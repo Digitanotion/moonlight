@@ -1,0 +1,19 @@
+name: moonlight
+description: Moonlight Livestream App MVP
+version: 1.0.0+1
+
+# ==== ADD THIS SECTION ====
+environment:
+  sdk: '>=3.8.0 <4.0.0'  # Or '^3.8.0' if you prefer
+# =========================
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.4.9
+  flutter_secure_storage: ^8.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
