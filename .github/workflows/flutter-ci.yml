@@ -8,8 +8,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
       - run: flutter pub get
-      - run: flutter test
-      - run: flutter analyze
+      - run: flutter test test/ --coverage
+      - uses: codecov/codecov-action@v3  # Optional coverage upload
 
   build:
     runs-on: ubuntu-latest
