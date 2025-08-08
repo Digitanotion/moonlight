@@ -13,7 +13,27 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: test
     steps:
       - uses: actions/checkout@v4
-      - run: flutter build apk --release
+
+      # Setup Flutter
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'  # Match your local version
+          channel: 'stable'
+
+      # Verify installation
+      - name: Check Flutter
+        run: flutter --version
+
+      # Build APK
+      - name: Build Release APK
+        run: |
+          flutter pub get
+          flutter build apk --release
+          
+      # Optional: Upload artifact
+      - uses: actions/upload-artifact@v3
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
