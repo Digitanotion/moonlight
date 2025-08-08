@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.moonlight"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = 27.0.12077973 //flutter.ndkVersion
+    ndkVersion = "27.0.12077973" //flutter.ndkVersion
     
 
     compileOptions {
