@@ -4,7 +4,7 @@ version: 1.0.0+1
 
 # ==== ADD THIS SECTION ====
 environment:
-  sdk: '>=3.8.0 <4.0.0'  # Or '^3.8.0' if you prefer
+  sdk: '>=3.8.0'  # Or '^3.8.0' if you prefer
 # =========================
 
 dependencies:

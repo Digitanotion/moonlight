@@ -19,18 +19,23 @@ jobs:
       # 1. Setup Flutter (pinned version)
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.22.7'
           channel: 'stable'
+      # 2. Verify versions
+      - name: Check SDK Versions
+        run: |
+          flutter --version
+          dart --version
 
-      # 2. Install dependencies
+      # 3. Install dependencies
       - name: Get packages
         run: flutter pub get
 
-      # 3. Build APK
+      # 4. Build APK
       - name: Build Release APK
         run: flutter build apk --release
 
-      # 4. Upload artifact (updated to v4+)
+      # 5. Upload artifact (updated to v4+)
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk
