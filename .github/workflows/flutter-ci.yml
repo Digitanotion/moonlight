@@ -19,7 +19,7 @@ jobs:
       # 1. Setup Flutter (pinned version)
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.7'
+          flutter-version: '3.22.5'
           channel: 'stable'
       # 2. Verify versions
       - name: Check SDK Versions
