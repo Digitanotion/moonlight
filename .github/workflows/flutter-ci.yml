@@ -16,24 +16,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Flutter
+      # 1. Setup Flutter (pinned version)
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'  # Match your local version
+          flutter-version: '3.22.0'
           channel: 'stable'
 
-      # Verify installation
-      - name: Check Flutter
-        run: flutter --version
+      # 2. Install dependencies
+      - name: Get packages
+        run: flutter pub get
 
-      # Build APK
+      # 3. Build APK
       - name: Build Release APK
-        run: |
-          flutter pub get
-          flutter build apk --release
-          
-      # Optional: Upload artifact
-      - uses: actions/upload-artifact@v3
+        run: flutter build apk --release
+
+      # 4. Upload artifact (updated to v4+)
+      - uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7  # Auto-clean after 1 week
