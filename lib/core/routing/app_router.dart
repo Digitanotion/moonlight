@@ -1,4 +1,3 @@
-// app_router.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -14,18 +13,31 @@ class AppRouter {
     switch (settings.name) {
       case RouteNames.splash:
         return MaterialPageRoute(builder: (_) => const SplashScreen());
+
       case RouteNames.onboarding:
         return MaterialPageRoute(builder: (_) => OnboardingScreen());
+
       case RouteNames.login:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
-            create: (context) =>
-                sl<AuthBloc>(), // sl = service locator (get_it)
+            create: (context) => sl<AuthBloc>(),
             child: const LoginScreen(),
           ),
         );
+
+      case RouteNames.register:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (context) => sl<AuthBloc>(),
+            child: const RegisterScreen(),
+          ),
+        );
+
       case RouteNames.home:
-        return MaterialPageRoute(builder: (_) => const RegisterScreen());
+        return MaterialPageRoute(
+          builder: (_) => const RegisterScreen(),
+        ); // or your HomeScreen
+
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

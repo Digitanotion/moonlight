@@ -1,6 +1,5 @@
 // check_auth_status.dart
 import 'package:dartz/dartz.dart';
-import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/core/errors/failures.dart';
 import 'package:moonlight/features/auth/domain/repositories/auth_repository.dart';
 
