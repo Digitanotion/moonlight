@@ -124,6 +124,22 @@ class LoginScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 30),
+                Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      // Navigate to Register page
+                      Navigator.pushNamed(context, RouteNames.email_verify);
+                    },
+                    child: Text(
+                      'Verify Email Page',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

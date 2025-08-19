@@ -15,7 +15,7 @@ class TermsAndPolicyText extends StatelessWidget {
         text: TextSpan(
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textWhite),
           children: [
             const TextSpan(text: 'By signing up, you agree to our '),
             TextSpan(

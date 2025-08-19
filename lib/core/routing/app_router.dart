@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:moonlight/features/auth/presentation/pages/email_verification.dart';
 import 'package:moonlight/features/auth/presentation/pages/login_screen.dart';
 import 'package:moonlight/features/auth/presentation/pages/register_screen.dart';
+import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -35,8 +37,13 @@ class AppRouter {
 
       case RouteNames.home:
         return MaterialPageRoute(
-          builder: (_) => const RegisterScreen(),
+          builder: (_) => const HomeScreen(),
         ); // or your HomeScreen
+      case RouteNames.email_verify:
+        return MaterialPageRoute(
+          builder: (_) =>
+              const EmailVerificationScreen(email: "digitanotion@gmail.com"),
+        ); //
 
       default:
         return MaterialPageRoute(

@@ -6,7 +6,7 @@ ThemeData buildAppTheme() {
   return base.copyWith(
     colorScheme: ColorScheme.fromSeed(seedColor: AppColors.orange),
     textTheme: base.textTheme.apply(
-      fontFamily: 'SFPro', // replace with your font or remove
+      fontFamily: 'Urbanist', // replace with your font or remove
       displayColor: Colors.white,
       bodyColor: Colors.white,
     ),

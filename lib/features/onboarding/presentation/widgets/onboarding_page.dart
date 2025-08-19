@@ -44,7 +44,7 @@ class OnboardingPage extends StatelessWidget {
                 // Title
                 Text(
                   page.title,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: AppColors.textWhite,
                   ),
@@ -105,9 +105,9 @@ class OnboardingPage extends StatelessWidget {
                 if (page.description != null)
                   Text(
                     page.description!,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyLarge?.copyWith(color: AppColors.textWhite),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppColors.textWhite,
+                    ),
                     textAlign: TextAlign.center,
                   ),
 

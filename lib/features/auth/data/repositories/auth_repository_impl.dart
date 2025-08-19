@@ -53,7 +53,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final token = await localDataSource.getAuthToken();
       return token != null
           ? Right(token)
-          : Left(CacheFailure('No token found'));
+          : const Left(CacheFailure('No token found'));
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
     }

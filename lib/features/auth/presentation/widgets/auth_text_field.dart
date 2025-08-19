@@ -9,6 +9,7 @@ class AuthTextField extends StatelessWidget {
   final bool isPassword;
 
   const AuthTextField({
+    super.key,
     required this.controller,
     required this.label,
     required this.hint,
@@ -37,11 +38,11 @@ class AuthTextField extends StatelessWidget {
             prefixIcon: Icon(icon, color: AppColors.textSecondary),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.border),
+              borderSide: const BorderSide(color: AppColors.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.primary),
+              borderSide: const BorderSide(color: AppColors.primary),
             ),
           ),
         ),
