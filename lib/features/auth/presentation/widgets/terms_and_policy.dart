@@ -4,7 +4,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 
 class TermsAndPolicyText extends StatelessWidget {
-  const TermsAndPolicyText({Key? key}) : super(key: key);
+  const TermsAndPolicyText({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +20,7 @@ class TermsAndPolicyText extends StatelessWidget {
             const TextSpan(text: 'By signing up, you agree to our '),
             TextSpan(
               text: 'Terms',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.primary,
                 decoration: TextDecoration.underline,
               ),
@@ -33,7 +33,7 @@ class TermsAndPolicyText extends StatelessWidget {
             const TextSpan(text: ' and '),
             TextSpan(
               text: 'Privacy Policy',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.primary,
                 decoration: TextDecoration.underline,
               ),
