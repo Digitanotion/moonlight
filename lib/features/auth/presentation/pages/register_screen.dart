@@ -104,6 +104,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         name: _nameController.text.trim(),
                       ),
                     );
+                    Navigator.pushReplacementNamed(
+                      context,
+                      RouteNames.profile_setup,
+                    );
                   },
                 ),
                 const SizedBox(height: 24),

@@ -2,6 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_remote_datasource.dart';
+import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
+import 'package:moonlight/features/profile_setup/data/repositories/profile_repository_impl.dart';
+import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/get_countries.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/update_profile.dart';
+import 'package:moonlight/features/profile_setup/presentation/bloc/profile_setup_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/features/auth/data/repositories/auth_repository_impl.dart';
@@ -58,9 +64,24 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SignUpWithEmail(sl()));
   sl.registerLazySingleton(() => SocialLogin(sl()));
   sl.registerLazySingleton(() => Logout(sl()));
+  // Data Sources
+  sl.registerLazySingleton<ProfileRemoteDataSource>(
+    () => ProfileRemoteDataSourceImpl(),
+  );
 
+  // Repositories
+  sl.registerLazySingleton<ProfileRepository>(
+    () => ProfileRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  // Use Cases
+  sl.registerLazySingleton(() => GetCountries(sl()));
+  sl.registerLazySingleton(() => UpdateProfile(sl()));
   // 🔹 Blocs
   sl.registerFactory(() => OnboardingBloc(repository: sl()));
+  sl.registerFactory(
+    () => ProfileSetupBloc(getCountries: sl(), updateProfile: sl()),
+  );
   sl.registerFactory(
     () => AuthBloc(
       loginWithEmail: sl(),
