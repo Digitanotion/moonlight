@@ -219,11 +219,18 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                             primaryButtonText: 'Set Up My Profile',
                             onPrimaryPressed: () {
                               Navigator.pop(context);
-                              Navigator.pushNamed(context, RouteNames.home);
+                              Navigator.pushNamed(
+                                context,
+                                RouteNames.profile_setup,
+                              );
                             },
                             secondaryButtonText: 'Skip For Now',
                             onSecondaryPressed: () {
                               Navigator.pop(context);
+                              Navigator.pushNamed(
+                                context,
+                                RouteNames.interests,
+                              );
                             },
                           ),
                         );

@@ -6,18 +6,32 @@ part 'user_model.g.dart';
 
 @JsonSerializable()
 class UserModel extends Equatable {
-  final String id;
+  @JsonKey(name: 'id')
+  final int userId;
+
   final String email;
   final String? name;
+
+  @JsonKey(name: 'avatar_url')
   final String? avatarUrl;
+
+  @JsonKey(name: 'access_token')
   final String? authToken;
 
+  @JsonKey(name: 'token_type')
+  final String? tokenType;
+
+  @JsonKey(name: 'expires_in')
+  final int? expiresIn;
+
   const UserModel({
-    required this.id,
+    required this.userId,
     required this.email,
     this.name,
     this.avatarUrl,
     this.authToken,
+    this.tokenType,
+    this.expiresIn,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -27,7 +41,7 @@ class UserModel extends Equatable {
 
   /// Model → Entity
   User toEntity() => User(
-    id: id,
+    id: userId.toString(),
     email: email,
     name: name,
     avatarUrl: avatarUrl,
@@ -35,13 +49,13 @@ class UserModel extends Equatable {
   );
 
   @override
-  List<Object?> get props => [id, email, name, avatarUrl];
+  List<Object?> get props => [userId, email, name, avatarUrl, authToken];
 }
 
 /// Entity → Model (optional helper)
 extension UserEntityX on User {
   UserModel toModel() => UserModel(
-    id: id,
+    userId: int.parse(id),
     email: email,
     name: name,
     avatarUrl: avatarUrl,

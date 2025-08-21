@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 // import 'package:moonlight/core/app/app_theme.dart';
@@ -7,9 +8,12 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
+import 'package:moonlight/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Initialize Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await init(); // Initialize dependencies
   runApp(const MyApp());
 }

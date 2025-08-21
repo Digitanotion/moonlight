@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "775545297921",
+    "project_id": "moonlightapp-12a0c",
+    "storage_bucket": "moonlightapp-12a0c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:775545297921:android:5f5164ab27b08a6504f400",
+        "android_client_info": {
+          "package_name": "com.example.moonlight"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwz8O_Yy08oRawA5g_0eN0FvtYvFzxluY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

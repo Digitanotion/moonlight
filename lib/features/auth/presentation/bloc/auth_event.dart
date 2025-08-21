@@ -7,11 +7,8 @@ abstract class AuthEvent extends Equatable {
   List<Object> get props => [];
 }
 
-// Triggered when app checks if user is authenticated
 class CheckAuthStatusEvent extends AuthEvent {}
 
-// Triggered when user attempts email/password login
-// For login (only needs email and password)
 class LoginRequested extends AuthEvent {
   final String email;
   final String password;
@@ -22,25 +19,34 @@ class LoginRequested extends AuthEvent {
   List<Object> get props => [email, password];
 }
 
-// Triggered when user attempts registration
+// Trigger login with email/password
+class LoginWithEmailRequested extends AuthEvent {
+  final String email;
+  final String password;
+
+  const LoginWithEmailRequested({required this.email, required this.password});
+
+  @override
+  List<Object?> get props => [email, password];
+}
+
 class SignUpRequested extends AuthEvent {
   final String email;
   final String password;
-  final String? name; // Make name optional
+  final String? name;
 
   const SignUpRequested({
     required this.email,
     required this.password,
-    this.name, // Mark as optional parameter
+    this.name,
   });
 
   @override
   List<Object> get props => [email, password, name ?? ''];
 }
 
-// Triggered when user attempts social login
 class SocialLoginRequested extends AuthEvent {
-  final String provider; // 'google', 'apple', 'facebook'
+  final String provider;
 
   const SocialLoginRequested(this.provider);
 
@@ -48,5 +54,11 @@ class SocialLoginRequested extends AuthEvent {
   List<Object> get props => [provider];
 }
 
-// Triggered when user logs out
+class GoogleSignInRequested extends AuthEvent {
+  const GoogleSignInRequested();
+
+  @override
+  List<Object> get props => [];
+}
+
 class LogoutRequested extends AuthEvent {}

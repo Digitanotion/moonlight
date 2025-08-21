@@ -1,22 +1,19 @@
-// lib/features/interests/data/models/interest_model.dart
-class Interest {
-  final String id;
-  final String name;
-  bool isSelected;
+import '../../domain/entities/interest.dart';
 
-  Interest({required this.id, required this.name, this.isSelected = false});
+class InterestModel extends Interest {
+  const InterestModel({
+    required super.id,
+    required super.title,
+    required super.emoji,
+  });
 
-  factory Interest.fromJson(Map<String, dynamic> json) {
-    return Interest(
+  factory InterestModel.fromJson(Map<String, dynamic> json) {
+    return InterestModel(
       id: json['id'].toString(),
-      name: json['name'],
-      isSelected: json['isSelected'] ?? false,
+      title: json['title'] as String,
+      emoji: json['emoji'] as String,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    "id": id,
-    "name": name,
-    "isSelected": isSelected,
-  };
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'emoji': emoji};
 }

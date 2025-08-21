@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 
@@ -28,6 +29,7 @@ class TermsAndPolicyText extends StatelessWidget {
                 ..onTap = () {
                   // Navigate to terms screen
                   // Navigator.pushNamed(context, RouteNames.terms);
+                  // Navigator.pushReplacementNamed(context, RouteNames.interests);
                 },
             ),
             const TextSpan(text: ' and '),

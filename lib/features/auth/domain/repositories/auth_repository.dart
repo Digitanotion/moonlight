@@ -12,6 +12,7 @@ abstract class AuthRepository {
     String? name,
   });
   Future<Either<Failure, User>> socialLogin(String provider);
+  Future<Either<Failure, User>> loginWithGoogle();
   Future<Either<Failure, void>> logout();
   Future<Either<Failure, String>> getAuthToken();
 }

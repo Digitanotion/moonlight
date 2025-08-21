@@ -16,6 +16,10 @@ class CacheFailure extends Failure {
   const CacheFailure(super.message);
 }
 
+class AuthFailure extends Failure {
+  const AuthFailure(String message) : super(message);
+}
+
 class NetworkFailure extends Failure {
   const NetworkFailure(super.message);
 }

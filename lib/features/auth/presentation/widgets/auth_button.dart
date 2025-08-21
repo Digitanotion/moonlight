@@ -6,7 +6,7 @@ import 'package:moonlight/core/theme/app_text_styles.dart';
 
 class AuthButton extends StatelessWidget {
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool isLoading;
 
   const AuthButton({

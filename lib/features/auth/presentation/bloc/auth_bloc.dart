@@ -1,6 +1,8 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:moonlight/core/errors/failures.dart';
 import 'package:moonlight/features/auth/domain/entities/user_entity.dart';
+import 'package:moonlight/features/auth/domain/repositories/auth_repository.dart';
 import 'package:moonlight/features/auth/domain/usecases/check_auth_status.dart'
     hide Logout;
 import 'package:moonlight/features/auth/domain/usecases/get_current_user.dart';
@@ -19,6 +21,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final CheckAuthStatus checkAuthStatusUseCase;
   final Logout logout;
   final GetCurrentUser getCurrentUser;
+  final AuthRepository authRepository;
 
   AuthBloc({
     required this.loginWithEmail,
@@ -27,11 +30,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.checkAuthStatusUseCase,
     required this.logout,
     required this.getCurrentUser,
+    required this.authRepository,
   }) : super(AuthInitial()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LoginRequested>(_onLoginRequested);
     on<SignUpRequested>(_onSignUpRequested);
     on<SocialLoginRequested>(_onSocialLoginRequested);
+    on<GoogleSignInRequested>(_onGoogleSignInRequested);
     on<LogoutRequested>(_onLogoutRequested);
   }
 
@@ -108,6 +113,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     result.fold(
       (failure) => emit(AuthFailure(failure.message)),
       (_) => emit(AuthUnauthenticated()),
+    );
+  }
+
+  Future<void> _onGoogleSignInRequested(
+    GoogleSignInRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    final result = await authRepository.loginWithGoogle();
+
+    result.fold(
+      (failure) => emit(AuthFailure(failure.message)),
+      (user) => emit(AuthAuthenticated(user)),
     );
   }
 }

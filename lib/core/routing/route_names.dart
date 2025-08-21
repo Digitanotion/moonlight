@@ -7,4 +7,6 @@ class RouteNames {
   static const String email_verify = '/email_verify';
   static const String forget_password = '/forget_password';
   static const String profile_setup = '/profile_setup';
+  static const String search = '/search';
+  static const String interests = '/interests';
 }

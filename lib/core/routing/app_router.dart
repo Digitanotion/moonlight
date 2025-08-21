@@ -10,8 +10,13 @@ import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/profile/presentation/bloc/interest_bloc.dart';
+import 'package:moonlight/features/profile/presentation/bloc/interest_event.dart';
+import 'package:moonlight/features/profile/presentation/pages/interest_selection_page.dart';
 import 'package:moonlight/features/profile_setup/presentation/bloc/profile_setup_bloc.dart';
 import 'package:moonlight/features/profile_setup/presentation/pages/profile_setup_screen.dart';
+import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
+import 'package:moonlight/features/search/presentation/pages/search_screen.dart';
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -60,6 +65,24 @@ class AppRouter {
                 child: const ProfileSetupScreen(),
               ),
         ); // profile_setup
+      case RouteNames.search:
+        return MaterialPageRoute(
+          builder:
+              (_) => // In your route generator or screen navigation
+              BlocProvider(
+                create: (context) => sl<SearchBloc>(),
+                child: const SearchScreen(),
+              ),
+        ); //search
+      case RouteNames.interests:
+        return MaterialPageRoute(
+          builder:
+              (_) => // In your route generator or screen navigation
+              BlocProvider(
+                create: (_) => sl<InterestBloc>()..add(const LoadInterests()),
+                child: const InterestSelectionPage(),
+              ),
+        ); //interests
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
