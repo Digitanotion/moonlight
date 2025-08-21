@@ -1,6 +1,9 @@
 // lib/features/home/presentation/widgets/bottom_nav.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 
 class HomeBottomNav extends StatefulWidget {
   final int currentIndex;
@@ -85,7 +88,18 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                 icon: Icons.person_outline,
                 label: 'Profile',
                 active: widget.currentIndex == 4,
-                onTap: () => widget.onTap(4),
+                onTap: () {
+                  final authState = context.read<AuthBloc>().state;
+
+                  if (authState is AuthAuthenticated) {
+                    // Already logged in
+                    // Just let parent handle the navigation to profile screen
+                    widget.onTap(4);
+                  } else {
+                    // Not logged in → navigate to login screen
+                    Navigator.pushNamed(context, RouteNames.login);
+                  }
+                },
               ),
             ],
           ),

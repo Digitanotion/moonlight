@@ -34,6 +34,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }) : super(AuthInitial()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LoginRequested>(_onLoginRequested);
+    on<LoginWithEmailRequested>(_onLoginWithEmailRequested); // ✅ Added
     on<SignUpRequested>(_onSignUpRequested);
     on<SocialLoginRequested>(_onSocialLoginRequested);
     on<GoogleSignInRequested>(_onGoogleSignInRequested);
@@ -45,7 +46,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
-    final result = await checkAuthStatusUseCase(); // Now works with call()
+    final result = await checkAuthStatusUseCase();
     result.fold((failure) => emit(AuthFailure(failure.message)), (
       isLoggedIn,
     ) async {
@@ -70,6 +71,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       email: event.email,
       password: event.password,
     );
+    result.fold(
+      (failure) => emit(AuthFailure(failure.message)),
+      (user) => emit(AuthAuthenticated(user)),
+    );
+  }
+
+  // ✅ New handler for device-aware login
+  Future<void> _onLoginWithEmailRequested(
+    LoginWithEmailRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final result = await authRepository.loginWithEmail(
+      event.email,
+      event.password,
+    );
+
     result.fold(
       (failure) => emit(AuthFailure(failure.message)),
       (user) => emit(AuthAuthenticated(user)),

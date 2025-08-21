@@ -9,7 +9,6 @@ import 'package:moonlight/features/auth/presentation/widgets/auth_button.dart';
 import 'package:moonlight/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:moonlight/features/auth/presentation/widgets/custom_status_dialog.dart';
 import 'package:moonlight/features/auth/presentation/widgets/social_auth_button.dart';
-import 'package:moonlight/shared/widgets/custom_status_dialog.dart'; // <- make sure path is correct
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -34,9 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
           title: "Missing Info",
           message: "Please enter both email and password.",
           primaryButtonText: 'Try Again',
-          onPrimaryPressed: () {
-            Navigator.pop(context);
-          },
+          onPrimaryPressed: () => Navigator.pop(context),
         ),
       );
       return;
@@ -64,7 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
           child: BlocConsumer<AuthBloc, AuthState>(
             listener: (context, state) {
               if (state is AuthAuthenticated) {
-                // ✅ Show success dialog
                 showDialog(
                   context: context,
                   builder: (_) => CustomStatusDialog(
@@ -75,24 +71,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     primaryButtonText: 'Continue',
                     onPrimaryPressed: () {
                       Navigator.pop(context);
-                      Navigator.pushReplacementNamed(
-                        context,
-                        RouteNames.home, // adjust if your home route differs
-                      );
+                      Navigator.pushReplacementNamed(context, RouteNames.home);
                     },
                   ),
                 );
               } else if (state is AuthFailure) {
-                // Show error dialog
+                final isEmailNotVerified = state.message.toLowerCase().contains(
+                  'email not verified',
+                );
+
                 showDialog(
                   context: context,
                   builder: (_) => CustomStatusDialog(
                     type: StatusDialogType.failure,
                     title: 'Login Failed',
                     message: state.message,
-                    primaryButtonText: 'Try Again',
+                    primaryButtonText: isEmailNotVerified
+                        ? 'Verify Email Now'
+                        : 'Try Again',
                     onPrimaryPressed: () {
                       Navigator.pop(context);
+                      if (isEmailNotVerified) {
+                        Navigator.pushNamed(context, RouteNames.email_verify);
+                      }
                     },
                   ),
                 );
@@ -124,8 +125,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 40),
-
-                    // Email
                     AuthTextField(
                       controller: emailController,
                       label: 'Email address',
@@ -133,8 +132,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       icon: Icons.email_outlined,
                     ),
                     const SizedBox(height: 16),
-
-                    // Password
                     AuthTextField(
                       controller: passwordController,
                       label: 'Password',
@@ -143,8 +140,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       isPassword: true,
                     ),
                     const SizedBox(height: 8),
-
-                    // Forgot password
                     Align(
                       alignment: Alignment.centerRight,
                       child: GestureDetector(
@@ -164,17 +159,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 32),
-
-                    // ✅ Login Button
                     AuthButton(
                       text: state is AuthLoading ? 'Logging in...' : 'Login',
                       onPressed: state is AuthLoading
                           ? null
                           : () => _onLoginPressed(context),
                     ),
-
                     const SizedBox(height: 24),
                     Center(
                       child: Text(
@@ -185,8 +176,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Google login
                     SocialAuthButton(
                       icon: AssetPaths.googleIcon,
                       text: 'Sign In with Google',
@@ -196,7 +185,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
                       },
                     ),
-
                     const SizedBox(height: 24),
                     Center(
                       child: GestureDetector(
@@ -213,23 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 30),
-                    Center(
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.pushNamed(context, RouteNames.email_verify);
-                        },
-                        child: Text(
-                          'Verify Email Page',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: AppColors.textWhite,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               );

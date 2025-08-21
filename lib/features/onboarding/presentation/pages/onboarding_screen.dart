@@ -42,7 +42,10 @@ class OnboardingScreen extends StatelessWidget {
                 child: SkipButton(
                   onPressed: () {
                     context.read<OnboardingBloc>().add(OnboardingSkip());
-                    Navigator.pushReplacementNamed(context, RouteNames.login);
+                    Navigator.pushReplacementNamed(
+                      context,
+                      RouteNames.interests,
+                    );
                   },
                 ),
               ),
@@ -57,7 +60,10 @@ class OnboardingScreen extends StatelessWidget {
                   onPressed: () {
                     if (state.currentPage == state.pages.length - 1) {
                       context.read<OnboardingBloc>().add(OnboardingComplete());
-                      Navigator.pushReplacementNamed(context, RouteNames.login);
+                      Navigator.pushReplacementNamed(
+                        context,
+                        RouteNames.interests,
+                      );
                     } else {
                       _pageController.nextPage(
                         duration: const Duration(milliseconds: 300),
