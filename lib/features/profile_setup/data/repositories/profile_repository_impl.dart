@@ -1,55 +1,57 @@
-import 'package:dartz/dartz.dart';
-import 'package:moonlight/core/errors/exceptions.dart';
-import 'package:moonlight/core/errors/failures.dart';
-import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
-import 'package:moonlight/features/profile_setup/domain/entities/user_profile.dart';
-import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
+import '../../domain/repositories/profile_repository.dart';
+import '../datasources/profile_remote_data_source.dart';
+import '../datasources/country_local_data_source.dart';
 
 class ProfileRepositoryImpl implements ProfileRepository {
-  final ProfileRemoteDataSource remoteDataSource;
+  final ProfileRemoteDataSource remote;
+  final CountryLocalDataSource countryLocal;
 
-  ProfileRepositoryImpl({required this.remoteDataSource});
-
-  @override
-  Future<Either<Failure, List<String>>> getCountries() async {
-    try {
-      final countries = await remoteDataSource.getCountries();
-      return Right(countries);
-    } on ServerException {
-      return Left(ServerFailure("Server failed to get countries"));
-    }
-  }
+  ProfileRepositoryImpl({required this.remote, required this.countryLocal});
 
   @override
-  Future<Either<Failure, void>> updateProfile(UserProfile profile) async {
-    try {
-      // First upload image if exists
-      String? imageUrl = profile.profileImageUrl;
-      if (profile.profileImageFile != null) {
-        // This would typically upload to a cloud storage service
-        // For now, we'll simulate the upload
-        await Future.delayed(const Duration(seconds: 2));
-        imageUrl =
-            'https://example.com/profile_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
-      }
+  Future<void> setupProfile({
+    required String fullname,
+    String? gender,
+    String? country,
+    String? bio,
+    List<String>? interests,
+    String? phone,
+    String? avatarPath,
+  }) => remote.setupProfile(
+    fullname: fullname,
+    gender: gender,
+    country: country,
+    bio: bio,
+    interests: interests,
+    phone: phone,
+    avatarPath: avatarPath,
+  );
 
-      final profileData = _profileToMap(
-        profile.copyWith(profileImageUrl: imageUrl),
-      );
-      await remoteDataSource.updateProfile(profileData);
-      return const Right(null);
-    } on ServerException {
-      return Left(ServerFailure("Server failed to updated profile"));
-    }
-  }
+  @override
+  Future<void> updateInterests(List<String> interests) =>
+      remote.updateInterests(interests);
 
-  Map<String, dynamic> _profileToMap(UserProfile profile) {
-    return {
-      'full_name': profile.fullName,
-      'date_of_birth': profile.dateOfBirth?.toIso8601String(),
-      'country': profile.country,
-      'gender': profile.gender?.toString().split('.').last,
-      'bio': profile.bio,
-    };
-  }
+  @override
+  Future<Map<String, dynamic>> updateProfile({
+    String? fullname,
+    String? gender,
+    String? country,
+    String? bio,
+    List<String>? interests,
+    String? phone,
+    String? avatarPath,
+    bool removeAvatar = false,
+  }) => remote.updateProfile(
+    fullname: fullname,
+    gender: gender,
+    country: country,
+    bio: bio,
+    interests: interests,
+    phone: phone,
+    avatarPath: avatarPath,
+    removeAvatar: removeAvatar,
+  );
+
+  @override
+  Future<List<String>> getCountries() => countryLocal.loadCountries();
 }

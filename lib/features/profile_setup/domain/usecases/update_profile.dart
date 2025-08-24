@@ -1,14 +1,28 @@
-import 'package:dartz/dartz.dart';
-import 'package:moonlight/core/errors/failures.dart';
-import 'package:moonlight/features/profile_setup/domain/entities/user_profile.dart';
-import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
+import '../repositories/profile_repository.dart';
 
 class UpdateProfile {
-  final ProfileRepository repository;
+  final ProfileRepository repo;
+  UpdateProfile(this.repo);
 
-  UpdateProfile(this.repository);
-
-  Future<Either<Failure, void>> call(UserProfile profile) async {
-    return await repository.updateProfile(profile);
+  Future<Map<String, dynamic>> call({
+    String? fullname,
+    String? gender,
+    String? country,
+    String? bio,
+    List<String>? interests,
+    String? phone,
+    String? avatarPath,
+    bool removeAvatar = false,
+  }) {
+    return repo.updateProfile(
+      fullname: fullname,
+      gender: gender,
+      country: country,
+      bio: bio,
+      interests: interests,
+      phone: phone,
+      avatarPath: avatarPath,
+      removeAvatar: removeAvatar,
+    );
   }
 }

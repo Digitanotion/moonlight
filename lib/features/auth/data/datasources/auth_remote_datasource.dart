@@ -3,22 +3,30 @@ import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/features/auth/data/models/user_model.dart';
 
 abstract class AuthRemoteDataSource {
-  Future<UserModel> loginWithEmail(
+  Future<LoginResponseModel> loginWithEmail(
     String email,
     String password,
     String deviceName,
   );
 
-  Future<UserModel> signUpWithEmail({
+  Future<LoginResponseModel> signUpWithEmail({
     required String email,
     required String password,
     required String passwordConfirmation,
-    String? name,
+    String? agent_name,
     String? referralCode,
   });
-  Future<UserModel> socialLogin(String provider, String deviceName);
-  Future<UserModel> loginWithGoogle(String firebaseToken, String deviceName);
+
+  Future<LoginResponseModel> socialLogin(String provider, String deviceName);
+
+  Future<LoginResponseModel> loginWithGoogle(
+    String firebaseToken,
+    String deviceName,
+  );
+
   Future<UserModel> loginWithFirebase(String firebaseToken, String deviceName);
+
+  Future<String> forgotPassword(String email);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -27,7 +35,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   AuthRemoteDataSourceImpl({required this.client});
 
   @override
-  Future<UserModel> loginWithEmail(
+  Future<LoginResponseModel> loginWithEmail(
     String email,
     String password,
     String deviceName,
@@ -38,13 +46,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: {'email': email, 'password': password, 'device_name': deviceName},
       );
 
-      // Handle API response structure
-      final responseData = response.data;
-      return UserModel.fromJson({
-        ...responseData['user'],
-        'access_token': responseData['access_token'],
-        'token_type': responseData['token_type'],
-        'expires_in': responseData['expires_in'],
+      final data = response.data;
+      return LoginResponseModel.fromJson({
+        'access_token': data['access_token'],
+        'token_type': data['token_type'],
+        'expiresIn': data['expires_in'] != "0" ? data['expires_in'] : 0,
+        'user': data['user'],
       });
     } on DioException catch (e) {
       throw ServerException(
@@ -55,11 +62,11 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   @override
-  Future<UserModel> signUpWithEmail({
+  Future<LoginResponseModel> signUpWithEmail({
     required String email,
     required String password,
     required String passwordConfirmation,
-    String? name,
+    String? agent_name,
     String? referralCode,
   }) async {
     try {
@@ -69,44 +76,73 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
           'email': email,
           'password': password,
           'password_confirmation': passwordConfirmation,
-          if (name != null && name.isNotEmpty) 'name': name,
+          if (agent_name != null && agent_name.isNotEmpty)
+            'agent_name': agent_name,
           if (referralCode != null && referralCode.isNotEmpty)
             'referral_code': referralCode,
         },
       );
 
-      // Handle registration response structure
-      final responseData = response.data;
-      print(responseData);
-      return UserModel.fromJson(responseData['user']);
+      final data = response.data;
+      return LoginResponseModel.fromJson({
+        'access_token': data['access_token'],
+        'token_type': data['token_type'],
+        'expires_in': data['expires_in'],
+        'user': data['user'],
+      });
     } on DioException catch (e) {
-      print('❌ Registration error raw: ${e.response?.data}');
       final errors = e.response?.data['errors'];
       final errorMessage =
           _parseValidationErrors(errors) ??
           e.response?.data['message'] ??
-          'Registration failed ${e.message}';
-
+          'Registration failed';
       throw ServerException(errorMessage, statusCode: e.response?.statusCode);
     }
   }
 
   @override
-  Future<UserModel> socialLogin(String provider, String deviceName) async {
+  Future<LoginResponseModel> socialLogin(
+    String provider,
+    String deviceName,
+  ) async {
     try {
       final response = await client.post(
         '/v1/login/$provider',
         data: {'device_name': deviceName},
       );
 
-      final responseData = response.data;
-      return UserModel.fromJson({
-        ...responseData['user'],
-        'access_token': responseData['access_token'],
+      final data = response.data;
+      return LoginResponseModel.fromJson({
+        'access_token': data['access_token'],
+        'user': data['user'],
       });
     } on DioException catch (e) {
       throw ServerException(
         e.response?.data['message'] ?? '$provider login failed',
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<LoginResponseModel> loginWithGoogle(
+    String firebaseToken,
+    String deviceName,
+  ) async {
+    try {
+      final response = await client.post(
+        'https://svc.moonlightstream.app/api/v1/login/firebase',
+        data: {'firebase_token': firebaseToken, 'device_name': deviceName},
+      );
+
+      final data = response.data;
+      return LoginResponseModel.fromJson({
+        'access_token': data['token'],
+        'user': data['user'],
+      });
+    } on DioException catch (e) {
+      throw ServerException(
+        e.response?.data['error'] ?? 'Google login failed',
         statusCode: e.response?.statusCode,
       );
     }
@@ -123,10 +159,10 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: {'firebase_token': firebaseToken, 'device_name': deviceName},
       );
 
-      final responseData = response.data;
+      final data = response.data;
       return UserModel.fromJson({
-        ...responseData['user'],
-        'access_token': responseData['token'],
+        ...data['user'],
+        'access_token': data['token'],
       });
     } on DioException catch (e) {
       throw ServerException(
@@ -137,24 +173,29 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   @override
-  Future<UserModel> loginWithGoogle(
-    String firebaseToken,
-    String deviceName,
-  ) async {
+  Future<String> forgotPassword(String email) async {
     try {
       final response = await client.post(
-        'https://svc.moonlightstream.app/api/v1/login/firebase',
-        data: {'firebase_token': firebaseToken, 'device_name': deviceName},
+        "https://svc.moonlightstream.app/api/v1/forgot-password",
+        data: {'email': email},
       );
 
-      final responseData = response.data;
-      return UserModel.fromJson({
-        ...responseData['user'],
-        'access_token': responseData['token'],
-      });
+      if (response.statusCode == 200) {
+        return response.data['message'];
+      } else if (response.statusCode == 422) {
+        throw ServerException(
+          response.data['errors']['email'][0],
+          statusCode: 422,
+        );
+      } else {
+        throw ServerException(
+          response.data['message'] ?? 'Unknown error',
+          statusCode: response.statusCode,
+        );
+      }
     } on DioException catch (e) {
       throw ServerException(
-        e.response?.data['error'] ?? 'Google login failed',
+        e.response?.data['message'] ?? 'Forgot password failed',
         statusCode: e.response?.statusCode,
       );
     }

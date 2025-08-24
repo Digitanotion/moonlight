@@ -45,3 +45,13 @@ class RegistrationSuccess extends AuthState {
   @override
   List<Object> get props => [user];
 }
+
+// New state when forgot password link is sent
+class AuthForgotPasswordSuccess extends AuthState {
+  final String message;
+
+  const AuthForgotPasswordSuccess(this.message);
+
+  @override
+  List<Object> get props => [message];
+}

@@ -14,16 +14,26 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
 
   OnboardingBloc({required this.repository})
     : super(OnboardingState.initial()) {
-    _loadFirstLaunchStatus();
+    // Event handlers
+    on<LoadOnboardingStatus>(_onLoadStatus);
     on<OnboardingPageChanged>(_onPageChanged);
     on<OnboardingSkip>(_onSkip);
     on<OnboardingComplete>(_onComplete);
+
+    // Trigger the loading of first-launch status
+    add(LoadOnboardingStatus());
   }
-  void _loadFirstLaunchStatus() async {
+
+  // Load first-launch flag from repository
+  Future<void> _onLoadStatus(
+    LoadOnboardingStatus event,
+    Emitter<OnboardingState> emit,
+  ) async {
     final firstLaunch = await repository.isFirstLaunch();
     emit(state.copyWith(isFirstLaunch: firstLaunch));
   }
 
+  // Handle page change
   void _onPageChanged(
     OnboardingPageChanged event,
     Emitter<OnboardingState> emit,
@@ -31,12 +41,17 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     emit(state.copyWith(currentPage: event.pageIndex));
   }
 
-  void _onSkip(OnboardingSkip event, Emitter<OnboardingState> emit) async {
+  // Handle skip button
+  Future<void> _onSkip(
+    OnboardingSkip event,
+    Emitter<OnboardingState> emit,
+  ) async {
     await repository.setOnboardingCompleted();
     emit(state.copyWith(isFirstLaunch: false));
   }
 
-  void _onComplete(
+  // Handle get started / complete button
+  Future<void> _onComplete(
     OnboardingComplete event,
     Emitter<OnboardingState> emit,
   ) async {

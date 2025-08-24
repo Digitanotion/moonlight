@@ -11,12 +11,12 @@ class SignUpWithEmail {
   Future<Either<Failure, User>> call({
     required String email,
     required String password,
-    String? name,
+    String? agent_name,
   }) async {
     return await repository.signUpWithEmail(
       email: email,
       password: password,
-      name: name,
+      agent_name: agent_name,
     );
   }
 }

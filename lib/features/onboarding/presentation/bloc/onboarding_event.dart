@@ -7,6 +7,8 @@ abstract class OnboardingEvent extends Equatable {
   List<Object> get props => [];
 }
 
+class LoadOnboardingStatus extends OnboardingEvent {}
+
 class OnboardingPageChanged extends OnboardingEvent {
   final int pageIndex;
 

@@ -9,4 +9,6 @@ class RouteNames {
   static const String profile_setup = '/profile_setup';
   static const String search = '/search';
   static const String interests = '/interests';
+  static const String user_profile = '/user_profile';
+  static const editProfile = '/edit-profile';
 }

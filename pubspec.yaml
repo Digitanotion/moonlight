@@ -27,6 +27,7 @@ dependencies:
   google_sign_in: ^6.1.1 # Current stable version
   firebase_core: ^2.24.0
   firebase_auth: ^4.16.0
+  http_parser: ^4.0.2
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +56,7 @@ flutter:
     - assets/icons/google.svg
     - assets/icons/apple.svg
     - assets/icons/facebook.svg
+    - assets/countries.json
   fonts:
     - family: Urbanist
       fonts:

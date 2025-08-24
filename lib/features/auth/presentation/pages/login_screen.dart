@@ -9,6 +9,7 @@ import 'package:moonlight/features/auth/presentation/widgets/auth_button.dart';
 import 'package:moonlight/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:moonlight/features/auth/presentation/widgets/custom_status_dialog.dart';
 import 'package:moonlight/features/auth/presentation/widgets/social_auth_button.dart';
+import 'package:moonlight/widgets/moon_snack.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -61,42 +62,27 @@ class _LoginScreenState extends State<LoginScreen> {
           child: BlocConsumer<AuthBloc, AuthState>(
             listener: (context, state) {
               if (state is AuthAuthenticated) {
-                showDialog(
-                  context: context,
-                  builder: (_) => CustomStatusDialog(
-                    type: StatusDialogType.success,
-                    title: 'Login Successful',
-                    message:
-                        'Welcome back, ${state.user.name ?? "Moonlighter"}!',
-                    primaryButtonText: 'Continue',
-                    onPrimaryPressed: () {
-                      Navigator.pop(context);
-                      Navigator.pushReplacementNamed(context, RouteNames.home);
-                    },
-                  ),
-                );
+                // showDialog(
+                //   context: context,
+                //   builder: (_) => CustomStatusDialog(
+                //     type: StatusDialogType.success,
+                //     title: 'Login Successful',
+                //     message:
+                //         'Welcome back, ${state.user.name ?? "Moonlighter"}!',
+                //     primaryButtonText: 'Continue',
+                //     onPrimaryPressed: () {
+                //       Navigator.pop(context);
+                //       Navigator.pushReplacementNamed(context, RouteNames.home);
+                //     },
+                //   ),
+                // );
+                Navigator.pushReplacementNamed(context, RouteNames.home);
               } else if (state is AuthFailure) {
                 final isEmailNotVerified = state.message.toLowerCase().contains(
                   'email not verified',
                 );
 
-                showDialog(
-                  context: context,
-                  builder: (_) => CustomStatusDialog(
-                    type: StatusDialogType.failure,
-                    title: 'Login Failed',
-                    message: state.message,
-                    primaryButtonText: isEmailNotVerified
-                        ? 'Verify Email Now'
-                        : 'Try Again',
-                    onPrimaryPressed: () {
-                      Navigator.pop(context);
-                      if (isEmailNotVerified) {
-                        Navigator.pushNamed(context, RouteNames.email_verify);
-                      }
-                    },
-                  ),
-                );
+                MoonSnack.error(context, state.message);
               }
             },
             builder: (context, state) {
@@ -201,7 +187,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 30),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          final userId = 'mock_id_123'; // temporary mock ID
+                          Navigator.pushNamed(context, RouteNames.editProfile);
+                        },
+                        child: Text(
+                          'View Profile',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.textWhite,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               );

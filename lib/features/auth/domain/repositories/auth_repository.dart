@@ -9,10 +9,11 @@ abstract class AuthRepository {
   Future<Either<Failure, User>> signUpWithEmail({
     required String email,
     required String password,
-    String? name,
+    String? agent_name,
   });
   Future<Either<Failure, User>> socialLogin(String provider);
   Future<Either<Failure, User>> loginWithGoogle();
   Future<Either<Failure, void>> logout();
   Future<Either<Failure, String>> getAuthToken();
+  Future<Either<Failure, String>> forgotPassword(String email);
 }

@@ -33,16 +33,16 @@ class LoginWithEmailRequested extends AuthEvent {
 class SignUpRequested extends AuthEvent {
   final String email;
   final String password;
-  final String? name;
+  final String? agent_name;
 
   const SignUpRequested({
     required this.email,
     required this.password,
-    this.name,
+    this.agent_name,
   });
 
   @override
-  List<Object> get props => [email, password, name ?? ''];
+  List<Object> get props => [email, password, agent_name ?? ''];
 }
 
 class SocialLoginRequested extends AuthEvent {

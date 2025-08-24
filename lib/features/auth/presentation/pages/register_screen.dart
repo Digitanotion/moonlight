@@ -134,7 +134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             SignUpRequested(
                               email: _emailController.text.trim(),
                               password: _passwordController.text.trim(),
-                              name: _nameController.text.trim(),
+                              agent_name: _nameController.text.trim(),
                             ),
                           );
                         },

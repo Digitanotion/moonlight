@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/utils/asset_paths.dart';
@@ -153,89 +154,183 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 16),
+                    // Animated email icon
                     const Icon(
                       Icons.email_outlined,
                       size: 48,
                       color: AppColors.primary_2,
                     ),
+
                     const SizedBox(height: 24),
+
+                    // Title
                     Text(
-                      'Check Your Email',
+                      'Verify Your Email',
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
                             color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 24,
                           ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "We've sent a 6-digit code to your email address.\nEnter it below to verify your account.",
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+
                     const SizedBox(height: 16),
-                    Text(
-                      widget.email,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textWhite,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 60),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(
-                        6,
-                        (index) => _buildCodeField(index),
-                      ),
-                    ),
-                    const SizedBox(height: 25),
-                    GestureDetector(
-                      onTap: _onResend,
-                      child: Text(
-                        resendSeconds > 0
-                            ? 'Didn\'t get the code? Resend in ${resendSeconds}s'
-                            : 'Resend Code',
+
+                    // Instruction text
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textWhite,
-                          fontWeight: FontWeight.w500,
+                          color: AppColors.textWhite.withOpacity(0.9),
+                          height: 1.5,
+                        ),
+                        children: [
+                          const TextSpan(
+                            text:
+                                'We sent a verification link to your email address from\n',
+                          ),
+                          TextSpan(
+                            text: 'api_smtp@moonlightstream.app',
+                            style: TextStyle(
+                              color: AppColors.secondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const TextSpan(text: ' with subject '),
+                          TextSpan(
+                            text: '"Verify Your Moonlight Account"',
+                            style: TextStyle(
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.secondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Email address with copy option
+                    // Container(
+                    //   padding: const EdgeInsets.symmetric(
+                    //     horizontal: 16,
+                    //     vertical: 12,
+                    //   ),
+                    //   decoration: BoxDecoration(
+                    //     color: Colors.white.withOpacity(0.1),
+                    //     borderRadius: BorderRadius.circular(12),
+                    //     border: Border.all(
+                    //       color: Colors.white.withOpacity(0.2),
+                    //     ),
+                    //   ),
+                    //   child: Row(
+                    //     mainAxisSize: MainAxisSize.min,
+                    //     children: [
+                    //       Text(
+                    //         widget.email,
+                    //         style: Theme.of(context).textTheme.bodyMedium
+                    //             ?.copyWith(
+                    //               color: Colors.white,
+                    //               fontWeight: FontWeight.w500,
+                    //             ),
+                    //       ),
+                    //       const SizedBox(width: 8),
+                    //       GestureDetector(
+                    //         onTap: () {
+                    //           Clipboard.setData(
+                    //             ClipboardData(text: widget.email),
+                    //           );
+                    //           ScaffoldMessenger.of(context).showSnackBar(
+                    //             SnackBar(
+                    //               content: Text(
+                    //                 'Email address copied to clipboard',
+                    //               ),
+                    //               backgroundColor: AppColors.green,
+                    //             ),
+                    //           );
+                    //         },
+                    //         child: Icon(
+                    //           Icons.content_copy,
+                    //           size: 18,
+                    //           color: AppColors.primary_2,
+                    //         ),
+                    //       ),
+                    //     ],
+                    //   ),
+                    // ),
+                    const SizedBox(height: 24),
+
+                    // Important notes section
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 50),
-                    AuthButton(
-                      text: 'Verify & Continue',
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (_) => CustomStatusDialog(
-                            type: StatusDialogType.success,
-                            title: 'Account Verified',
-                            message:
-                                'Welcome to Moonlight. Let’s set up your profile to get started.',
-                            primaryButtonText: 'Set Up My Profile',
-                            onPrimaryPressed: () {
-                              Navigator.pop(context);
-                              Navigator.pushNamed(
-                                context,
-                                RouteNames.profile_setup,
-                              );
-                            },
-                            secondaryButtonText: 'Skip For Now',
-                            onSecondaryPressed: () {
-                              Navigator.pop(context);
-                              Navigator.pushNamed(
-                                context,
-                                RouteNames.interests,
-                              );
-                            },
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.orange,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Important:',
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                        );
-                      }, //isButtonEnabled ? _onVerify : null,
+                          const SizedBox(height: 8),
+                          Text(
+                            '• Check both your inbox and spam folder\n'
+                            '• Link expires in 60 minutes\n'
+                            '• Click the link to complete verification\n'
+                            '• Didn\'t receive it? Try signing in, a new link will be sent to you',
+                            style: TextStyle(
+                              color: Colors.orange.withOpacity(0.9),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+
+                    const SizedBox(height: 40),
+
+                    // Action buttons
+                    AuthButton(
+                      text: "Sign In",
+                      onPressed: () {
+                        Navigator.pushNamed(context, RouteNames.login);
+                      },
+                    ),
+                    // const SizedBox(height: 16),
+
+                    // Support text
+                    // TextButton(
+                    //   onPressed: () {
+                    //     // Open support email or help center
+                    //     // _openSupport();
+                    //   },
+                    //   child: Text(
+                    //     'Need help? Contact Support',
+                    //     style: TextStyle(
+                    //       color: Colors.white.withOpacity(0.7),
+                    //       decoration: TextDecoration.underline,
+                    //     ),
+                    //   ),
+                    // ),
                   ],
                 ),
               ),

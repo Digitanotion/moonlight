@@ -1,8 +1,25 @@
-import 'package:dartz/dartz.dart';
-import 'package:moonlight/core/errors/failures.dart';
-import 'package:moonlight/features/profile_setup/domain/entities/user_profile.dart';
-
 abstract class ProfileRepository {
-  Future<Either<Failure, List<String>>> getCountries();
-  Future<Either<Failure, void>> updateProfile(UserProfile profile);
+  Future<void> setupProfile({
+    required String fullname,
+    String? gender, // 'male'|'female'|'other'|'prefer_not_to_say'
+    String? country,
+    String? bio,
+    List<String>? interests,
+    String? phone,
+    String? avatarPath, // optional file path
+  });
+  Future<Map<String, dynamic>> updateProfile({
+    String? fullname,
+    String? gender,
+    String? country,
+    String? bio,
+    List<String>? interests,
+    String? phone,
+    String? avatarPath,
+    bool removeAvatar = false,
+  });
+
+  Future<void> updateInterests(List<String> interests);
+
+  Future<List<String>> getCountries(); // from local asset
 }

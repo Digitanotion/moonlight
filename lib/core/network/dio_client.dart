@@ -1,0 +1,67 @@
+// lib/core/network/dio_client.dart
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart'; // for debugPrint
+
+/// Anything that can provide a token (e.g., SharedPreferences-backed class)
+abstract class AuthTokenProvider {
+  Future<String?> readToken();
+}
+
+class DioClient {
+  final Dio dio;
+
+  DioClient(String baseUrl, AuthTokenProvider tokenProvider)
+    : dio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 20),
+          sendTimeout: const Duration(seconds: 20),
+          headers: const {'Accept': 'application/json'},
+          // Let Dio auto-set content-type (JSON vs multipart) per request
+          contentType: null,
+        ),
+      ) {
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          // Read token from the provided source
+          String? token = await tokenProvider.readToken();
+
+          // Sanitize accidental "Bearer " prefix if caller saved it that way
+          if (token != null && token.startsWith('Bearer ')) {
+            token = token.substring(7);
+          }
+
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+
+          // Helpful one-liners while debugging
+          print('➡️  ${options.method} ${options.uri}');
+          print(
+            '   Authorization: ${options.headers['Authorization'] ?? '(none)'}',
+          );
+
+          handler.next(options);
+        },
+        onError: (e, handler) {
+          // Compact error visibility
+          debugPrint(
+            '❌ ${e.response?.statusCode} ${e.requestOptions.method} ${e.requestOptions.uri}',
+          );
+          handler.next(e);
+        },
+      ),
+    );
+
+    // Optional: verbose logs (disable for release)
+    // dio.interceptors.add(LogInterceptor(
+    //   requestHeader: true,
+    //   requestBody: true,
+    //   responseHeader: false,
+    //   responseBody: false,
+    //   error: true,
+    // ));
+  }
+}
