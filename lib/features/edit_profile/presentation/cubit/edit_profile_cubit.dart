@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/fetch_my_profile.dart';
 import 'package:moonlight/features/profile_setup/domain/usecases/update_profile.dart';
 import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart'
     as repo;
@@ -12,12 +13,14 @@ import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.d
 part 'edit_profile_state.dart';
 
 class EditProfileCubit extends Cubit<EditProfileState> {
+  final FetchMyProfile fetchMyProfile;
   final GetCurrentUser getCurrentUser; // to prefill
   final repo.ProfileRepository profileRepo; // for countries (reuse)
   final UpdateProfile updateProfile; // update call
   final AuthLocalDataSource authLocal; // to cache updated user
 
   EditProfileCubit({
+    required this.fetchMyProfile,
     required this.getCurrentUser,
     required this.profileRepo,
     required this.updateProfile,
@@ -26,26 +29,22 @@ class EditProfileCubit extends Cubit<EditProfileState> {
 
   Future<void> load() async {
     emit(state.copyWith(loading: true, error: null));
-
     try {
-      final userEither = await getCurrentUser();
-      userEither.fold(
-        (fail) => emit(state.copyWith(loading: false, error: fail.message)),
-        (user) async {
-          final countries = await profileRepo.getCountries();
-          emit(
-            state.copyWith(
-              loading: false,
-              countries: countries,
-              fullname: user.fullname ?? '',
-              gender: user.gender,
-              country: user.country,
-              bio: user.bio,
-              phone: user.phone,
-              avatarUrl: user.avatarUrl,
-            ),
-          );
-        },
+      final user = await fetchMyProfile(); // fetch from /v1/me & cache
+      final countries = await profileRepo.getCountries();
+      emit(
+        state.copyWith(
+          loading: false,
+          countries: countries,
+          fullname: user.fullname ?? '',
+          gender: user.gender,
+          country: user.country,
+          bio: user.bio,
+          phone: user.phone,
+          avatarUrl: user.avatarUrl,
+          // if you want to support DOB field in UI later:
+          dateOfBirth: user.dateOfBirth,
+        ),
       );
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));

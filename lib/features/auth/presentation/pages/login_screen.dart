@@ -76,7 +76,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 //     },
                 //   ),
                 // );
-                Navigator.pushReplacementNamed(context, RouteNames.home);
+                Navigator.pushReplacementNamed(
+                  context,
+                  RouteNames.profile_setup,
+                );
               } else if (state is AuthFailure) {
                 final isEmailNotVerified = state.message.toLowerCase().contains(
                   'email not verified',

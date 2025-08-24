@@ -47,7 +47,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (isFirstLaunch == true) {
       Navigator.pushReplacementNamed(context, RouteNames.onboarding);
     } else if (authState is AuthAuthenticated) {
-      Navigator.pushReplacementNamed(context, RouteNames.profile_setup);
+      Navigator.pushReplacementNamed(context, RouteNames.home);
     } else {
       Navigator.pushReplacementNamed(context, RouteNames.register);
     }

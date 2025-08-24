@@ -11,4 +11,5 @@ class RouteNames {
   static const String interests = '/interests';
   static const String user_profile = '/user_profile';
   static const editProfile = '/edit-profile';
+  static const myProfile = '/my-profile';
 }

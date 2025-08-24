@@ -8,9 +8,11 @@ import 'package:moonlight/features/profile_setup/data/datasources/country_local_
 import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
 import 'package:moonlight/features/profile_setup/data/repositories/profile_repository_impl.dart';
 import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/fetch_my_profile.dart';
 import 'package:moonlight/features/profile_setup/domain/usecases/setup_profile.dart';
 import 'package:moonlight/features/profile_setup/domain/usecases/update_interests.dart';
 import 'package:moonlight/features/profile_setup/domain/usecases/update_profile.dart';
+import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,7 +116,14 @@ Future<void> init() async {
     () => SearchRepositoryImpl(remoteDataSource: sl()),
   );
   sl.registerLazySingleton<ProfileRepository>(
-    () => ProfileRepositoryImpl(remote: sl(), countryLocal: sl()),
+    () => ProfileRepositoryImpl(
+      remote: sl(),
+      countryLocal: sl(),
+      local:
+          sl<
+            AuthLocalDataSource
+          >(), // this is your SharedPreferences-backed impl
+    ),
   );
 
   // Auth repository
@@ -142,6 +151,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SetupProfile(sl()));
   sl.registerLazySingleton(() => UpdateInterests(sl()));
   sl.registerLazySingleton(() => UpdateProfile(sl()));
+  sl.registerLazySingleton(() => FetchMyProfile(sl()));
 
   // ---------- Blocs ----------
   sl.registerFactory<OnboardingBloc>(() => OnboardingBloc(repository: sl()));
@@ -168,12 +178,15 @@ Future<void> init() async {
   // cubits
   sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
   sl.registerFactory(() => UserInterestCubit(sl()));
+  sl.registerFactory(() => ProfilePageCubit(fetchMyProfile: sl()));
+  // Cubit
   sl.registerFactory(
     () => EditProfileCubit(
-      getCurrentUser: sl(), // you already registered GetCurrentUser
-      profileRepo: sl(),
-      updateProfile: sl(),
-      authLocal: sl(), // AuthLocalDataSource
+      fetchMyProfile: sl(), // /v1/me
+      updateProfile: sl(), // PUT /v1/profile/update
+      profileRepo: sl(), // countries
+      authLocal: sl(),
+      getCurrentUser: sl(), // cache updated profile if needed
     ),
   );
 }

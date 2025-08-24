@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 
 class HomeBottomNav extends StatefulWidget {
   final int currentIndex;
@@ -95,6 +96,8 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                     // Already logged in
                     // Just let parent handle the navigation to profile screen
                     widget.onTap(4);
+                    Navigator.pushNamed(context, RouteNames.myProfile);
+                    // context.read<ProfilePageCubit>().load();
                   } else {
                     // Not logged in → navigate to login screen
                     Navigator.pushNamed(context, RouteNames.login);

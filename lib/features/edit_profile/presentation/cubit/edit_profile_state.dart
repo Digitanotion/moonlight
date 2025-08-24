@@ -17,6 +17,7 @@ class EditProfileState extends Equatable {
   final bool removeAvatar;
 
   final List<String> countries;
+  final String? dateOfBirth;
 
   const EditProfileState({
     required this.loading,
@@ -32,6 +33,7 @@ class EditProfileState extends Equatable {
     required this.avatarPath,
     required this.removeAvatar,
     required this.countries,
+    required this.dateOfBirth,
   });
 
   factory EditProfileState.initial() => const EditProfileState(
@@ -48,6 +50,7 @@ class EditProfileState extends Equatable {
     avatarPath: null,
     removeAvatar: false,
     countries: <String>[],
+    dateOfBirth: '',
   );
 
   EditProfileState copyWith({
@@ -64,6 +67,7 @@ class EditProfileState extends Equatable {
     String? avatarPath,
     bool? removeAvatar,
     List<String>? countries,
+    String? dateOfBirth,
   }) => EditProfileState(
     loading: loading ?? this.loading,
     submitting: submitting ?? this.submitting,
@@ -78,6 +82,7 @@ class EditProfileState extends Equatable {
     avatarPath: avatarPath ?? this.avatarPath,
     removeAvatar: removeAvatar ?? this.removeAvatar,
     countries: countries ?? this.countries,
+    dateOfBirth: dateOfBirth ?? this.dateOfBirth,
   );
 
   @override

@@ -1,3 +1,5 @@
+import 'package:moonlight/features/auth/data/models/user_model.dart';
+
 abstract class ProfileRepository {
   Future<void> setupProfile({
     required String fullname,
@@ -20,6 +22,7 @@ abstract class ProfileRepository {
   });
 
   Future<void> updateInterests(List<String> interests);
-
+  // NEW
+  Future<UserModel> fetchMyProfile();
   Future<List<String>> getCountries(); // from local asset
 }

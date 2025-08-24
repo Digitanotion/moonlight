@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:moonlight/widgets/moon_snack.dart';
 import '../cubit/edit_profile_cubit.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -42,14 +43,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return BlocConsumer<EditProfileCubit, EditProfileState>(
       listener: (context, state) {
         if (state.success) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Profile updated')));
-          Navigator.pop(context); // back
+          MoonSnack.success(context, "Profile updated");
         } else if (state.error != null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.error!)));
+          MoonSnack.error(context, state.error!);
         }
       },
       builder: (context, state) {

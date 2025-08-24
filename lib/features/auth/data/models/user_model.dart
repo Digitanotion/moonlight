@@ -53,6 +53,10 @@ class UserModel extends Equatable {
   @JsonKey(name: 'user_slug')
   final String? userSlug;
 
+  /// NEW
+  @JsonKey(name: 'username')
+  final String? username;
+
   @JsonKey(name: 'avatar_url')
   final String? avatarUrl;
 
@@ -81,13 +85,17 @@ class UserModel extends Equatable {
   @JsonKey(name: 'email_verified_at')
   final String? emailVerifiedAt;
 
+  /// NEW
+  @JsonKey(name: 'date_of_birth')
+  final String? dateOfBirth;
+
   @JsonKey(name: 'created_at')
   final String? createdAt;
 
   @JsonKey(name: 'updated_at')
   final String? updatedAt;
 
-  // These are now filled via LoginResponseModel
+  // Filled via LoginResponseModel
   final String? authToken;
   final String? tokenType;
   final int? expiresIn;
@@ -97,6 +105,7 @@ class UserModel extends Equatable {
     required this.email,
     this.agent_name,
     this.userSlug,
+    this.username, // NEW
     this.avatarUrl,
     this.avatar,
     this.fullname,
@@ -108,6 +117,7 @@ class UserModel extends Equatable {
     this.referralCode,
     this.referredBy,
     this.emailVerifiedAt,
+    this.dateOfBirth, // NEW
     this.createdAt,
     this.updatedAt,
     this.authToken,
@@ -121,6 +131,7 @@ class UserModel extends Equatable {
     String? email,
     String? agent_name,
     String? userSlug,
+    String? username, // NEW
     String? avatarUrl,
     String? avatar,
     String? fullname,
@@ -132,6 +143,7 @@ class UserModel extends Equatable {
     String? referralCode,
     int? referredBy,
     String? emailVerifiedAt,
+    String? dateOfBirth, // NEW
     String? createdAt,
     String? updatedAt,
     String? authToken,
@@ -143,6 +155,7 @@ class UserModel extends Equatable {
       email: email ?? this.email,
       agent_name: agent_name ?? this.agent_name,
       userSlug: userSlug ?? this.userSlug,
+      username: username ?? this.username, // NEW
       avatarUrl: avatarUrl ?? this.avatarUrl,
       avatar: avatar ?? this.avatar,
       fullname: fullname ?? this.fullname,
@@ -154,6 +167,7 @@ class UserModel extends Equatable {
       referralCode: referralCode ?? this.referralCode,
       referredBy: referredBy ?? this.referredBy,
       emailVerifiedAt: emailVerifiedAt ?? this.emailVerifiedAt,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth, // NEW
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       authToken: authToken ?? this.authToken,
@@ -164,6 +178,38 @@ class UserModel extends Equatable {
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
+  // NEW: map UserResource (shape returned by /v1/me -> { data: {...} } but we pass just the map)
+  /// NEW: map UserResource (shape returned by /v1/me and /v1/users/{slug})
+  /// NOTE: we pass the inner `{...}` map (not the envelope { "data": {...} }).
+  factory UserModel.fromUserResource(Map<String, dynamic> json) => UserModel(
+    userId: (json['id'] as num).toInt(),
+    email: (json['email'] as String?) ?? '', // spec includes email
+    userSlug: json['user_slug'] as String?,
+    username: json['username'] as String?,
+    fullname: json['fullname'] as String?,
+    bio: json['bio'] as String?,
+    avatarUrl: json['avatar_url'] as String?,
+    gender: json['gender'] as String?,
+    country: json['country'] as String?, // may be country code e.g. "NG"
+    dateOfBirth: json['date_of_birth'] as String?,
+    userInterests: (json['user_interests'] as List?)
+        ?.map((e) => e.toString())
+        .toList(),
+    // Optional / not guaranteed in UserResource:
+    phone: json['phone'] as String?,
+    agent_name: json['agent_name'] as String?,
+    referralCode: json['referral_code'] as String?,
+    referredBy: (json['referred_by'] as num?)?.toInt(),
+    emailVerifiedAt: json['email_verified_at'] as String?,
+    createdAt: json['created_at'] as String?,
+    updatedAt: json['updated_at'] as String?,
+    // Auth fields are not in /v1/me; keep null
+    authToken: null,
+    tokenType: null,
+    expiresIn: null,
+    // 'avatar' raw not present in UserResource; keep null
+    avatar: null,
+  );
 
   Map<String, dynamic> toJson() => _$UserModelToJson(this);
 
@@ -198,6 +244,7 @@ class UserModel extends Equatable {
     email,
     agent_name,
     userSlug,
+    username, // NEW
     avatarUrl,
     avatar,
     fullname,
@@ -209,6 +256,7 @@ class UserModel extends Equatable {
     referralCode,
     referredBy,
     emailVerifiedAt,
+    dateOfBirth, // NEW
     createdAt,
     updatedAt,
     authToken,

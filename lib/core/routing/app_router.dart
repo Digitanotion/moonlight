@@ -12,7 +12,9 @@ import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
+import 'package:moonlight/features/profile_setup/presentation/pages/my_profile_screen.dart';
 import 'package:moonlight/features/profile_setup/presentation/pages/profile_setup_screen.dart';
 
 import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
@@ -91,6 +93,13 @@ class AppRouter {
           builder: (_) => BlocProvider(
             create: (_) => sl<EditProfileCubit>(),
             child: const EditProfileScreen(),
+          ),
+        );
+      case RouteNames.myProfile:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => sl<ProfilePageCubit>(),
+            child: const MyProfileScreen(),
           ),
         );
 

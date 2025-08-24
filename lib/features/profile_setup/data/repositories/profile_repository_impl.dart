@@ -1,3 +1,6 @@
+import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
+import 'package:moonlight/features/auth/data/models/user_model.dart';
+
 import '../../domain/repositories/profile_repository.dart';
 import '../datasources/profile_remote_data_source.dart';
 import '../datasources/country_local_data_source.dart';
@@ -5,8 +8,13 @@ import '../datasources/country_local_data_source.dart';
 class ProfileRepositoryImpl implements ProfileRepository {
   final ProfileRemoteDataSource remote;
   final CountryLocalDataSource countryLocal;
+  final AuthLocalDataSource local;
 
-  ProfileRepositoryImpl({required this.remote, required this.countryLocal});
+  ProfileRepositoryImpl({
+    required this.remote,
+    required this.countryLocal,
+    required this.local,
+  });
 
   @override
   Future<void> setupProfile({
@@ -51,6 +59,18 @@ class ProfileRepositoryImpl implements ProfileRepository {
     avatarPath: avatarPath,
     removeAvatar: removeAvatar,
   );
+
+  @override
+  Future<UserModel> fetchMyProfile() async {
+    final map = await remote.getMe(); // UserResource map
+    final user = UserModel.fromUserResource(map);
+    // cache locally so the rest of the app sees the latest profile
+    try {
+      // ✅ cache locally (SharedPreferences under the hood)
+      await local.cacheUser(user);
+    } catch (_) {}
+    return user;
+  }
 
   @override
   Future<List<String>> getCountries() => countryLocal.loadCountries();

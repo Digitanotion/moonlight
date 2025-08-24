@@ -13,7 +13,6 @@ abstract class ProfileRemoteDataSource {
   });
 
   Future<void> updateInterests(List<String> interests);
-  // NEW: returns updated user map from API response
   Future<Map<String, dynamic>> updateProfile({
     String? fullname,
     String? gender,
@@ -23,7 +22,11 @@ abstract class ProfileRemoteDataSource {
     String? phone,
     String? avatarPath,
     bool removeAvatar = false,
+    String? dateOfBirth, // <-- add
   });
+
+  // NEW: fetch authenticated user profile
+  Future<Map<String, dynamic>> getMe();
 }
 
 class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
@@ -139,6 +142,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
     String? phone,
     String? avatarPath,
     bool removeAvatar = false,
+    String? dateOfBirth, // <-- add
   }) async {
     final payload = <String, dynamic>{
       if (fullname?.trim().isNotEmpty == true) 'fullname': fullname!.trim(),
@@ -149,20 +153,22 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
       if (interests != null && interests.isNotEmpty)
         'user_interests': interests,
       if (removeAvatar) 'remove_avatar': true,
+      if (dateOfBirth?.isNotEmpty == true)
+        'date_of_birth': dateOfBirth, // <-- NEW
     };
 
     Response res;
     if (avatarPath != null && avatarPath.isNotEmpty) {
-      final form = FormData.fromMap(payload);
-      form.files.add(
-        MapEntry(
-          'avatar',
-          await MultipartFile.fromFile(
-            avatarPath,
-            filename: avatarPath.split('/').last,
+      final form = FormData.fromMap(payload)
+        ..files.add(
+          MapEntry(
+            'avatar',
+            await MultipartFile.fromFile(
+              avatarPath,
+              filename: avatarPath.split('/').last,
+            ),
           ),
-        ),
-      );
+        );
       res = await dio.put(
         '/v1/profile/update',
         data: form,
@@ -182,7 +188,6 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
       );
     }
 
-    // expected: { message: "...", user: { ... } }
     final data = (res.data is Map<String, dynamic>)
         ? res.data as Map<String, dynamic>
         : <String, dynamic>{};
@@ -190,6 +195,18 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         ? data['user'] as Map<String, dynamic>
         : <String, dynamic>{};
     return user;
+  }
+
+  // NEW: GET /v1/me  -> returns { data: UserResource }
+  @override
+  Future<Map<String, dynamic>> getMe() async {
+    final res = await dio.get('/v1/me');
+    final body = (res.data is Map<String, dynamic>)
+        ? res.data as Map<String, dynamic>
+        : const {};
+    final data =
+        body['data'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    return data; // return a user map (UserResource shape)
   }
 
   String? _extractValidationMessage(dynamic data) {
