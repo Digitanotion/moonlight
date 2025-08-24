@@ -14,6 +14,13 @@ import 'package:moonlight/features/profile_setup/domain/usecases/update_interest
 import 'package:moonlight/features/profile_setup/domain/usecases/update_profile.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
+import 'package:moonlight/features/settings/data/datasources/account_remote_data_source.dart';
+import 'package:moonlight/features/settings/data/repositories/account_repository_impl.dart';
+import 'package:moonlight/features/settings/domain/repositories/account_repository.dart';
+import 'package:moonlight/features/settings/domain/usecases/deactivate_account.dart';
+import 'package:moonlight/features/settings/domain/usecases/delete_account.dart';
+import 'package:moonlight/features/settings/domain/usecases/reactivate_account.dart';
+import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -95,6 +102,9 @@ Future<void> init() async {
   sl.registerLazySingleton<CountryLocalDataSource>(
     () => CountryLocalDataSourceImpl(),
   );
+  sl.registerLazySingleton<AccountRemoteDataSource>(
+    () => AccountRemoteDataSourceImpl(sl<Dio>()),
+  );
 
   // SEARCH
   sl.registerLazySingleton<SearchRemoteDataSource>(
@@ -111,7 +121,9 @@ Future<void> init() async {
   sl.registerLazySingleton<OnboardingRepository>(
     () => OnboardingRepositoryImpl(localDataSource: sl()),
   );
-
+  sl.registerLazySingleton<AccountRepository>(
+    () => AccountRepositoryImpl(sl()),
+  );
   sl.registerLazySingleton<SearchRepository>(
     () => SearchRepositoryImpl(remoteDataSource: sl()),
   );
@@ -143,6 +155,9 @@ Future<void> init() async {
   sl.registerLazySingleton<SignUpWithEmail>(() => SignUpWithEmail(sl()));
   sl.registerLazySingleton<SocialLogin>(() => SocialLogin(sl()));
   sl.registerLazySingleton<Logout>(() => Logout(sl()));
+  sl.registerLazySingleton(() => DeactivateAccount(sl()));
+  sl.registerLazySingleton(() => ReactivateAccount(sl()));
+  sl.registerLazySingleton(() => DeleteAccount(sl()));
 
   sl.registerLazySingleton<SearchContent>(() => SearchContent(sl()));
   sl.registerLazySingleton<GetTrendingTags>(() => GetTrendingTags(sl()));
@@ -187,6 +202,14 @@ Future<void> init() async {
       profileRepo: sl(), // countries
       authLocal: sl(),
       getCurrentUser: sl(), // cache updated profile if needed
+    ),
+  );
+  sl.registerFactory<AccountSettingsCubit>(
+    () => AccountSettingsCubit(
+      deactivateAccount: sl(),
+      reactivateAccount: sl(),
+      deleteAccount: sl(),
+      prefs: sl(), // SharedPreferences
     ),
   );
 }

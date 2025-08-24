@@ -129,9 +129,6 @@ class LiveCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      // Country flag + space
-                      Text(countryCode, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           handle,
@@ -154,6 +151,21 @@ class LiveCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  Container(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8, top: 5),
+                      child: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(text: countryCode),
+                            TextSpan(text: " Nigeria"),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Country flag + space
                 ],
               ),
             ),

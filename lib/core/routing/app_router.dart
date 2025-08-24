@@ -19,6 +19,8 @@ import 'package:moonlight/features/profile_setup/presentation/pages/profile_setu
 
 import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
 import 'package:moonlight/features/search/presentation/pages/search_screen.dart';
+import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
+import 'package:moonlight/features/settings/presentation/pages/account_settings_page.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/pages/user_interest_screen.dart';
 
@@ -100,6 +102,13 @@ class AppRouter {
           builder: (_) => BlocProvider(
             create: (_) => sl<ProfilePageCubit>(),
             child: const MyProfileScreen(),
+          ),
+        );
+      case RouteNames.accountSettings:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => sl<AccountSettingsCubit>(),
+            child: const AccountSettingsPage(),
           ),
         );
 

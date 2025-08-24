@@ -8,7 +8,7 @@ class LiveNowSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 176,
+      height: 150,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
@@ -41,6 +41,34 @@ class _LiveItem {
 }
 
 final _items = <_LiveItem>[
+  _LiveItem(
+    'https://images.pexels.com/photos/2773941/pexels-photo-2773941.jpeg?auto=compress&w=800',
+    '@sarah_gam...',
+    'Active member',
+    '🇳🇬',
+    '2.4K',
+  ),
+  _LiveItem(
+    'https://images.pexels.com/photos/4253312/pexels-photo-4253312.jpeg?auto=compress&w=800',
+    '@chef_dami',
+    'Superstar',
+    '🇺🇸',
+    '2.4K',
+  ),
+  _LiveItem(
+    'https://images.pexels.com/photos/2773941/pexels-photo-2773941.jpeg?auto=compress&w=800',
+    '@sarah_gam...',
+    'Active member',
+    '🇳🇬',
+    '2.4K',
+  ),
+  _LiveItem(
+    'https://images.pexels.com/photos/4253312/pexels-photo-4253312.jpeg?auto=compress&w=800',
+    '@chef_dami',
+    'Superstar',
+    '🇺🇸',
+    '2.4K',
+  ),
   _LiveItem(
     'https://images.pexels.com/photos/2773941/pexels-photo-2773941.jpeg?auto=compress&w=800',
     '@sarah_gam...',

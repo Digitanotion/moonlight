@@ -151,7 +151,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: orange,
-                                  foregroundColor: Colors.black,
+                                  foregroundColor: AppColors.textWhite,
                                   shape: const StadiumBorder(),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 12,
@@ -234,6 +234,10 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                           ),
                           onAccount: () {
                             /* TODO: route */
+                            Navigator.pushNamed(
+                              context,
+                              RouteNames.accountSettings,
+                            );
                           },
                           onEarnings: () {
                             /* TODO: route */
@@ -399,7 +403,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isSel
-                  ? Colors.white.withOpacity(0.08)
+                  ? AppColors.secondary.withOpacity(0.7)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -599,7 +603,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: orange,
-                      foregroundColor: Colors.black,
+                      foregroundColor: AppColors.textWhite,
                       shape: const StadiumBorder(),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
