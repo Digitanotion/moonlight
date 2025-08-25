@@ -90,18 +90,7 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                 label: 'Profile',
                 active: widget.currentIndex == 4,
                 onTap: () {
-                  final authState = context.read<AuthBloc>().state;
-
-                  if (authState is AuthAuthenticated) {
-                    // Already logged in
-                    // Just let parent handle the navigation to profile screen
-                    widget.onTap(4);
-                    Navigator.pushNamed(context, RouteNames.myProfile);
-                    // context.read<ProfilePageCubit>().load();
-                  } else {
-                    // Not logged in → navigate to login screen
-                    Navigator.pushNamed(context, RouteNames.login);
-                  }
+                  Navigator.pushNamed(context, RouteNames.myProfile);
                 },
               ),
             ],

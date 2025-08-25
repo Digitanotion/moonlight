@@ -180,7 +180,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const TermsAndPolicyText(),
+                  // const TermsAndPolicyText(),
                 ],
               ),
             ),

@@ -295,7 +295,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       child: TextButton(
                         onPressed: () => Navigator.pushReplacementNamed(
                           context,
-                          RouteNames.editProfile,
+                          RouteNames.home,
                         ),
                         child: const Text(
                           'Skip for now',
@@ -348,7 +348,7 @@ class _Input extends StatelessWidget {
           label,
           style: const TextStyle(
             color: Colors.white70,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w900,
           ),
         ),
         const SizedBox(height: 8),
@@ -358,13 +358,16 @@ class _Input extends StatelessWidget {
           readOnly: readOnly,
           onChanged: onChanged,
           maxLines: maxLines,
-          style: const TextStyle(color: Colors.white),
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: AppColors.textWhite)
+              .copyWith(fontWeight: FontWeight.w900),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: Colors.white54),
             filled: true,
             fillColor: Colors.white.withOpacity(0.06),
             border: _border(),
+
             enabledBorder: _border(),
             focusedBorder: _border(color: Colors.white30),
             contentPadding: const EdgeInsets.symmetric(

@@ -56,7 +56,7 @@ class OnboardingScreen extends StatelessWidget {
                       await prefs.setBool('hasCompletedOnboarding', true);
                       Navigator.pushReplacementNamed(
                         context,
-                        RouteNames.interests,
+                        RouteNames.register,
                       );
                     },
                   ),

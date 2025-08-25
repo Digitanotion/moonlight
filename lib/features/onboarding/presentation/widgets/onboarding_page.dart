@@ -39,7 +39,7 @@ class OnboardingPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Spacer(flex: 3),
+                const Spacer(flex: 7),
 
                 // Title
                 Text(

@@ -191,23 +191,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 30),
-                    Center(
-                      child: GestureDetector(
-                        onTap: () {
-                          final userId = 'mock_id_123'; // temporary mock ID
-                          Navigator.pushNamed(context, RouteNames.editProfile);
-                        },
-                        child: Text(
-                          'View Profile',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: AppColors.textWhite,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ),
-                    ),
+                    //   const SizedBox(height: 30),
+                    //   Center(
+                    //     child: GestureDetector(
+                    //       onTap: () {
+                    //         final userId = 'mock_id_123'; // temporary mock ID
+                    //         Navigator.pushNamed(context, RouteNames.editProfile);
+                    //       },
+                    //       child: Text(
+                    //         'View Profile',
+                    //         style: Theme.of(context).textTheme.bodyMedium
+                    //             ?.copyWith(
+                    //               color: AppColors.textWhite,
+                    //               fontWeight: FontWeight.bold,
+                    //             ),
+                    //       ),
+                    //     ),
+                    //   ),
                   ],
                 ),
               );

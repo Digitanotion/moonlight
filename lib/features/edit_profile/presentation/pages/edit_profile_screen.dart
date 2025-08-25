@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/widgets/moon_snack.dart';
 import '../cubit/edit_profile_cubit.dart';
 
@@ -295,7 +296,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           const SizedBox(height: 14),
                           Center(
                             child: TextButton(
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: () => Navigator.pushReplacementNamed(
+                                context,
+                                RouteNames.home,
+                              ),
                               child: const Text(
                                 'Cancel',
                                 style: TextStyle(color: Color(0xFF19D85E)),

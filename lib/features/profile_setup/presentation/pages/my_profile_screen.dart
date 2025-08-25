@@ -16,7 +16,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<ProfilePageCubit>().load();
+    // context.read<ProfilePageCubit>().load();
   }
 
   @override
@@ -61,7 +61,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                           children: [
                             _iconButton(
                               context,
-                              Icons.arrow_back_rounded,
+                              Icons.arrow_back,
                               () => Navigator.pop(context),
                             ),
                             const Spacer(),
@@ -268,11 +268,11 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       child: Container(
         width: 36,
         height: 36,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white24),
-        ),
+        // decoration: BoxDecoration(
+        //   color: Colors.white.withOpacity(0.08),
+        //   borderRadius: BorderRadius.circular(10),
+        //   border: Border.all(color: Colors.white24),
+        // ),
         child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
@@ -516,25 +516,26 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            height: 36,
-            child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isPresident
-                    ? const Color(0xFFFF7A00)
-                    : Colors.white.withOpacity(0.08),
-                foregroundColor: isPresident ? Colors.black : Colors.white,
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-              child: Text(
-                isPresident ? 'Manage Club' : 'Open Club',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
+
+          // const SizedBox(width: 12),
+          // SizedBox(
+          //   height: 36,
+          //   child: ElevatedButton(
+          //     onPressed: () {},
+          //     style: ElevatedButton.styleFrom(
+          //       backgroundColor: isPresident
+          //           ? const Color(0xFFFF7A00)
+          //           : Colors.white.withOpacity(0.08),
+          //       foregroundColor: isPresident ? Colors.black : Colors.white,
+          //       shape: const StadiumBorder(),
+          //       padding: const EdgeInsets.symmetric(horizontal: 14),
+          //     ),
+          //     child: Text(
+          //       isPresident ? 'Manage Club' : 'Open Club',
+          //       style: const TextStyle(fontWeight: FontWeight.w700),
+          //     ),
+          //   ),
+          // ),
         ],
       ),
     );

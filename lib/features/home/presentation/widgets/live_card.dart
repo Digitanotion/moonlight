@@ -158,7 +158,10 @@ class LiveCard extends StatelessWidget {
                         text: TextSpan(
                           children: [
                             TextSpan(text: countryCode),
-                            TextSpan(text: " Nigeria"),
+                            TextSpan(
+                              text: " Nigeria",
+                              style: TextStyle(fontSize: 12),
+                            ),
                           ],
                         ),
                       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/widgets/auth_guard.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/auth/presentation/pages/email_verification.dart';
 import 'package:moonlight/features/auth/presentation/pages/forget_password.dart';
@@ -99,11 +100,15 @@ class AppRouter {
         );
       case RouteNames.myProfile:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => sl<ProfilePageCubit>(),
-            child: const MyProfileScreen(),
+          builder: (_) => AuthGuard(
+            child: BlocProvider<ProfilePageCubit>(
+              create: (_) => sl<ProfilePageCubit>()..load(),
+              child: const MyProfileScreen(),
+            ),
           ),
+          settings: settings,
         );
+
       case RouteNames.accountSettings:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
