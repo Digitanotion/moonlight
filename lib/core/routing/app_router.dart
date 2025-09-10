@@ -10,6 +10,16 @@ import 'package:moonlight/features/auth/presentation/pages/register_screen.dart'
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
 import 'package:moonlight/features/edit_profile/presentation/pages/edit_profile_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/chat_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/gifts_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/live_player_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/requests_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/viewers_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/pages/chat_fullscreen_page.dart';
+import 'package:moonlight/features/livestream/presentation/pages/go_live_page.dart';
+import 'package:moonlight/features/livestream/presentation/pages/live_host_page.dart';
+import 'package:moonlight/features/livestream/presentation/pages/live_viewer_page.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -107,6 +117,68 @@ class AppRouter {
             ),
           ),
           settings: settings,
+        );
+      case RouteNames.goLive:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => sl<GoLiveCubit>(),
+            child: const GoLivePage(),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.chatFullscreen:
+        final uuid = settings.arguments as String;
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider.value(
+            // reuse your existing ChatCubit instance if provided higher up
+            value: sl<ChatCubit>()..loadHistory(),
+            child: ChatFullscreenPage(livestreamUuid: uuid),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.liveViewer:
+        final lsUuid = settings.arguments as String;
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => MultiBlocProvider(
+            providers: [
+              BlocProvider(create: (_) => LivePlayerCubit(sl())), // repo
+              BlocProvider(
+                create: (_) => ChatCubit(sl(), lsUuid)..loadHistory(),
+              ),
+              BlocProvider(
+                create: (_) => ViewersCubit(sl(), lsUuid)..refresh(),
+              ),
+              BlocProvider(create: (_) => GiftsCubit(sl(), lsUuid)),
+            ],
+            child: LiveViewerPage(livestreamUuid: lsUuid),
+          ),
+        );
+
+      case RouteNames.liveHost:
+        final args = settings.arguments as Map<String, String>;
+        // { 'uuid','channel','token','appId' } from CreateLivestream usecase/repo
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => MultiBlocProvider(
+            providers: [
+              BlocProvider(create: (_) => LivePlayerCubit(sl())),
+              BlocProvider(
+                create: (_) => ChatCubit(sl(), args['uuid']!)..loadHistory(),
+              ),
+              BlocProvider(
+                create: (_) => RequestsCubit(sl(), args['uuid']!)..poll(),
+              ),
+            ],
+            child: LiveHostPage(
+              livestreamUuid: args['uuid']!,
+              channelName: args['channel']!,
+              rtcToken: args['token']!,
+              appId: args['appId']!,
+            ),
+          ),
         );
 
       case RouteNames.accountSettings:

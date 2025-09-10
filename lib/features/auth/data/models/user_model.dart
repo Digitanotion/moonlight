@@ -4,7 +4,7 @@ import 'package:moonlight/features/auth/domain/entities/user_entity.dart';
 
 part 'user_model.g.dart';
 
-/// Wrapper for API response
+/// Wrapper for API login response (no UUID here; only token + minimal user)
 @JsonSerializable()
 class LoginResponseModel {
   final UserModel user;
@@ -30,7 +30,8 @@ class LoginResponseModel {
 
   Map<String, dynamic> toJson() => _$LoginResponseModelToJson(this);
 
-  /// Convert API response into a proper UserModel with token fields
+  /// Convert API response into a proper UserModel with token fields.
+  /// NOTE: This does NOT inject UUID (login payload usually has no uuid).
   UserModel toUserModel() {
     return user.copyWith(
       authToken: accessToken,
@@ -42,8 +43,13 @@ class LoginResponseModel {
 
 @JsonSerializable()
 class UserModel extends Equatable {
+  /// New: UUID exposed by the API everywhere (this is what we persist & expose).
+  @JsonKey(name: 'uuid')
+  final String? uuid;
+
+  /// Legacy: some endpoints still return numeric id (keep for compatibility).
   @JsonKey(name: 'id')
-  final int userId;
+  final int? userId;
 
   final String email;
 
@@ -53,7 +59,6 @@ class UserModel extends Equatable {
   @JsonKey(name: 'user_slug')
   final String? userSlug;
 
-  /// NEW
   @JsonKey(name: 'username')
   final String? username;
 
@@ -85,7 +90,6 @@ class UserModel extends Equatable {
   @JsonKey(name: 'email_verified_at')
   final String? emailVerifiedAt;
 
-  /// NEW
   @JsonKey(name: 'date_of_birth')
   final String? dateOfBirth;
 
@@ -101,11 +105,12 @@ class UserModel extends Equatable {
   final int? expiresIn;
 
   const UserModel({
-    required this.userId,
+    this.uuid,
+    this.userId,
     required this.email,
     this.agent_name,
     this.userSlug,
-    this.username, // NEW
+    this.username,
     this.avatarUrl,
     this.avatar,
     this.fullname,
@@ -117,7 +122,7 @@ class UserModel extends Equatable {
     this.referralCode,
     this.referredBy,
     this.emailVerifiedAt,
-    this.dateOfBirth, // NEW
+    this.dateOfBirth,
     this.createdAt,
     this.updatedAt,
     this.authToken,
@@ -125,13 +130,14 @@ class UserModel extends Equatable {
     this.expiresIn,
   });
 
-  /// CopyWith to easily set token fields from response wrapper
+  /// CopyWith (keeps immutability)
   UserModel copyWith({
+    String? uuid,
     int? userId,
     String? email,
     String? agent_name,
     String? userSlug,
-    String? username, // NEW
+    String? username,
     String? avatarUrl,
     String? avatar,
     String? fullname,
@@ -143,7 +149,7 @@ class UserModel extends Equatable {
     String? referralCode,
     int? referredBy,
     String? emailVerifiedAt,
-    String? dateOfBirth, // NEW
+    String? dateOfBirth,
     String? createdAt,
     String? updatedAt,
     String? authToken,
@@ -151,11 +157,12 @@ class UserModel extends Equatable {
     int? expiresIn,
   }) {
     return UserModel(
+      uuid: uuid ?? this.uuid,
       userId: userId ?? this.userId,
       email: email ?? this.email,
       agent_name: agent_name ?? this.agent_name,
       userSlug: userSlug ?? this.userSlug,
-      username: username ?? this.username, // NEW
+      username: username ?? this.username,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       avatar: avatar ?? this.avatar,
       fullname: fullname ?? this.fullname,
@@ -167,7 +174,7 @@ class UserModel extends Equatable {
       referralCode: referralCode ?? this.referralCode,
       referredBy: referredBy ?? this.referredBy,
       emailVerifiedAt: emailVerifiedAt ?? this.emailVerifiedAt,
-      dateOfBirth: dateOfBirth ?? this.dateOfBirth, // NEW
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       authToken: authToken ?? this.authToken,
@@ -178,23 +185,22 @@ class UserModel extends Equatable {
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
-  // NEW: map UserResource (shape returned by /v1/me -> { data: {...} } but we pass just the map)
-  /// NEW: map UserResource (shape returned by /v1/me and /v1/users/{slug})
-  /// NOTE: we pass the inner `{...}` map (not the envelope { "data": {...} }).
+
+  /// Map **UserResource** (the `data` from `/v1/me`) — this includes `uuid`.
+  /// NOTE: we pass the inner `{...}` map (not the envelope `{ "data": {...} }`).
   factory UserModel.fromUserResource(Map<String, dynamic> json) => UserModel(
-    userId: (json['id'] as num).toInt(),
-    email: (json['email'] as String?) ?? '', // spec includes email
+    uuid: json['uuid'] as String?,
+    userId: (json['id'] as num?)?.toInt(),
+    email: (json['email'] as String?) ?? '',
     userSlug: json['user_slug'] as String?,
     username: json['username'] as String?,
     fullname: json['fullname'] as String?,
     bio: json['bio'] as String?,
     avatarUrl: json['avatar_url'] as String?,
     gender: json['gender'] as String?,
-    country: json['country'] as String?, // may be country code e.g. "NG"
+    country: json['country'] as String?,
     dateOfBirth: json['date_of_birth'] as String?,
-    userInterests: (json['user_interests'] as List?)
-        ?.map((e) => e.toString())
-        .toList(),
+    userInterests: (json['user_interests'] as List?)?.map((e) => '$e').toList(),
     // Optional / not guaranteed in UserResource:
     phone: json['phone'] as String?,
     agent_name: json['agent_name'] as String?,
@@ -214,8 +220,9 @@ class UserModel extends Equatable {
   Map<String, dynamic> toJson() => _$UserModelToJson(this);
 
   /// Model → Entity
+  /// IMPORTANT: We expose **uuid** in the entity's `id` field (so old code using `user.id` keeps working).
   User toEntity() => User(
-    id: userId.toString(),
+    id: (uuid ?? userId?.toString() ?? ''),
     email: email,
     agent_name: agent_name,
     userSlug: userSlug,
@@ -232,19 +239,18 @@ class UserModel extends Equatable {
     authToken: authToken,
   );
 
-  /// Get display name (prefer fullname if available)
+  /// Display helpers
   String get displayName => fullname ?? agent_name ?? email;
-
-  /// Check if email is verified
   bool get isEmailVerified => emailVerifiedAt != null;
 
   @override
   List<Object?> get props => [
+    uuid,
     userId,
     email,
     agent_name,
     userSlug,
-    username, // NEW
+    username,
     avatarUrl,
     avatar,
     fullname,
@@ -256,7 +262,7 @@ class UserModel extends Equatable {
     referralCode,
     referredBy,
     emailVerifiedAt,
-    dateOfBirth, // NEW
+    dateOfBirth,
     createdAt,
     updatedAt,
     authToken,
@@ -265,15 +271,16 @@ class UserModel extends Equatable {
   ];
 }
 
-/// Entity → Model (optional helper)
+/// Entity → Model (helper for caching etc.)
 extension UserEntityX on User {
   UserModel toModel() => UserModel(
-    userId: int.parse(id),
+    uuid: id, // our entity.id is UUID now
+    userId: null, // we no longer rely on numeric ids
     email: email,
     agent_name: agent_name,
     userSlug: userSlug,
     avatarUrl: avatarUrl,
-    avatar: avatarUrl, // Map entity avatarUrl to both avatar and avatarUrl
+    avatar: avatarUrl,
     fullname: fullname,
     gender: gender,
     country: country,
@@ -281,7 +288,7 @@ extension UserEntityX on User {
     userInterests: userInterests,
     phone: phone,
     referralCode: referralCode,
-    referredBy: referredBy != null ? int.parse(referredBy!) : null,
+    referredBy: referredBy != null ? int.tryParse(referredBy!) : null,
     emailVerifiedAt: emailVerifiedAt,
     authToken: authToken,
   );

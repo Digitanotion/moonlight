@@ -13,4 +13,8 @@ class RouteNames {
   static const editProfile = '/edit-profile';
   static const myProfile = '/my-profile';
   static const accountSettings = '/account-settings';
+  static const goLive = '/live/go';
+  static const chatFullscreen = '/live/chat';
+  static const liveHost = '/live/host';
+  static const liveViewer = '/live/viewer';
 }

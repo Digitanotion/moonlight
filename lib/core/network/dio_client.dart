@@ -51,6 +51,13 @@ class DioClient {
             '❌ ${e.response?.statusCode} ${e.requestOptions.method} ${e.requestOptions.uri}',
           );
           handler.next(e);
+          //New Patch
+          // Normalize messages for UI
+          // final data = e.response?.data;
+          // final msg = (data is Map && data['message'] is String)
+          //     ? data['message'] as String
+          //     : 'Something went wrong. Please try again.';
+          // handler.next(e..error = msg);
         },
       ),
     );

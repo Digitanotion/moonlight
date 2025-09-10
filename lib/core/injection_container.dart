@@ -2,8 +2,20 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
+
+import 'package:moonlight/features/livestream/data/datasources/livestream_remote_ds.dart';
+import 'package:moonlight/features/livestream/data/repositories/livestream_repository_impl.dart';
+import 'package:moonlight/features/livestream/domain/repositories/livestream_repository.dart';
+import 'package:moonlight/features/livestream/domain/usecases/create_livestream.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/gifts_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/requests_cubit.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/viewers_cubit.dart';
+
 import 'package:moonlight/features/profile_setup/data/datasources/country_local_data_source.dart';
 import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
 import 'package:moonlight/features/profile_setup/data/repositories/profile_repository_impl.dart';
@@ -212,6 +224,24 @@ Future<void> init() async {
       prefs: sl(), // SharedPreferences
     ),
   );
+
+  //LIVE STREAM
+  registerLivestream();
+  //Agora
+  sl.registerLazySingleton<AgoraService>(() => AgoraService());
+}
+
+// lib/injection_container.dart  (excerpt)
+void registerLivestream() {
+  // Remote DS
+  sl.registerLazySingleton<LivestreamRemoteDataSource>(
+    () => LivestreamRemoteDataSource(sl<Dio>()),
+  );
+  sl.registerLazySingleton<LivestreamRepository>(
+    () => LivestreamRepositoryImpl(sl()),
+  );
+  sl.registerFactory(() => CreateLivestream(sl())); // repo already registered
+  sl.registerFactory(() => GoLiveCubit(sl()));
 }
 
 /// Centralized Dio builder with sane defaults + auth header.

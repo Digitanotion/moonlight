@@ -8,6 +8,7 @@ abstract class AuthRemoteDataSource {
     String password,
     String deviceName,
   );
+  Future<UserModel> fetchMe();
 
   Future<LoginResponseModel> signUpWithEmail({
     required String email,
@@ -33,6 +34,17 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final Dio client;
 
   AuthRemoteDataSourceImpl({required this.client});
+  @override
+  Future<UserModel> fetchMe() async {
+    final res = await client.get(
+      '/v1/me',
+    ); // Sanctum token already on interceptor
+    // API shape: { "data": { ...UserResource } }
+    final data = (res.data is Map && res.data['data'] is Map)
+        ? Map<String, dynamic>.from(res.data['data'] as Map)
+        : <String, dynamic>{};
+    return UserModel.fromUserResource(data);
+  }
 
   @override
   Future<LoginResponseModel> loginWithEmail(

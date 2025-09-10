@@ -12,6 +12,9 @@ abstract class AuthLocalDataSource implements AuthTokenProvider {
 
   Future<void> cacheUser(UserModel user);
   Future<UserModel> getCurrentUser();
+
+  /// Convenience getter to read the cached user's UUID quickly.
+  Future<String?> getCurrentUserUuid();
   Future<void> clearUserData();
 }
 
@@ -30,6 +33,20 @@ class AuthLocalDataSourceImpl
   Future<String?> getAuthToken() async {
     final raw = sharedPreferences.getString(_tokenKey);
     return _sanitize(raw);
+  }
+
+  @override
+  Future<String?> getCurrentUserUuid() async {
+    final jsonString = sharedPreferences.getString(_userKey);
+    if (jsonString == null) return null;
+    try {
+      final map = jsonDecode(jsonString) as Map<String, dynamic>;
+      // Expecting your cached user JSON to include 'uuid'
+      final uuid = (map['uuid'] ?? map['user_uuid']) as String?;
+      return uuid?.trim().isEmpty == true ? null : uuid;
+    } catch (_) {
+      return null;
+    }
   }
 
   // for DioClient interceptor (AuthTokenProvider)

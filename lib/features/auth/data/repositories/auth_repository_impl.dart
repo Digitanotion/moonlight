@@ -81,23 +81,30 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final deviceName = await _getDeviceName();
 
-      // Use LoginResponseModel from remote datasource
+      // 1) Login -> tokens
       final loginResponse = await remoteDataSource.loginWithEmail(
         email,
         password,
         deviceName,
       );
 
-      // Convert wrapper to UserModel with token
-      final userModel = loginResponse.toUserModel();
+      // 2) Fetch full profile -> has `uuid`
+      final me = await remoteDataSource.fetchMe();
 
-      // Cache token and user
-      if (userModel.authToken != null) {
-        await localDataSource.cacheToken(userModel.authToken!);
-        await localDataSource.cacheUser(userModel);
+      // 3) Merge token fields into `me`
+      final merged = me.copyWith(
+        authToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresIn: loginResponse.expiresIn,
+      );
+
+      // 4) Cache token + user (with uuid)
+      if (merged.authToken != null) {
+        await localDataSource.cacheToken(merged.authToken!);
+        await localDataSource.cacheUser(merged);
       }
 
-      return Right(userModel.toEntity());
+      return Right(merged.toEntity());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
@@ -112,6 +119,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String? agent_name,
   }) async {
     try {
+      // 1) Register -> may return token depending on backend
       final signUpResponse = await remoteDataSource.signUpWithEmail(
         email: email,
         password: password,
@@ -119,14 +127,22 @@ class AuthRepositoryImpl implements AuthRepository {
         agent_name: agent_name,
       );
 
-      final userModel = signUpResponse.toUserModel();
+      // 2) Fetch full profile
+      final me = await remoteDataSource.fetchMe();
 
-      if (userModel.authToken != null) {
-        await localDataSource.cacheToken(userModel.authToken!);
-        await localDataSource.cacheUser(userModel);
+      // 3) Merge token fields if present
+      final merged = me.copyWith(
+        authToken: signUpResponse.accessToken,
+        tokenType: signUpResponse.tokenType,
+        expiresIn: signUpResponse.expiresIn,
+      );
+
+      if (merged.authToken != null) {
+        await localDataSource.cacheToken(merged.authToken!);
+        await localDataSource.cacheUser(merged);
       }
 
-      return Right(userModel.toEntity());
+      return Right(merged.toEntity());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
@@ -144,12 +160,20 @@ class AuthRepositoryImpl implements AuthRepository {
         deviceName,
       );
 
-      final userModel = loginResponse.toUserModel();
+      final me = await remoteDataSource.fetchMe();
 
-      await localDataSource.cacheToken(userModel.authToken!);
-      await localDataSource.cacheUser(userModel);
+      final merged = me.copyWith(
+        authToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresIn: loginResponse.expiresIn,
+      );
 
-      return Right(userModel.toEntity());
+      if (merged.authToken != null) {
+        await localDataSource.cacheToken(merged.authToken!);
+        await localDataSource.cacheUser(merged);
+      }
+
+      return Right(merged.toEntity());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
@@ -168,14 +192,20 @@ class AuthRepositoryImpl implements AuthRepository {
         deviceName,
       );
 
-      final userModel = loginResponse.toUserModel();
+      final me = await remoteDataSource.fetchMe();
 
-      if (userModel.authToken != null) {
-        await localDataSource.cacheToken(userModel.authToken!);
-        await localDataSource.cacheUser(userModel);
+      final merged = me.copyWith(
+        authToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresIn: loginResponse.expiresIn,
+      );
+
+      if (merged.authToken != null) {
+        await localDataSource.cacheToken(merged.authToken!);
+        await localDataSource.cacheUser(merged);
       }
 
-      return Right(userModel.toEntity());
+      return Right(merged.toEntity());
     } on AuthException catch (e) {
       return Left(AuthFailure(e.message));
     } on ServerException catch (e) {
