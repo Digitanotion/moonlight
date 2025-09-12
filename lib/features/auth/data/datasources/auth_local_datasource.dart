@@ -36,17 +36,12 @@ class AuthLocalDataSourceImpl
   }
 
   @override
+  // NEW: expose uuid for Agora
   Future<String?> getCurrentUserUuid() async {
     final jsonString = sharedPreferences.getString(_userKey);
     if (jsonString == null) return null;
-    try {
-      final map = jsonDecode(jsonString) as Map<String, dynamic>;
-      // Expecting your cached user JSON to include 'uuid'
-      final uuid = (map['uuid'] ?? map['user_uuid']) as String?;
-      return uuid?.trim().isEmpty == true ? null : uuid;
-    } catch (_) {
-      return null;
-    }
+    final map = jsonDecode(jsonString) as Map<String, dynamic>;
+    return map['uuid']?.toString();
   }
 
   // for DioClient interceptor (AuthTokenProvider)
@@ -96,7 +91,7 @@ class AuthLocalDataSourceImpl
     await sharedPreferences.remove(_userKey);
   }
 
-  // ---- Helpers ----
+  // ---- Helpers, sanitize
   String? _sanitize(String? t) {
     if (t == null) return null;
     final s = t.trim();

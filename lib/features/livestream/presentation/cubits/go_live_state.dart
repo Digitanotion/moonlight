@@ -1,74 +1,119 @@
-part of 'go_live_cubit.dart';
+import 'package:moonlight/features/livestream/domain/entities/live_category.dart';
 
-enum GoLiveStatus { idle, submitting, success, error }
+class GoLiveState {
+  // Media
+  final String? coverPath;
+  final String title;
+  final LiveCategory? category;
 
-class GoLiveState extends Equatable {
+  // Toggles
+  final bool premium;
+  final bool allowGuestBox;
+  final bool comments;
+  final bool showCount;
+
+  // Devices (desired state the user selected)
+  final bool micOn;
+  final bool camOn;
+
+  // Device readiness/results
+  final bool camReady;
+  final bool micReady;
+  final double micLevel; // 0..1
+
+  // Loading / actions
+  final bool loading;
+  final bool starting;
+  final bool eligibleBonus;
+
+  // Preview
+  final bool previewReady;
+  final int estLow;
+  final int estHigh;
+  final String bestTime;
+
+  // Data + error
+  final List<LiveCategory> categories;
+  final String? error;
+
   const GoLiveState({
+    this.coverPath,
     this.title = '',
     this.category,
-    this.record = false,
-    this.allowGuests = false,
-    this.enableComments = true,
-    this.showViewerCount = true,
-    this.visibility = 'public',
-    this.clubUuid,
-    this.status = GoLiveStatus.idle,
-    this.message,
-    this.created,
+    this.premium = false,
+    this.allowGuestBox = false,
+    this.comments = true,
+    this.showCount = true,
+    this.micOn = true,
+    this.camOn = false,
+    this.camReady = false,
+    this.micReady = false,
+    this.micLevel = 0.0,
+    this.loading = false,
+    this.starting = false,
+    this.eligibleBonus = false,
+    this.previewReady = false,
+    this.estLow = 0,
+    this.estHigh = 0,
+    this.bestTime = 'Now',
+    this.categories = const [],
+    this.error,
   });
 
-  final String title;
-  final String? category;
-  final bool record;
-  final bool allowGuests;
-  final bool enableComments;
-  final bool showViewerCount;
-  final String visibility; // public|followers|private|club
-  final String? clubUuid;
-  final GoLiveStatus status;
-  final String? message;
-  final Livestream? created;
+  bool get canStart => title.trim().isNotEmpty && category != null && !starting;
+  bool get devicesOk => (!camOn || camReady) && (!micOn || micReady);
 
   GoLiveState copyWith({
+    String? coverPath,
     String? title,
-    String? category,
-    bool? record,
-    bool? allowGuests,
-    bool? enableComments,
-    bool? showViewerCount,
-    String? visibility,
-    String? clubUuid,
-    GoLiveStatus? status,
-    String? message,
-    Livestream? created,
+    LiveCategory? category,
+    bool? premium,
+    bool? allowGuestBox,
+    bool? comments,
+    bool? showCount,
+    bool? micOn,
+    bool? camOn,
+    bool? camReady,
+    bool? micReady,
+    double? micLevel,
+    bool? loading,
+    bool? starting,
+    bool? eligibleBonus,
+    bool? previewReady,
+    int? estLow,
+    int? estHigh,
+    String? bestTime,
+    List<LiveCategory>? categories,
+    String? error,
+    bool clearError = false,
   }) {
     return GoLiveState(
+      coverPath: coverPath ?? this.coverPath,
       title: title ?? this.title,
       category: category ?? this.category,
-      record: record ?? this.record,
-      allowGuests: allowGuests ?? this.allowGuests,
-      enableComments: enableComments ?? this.enableComments,
-      showViewerCount: showViewerCount ?? this.showViewerCount,
-      visibility: visibility ?? this.visibility,
-      clubUuid: clubUuid ?? this.clubUuid,
-      status: status ?? this.status,
-      message: message,
-      created: created ?? this.created,
+      premium: premium ?? this.premium,
+      allowGuestBox: allowGuestBox ?? this.allowGuestBox,
+      comments: comments ?? this.comments,
+      showCount: showCount ?? this.showCount,
+      micOn: micOn ?? this.micOn,
+      camOn: camOn ?? this.camOn,
+      camReady: camReady ?? this.camReady,
+      micReady: micReady ?? this.micReady,
+      micLevel: micLevel ?? this.micLevel,
+      loading: loading ?? this.loading,
+      starting: starting ?? this.starting,
+      eligibleBonus: eligibleBonus ?? this.eligibleBonus,
+      previewReady: previewReady ?? this.previewReady,
+      estLow: estLow ?? this.estLow,
+      estHigh: estHigh ?? this.estHigh,
+      bestTime: bestTime ?? this.bestTime,
+      categories: categories ?? this.categories,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 
   @override
-  List<Object?> get props => [
-    title,
-    category,
-    record,
-    allowGuests,
-    enableComments,
-    showViewerCount,
-    visibility,
-    clubUuid,
-    status,
-    message,
-    created,
-  ];
+  String toString() =>
+      'GoLiveState(title:$title, cat:${category?.name}, micOn:$micOn, micReady:$micReady, '
+      'camOn:$camOn, camReady:$camReady, micLevel:$micLevel, starting:$starting)';
 }

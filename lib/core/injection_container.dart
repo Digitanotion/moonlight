@@ -6,15 +6,20 @@ import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
-
-import 'package:moonlight/features/livestream/data/datasources/livestream_remote_ds.dart';
-import 'package:moonlight/features/livestream/data/repositories/livestream_repository_impl.dart';
-import 'package:moonlight/features/livestream/domain/repositories/livestream_repository.dart';
-import 'package:moonlight/features/livestream/domain/usecases/create_livestream.dart';
-import 'package:moonlight/features/livestream/presentation/cubits/gifts_cubit.dart';
+import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_mock.dart';
+import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
+import 'package:moonlight/features/livestream/data/repositories/fake_live_session_repository.dart';
+import 'package:moonlight/features/livestream/data/repositories/go_live_repository_impl.dart';
+import 'package:moonlight/features/livestream/data/repositories/live_repository_mock.dart';
+import 'package:moonlight/features/livestream/data/services/audio_test_service_impl.dart';
+import 'package:moonlight/features/livestream/data/services/camera_service_impl.dart';
+import 'package:moonlight/features/livestream/domain/repositories/go_live_repository.dart';
+import 'package:moonlight/features/livestream/domain/repositories/live_repository.dart';
+import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
+import 'package:moonlight/features/livestream/domain/services/audio_test_service.dart';
+import 'package:moonlight/features/livestream/domain/services/camera_service.dart';
+import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
-import 'package:moonlight/features/livestream/presentation/cubits/requests_cubit.dart';
-import 'package:moonlight/features/livestream/presentation/cubits/viewers_cubit.dart';
 
 import 'package:moonlight/features/profile_setup/data/datasources/country_local_data_source.dart';
 import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
@@ -68,7 +73,6 @@ import 'package:moonlight/features/search/domain/usecases/get_suggested_users.da
 import 'package:moonlight/features/search/domain/usecases/get_trending_tags.dart';
 import 'package:moonlight/features/search/domain/usecases/search_content.dart';
 import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
-
 // INTERESTS (Profile – interests selection)
 
 final sl = GetIt.instance;
@@ -226,23 +230,41 @@ Future<void> init() async {
   );
 
   //LIVE STREAM
-  registerLivestream();
+  // registerLivestream();
+  live_host();
+  goLive();
+  live_viewer();
   //Agora
   sl.registerLazySingleton<AgoraService>(() => AgoraService());
 }
 
-// lib/injection_container.dart  (excerpt)
-void registerLivestream() {
-  // Remote DS
-  sl.registerLazySingleton<LivestreamRemoteDataSource>(
-    () => LivestreamRemoteDataSource(sl<Dio>()),
-  );
-  sl.registerLazySingleton<LivestreamRepository>(
-    () => LivestreamRepositoryImpl(sl()),
-  );
-  sl.registerFactory(() => CreateLivestream(sl())); // repo already registered
-  sl.registerFactory(() => GoLiveCubit(sl()));
+goLive() {
+  // Repos
+  sl.registerLazySingleton<GoLiveRepository>(() => GoLiveRepositoryImpl());
+
+  // Services (✅ use concrete implementations)
+  sl.registerLazySingleton<CameraService>(() => RealCameraService());
+  sl.registerLazySingleton<AudioTestService>(() => RecordAudioTestService());
+
+  // Cubit
+  sl.registerFactory<GoLiveCubit>(() => GoLiveCubit(sl(), sl(), sl()));
 }
+
+live_host() {
+  // Repo (swap later with real impl)
+  sl.registerLazySingleton<LiveSessionRepository>(
+    () => FakeLiveSessionRepository(),
+  );
+
+  // Bloc
+  sl.registerFactory(() => LiveHostBloc(sl<LiveSessionRepository>()));
+}
+
+live_viewer() {
+  // injection_container.dart
+  sl.registerLazySingleton<ViewerRepository>(() => ViewerRepositoryMock());
+}
+// lib/injection_container.dart  (excerpt)
 
 /// Centralized Dio builder with sane defaults + auth header.
 /// Reads the token from SharedPreferences and injects it as:

@@ -34,10 +34,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final Dio client;
 
   AuthRemoteDataSourceImpl({required this.client});
+
+  final BaseUrl = "https://svc.moonlightstream.app/api";
   @override
   Future<UserModel> fetchMe() async {
     final res = await client.get(
-      '/v1/me',
+      '${BaseUrl}/v1/me',
     ); // Sanctum token already on interceptor
     // API shape: { "data": { ...UserResource } }
     final data = (res.data is Map && res.data['data'] is Map)

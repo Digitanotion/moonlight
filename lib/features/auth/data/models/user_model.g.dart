@@ -11,7 +11,7 @@ LoginResponseModel _$LoginResponseModelFromJson(Map<String, dynamic> json) =>
       user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
       accessToken: json['access_token'] as String?,
       tokenType: json['token_type'] as String?,
-      expiresIn: (json['expires_in'] as num?)?.toInt(),
+      expiresIn: json['expires_in'] as String?,
     );
 
 Map<String, dynamic> _$LoginResponseModelToJson(LoginResponseModel instance) =>
@@ -23,7 +23,8 @@ Map<String, dynamic> _$LoginResponseModelToJson(LoginResponseModel instance) =>
     };
 
 UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
-  userId: (json['id'] as num).toInt(),
+  uuid: json['uuid'] as String?,
+  userId: json['id'] as String?,
   email: json['email'] as String,
   agent_name: json['agent_name'] as String?,
   userSlug: json['user_slug'] as String?,
@@ -39,17 +40,18 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
       .toList(),
   phone: json['phone'] as String?,
   referralCode: json['referral_code'] as String?,
-  referredBy: (json['referred_by'] as num?)?.toInt(),
+  referredBy: json['referred_by'] as String?,
   emailVerifiedAt: json['email_verified_at'] as String?,
   dateOfBirth: json['date_of_birth'] as String?,
   createdAt: json['created_at'] as String?,
   updatedAt: json['updated_at'] as String?,
   authToken: json['authToken'] as String?,
   tokenType: json['tokenType'] as String?,
-  expiresIn: (json['expiresIn'] as num?)?.toInt(),
+  expiresIn: json['expiresIn'] as String?,
 );
 
 Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
+  'uuid': instance.uuid,
   'id': instance.userId,
   'email': instance.email,
   'agent_name': instance.agent_name,

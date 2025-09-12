@@ -16,7 +16,7 @@ class LoginResponseModel {
   final String? tokenType;
 
   @JsonKey(name: 'expires_in')
-  final int? expiresIn;
+  final String? expiresIn;
 
   LoginResponseModel({
     required this.user,
@@ -49,7 +49,7 @@ class UserModel extends Equatable {
 
   /// Legacy: some endpoints still return numeric id (keep for compatibility).
   @JsonKey(name: 'id')
-  final int? userId;
+  final String? userId;
 
   final String email;
 
@@ -85,7 +85,7 @@ class UserModel extends Equatable {
   final String? referralCode;
 
   @JsonKey(name: 'referred_by')
-  final int? referredBy;
+  final String? referredBy;
 
   @JsonKey(name: 'email_verified_at')
   final String? emailVerifiedAt;
@@ -102,7 +102,7 @@ class UserModel extends Equatable {
   // Filled via LoginResponseModel
   final String? authToken;
   final String? tokenType;
-  final int? expiresIn;
+  final String? expiresIn;
 
   const UserModel({
     this.uuid,
@@ -133,7 +133,7 @@ class UserModel extends Equatable {
   /// CopyWith (keeps immutability)
   UserModel copyWith({
     String? uuid,
-    int? userId,
+    String? userId,
     String? email,
     String? agent_name,
     String? userSlug,
@@ -147,14 +147,14 @@ class UserModel extends Equatable {
     List<String>? userInterests,
     String? phone,
     String? referralCode,
-    int? referredBy,
+    String? referredBy,
     String? emailVerifiedAt,
     String? dateOfBirth,
     String? createdAt,
     String? updatedAt,
     String? authToken,
     String? tokenType,
-    int? expiresIn,
+    String? expiresIn,
   }) {
     return UserModel(
       uuid: uuid ?? this.uuid,
@@ -190,7 +190,7 @@ class UserModel extends Equatable {
   /// NOTE: we pass the inner `{...}` map (not the envelope `{ "data": {...} }`).
   factory UserModel.fromUserResource(Map<String, dynamic> json) => UserModel(
     uuid: json['uuid'] as String?,
-    userId: (json['id'] as num?)?.toInt(),
+    userId: json['id'],
     email: (json['email'] as String?) ?? '',
     userSlug: json['user_slug'] as String?,
     username: json['username'] as String?,
@@ -205,7 +205,7 @@ class UserModel extends Equatable {
     phone: json['phone'] as String?,
     agent_name: json['agent_name'] as String?,
     referralCode: json['referral_code'] as String?,
-    referredBy: (json['referred_by'] as num?)?.toInt(),
+    referredBy: json['referred_by'] as String?,
     emailVerifiedAt: json['email_verified_at'] as String?,
     createdAt: json['created_at'] as String?,
     updatedAt: json['updated_at'] as String?,
@@ -275,7 +275,7 @@ class UserModel extends Equatable {
 extension UserEntityX on User {
   UserModel toModel() => UserModel(
     uuid: id, // our entity.id is UUID now
-    userId: null, // we no longer rely on numeric ids
+    userId: "", // we no longer rely on numeric ids
     email: email,
     agent_name: agent_name,
     userSlug: userSlug,
@@ -288,7 +288,7 @@ extension UserEntityX on User {
     userInterests: userInterests,
     phone: phone,
     referralCode: referralCode,
-    referredBy: referredBy != null ? int.tryParse(referredBy!) : null,
+    referredBy: referredBy,
     emailVerifiedAt: emailVerifiedAt,
     authToken: authToken,
   );

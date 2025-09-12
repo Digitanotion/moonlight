@@ -87,24 +87,25 @@ class AuthRepositoryImpl implements AuthRepository {
         password,
         deviceName,
       );
-
+      final userModel = loginResponse.toUserModel();
+      if (userModel.authToken != null) {
+        await localDataSource.cacheToken(userModel.authToken!);
+        await localDataSource.cacheUser(userModel);
+      }
       // 2) Fetch full profile -> has `uuid`
-      final me = await remoteDataSource.fetchMe();
-
+      //final me = await remoteDataSource.fetchMe();
+      print(email);
+      print(password);
       // 3) Merge token fields into `me`
-      final merged = me.copyWith(
-        authToken: loginResponse.accessToken,
-        tokenType: loginResponse.tokenType,
-        expiresIn: loginResponse.expiresIn,
-      );
+      // final merged = me.copyWith(
+      //   authToken: loginResponse.accessToken,
+      //   tokenType: loginResponse.tokenType,
+      //   expiresIn: loginResponse.expiresIn,
+      // );
 
       // 4) Cache token + user (with uuid)
-      if (merged.authToken != null) {
-        await localDataSource.cacheToken(merged.authToken!);
-        await localDataSource.cacheUser(merged);
-      }
 
-      return Right(merged.toEntity());
+      return Right(userModel.toEntity());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {

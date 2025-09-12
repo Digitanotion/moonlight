@@ -12,7 +12,7 @@ plugins {
 
 android {
     namespace = "com.example.moonlight"
-    compileSdk = 35  // Changed from flutter.compileSdkVersion to 34
+    compileSdk = 36  // Changed from flutter.compileSdkVersion to 34
     ndkVersion = "27.0.12077973" //flutter.ndkVersion
     
     compileOptions {
@@ -26,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.moonlight"
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = 34  // Changed from flutter.targetSdkVersion to 34
         versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName

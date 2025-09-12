@@ -17,9 +17,9 @@ class DioClient {
           connectTimeout: const Duration(seconds: 20),
           receiveTimeout: const Duration(seconds: 20),
           sendTimeout: const Duration(seconds: 20),
-          headers: const {'Accept': 'application/json'},
+          headers: {'Accept': 'application/json'},
           // Let Dio auto-set content-type (JSON vs multipart) per request
-          contentType: null,
+          // contentType: null,
         ),
       ) {
     dio.interceptors.add(

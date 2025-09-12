@@ -4,8 +4,8 @@ version: 1.0.0+1
 
 # ==== ADD THIS SECTION ====
 environment:
-  sdk: '>=3.8.0 <4.0.0'  # Matches Flutter 3.22.x
-  flutter: '>=3.32.1'
+  sdk: ">=3.8.0 <4.0.0" # Matches Flutter 3.22.x
+  flutter: ">=3.32.1"
 # =========================
 
 dependencies:
@@ -28,7 +28,15 @@ dependencies:
   firebase_core: ^2.24.0
   firebase_auth: ^4.16.0
   http_parser: ^4.0.2
-  agora_rtc_engine: ^6.3.2
+  agora_rtc_engine: ^6.5.2
+  permission_handler: ^11.3.1
+  record: ^6.1.1
+  camera: ^0.10.5+9
+  path_provider: ^2.1.2
+  cached_network_image: ^3.3.1
+  collection: ^1.18.0
+  rxdart: ^0.27.7
+  cupertino_icons: ^1.0.6
 
 dev_dependencies:
   flutter_test:
@@ -44,7 +52,7 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/logo.png"   # your logo path
+  image_path: "assets/images/logo.png" # your logo path
   min_sdk_android: 21
 
 flutter:
@@ -70,4 +78,3 @@ flutter:
           weight: 600
         - asset: assets/fonts/Urbanist/Urbanist-Light.ttf
           weight: 300
-    
