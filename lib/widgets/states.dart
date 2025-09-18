@@ -70,7 +70,7 @@ class EmptyLiveState extends StatelessWidget {
               onTap: onGoLive!,
               kind: _ActionKind.ghost,
             ),
-      footerHint: 'Pull down to refresh.',
+      footerHint: '',
     );
   }
 }
