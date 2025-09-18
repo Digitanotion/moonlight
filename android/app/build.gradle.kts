@@ -35,6 +35,9 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
@@ -49,4 +52,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.0.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.android.gms:play-services-auth:20.7.0")
+    // ✅ Add this: provides org.slf4j.impl.StaticLoggerBinder
+    implementation("org.slf4j:slf4j-nop:1.7.36")
+    // (Alternative if you want logs in Logcat instead of no-op)
+    // implementation("org.slf4j:slf4j-android:1.7.36")
 }
