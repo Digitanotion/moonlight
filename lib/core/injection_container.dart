@@ -2,46 +2,17 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/features/home/data/datasources/live_feed_remote_datasource.dart';
+import 'package:moonlight/features/home/data/repositories/live_feed_repository_impl.dart';
+import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
+import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_service.dart';
-import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
-import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_mock.dart';
-import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
-import 'package:moonlight/features/livestream/data/repositories/fake_live_session_repository.dart';
-import 'package:moonlight/features/livestream/data/repositories/go_live_repository_impl.dart';
-import 'package:moonlight/features/livestream/data/repositories/live_repository_mock.dart';
-import 'package:moonlight/features/livestream/data/services/audio_test_service_impl.dart';
-import 'package:moonlight/features/livestream/data/services/camera_service_impl.dart';
-import 'package:moonlight/features/livestream/domain/repositories/go_live_repository.dart';
-import 'package:moonlight/features/livestream/domain/repositories/live_repository.dart';
-import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
-import 'package:moonlight/features/livestream/domain/services/audio_test_service.dart';
-import 'package:moonlight/features/livestream/domain/services/camera_service.dart';
-import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
-import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
+import 'package:moonlight/core/services/pusher_service.dart';
 
-import 'package:moonlight/features/profile_setup/data/datasources/country_local_data_source.dart';
-import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
-import 'package:moonlight/features/profile_setup/data/repositories/profile_repository_impl.dart';
-import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
-import 'package:moonlight/features/profile_setup/domain/usecases/fetch_my_profile.dart';
-import 'package:moonlight/features/profile_setup/domain/usecases/setup_profile.dart';
-import 'package:moonlight/features/profile_setup/domain/usecases/update_interests.dart';
-import 'package:moonlight/features/profile_setup/domain/usecases/update_profile.dart';
-import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
-import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
-import 'package:moonlight/features/settings/data/datasources/account_remote_data_source.dart';
-import 'package:moonlight/features/settings/data/repositories/account_repository_impl.dart';
-import 'package:moonlight/features/settings/domain/repositories/account_repository.dart';
-import 'package:moonlight/features/settings/domain/usecases/deactivate_account.dart';
-import 'package:moonlight/features/settings/domain/usecases/delete_account.dart';
-import 'package:moonlight/features/settings/domain/usecases/reactivate_account.dart';
-import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
-import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-// Services
 import 'package:moonlight/core/services/google_signin_service.dart';
 
 // AUTH
@@ -73,42 +44,114 @@ import 'package:moonlight/features/search/domain/usecases/get_suggested_users.da
 import 'package:moonlight/features/search/domain/usecases/get_trending_tags.dart';
 import 'package:moonlight/features/search/domain/usecases/search_content.dart';
 import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
-// INTERESTS (Profile – interests selection)
+
+// PROFILE/SETTINGS
+import 'package:moonlight/features/profile_setup/data/datasources/country_local_data_source.dart';
+import 'package:moonlight/features/profile_setup/data/datasources/profile_remote_data_source.dart';
+import 'package:moonlight/features/profile_setup/data/repositories/profile_repository_impl.dart';
+import 'package:moonlight/features/profile_setup/domain/repositories/profile_repository.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/fetch_my_profile.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/setup_profile.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/update_interests.dart';
+import 'package:moonlight/features/profile_setup/domain/usecases/update_profile.dart';
+import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
+import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
+import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
+import 'package:moonlight/features/settings/data/datasources/account_remote_data_source.dart';
+import 'package:moonlight/features/settings/data/repositories/account_repository_impl.dart';
+import 'package:moonlight/features/settings/domain/repositories/account_repository.dart';
+import 'package:moonlight/features/settings/domain/usecases/deactivate_account.dart';
+import 'package:moonlight/features/settings/domain/usecases/delete_account.dart';
+import 'package:moonlight/features/settings/domain/usecases/reactivate_account.dart';
+import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
+import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
+
+// LIVE
+import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_mock.dart';
+import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
+import 'package:moonlight/features/livestream/data/repositories/go_live_repository_impl.dart';
+import 'package:moonlight/features/livestream/domain/repositories/go_live_repository.dart';
+import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart';
+import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
+import 'package:moonlight/features/livestream/data/services/audio_test_service_impl.dart';
+import 'package:moonlight/features/livestream/data/services/camera_service_impl.dart';
+import 'package:moonlight/features/livestream/domain/services/audio_test_service.dart';
+import 'package:moonlight/features/livestream/domain/services/camera_service.dart';
+import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
+import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
+import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
 
 final sl = GetIt.instance;
 
-/// Update base URL here if the backend changes environments.
-const _baseUrl = 'https://svc.moonlightstream.app/api/';
+/// Used ONLY to bootstrap `/api/config` before we know the real base URL.
+/// Must be your final host (no trailing slash).
+const _fallbackHost = 'https://svc.moonlightstream.app';
 
 Future<void> init() async {
-  // SharedPreferences first (used by many)
-  final sharedPreferences = await SharedPreferences.getInstance();
-  sl.registerLazySingleton<SharedPreferences>(() => sharedPreferences);
-  sl.registerLazySingleton<AuthLocalDataSource>(
-    () => AuthLocalDataSourceImpl(sharedPreferences: sharedPreferences),
-  );
-  // External services
+  // --------- Core singletons ---------
+  final prefs = await SharedPreferences.getInstance();
+  sl.registerLazySingleton<SharedPreferences>(() => prefs);
   sl.registerLazySingleton<DeviceInfoPlugin>(() => DeviceInfoPlugin());
   sl.registerLazySingleton<GoogleSignInService>(() => GoogleSignInService());
 
-  // ---------- DIO (single source of truth) ----------
-  // sl.registerLazySingleton<Dio>(
-  //   () => buildDio(baseUrl: _baseUrl, prefs: sl<SharedPreferences>()),
-  // );
-  final dioClient = DioClient(
-    '${_baseUrl}',
-    sl<AuthLocalDataSource>(), // provides readToken()
+  // Local auth (provides token for DioClient)
+  sl.registerLazySingleton<AuthLocalDataSource>(
+    () => AuthLocalDataSourceImpl(sharedPreferences: prefs),
   );
+
+  // --------- Bootstrap /api/config (public or Sanctum-protected) ---------
+  final bootstrap = Dio(
+    BaseOptions(
+      baseUrl: '$_fallbackHost/api',
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 20),
+      headers: {'Accept': 'application/json'},
+    ),
+  );
+  bootstrap.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final token = await sl<AuthLocalDataSource>().readToken();
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        handler.next(options);
+      },
+    ),
+  );
+
+  // Load runtime config (with fallback if API is unreachable)
+  RuntimeConfig cfg;
+  try {
+    cfg = await ConfigServiceHttp(bootstrap).load(); // GET /api/config
+  } catch (_) {
+    cfg = RuntimeConfig(
+      agoraAppId: const String.fromEnvironment(
+        'AGORA_APP_ID',
+        defaultValue: '',
+      ),
+      apiBaseUrl: _fallbackHost,
+      pusherKey: const String.fromEnvironment('PUSHER_KEY', defaultValue: ''),
+      pusherCluster: const String.fromEnvironment(
+        'PUSHER_CLUSTER',
+        defaultValue: 'mt1',
+      ),
+    );
+  }
+  sl.registerLazySingleton<RuntimeConfig>(() => cfg);
+
+  // --------- Real DioClient (uses base host from config) ---------
+  // IMPORTANT: Repos use absolute paths like '/api/v1/...'
+  // so baseUrl should be just the root domain.
+  final dioClient = DioClient(cfg.apiBaseUrl, sl<AuthLocalDataSource>());
+  sl.registerLazySingleton<DioClient>(() => dioClient);
   sl.registerLazySingleton<Dio>(() => dioClient.dio);
 
-  // ---------- Data sources ----------
+  // --------- Data sources ---------
   sl.registerLazySingleton<AuthRemoteDataSource>(
     () => AuthRemoteDataSourceImpl(client: sl<Dio>()),
   );
-  // sl.registerLazySingleton<AuthLocalDataSource>(
-  //   () => AuthLocalDataSourceImpl(sharedPreferences: sl()),
-  // );
-
   sl.registerLazySingleton<OnboardingLocalDataSource>(
     () => OnboardingLocalDataSourceImpl(sharedPreferences: sl()),
   );
@@ -121,19 +164,11 @@ Future<void> init() async {
   sl.registerLazySingleton<AccountRemoteDataSource>(
     () => AccountRemoteDataSourceImpl(sl<Dio>()),
   );
-
-  // SEARCH
   sl.registerLazySingleton<SearchRemoteDataSource>(
     () => SearchRemoteDataSourceImpl(),
   );
 
-  // PROFILE SETUP remote DS:
-  // If your ProfileRemoteDataSourceImpl has a Dio parameter:
-
-  // If it does NOT accept Dio, use the no-arg constructor instead and comment the above:
-  // sl.registerLazySingleton<ProfileRemoteDataSource>(() => ProfileRemoteDataSourceImpl());
-
-  // ---------- Repositories ----------
+  // --------- Repositories ---------
   sl.registerLazySingleton<OnboardingRepository>(
     () => OnboardingRepositoryImpl(localDataSource: sl()),
   );
@@ -147,14 +182,10 @@ Future<void> init() async {
     () => ProfileRepositoryImpl(
       remote: sl(),
       countryLocal: sl(),
-      local:
-          sl<
-            AuthLocalDataSource
-          >(), // this is your SharedPreferences-backed impl
+      local: sl<AuthLocalDataSource>(),
     ),
   );
 
-  // Auth repository
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(
       localDataSource: sl(),
@@ -164,7 +195,7 @@ Future<void> init() async {
     ),
   );
 
-  // ---------- Use cases ----------
+  // --------- Use cases ---------
   sl.registerLazySingleton<GetCurrentUser>(() => GetCurrentUser(sl()));
   sl.registerLazySingleton<CheckAuthStatus>(() => CheckAuthStatus(sl()));
   sl.registerLazySingleton<LoginWithEmail>(() => LoginWithEmail(sl()));
@@ -184,9 +215,8 @@ Future<void> init() async {
   sl.registerLazySingleton(() => UpdateProfile(sl()));
   sl.registerLazySingleton(() => FetchMyProfile(sl()));
 
-  // ---------- Blocs ----------
+  // --------- Blocs/Cubits ---------
   sl.registerFactory<OnboardingBloc>(() => OnboardingBloc(repository: sl()));
-
   sl.registerFactory<SearchBloc>(
     () => SearchBloc(
       searchContent: sl(),
@@ -206,18 +236,17 @@ Future<void> init() async {
       authRepository: sl(),
     ),
   );
-  // cubits
+
   sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
   sl.registerFactory(() => UserInterestCubit(sl()));
   sl.registerFactory(() => ProfilePageCubit(fetchMyProfile: sl()));
-  // Cubit
   sl.registerFactory(
     () => EditProfileCubit(
-      fetchMyProfile: sl(), // /v1/me
-      updateProfile: sl(), // PUT /v1/profile/update
-      profileRepo: sl(), // countries
+      fetchMyProfile: sl(),
+      updateProfile: sl(),
+      profileRepo: sl(),
       authLocal: sl(),
-      getCurrentUser: sl(), // cache updated profile if needed
+      getCurrentUser: sl(),
     ),
   );
   sl.registerFactory<AccountSettingsCubit>(
@@ -225,50 +254,107 @@ Future<void> init() async {
       deactivateAccount: sl(),
       reactivateAccount: sl(),
       deleteAccount: sl(),
-      prefs: sl(), // SharedPreferences
+      prefs: sl(),
     ),
   );
-
-  //LIVE STREAM
-  // registerLivestream();
-  live_host();
-  goLive();
-  live_viewer();
-  //Agora
-  sl.registerLazySingleton<AgoraService>(() => AgoraService());
+  //Live Feeds for Homepage
+  liveFeeds();
+  // ======= Live stack (order matters) =======
+  _registerPusher(); // needs RuntimeConfig
+  _registerAgora(); // agora engine
+  _registerGoLive(); // camera/mic + go live repo
+  _registerLiveHost(); // session repo (agora + pusher)
+  _registerLiveViewer(); // viewer mock (until implemented)
 }
 
-goLive() {
-  // Repos
-  sl.registerLazySingleton<GoLiveRepository>(() => GoLiveRepositoryImpl());
+void _registerAgora() {
+  if (!sl.isRegistered<AgoraService>()) {
+    sl.registerLazySingleton<AgoraService>(() => AgoraService());
+  }
+}
 
-  // Services (✅ use concrete implementations)
+void _registerGoLive() {
+  // Services for device preflight
   sl.registerLazySingleton<CameraService>(() => RealCameraService());
   sl.registerLazySingleton<AudioTestService>(() => RecordAudioTestService());
 
-  // Cubit
-  sl.registerFactory<GoLiveCubit>(() => GoLiveCubit(sl(), sl(), sl()));
-}
-
-live_host() {
-  // Repo (swap later with real impl)
-  sl.registerLazySingleton<LiveSessionRepository>(
-    () => FakeLiveSessionRepository(),
+  // Repos
+  sl.registerLazySingleton<GoLiveRepository>(
+    () => GoLiveRepositoryImpl(sl<DioClient>()),
   );
 
-  // Bloc
-  sl.registerFactory(() => LiveHostBloc(sl<LiveSessionRepository>()));
+  // Cubit
+  sl.registerFactory<GoLiveCubit>(
+    () => GoLiveCubit(
+      sl<GoLiveRepository>(),
+      sl<CameraService>(),
+      sl<AudioTestService>(),
+    ),
+  );
 }
 
-live_viewer() {
-  // injection_container.dart
-  sl.registerLazySingleton<ViewerRepository>(() => ViewerRepositoryMock());
-}
-// lib/injection_container.dart  (excerpt)
+void _registerLiveHost() {
+  if (!sl.isRegistered<LiveSessionTracker>()) {
+    sl.registerLazySingleton<LiveSessionTracker>(() => LiveSessionTracker());
+  }
 
-/// Centralized Dio builder with sane defaults + auth header.
-/// Reads the token from SharedPreferences and injects it as:
-///   Authorization: Bearer <token>
+  sl.registerLazySingleton<LiveSessionRepository>(
+    () => LiveSessionRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(),
+      sl<AgoraService>(),
+      sl<LiveSessionTracker>(),
+    ),
+  );
+
+  // Register the bloc as a factory (new instance per page)
+  sl.registerFactory<LiveHostBloc>(
+    () => LiveHostBloc(sl<LiveSessionRepository>()),
+  );
+}
+
+void _registerLiveViewer() {
+  // sl.registerLazySingleton<ViewerRepository>(() => ViewerRepositoryMock());
+}
+
+void _registerPusher() {
+  if (sl.isRegistered<PusherService>()) return;
+  // from RuntimeConfig (loaded above). Fallback to dart-define if empty.
+  final cfg = sl<RuntimeConfig>();
+  var key = cfg.pusherKey;
+  var cluster = cfg.pusherCluster.isNotEmpty ? cfg.pusherCluster : 'mt1';
+
+  if (key.isEmpty) {
+    const envKey = String.fromEnvironment('PUSHER_KEY');
+    const envCluster = String.fromEnvironment(
+      'PUSHER_CLUSTER',
+      defaultValue: 'mt1',
+    );
+    key = envKey;
+    cluster = envCluster;
+  }
+
+  sl.registerLazySingleton<PusherService>(
+    () => PusherService(apiKey: key, cluster: cluster),
+  );
+}
+
+liveFeeds() {
+  // Data sources
+  sl.registerLazySingleton<LiveFeedRemoteDataSource>(
+    () => LiveFeedRemoteDataSourceImpl(sl()),
+  );
+
+  // Repositories
+  sl.registerLazySingleton<LiveFeedRepository>(
+    () => LiveFeedRepositoryImpl(sl()),
+  );
+
+  // Blocs
+  sl.registerFactory<LiveFeedBloc>(() => LiveFeedBloc(sl()));
+}
+
+// Optional helper if some legacy code still uses it.
 Dio buildDio({required String baseUrl, required SharedPreferences prefs}) {
   final dio = Dio(
     BaseOptions(
@@ -277,33 +363,21 @@ Dio buildDio({required String baseUrl, required SharedPreferences prefs}) {
       receiveTimeout: const Duration(seconds: 20),
       sendTimeout: const Duration(seconds: 20),
       headers: {'Accept': 'application/json'},
-      // Important to let Dio pick correct content-type for multipart, JSON, etc.
       contentType: 'application/json',
     ),
   );
-
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // Read token from prefs. Adjust keys if your AuthLocalDataSource uses a different one.
         final token =
-            prefs.getString('access_token') ??
-            prefs.getString('token'); // fallback
+            prefs.getString('access_token') ?? prefs.getString('token');
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
         }
-        return handler.next(options);
+        handler.next(options);
       },
-      onError: (e, handler) {
-        // Optional: normalize typical API errors
-        // You can also add retry/backoff for GETs here if needed.
-        // print(e);
-        // print("Bearer ${prefs.getString('access_token')}");
-        // print("Token: ${prefs.getString('token')}");
-        return handler.next(e);
-      },
+      onError: (e, handler) => handler.next(e),
     ),
   );
-
   return dio;
 }

@@ -1,12 +1,15 @@
+// lib/features/live_viewer/presentation/screens/live_viewer_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+import 'package:moonlight/features/live_viewer/domain/video_surface_provider.dart';
 import '../../domain/entities.dart';
 import '../../domain/repositories/viewer_repository.dart';
 import '../bloc/viewer_bloc.dart';
 
 class LiveViewerScreen extends StatefulWidget {
-  final ViewerRepository repository; // inject your real repo later
+  final ViewerRepository repository; // injected
   const LiveViewerScreen({super.key, required this.repository});
 
   @override
@@ -15,96 +18,114 @@ class LiveViewerScreen extends StatefulWidget {
 
 class _LiveViewerScreenState extends State<LiveViewerScreen> {
   final _commentCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
 
   @override
   void dispose() {
     _commentCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Assumes ViewerBloc is provided higher up (e.g., by the route)
     return Scaffold(
-      body: BlocProvider.value(
-        value: BlocProvider.of<ViewerBloc>(context),
-        child: _BackgroundVideo(
-          child: SafeArea(
-            top: true,
-            bottom: false,
-            child: Stack(
-              children: [
-                // overlays
-                const _TopStatusBar(),
-                const _TopicPill(),
-                const _HostCard(),
-                const _GuestJoinedBanner(),
-                const _GiftToast(),
-                const _PauseOverlay(),
-                // chat + right rail
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      left: 12,
-                      right: 12,
-                      bottom: 80,
-                    ),
-                    child: BlocBuilder<ViewerBloc, ViewerState>(
-                      buildWhen: (p, n) =>
-                          p.showChatUI != n.showChatUI || p.chat != n.chat,
-                      builder: (_, s) => Visibility(
-                        visible: s.showChatUI,
-                        child: const _ChatPanel(),
+      body: _BackgroundVideo(
+        repository: widget.repository,
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: Stack(
+            children: [
+              // Live ended → toast + pop
+              BlocListener<ViewerBloc, ViewerState>(
+                listenWhen: (p, n) => p.isEnded != n.isEnded,
+                listener: (ctx, s) async {
+                  if (s.isEnded) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Live has ended.'),
+                        duration: Duration(seconds: 2),
                       ),
-                    ),
-                  ),
-                ),
+                    );
+                    await Future.delayed(const Duration(milliseconds: 600));
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                  }
+                },
+                child: const SizedBox.shrink(),
+              ),
 
-                // request to join
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 90),
-                    child: BlocBuilder<ViewerBloc, ViewerState>(
-                      buildWhen: (p, n) =>
-                          p.showChatUI != n.showChatUI ||
-                          p.joinRequested != n.joinRequested,
-                      builder: (_, s) => Visibility(
-                        visible: !s.isPaused,
-                        child: const _RequestToJoinButton(),
-                      ),
-                    ),
-                  ),
-                ),
+              // overlays
+              const _TopStatusBar(),
+              const _TopicPill(),
+              const _HostCard(),
+              const _GuestJoinedBanner(),
+              const _GiftToast(),
+              const _PauseOverlay(),
+              const _WaitingOverlay(),
 
-                // comment box
-                Align(
-                  alignment: Alignment.bottomCenter,
+              // chat (bottom-left)
+              Align(
+                alignment: Alignment.bottomLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    left: 12,
+                    right: 12,
+                    bottom: 80,
+                  ),
                   child: BlocBuilder<ViewerBloc, ViewerState>(
-                    buildWhen: (p, n) => p.showChatUI != n.showChatUI,
+                    buildWhen: (p, n) =>
+                        p.showChatUI != n.showChatUI || p.chat != n.chat,
                     builder: (_, s) => Visibility(
                       visible: s.showChatUI,
-                      child: _CommentBar(
-                        controller: _commentCtrl,
-                        onSend: (text) {
-                          context.read<ViewerBloc>().add(CommentSent(text));
-                          _commentCtrl.clear();
-                        },
-                      ),
+                      child: const _ChatPanel(),
                     ),
                   ),
                 ),
-                const Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: EdgeInsets.only(right: 10, bottom: 140),
-                    child: _RightRail(),
+              ),
+
+              // request-to-join (bottom-center)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 90),
+                  child: BlocBuilder<ViewerBloc, ViewerState>(
+                    buildWhen: (p, n) =>
+                        p.showChatUI != n.showChatUI ||
+                        p.joinRequested != n.joinRequested ||
+                        p.awaitingApproval != n.awaitingApproval ||
+                        p.isPaused != n.isPaused,
+                    builder: (_, s) => Visibility(
+                      visible: !s.isPaused,
+                      child: const _RequestToJoinButton(),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+
+              // comment bar (bottom)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: BlocBuilder<ViewerBloc, ViewerState>(
+                  buildWhen: (p, n) => p.showChatUI != n.showChatUI,
+                  builder: (_, s) => Visibility(
+                    visible: s.showChatUI,
+                    child: _CommentBar(
+                      controller: _commentCtrl,
+                      onSend: (text) {
+                        final t = text.trim();
+                        if (t.isNotEmpty) {
+                          context.read<ViewerBloc>().add(CommentSent(t));
+                          _commentCtrl.clear();
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+
+              // right rail
+              const Positioned(right: 10, bottom: 140, child: _RightRail()),
+            ],
           ),
         ),
       ),
@@ -112,29 +133,42 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
   }
 }
 
-/// Simulated live video background (replace with RTC view). Uses a bundled or network image.
+/// Background live video (or fallback image) + optional local preview bubble.
 class _BackgroundVideo extends StatelessWidget {
   final Widget child;
-  const _BackgroundVideo({required this.child});
+  final ViewerRepository repository;
+  const _BackgroundVideo({required this.child, required this.repository});
 
   @override
   Widget build(BuildContext context) {
+    final videoProvider = repository is VideoSurfaceProvider
+        ? repository as VideoSurfaceProvider
+        : null;
+    final localPreview = videoProvider?.buildLocalPreview();
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Use your live video widget here. For now an image/blur mimics the screenshot.
-        Image.asset(
-          'assets/images/onboard_1.jpg', // fallback: add any photo asset
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) {
-            return Image.network(
+        if (videoProvider != null)
+          Positioned.fill(child: videoProvider.buildHostVideo())
+        else
+          Image.asset(
+            'assets/images/onboard_1.jpg',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Image.network(
               'https://images.pexels.com/photos/414886/pexels-photo-414886.jpeg?auto=compress&w=800',
               fit: BoxFit.cover,
-            );
-          },
-        ),
-        Container(color: Colors.black.withOpacity(0.15)), // slight darken
+            ),
+          ),
+        // slight darken overlay
+        Container(color: Colors.black.withOpacity(0.15)),
         child,
+        if (localPreview != null)
+          Positioned(
+            right: 12,
+            bottom: 150, // above the comment bar
+            child: localPreview,
+          ),
       ],
     );
   }
@@ -165,14 +199,10 @@ class _TopStatusBar extends StatelessWidget {
                     vertical: 6,
                   ),
                   child: Row(
-                    children: [
-                      const Icon(
-                        Icons.circle,
-                        color: Colors.redAccent,
-                        size: 10,
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
+                    children: const [
+                      Icon(Icons.circle, color: Colors.redAccent, size: 10),
+                      SizedBox(width: 6),
+                      Text(
                         'LIVE',
                         style: TextStyle(
                           color: Colors.white,
@@ -241,7 +271,8 @@ class _TopicPill extends StatelessWidget {
     return BlocBuilder<ViewerBloc, ViewerState>(
       buildWhen: (p, n) => p.host != n.host,
       builder: (_, s) {
-        if (s.host == null) return const SizedBox.shrink();
+        final host = s.host;
+        if (host == null) return const SizedBox.shrink();
         return Align(
           alignment: Alignment.topCenter,
           child: Padding(
@@ -254,7 +285,7 @@ class _TopicPill extends StatelessWidget {
                   vertical: 10,
                 ),
                 child: Text(
-                  s.host!.title,
+                  host.title,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -281,11 +312,7 @@ class _HostCard extends StatelessWidget {
         if (host == null) return const SizedBox.shrink();
 
         return Padding(
-          padding: const EdgeInsets.only(
-            left: 12,
-            right: 12,
-            top: 84,
-          ), // sits near very top
+          padding: const EdgeInsets.only(left: 12, right: 12, top: 84),
           child: _glass(
             radius: 18,
             child: Container(
@@ -299,8 +326,6 @@ class _HostCard extends StatelessWidget {
                     radius: 18,
                   ),
                   const SizedBox(width: 10),
-
-                  // Name + subtitle + badge stacked but kept compact
                   Expanded(
                     child: Row(
                       children: [
@@ -319,46 +344,24 @@ class _HostCard extends StatelessWidget {
                                   fontSize: 14,
                                 ),
                               ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        host.subtitle,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withOpacity(.15),
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Superstar',
-                                          style: TextStyle(
-                                            color: Colors.orange,
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  host.badge,
+                                  style: const TextStyle(
+                                    color: Colors.orange,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                ],
+                                ),
                               ),
                             ],
                           ),
@@ -366,10 +369,7 @@ class _HostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   const SizedBox(width: 8),
-
-                  // Follow button aligned right on the same row
                   GestureDetector(
                     onTap: () =>
                         context.read<ViewerBloc>().add(const FollowToggled()),
@@ -413,8 +413,9 @@ class _GuestJoinedBanner extends StatelessWidget {
       buildWhen: (p, n) =>
           p.showGuestBanner != n.showGuestBanner || p.guest != n.guest,
       builder: (_, s) {
-        if (!s.showGuestBanner || s.guest == null)
+        if (!s.showGuestBanner || s.guest == null) {
           return const SizedBox.shrink();
+        }
         final n = s.guest!;
         return Align(
           alignment: Alignment.topLeft,
@@ -467,7 +468,9 @@ class _GiftToast extends StatelessWidget {
       buildWhen: (p, n) =>
           p.showGiftToast != n.showGiftToast || p.gift != n.gift,
       builder: (_, s) {
-        if (!s.showGiftToast || s.gift == null) return const SizedBox.shrink();
+        if (!s.showGiftToast || s.gift == null) {
+          return const SizedBox.shrink();
+        }
         final g = s.gift!;
         return Align(
           alignment: Alignment.centerLeft,
@@ -553,12 +556,10 @@ class _ChatPanel extends StatelessWidget {
       buildWhen: (p, n) => p.chat != n.chat,
       builder: (_, s) {
         final chat = s.chat.reversed.toList();
-
         return ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 220, minWidth: 220),
           child: Stack(
             children: [
-              // Single background for the whole chat
               _glass(
                 color: Colors.black.withOpacity(.30),
                 child: Padding(
@@ -567,7 +568,7 @@ class _ChatPanel extends StatelessWidget {
                     10,
                     34,
                     10,
-                  ), // leave room for ✕
+                  ), // room for ✕
                   child: ListView.separated(
                     reverse: true,
                     shrinkWrap: true,
@@ -600,8 +601,6 @@ class _ChatPanel extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // Close (✕)
               Positioned(
                 right: 6,
                 top: 6,
@@ -643,35 +642,35 @@ class _RightRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ViewerBloc, ViewerState>(
-      buildWhen: (p, n) => p.likes != n.likes || p.shares != n.shares,
+      buildWhen: (p, n) =>
+          p.likes != n.likes || p.shares != n.shares || p.chat != n.chat,
       builder: (_, s) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _railButton(
-              icon: Icons.favorite,
-              onTap: () => context.read<ViewerBloc>().add(const LikePressed()),
-              label: _fmtCount(s.likes),
-            ),
+            // _railButton(
+            //   icon: Icons.favorite,
+            //   onTap: () => context.read<ViewerBloc>().add(const LikePressed()),
+            //   label: _fmtCount(s.likes),
+            // ),
             const SizedBox(height: 12),
             _railButton(
               icon: Icons.chat_bubble_outline,
-              onTap: () => context.read<ViewerBloc>().add(
-                const ChatShowRequested(),
-              ), // toggles
-              label: _fmtCount(s.chat.length + 1200),
+              onTap: () =>
+                  context.read<ViewerBloc>().add(const ChatShowRequested()),
+              label: "", //_fmtCount(s.chat.length + 1200),
             ),
-            const SizedBox(height: 12),
-            _railButton(
-              icon: Icons.share_outlined,
-              onTap: () {
-                context.read<ViewerBloc>().add(const SharePressed());
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('Share tapped')));
-              },
-              label: 'Share',
-            ),
+            // const SizedBox(height: 12),
+            // _railButton(
+            //   icon: Icons.share_outlined,
+            //   onTap: () {
+            //     context.read<ViewerBloc>().add(const SharePressed());
+            //     ScaffoldMessenger.of(
+            //       context,
+            //     ).showSnackBar(const SnackBar(content: Text('Share tapped')));
+            //   },
+            //   label: 'Share',
+            // ),
           ],
         );
       },
@@ -716,9 +715,18 @@ class _RequestToJoinButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ViewerBloc, ViewerState>(
-      buildWhen: (p, n) => p.joinRequested != n.joinRequested,
+      buildWhen: (p, n) =>
+          p.joinRequested != n.joinRequested ||
+          p.awaitingApproval != n.awaitingApproval,
       builder: (_, s) {
-        return ElevatedButton.icon(
+        // Treat either flag as "request in flight / made"
+        final requestingOrRequested =
+            (s.awaitingApproval == true) || (s.joinRequested == true);
+        final label = s.awaitingApproval == true
+            ? 'Requesting…'
+            : (s.joinRequested == true ? 'Requested' : 'Request Guest Box');
+
+        return ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFFF7A00),
             foregroundColor: Colors.white,
@@ -727,13 +735,29 @@ class _RequestToJoinButton extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           ),
-          onPressed: s.joinRequested
+          onPressed: requestingOrRequested
               ? null
-              : () {
-                  context.read<ViewerBloc>().add(const RequestToJoinPressed());
-                },
-          icon: const Icon(Icons.video_call),
-          label: Text(s.joinRequested ? 'Requested' : 'Request to Join'),
+              : () => context.read<ViewerBloc>().add(
+                  const RequestToJoinPressed(),
+                ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (s.awaitingApproval == true)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                const Icon(Icons.video_call),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
         );
       },
     );
@@ -748,9 +772,8 @@ class _CommentBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16 + 12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
       decoration: const BoxDecoration(
-        // space for system gesture
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -773,10 +796,18 @@ class _CommentBar extends StatelessWidget {
                   hintStyle: TextStyle(color: Colors.white70),
                   border: InputBorder.none,
                 ),
+                textInputAction: TextInputAction.send,
+                onSubmitted: (v) {
+                  final t = v.trim();
+                  if (t.isNotEmpty) onSend(t);
+                },
               ),
             ),
             IconButton(
-              onPressed: () => onSend(controller.text),
+              onPressed: () {
+                final t = controller.text.trim();
+                if (t.isNotEmpty) onSend(t);
+              },
               icon: const Icon(Icons.send_rounded, color: Colors.white),
             ),
           ],
@@ -813,16 +844,13 @@ class _PauseOverlay extends StatelessWidget {
       buildWhen: (p, n) => p.isPaused != n.isPaused || p.host != n.host,
       builder: (_, s) {
         if (!s.isPaused) return const SizedBox.shrink();
-
         final host = s.host;
         final handle = host == null
             ? ''
-            : '@' + host.name.replaceAll(' ', '_').toLowerCase();
+            : '@${host.name.replaceAll(' ', '_').toLowerCase()}';
 
         return IgnorePointer(
-          // don’t pass taps to video below
           child: Container(
-            // full-screen, purple-tinted blur
             alignment: Alignment.center,
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -837,7 +865,6 @@ class _PauseOverlay extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // pause icon + title
                 Container(
                   width: 56,
                   height: 56,
@@ -874,8 +901,6 @@ class _PauseOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // host chip
                 if (host != null)
                   _glass(
                     radius: 22,
@@ -922,10 +947,7 @@ class _PauseOverlay extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 const SizedBox(height: 18),
-
-                // Leave Stream (outlined)
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
@@ -947,6 +969,94 @@ class _PauseOverlay extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WaitingOverlay extends StatelessWidget {
+  const _WaitingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) =>
+          p.awaitingApproval != n.awaitingApproval || p.host != n.host,
+      builder: (_, s) {
+        if (!s.awaitingApproval) return const SizedBox.shrink();
+        final host = s.host;
+        final handle = host == null
+            ? ''
+            : '@${host.name.replaceAll(' ', '_').toLowerCase()}';
+
+        return IgnorePointer(
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF2B2E83).withOpacity(0.55),
+                  const Color(0xFF7B2F9B).withOpacity(0.55),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                const CircularProgressIndicator(color: Colors.white),
+                const SizedBox(height: 16),
+                const Text(
+                  'Waiting for host approval…',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 28),
+                  child: Text(
+                    'You’ll join automatically once approved.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (host != null)
+                  _glass(
+                    radius: 22,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            backgroundImage: NetworkImage(host.avatarUrl),
+                            radius: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            handle,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

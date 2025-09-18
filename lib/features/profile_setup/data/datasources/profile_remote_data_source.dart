@@ -69,7 +69,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         );
 
         await dio.post(
-          '/v1/profile/setup',
+          '/api/v1/profile/setup',
           data: form,
           // Ensure arrays are sent compatibly: user_interests[]=a&user_interests[]=b
           options: Options(
@@ -80,7 +80,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
       } else {
         // JSON is safest when not sending files
         await dio.post(
-          '/v1/profile/setup',
+          '/api/v1/profile/setup',
           data: payload,
           options: Options(contentType: Headers.jsonContentType),
         );
@@ -108,7 +108,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
   Future<void> updateInterests(List<String> interests) async {
     try {
       await dio.put(
-        '/v1/profile/update',
+        '/api/v1/profile/update',
         data: {'user_interests': interests},
         options: Options(
           contentType: Headers.jsonContentType,
@@ -170,7 +170,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
           ),
         );
       res = await dio.put(
-        '/v1/profile/update',
+        '/api/v1/profile/update',
         data: form,
         options: Options(
           contentType: 'multipart/form-data',
@@ -179,7 +179,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
       );
     } else {
       res = await dio.put(
-        '/v1/profile/update',
+        '/api/v1/profile/update',
         data: payload,
         options: Options(
           contentType: Headers.jsonContentType,
@@ -197,10 +197,10 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
     return user;
   }
 
-  // NEW: GET /v1/me  -> returns { data: UserResource }
+  // NEW: GET /api/v1/me  -> returns { data: UserResource }
   @override
   Future<Map<String, dynamic>> getMe() async {
-    final res = await dio.get('/v1/me');
+    final res = await dio.get('/api/v1/me');
     final body = (res.data is Map<String, dynamic>)
         ? res.data as Map<String, dynamic>
         : const {};

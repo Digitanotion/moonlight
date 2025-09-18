@@ -1,24 +1,29 @@
-import 'dart:async';
-import '../entities.dart';
+import 'package:moonlight/features/live_viewer/domain/entities.dart';
 
 abstract class ViewerRepository {
   Future<HostInfo> fetchHostInfo();
 
-  /// Live streams (wire to your sockets / RTC callbacks later)
-  Stream<Duration> watchLiveClock(); // 00:01, 00:02, ...
-  Stream<int> watchViewerCount(); // 247, ...
-  Stream<ChatMessage> watchChat(); // incoming chat
-  Stream<GuestJoinNotice> watchGuestJoins(); // guest banner
-  Stream<GiftNotice> watchGifts(); // gift toast
+  Stream<Duration> watchLiveClock();
+  Stream<int> watchViewerCount();
+  Stream<ChatMessage> watchChat();
+  Stream<GuestJoinNotice> watchGuestJoins();
+  Stream<GiftNotice> watchGifts();
   Stream<bool> watchPause();
+  Stream<void> watchEnded();
 
-  /// Actions
+  /// Emits:
+  ///  - true  → this viewer's join request accepted
+  ///  - false → declined (or ended)
+  Stream<bool> watchMyApproval();
+
   Future<void> sendComment(String text);
-  Future<int> like(); // returns new like count
-  Future<int> share(); // returns new share count
-  Future<void> requestToJoin();
-  Future<bool> toggleFollow(bool follow); // returns new follow state
+  Future<int> like();
+  Future<int> share();
 
-  /// Dispose if needed
+  /// Sends a *view-only* join request (NOT co-host).
+  Future<void> requestToJoin();
+
+  Future<bool> toggleFollow(bool follow);
+
   void dispose();
 }

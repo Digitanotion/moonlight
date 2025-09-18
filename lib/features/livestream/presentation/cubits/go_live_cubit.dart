@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_category.dart';
+import 'package:moonlight/features/livestream/domain/entities/live_start_payload.dart';
 import 'package:moonlight/features/livestream/domain/repositories/go_live_repository.dart';
 import 'package:moonlight/features/livestream/domain/services/audio_test_service.dart';
 import 'package:moonlight/features/livestream/domain/services/camera_service.dart';
+import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
 import 'go_live_state.dart';
 
 class GoLiveCubit extends Cubit<GoLiveState> {
@@ -14,7 +17,7 @@ class GoLiveCubit extends Cubit<GoLiveState> {
   final ImagePicker _picker = ImagePicker();
 
   StreamSubscription<double>? _levelSub;
-
+  Timer? _previewDebounce;
   GoLiveCubit(this.repo, this.camera, this.audio) : super(const GoLiveState());
 
   Future<void> init() async {
@@ -128,43 +131,49 @@ class GoLiveCubit extends Cubit<GoLiveState> {
   }
 
   Future<void> _refreshPreview() async {
-    final p = await repo.getPreview(
-      title: state.title,
-      category: state.category,
-      premium: state.premium,
-      allowGuestBox: state.allowGuestBox,
-      comments: state.comments,
-      showCount: state.showCount,
-    );
-    emit(
-      state.copyWith(
-        previewReady: p.ready,
-        bestTime: p.bestTime,
-        estLow: p.estimatedViewers.$1,
-        estHigh: p.estimatedViewers.$2,
-      ),
-    );
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final p = await repo.getPreview(
+          title: state.title,
+          category: state.category,
+          premium: state.premium,
+          allowGuestBox: state.allowGuestBox,
+          comments: state.comments,
+          showCount: state.showCount,
+        );
+        emit(
+          state.copyWith(
+            previewReady: p.ready,
+            bestTime: p.bestTime,
+            estLow: p.estimatedViewers.$1,
+            estHigh: p.estimatedViewers.$2,
+          ),
+        );
+      } catch (e) {
+        // Don’t show snackbars for preview; keep silent
+      }
+    });
   }
 
-  Future<void> start() async {
-    if (!state.canStart || !state.devicesOk) return;
+  Future<dynamic> start() async {
+    if (!state.canStart || !state.devicesOk) return null;
 
-    // Double-check devices if toggled on but not ready
     if (state.camOn && !state.camReady) {
       final ok = await _ensureCamStarted();
       emit(state.copyWith(camReady: ok));
-      if (!ok) return;
+      if (!ok) return null;
     }
     if (state.micOn && !state.micReady) {
       final ok = await _ensureMicStarted();
       emit(state.copyWith(micReady: ok));
-      if (!ok) return;
+      if (!ok) return null;
     }
 
     emit(state.copyWith(starting: true));
     try {
       await audio.stopAndClean();
-      await repo.startStreaming(
+      final dto = await repo.startStreaming(
         title: state.title.trim(),
         categoryId: state.category!.id,
         premium: state.premium,
@@ -175,14 +184,34 @@ class GoLiveCubit extends Cubit<GoLiveState> {
         micOn: state.micOn,
         camOn: state.camOn,
       );
+
+      // Map DTO → domain payload for the live session tracker
+      final payload = LiveStartPayload(
+        livestreamId: dto.livestreamId,
+        channel: dto.channel,
+        uidType: dto.uidType,
+        uid: dto.uid,
+        rtcRole: dto.rtcRole,
+        startedAt: dto.startedAt,
+        bonusAwarded: dto.bonusAwarded,
+        appId: dto.appId,
+        rtcToken: dto.rtcToken,
+        expiresAt: dto.expiresAt,
+      );
+      final tracker = GetIt.I<LiveSessionTracker>();
+      tracker.start(payload);
+
       emit(state.copyWith(starting: false));
+      return dto; // IMPORTANT: return full DTO so UI can read host/stream fields
     } catch (e) {
       emit(state.copyWith(starting: false, error: e.toString()));
+      return null;
     }
   }
 
   @override
   Future<void> close() async {
+    _previewDebounce?.cancel();
     await _levelSub?.cancel();
     await camera.dispose();
     await audio.dispose();

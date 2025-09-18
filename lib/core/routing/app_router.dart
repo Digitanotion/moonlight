@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/widgets/auth_guard.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/auth/presentation/pages/email_verification.dart';
@@ -10,6 +13,9 @@ import 'package:moonlight/features/auth/presentation/pages/register_screen.dart'
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
 import 'package:moonlight/features/edit_profile/presentation/pages/edit_profile_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
+import 'package:moonlight/features/home/presentation/pages/posts_screen.dart';
+import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
+import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
@@ -125,24 +131,76 @@ class AppRouter {
         );
 
       case RouteNames.liveHost:
+        final a = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => sl<LiveHostBloc>(),
+          builder: (_) => BlocProvider<LiveHostBloc>(
+            create: (_) => GetIt.I<LiveHostBloc>(),
             child: LiveHostPage(
-              hostName: 'Sarah Mitchell',
-              hostBadge: 'Superstar',
-              topic: 'Talking about Mental Health',
+              hostName: a['host_name'] as String,
+              hostBadge: a['host_badge'] as String,
+              topic: a['topic'] as String,
+              initialViewers: a['initial_viewers'] as int? ?? 0,
+              startedAtIso:
+                  a['started_at'] as String? ??
+                  DateTime.now().toIso8601String(),
+              avatarUrl: a['avatar_url'] as String?,
             ),
           ),
         );
+
       case RouteNames.liveViewer:
-        return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) =>
-                ViewerBloc(sl<ViewerRepository>())..add(ViewerStarted()),
-            child: LiveViewerScreen(repository: sl<ViewerRepository>()),
-          ),
-        );
+        {
+          final a = (settings.arguments as Map?) ?? {};
+          final id = a['id'] as int?;
+          final uuid = a['uuid'] as String?;
+          final channel = a['channel'] as String?;
+          if (id == null || uuid == null || channel == null) {
+            // visible, friendly guard
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(
+                  child: Text('Unable to open live (missing id/uuid/channel).'),
+                ),
+              ),
+            );
+          }
+
+          // Build host card from args (or leave defaults)
+          final host = HostInfo(
+            name: (a['hostName'] as String?) ?? 'Host',
+            title: (a['title'] as String?) ?? 'Live',
+            subtitle: '', // you can enrich from feed
+            badge: (a['role'] as String?) ?? 'Host',
+            avatarUrl:
+                (a['hostAvatar'] as String?) ??
+                'https://via.placeholder.com/120x120.png?text=LIVE',
+          );
+
+          final startedAtIso = (a['startedAt'] as String?);
+          final startedAt = startedAtIso == null
+              ? null
+              : DateTime.tryParse(startedAtIso);
+
+          // ✅ REST will use numeric id, sockets also use numeric id
+          final repo = ViewerRepositoryImpl(
+            http: GetIt.I<DioClient>(),
+            pusher: GetIt.I<PusherService>(),
+            livestreamParam: id.toString(), // ✅ REST path uses numeric id
+            livestreamIdNumeric: id, // ✅ Pusher channels use numeric id
+            channelName: channel,
+            initialHost: host,
+            startedAt: startedAt,
+          );
+
+          return MaterialPageRoute(
+            builder: (_) => BlocProvider(
+              create: (_) => ViewerBloc(repo)..add(const ViewerStarted()),
+              child: LiveViewerScreen(repository: repo),
+            ),
+            settings: settings,
+          );
+        }
+
       case RouteNames.accountSettings:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
@@ -150,6 +208,9 @@ class AppRouter {
             child: const AccountSettingsPage(),
           ),
         );
+
+      case RouteNames.postsPage:
+        return MaterialPageRoute(builder: (_) => const PostsScreen());
 
       default:
         return MaterialPageRoute(

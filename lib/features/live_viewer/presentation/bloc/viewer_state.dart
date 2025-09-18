@@ -13,6 +13,9 @@ class ViewerState extends Equatable {
   final bool joinRequested;
   final bool showChatUI;
   final bool isPaused;
+  final bool isEnded;
+
+  final bool awaitingApproval; // 👈 NEW
 
   final GuestJoinNotice? guest;
   final bool showGuestBanner;
@@ -35,6 +38,8 @@ class ViewerState extends Equatable {
     required this.showGiftToast,
     required this.showChatUI,
     required this.isPaused,
+    required this.isEnded,
+    required this.awaitingApproval,
   });
 
   const ViewerState.initial()
@@ -51,7 +56,9 @@ class ViewerState extends Equatable {
       showGuestBanner = false,
       gift = null,
       showGiftToast = false,
-      isPaused = false;
+      isPaused = false,
+      isEnded = false,
+      awaitingApproval = false; // 👈 NEW
 
   ViewerState copyWith({
     ViewerStatus? status,
@@ -68,6 +75,8 @@ class ViewerState extends Equatable {
     GiftNotice? gift,
     bool? showGiftToast,
     bool? isPaused,
+    bool? isEnded,
+    bool? awaitingApproval, // 👈 NEW
   }) {
     return ViewerState(
       status: status ?? this.status,
@@ -84,6 +93,8 @@ class ViewerState extends Equatable {
       showGiftToast: showGiftToast ?? this.showGiftToast,
       showChatUI: showChatUI ?? this.showChatUI,
       isPaused: isPaused ?? this.isPaused,
+      isEnded: isEnded ?? this.isEnded,
+      awaitingApproval: awaitingApproval ?? this.awaitingApproval,
     );
   }
 
@@ -103,5 +114,7 @@ class ViewerState extends Equatable {
     showGiftToast,
     showChatUI,
     isPaused,
+    isEnded,
+    awaitingApproval, // 👈 NEW
   ];
 }

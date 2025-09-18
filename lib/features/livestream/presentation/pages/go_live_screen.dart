@@ -304,7 +304,9 @@ class _CameraCard extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: s.camOn && s.camReady
-                      ? context.read<GoLiveCubit>().camera.buildPreview()
+                      ? Text(
+                          "",
+                        ) //context.read<GoLiveCubit>().camera.buildPreview()
                       : Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -604,14 +606,40 @@ class _StartButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: canGo
             ? () async {
-                await context.read<GoLiveCubit>().start();
-                // Navigate to your "Live Room / Preflight" when wired
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Starting stream…')),
+                final dto = await context.read<GoLiveCubit>().start();
+                if (dto == null) return; // guard
+
+                // Prefer server title; fall back to local state
+                final topic = (dto.streamTitle.isNotEmpty)
+                    ? dto.streamTitle
+                    : (state.title.isNotEmpty ? state.title : 'Live');
+
+                Navigator.pushNamed(
+                  context,
+                  RouteNames.liveHost,
+                  arguments: {
+                    'host_name': dto.hostDisplayName,
+                    'host_badge': dto.hostBadge,
+                    'avatar_url': dto.hostAvatarUrl,
+                    'topic': topic,
+
+                    // Seed header counters
+                    'initial_viewers': dto.initialViewers,
+                    'started_at': dto.startedAt,
+
+                    // Agora/session
+                    'livestream_id': dto.livestreamId,
+                    'channel': dto.channel,
+                    'uid_type': dto.uidType,
+                    'uid': dto.uid,
+                    'app_id': dto.appId,
+                    'rtc_token': dto.rtcToken,
+                    'rtc_role': dto.rtcRole,
+                  },
                 );
-                Navigator.pushNamed(context, RouteNames.liveHost);
               }
             : null,
+
         style:
             ElevatedButton.styleFrom(
               elevation: 0,

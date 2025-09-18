@@ -1,8 +1,10 @@
 import 'dart:ui';
-import 'package:camera/camera.dart';
+// import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 
@@ -10,12 +12,18 @@ class LiveHostPage extends StatefulWidget {
   final String hostName;
   final String hostBadge; // e.g., "Superstar"
   final String topic; // e.g., "Talking about Mental Health"
+  final int initialViewers;
+  final String startedAtIso;
+  final String? avatarUrl; // optional for header
 
   const LiveHostPage({
     super.key,
     required this.hostName,
     required this.hostBadge,
     required this.topic,
+    required this.initialViewers,
+    required this.startedAtIso,
+    this.avatarUrl,
   });
 
   @override
@@ -23,40 +31,48 @@ class LiveHostPage extends StatefulWidget {
 }
 
 class _LiveHostPageState extends State<LiveHostPage> {
-  CameraController? _controller;
-  List<CameraDescription> _cameras = const [];
+  // CameraController? _controller;
+  // List<CameraDescription> _cameras = const [];
   bool _initErr = false;
 
   @override
   void initState() {
     super.initState();
-    _setupCamera();
-    context.read<LiveHostBloc>().add(LiveStarted(widget.topic));
+    // schedule event once the widget is mounted & provider is in the tree
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LiveHostBloc>().add(
+        LiveStarted(
+          widget.topic,
+          initialViewers: widget.initialViewers,
+          startedAtIso: widget.startedAtIso,
+        ),
+      );
+    });
   }
 
-  Future<void> _setupCamera() async {
-    try {
-      _cameras = await availableCameras();
-      final front = _cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => _cameras.first,
-      );
-      _controller = CameraController(
-        front,
-        ResolutionPreset.high,
-        enableAudio: true,
-      );
-      await _controller!.initialize();
-      if (mounted) setState(() {});
-    } catch (_) {
-      _initErr = true;
-      if (mounted) setState(() {});
-    }
-  }
+  // Future<void> _setupCamera() async {
+  //   try {
+  //     _cameras = await availableCameras();
+  //     final front = _cameras.firstWhere(
+  //       (c) => c.lensDirection == CameraLensDirection.front,
+  //       orElse: () => _cameras.first,
+  //     );
+  //     _controller = CameraController(
+  //       front,
+  //       ResolutionPreset.high,
+  //       enableAudio: true,
+  //     );
+  //     await _controller!.initialize();
+  //     if (mounted) setState(() {});
+  //   } catch (_) {
+  //     _initErr = true;
+  //     if (mounted) setState(() {});
+  //   }
+  // }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    // _controller?.dispose();
     super.dispose();
   }
 
@@ -68,128 +84,176 @@ class _LiveHostPageState extends State<LiveHostPage> {
 
   @override
   Widget build(BuildContext context) {
+    final agora = GetIt.I<AgoraService>();
     return Scaffold(
       backgroundColor: Colors.black,
-      body: BlocConsumer<LiveHostBloc, LiveHostState>(
-        listenWhen: (p, c) => p.isLive && !c.isLive,
-        listener: (context, state) {
-          if (!state.isLive && mounted) Navigator.of(context).pop();
-        },
-        builder: (context, state) {
-          return Stack(
-            children: [
-              // Camera preview
-              Positioned.fill(
-                child: _controller == null
-                    ? const SizedBox.shrink()
-                    : (!_initErr && _controller!.value.isInitialized)
-                    ? CameraPreview(_controller!)
-                    : const Center(
-                        child: Text(
-                          'Camera unavailable',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-              ),
-              // ===== Top Bar (fixed alignment) =====
-              // ===== Top header (single tight glass bar) =====
-              Positioned(
-                left: 12,
-                right: 12,
-                top: MediaQuery.of(context).padding.top + 8,
-                child: _HeaderBar(
-                  hostName: widget.hostName,
-                  hostBadge: widget.hostBadge,
-                  timeText: _mmss(state.elapsedSeconds),
-                  viewersText: _formatViewers(state.viewers),
-                  onEnd: () => context.read<LiveHostBloc>().add(EndPressed()),
-                ),
-              ),
+      body: MultiBlocListener(
+        listeners: [
+          // 1) Navigate out when stream ends (you already had this in BlocConsumer)
+          BlocListener<LiveHostBloc, LiveHostState>(
+            listenWhen: (p, c) => p.isLive != c.isLive,
+            listener: (context, state) {
+              if (!state.isLive) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Live stream has ended'),
+                    behavior: SnackBarBehavior.floating,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil(RouteNames.home, (r) => false);
+              }
+            },
+          ),
 
-              // Dim layer when paused
-              if (state.isPaused)
+          // 2) Gift toast when gift.sent arrives
+          // BlocListener<LiveHostBloc, LiveHostState>(
+          //   listenWhen: (p, c) =>
+          //       p.lastGift != c.lastGift && c.lastGift != null,
+          //   listener: (context, state) {
+          //     final g = state.lastGift!;
+          //     ScaffoldMessenger.of(context).showSnackBar(
+          //       SnackBar(
+          //         content: Text(
+          //           '${g.from} sent “${g.giftName}” (${g.coins} coins)',
+          //         ),
+          //         behavior: SnackBarBehavior.floating,
+          //         duration: const Duration(seconds: 2),
+          //       ),
+          //     );
+          //   },
+          // ),
+        ],
+        child: BlocBuilder<LiveHostBloc, LiveHostState>(
+          builder: (context, state) {
+            return Stack(
+              children: [
+                // Camera preview
                 Positioned.fill(
-                  child: Container(color: Colors.black.withOpacity(0.55)),
-                ),
-
-              // Topic chip
-              Positioned(
-                top: 92,
-                left: 12,
-                right: 12,
-                child: _Glass(
-                  radius: 18,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
+                  child: AnimatedBuilder(
+                    animation: agora,
+                    builder: (_, __) {
+                      if (!agora.joined) {
+                        return const Center(
+                          child: Text(
+                            'Connecting to Agora…',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        );
+                      }
+                      return ClipRRect(
+                        borderRadius: BorderRadius.zero,
+                        child: agora.localPreview(),
+                      );
+                    },
                   ),
-                  child: Text(
-                    widget.topic,
-                    style: const TextStyle(color: Colors.white, fontSize: 13.5),
-                  ),
                 ),
-              ),
-
-              // Join Request card
-              if (state.pendingRequest != null && !state.isPaused)
+                // ===== Top Bar (fixed alignment) =====
+                // ===== Top header (single tight glass bar) =====
                 Positioned(
-                  top: 120,
-                  left: 16,
-                  right: 16,
-                  child: _JoinRequestCard(
-                    req: state.pendingRequest!,
-                    onAccept: () => context.read<LiveHostBloc>().add(
-                      AcceptJoinRequest(state.pendingRequest!.id),
-                    ),
-                    onDecline: () => context.read<LiveHostBloc>().add(
-                      DeclineJoinRequest(state.pendingRequest!.id),
-                    ),
+                  left: 12,
+                  right: 12,
+                  top: MediaQuery.of(context).padding.top + 8,
+                  child: _HeaderBar(
+                    hostName: widget.hostName,
+                    hostBadge: widget.hostBadge,
+                    avatarUrl: widget.avatarUrl,
+                    timeText: _mmss(state.elapsedSeconds),
+                    viewersText: _formatViewers(state.viewers),
+                    onEnd: () => context.read<LiveHostBloc>().add(EndPressed()),
                   ),
                 ),
 
-              // Chat overlay (stable wrapping + spacing)
-              if (state.chatVisible && !state.isPaused)
+                // Dim layer when paused
+                if (state.isPaused)
+                  Positioned.fill(
+                    child: Container(color: Colors.black.withOpacity(0.55)),
+                  ),
+
+                // Topic chip
                 Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 135,
+                  top: 92,
+                  left: 12,
+                  right: 12,
                   child: _Glass(
                     radius: 18,
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                    child: _ChatList(messages: state.messages),
-                  ),
-                ),
-
-              // Bottom actions
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 10,
-                child: SafeArea(
-                  child: _BottomActions(
-                    isPaused: state.isPaused,
-                    onPause: () =>
-                        context.read<LiveHostBloc>().add(TogglePause()),
-                    onChatToggle: () => context.read<LiveHostBloc>().add(
-                      ToggleChatVisibility(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
                     ),
-                    onGifts: () => _toast(context, 'Gifts'),
-                    onViewers: () =>
-                        Navigator.pushNamed(context, RouteNames.liveViewer),
-                    onPremium: () => _toast(context, 'Premium'),
+                    child: Text(
+                      widget.topic,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13.5,
+                      ),
+                    ),
                   ),
                 ),
-              ),
 
-              // Paused overlay
-              if (state.isPaused)
-                _PausedOverlay(
-                  onResume: () =>
-                      context.read<LiveHostBloc>().add(TogglePause()),
+                // Join Request card
+                if (state.pendingRequest != null && !state.isPaused)
+                  Positioned(
+                    top: 120,
+                    left: 16,
+                    right: 16,
+                    child: _JoinRequestCard(
+                      req: state.pendingRequest!,
+                      onAccept: () => context.read<LiveHostBloc>().add(
+                        AcceptJoinRequest(state.pendingRequest!.id),
+                      ),
+                      onDecline: () => context.read<LiveHostBloc>().add(
+                        DeclineJoinRequest(state.pendingRequest!.id),
+                      ),
+                    ),
+                  ),
+
+                // Chat overlay (stable wrapping + spacing)
+                if (state.chatVisible && !state.isPaused)
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 135,
+                    child: _Glass(
+                      radius: 18,
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                      child: _ChatList(messages: state.messages),
+                    ),
+                  ),
+
+                // Bottom actions
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 10,
+                  child: SafeArea(
+                    child: _BottomActions(
+                      isPaused: state.isPaused,
+                      onPause: () =>
+                          context.read<LiveHostBloc>().add(TogglePause()),
+                      onChatToggle: () => context.read<LiveHostBloc>().add(
+                        ToggleChatVisibility(),
+                      ),
+                      onGifts: () => _toast(context, 'Gifts'),
+                      onViewers: () =>
+                          Navigator.pushNamed(context, RouteNames.liveViewer),
+                      onPremium: () => _toast(context, 'Premium'),
+                    ),
+                  ),
                 ),
-            ],
-          );
-        },
+
+                // Paused overlay
+                if (state.isPaused)
+                  _PausedOverlay(
+                    onResume: () =>
+                        context.read<LiveHostBloc>().add(TogglePause()),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -228,16 +292,19 @@ class _Glass extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: (color ?? Colors.black.withOpacity(0.35)),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
+      child: ClipRect(
+        // <-- hard clip the blur area
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: (color ?? Colors.black.withOpacity(0.35)),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
@@ -432,7 +499,7 @@ class _BottomActions extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _item(Icons.chat_bubble_rounded, 'Chat', onChatToggle),
-          _item(Icons.visibility_rounded, 'Viewers', onViewers),
+          _item(Icons.visibility_rounded, 'Viewers', () => {}),
 
           InkWell(
             onTap: onPause,
@@ -493,7 +560,12 @@ class _JoinRequestCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundImage: AssetImage(req.avatarUrl),
+                backgroundImage:
+                    (req.avatarUrl.isNotEmpty &&
+                        req.avatarUrl.startsWith('http'))
+                    ? NetworkImage(req.avatarUrl)
+                    : const AssetImage('assets/images/logo.png')
+                          as ImageProvider,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -688,6 +760,7 @@ class _HeaderBar extends StatelessWidget {
   final String hostBadge;
   final String timeText;
   final String viewersText;
+  final String? avatarUrl; // NEW
   final VoidCallback onEnd;
 
   const _HeaderBar({
@@ -696,26 +769,27 @@ class _HeaderBar extends StatelessWidget {
     required this.timeText,
     required this.viewersText,
     required this.onEnd,
+    this.avatarUrl,
   });
 
   @override
   Widget build(BuildContext context) {
+    final ImageProvider img =
+        (avatarUrl != null && avatarUrl!.startsWith('http'))
+        ? NetworkImage(avatarUrl!)
+        : const AssetImage('assets/images/logo.png');
+
     return _Glass(
       radius: 18,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start, // top-align all items
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // avatar
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: CircleAvatar(
-              radius: 14,
-              backgroundImage: AssetImage('assets/avatar_placeholder.png'),
-            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: CircleAvatar(radius: 14, backgroundImage: img),
           ),
           const SizedBox(width: 8),
-
           // host name + badge
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

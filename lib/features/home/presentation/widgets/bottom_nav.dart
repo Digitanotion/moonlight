@@ -53,8 +53,7 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                 icon: Icons.videocam_outlined,
                 label: 'Go Live',
                 active: widget.currentIndex == 1,
-                onTap: () =>
-                    Navigator.of(context).pushNamed(RouteNames.liveViewer),
+                onTap: () => Navigator.of(context).pushNamed(RouteNames.goLive),
               ),
 
               /// Emphasized Post Button (Floating style)

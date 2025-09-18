@@ -96,3 +96,15 @@ class _PauseChanged extends ViewerEvent {
   @override
   List<Object?> get props => [paused];
 }
+
+class _LiveEnded extends ViewerEvent {
+  const _LiveEnded();
+}
+
+/// 👇 NEW: repo reported my request was accepted/declined
+class _MyApprovalChanged extends ViewerEvent {
+  final bool accepted;
+  const _MyApprovalChanged(this.accepted);
+  @override
+  List<Object?> get props => [accepted];
+}
