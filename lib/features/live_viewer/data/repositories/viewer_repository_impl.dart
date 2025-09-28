@@ -339,28 +339,28 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   /// Viewer join (view-only). We listen for join.handled to be accepted/declined.
   @override
   Future<void> requestToJoin() async {
-    await _ensureWiredOnce();
-    try {
-      final res = await http.dio.post('$_basePath/join');
-      final m = _asMap(res.data);
+    // await _ensureWiredOnce();
+    // try {
+    //   final res = await http.dio.post('$_basePath/join');
+    //   final m = _asMap(res.data);
 
-      // ✅ accept any shape and store as string
-      final rid = m['id'] ?? m['request_id'];
-      _myJoinRequestId = rid == null ? null : '$rid';
+    //   // ✅ accept any shape and store as string
+    //   final rid = m['id'] ?? m['request_id'];
+    //   _myJoinRequestId = rid == null ? null : '$rid';
 
-      if (kDebugMode) debugPrint('▶️ join request id=$_myJoinRequestId');
-    } on DioException catch (e) {
-      final m = _asMap(e.response?.data);
-      final msg = '${m['message'] ?? ''}'.toLowerCase();
-      final rid = m['id'] ?? m['request_id'];
+    //   if (kDebugMode) debugPrint('▶️ join request id=$_myJoinRequestId');
+    // } on DioException catch (e) {
+    //   final m = _asMap(e.response?.data);
+    //   final msg = '${m['message'] ?? ''}'.toLowerCase();
+    //   final rid = m['id'] ?? m['request_id'];
 
-      // ✅ handle idempotent “already pending”
-      if (e.response?.statusCode == 200 || msg.contains('already')) {
-        if (rid != null) _myJoinRequestId = '$rid';
-        return;
-      }
-      rethrow;
-    }
+    //   // ✅ handle idempotent “already pending”
+    //   if (e.response?.statusCode == 200 || msg.contains('already')) {
+    //     if (rid != null) _myJoinRequestId = '$rid';
+    //     return;
+    //   }
+    //   rethrow;
+    // }
   }
 
   @override

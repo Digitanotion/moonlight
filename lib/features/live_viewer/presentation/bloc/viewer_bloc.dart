@@ -72,7 +72,15 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     emit(state.copyWith(status: ViewerStatus.loading));
 
     final host = await repo.fetchHostInfo();
-    emit(state.copyWith(status: ViewerStatus.active, host: host));
+    // Set joinRequested to true since we auto-join as audience
+    emit(
+      state.copyWith(
+        status: ViewerStatus.active,
+        host: host,
+        joinRequested: true, // We're automatically joined
+        awaitingApproval: false, // No approval needed for audience
+      ),
+    );
 
     _pauseSub?.cancel();
     _pauseSub = repo.watchPause().listen((p) => add(_PauseChanged(p)));
@@ -93,18 +101,17 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _chatSub = repo.watchChat().listen((m) => add(_ChatArrived(m)));
     _guestSub = repo.watchGuestJoins().listen((n) => add(_GuestJoined(n)));
     _giftSub = repo.watchGifts().listen((n) => add(_GiftArrived(n)));
-    _approvalSub = repo.watchMyApproval().listen(
-      (ok) => add(_MyApprovalChanged(ok)),
-    );
+    _approvalSub = repo.watchMyApproval().listen((ok) {
+      if (ok) {
+        // Successfully joined as audience
+        add(const _MyApprovalChanged(true));
+      } else {
+        // Failed to join - show error or retry
+        add(const _MyApprovalChanged(false));
+      }
+    });
 
-    // 🚀 Auto-request join as soon as we land on the viewer screen
-    try {
-      await repo.requestToJoin();
-      emit(state.copyWith(joinRequested: true, awaitingApproval: true));
-    } catch (_) {
-      // keep UI enabled; user can tap manual button
-      emit(state.copyWith(joinRequested: false, awaitingApproval: false));
-    }
+    // Remove the auto-request join logic since we handle it in repository
   }
 
   Future<void> _onFollowToggled(

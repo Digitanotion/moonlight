@@ -720,12 +720,12 @@ class _RequestToJoinButton extends StatelessWidget {
           p.joinRequested != n.joinRequested ||
           p.awaitingApproval != n.awaitingApproval,
       builder: (_, s) {
-        // Treat either flag as "request in flight / made"
-        final requestingOrRequested =
-            (s.awaitingApproval == true) || (s.joinRequested == true);
-        final label = s.awaitingApproval == true
-            ? 'Requesting…'
-            : (s.joinRequested == true ? 'Requested' : 'Request Guest Box');
+        // Hide button if already joined as audience
+        if (s.joinRequested == true && s.awaitingApproval == false) {
+          return const SizedBox.shrink();
+        }
+
+        final label = s.joinRequested == true ? 'Joined' : 'Join Stream';
 
         return ElevatedButton(
           style: ElevatedButton.styleFrom(
@@ -736,7 +736,7 @@ class _RequestToJoinButton extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           ),
-          onPressed: requestingOrRequested
+          onPressed: s.joinRequested == true
               ? null
               : () => context.read<ViewerBloc>().add(
                   const RequestToJoinPressed(),
@@ -744,15 +744,8 @@ class _RequestToJoinButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (s.awaitingApproval == true)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+              if (s.joinRequested == true)
+                const Icon(Icons.check, size: 18)
               else
                 const Icon(Icons.video_call),
               const SizedBox(width: 8),
@@ -985,14 +978,10 @@ class _WaitingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ViewerBloc, ViewerState>(
-      buildWhen: (p, n) =>
-          p.awaitingApproval != n.awaitingApproval || p.host != n.host,
+      buildWhen: (p, n) => p.awaitingApproval != n.awaitingApproval,
       builder: (_, s) {
+        // Only show if there's an actual connection issue
         if (!s.awaitingApproval) return const SizedBox.shrink();
-        final host = s.host;
-        final handle = host == null
-            ? ''
-            : '@${host.name.replaceAll(' ', '_').toLowerCase()}';
 
         return IgnorePointer(
           child: Container(
@@ -1010,54 +999,16 @@ class _WaitingOverlay extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 8),
                 const CircularProgressIndicator(color: Colors.white),
                 const SizedBox(height: 16),
                 const Text(
-                  'Waiting for host approval…',
+                  'Connecting to stream...',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 22,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 28),
-                  child: Text(
-                    'You’ll join automatically once approved.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                if (host != null)
-                  _glass(
-                    radius: 22,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircleAvatar(
-                            backgroundImage: NetworkImage(host.avatarUrl),
-                            radius: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            handle,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1065,4 +1016,88 @@ class _WaitingOverlay extends StatelessWidget {
       },
     );
   }
+
+  // @override
+  // Widget build(BuildContext context) {
+  //   return BlocBuilder<ViewerBloc, ViewerState>(
+  //     buildWhen: (p, n) =>
+  //         p.awaitingApproval != n.awaitingApproval || p.host != n.host,
+  //     builder: (_, s) {
+  //       if (!s.awaitingApproval) return const SizedBox.shrink();
+  //       final host = s.host;
+  //       final handle = host == null
+  //           ? ''
+  //           : '@${host.name.replaceAll(' ', '_').toLowerCase()}';
+
+  //       return IgnorePointer(
+  //         child: Container(
+  //           alignment: Alignment.center,
+  //           decoration: BoxDecoration(
+  //             gradient: LinearGradient(
+  //               colors: [
+  //                 const Color(0xFF2B2E83).withOpacity(0.55),
+  //                 const Color(0xFF7B2F9B).withOpacity(0.55),
+  //               ],
+  //               begin: Alignment.topCenter,
+  //               end: Alignment.bottomCenter,
+  //             ),
+  //           ),
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: [
+  //               const SizedBox(height: 8),
+  //               const CircularProgressIndicator(color: Colors.white),
+  //               const SizedBox(height: 16),
+  //               const Text(
+  //                 'Waiting for host approval…',
+  //                 style: TextStyle(
+  //                   color: Colors.white,
+  //                   fontWeight: FontWeight.w800,
+  //                   fontSize: 22,
+  //                 ),
+  //               ),
+  //               const SizedBox(height: 8),
+  //               const Padding(
+  //                 padding: EdgeInsets.symmetric(horizontal: 28),
+  //                 child: Text(
+  //                   'You’ll join automatically once approved.',
+  //                   textAlign: TextAlign.center,
+  //                   style: TextStyle(color: Colors.white70, fontSize: 14),
+  //                 ),
+  //               ),
+  //               const SizedBox(height: 18),
+  //               if (host != null)
+  //                 _glass(
+  //                   radius: 22,
+  //                   child: Padding(
+  //                     padding: const EdgeInsets.symmetric(
+  //                       horizontal: 12,
+  //                       vertical: 8,
+  //                     ),
+  //                     child: Row(
+  //                       mainAxisSize: MainAxisSize.min,
+  //                       children: [
+  //                         CircleAvatar(
+  //                           backgroundImage: NetworkImage(host.avatarUrl),
+  //                           radius: 16,
+  //                         ),
+  //                         const SizedBox(width: 8),
+  //                         Text(
+  //                           handle,
+  //                           style: const TextStyle(
+  //                             color: Colors.white,
+  //                             fontWeight: FontWeight.w700,
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                   ),
+  //                 ),
+  //             ],
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
+  // }
 }
