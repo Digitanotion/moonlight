@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
@@ -14,6 +15,7 @@ class LiveHostState {
   final List<LiveChatMessage> messages;
   final bool chatVisible;
   final LiveJoinRequest? pendingRequest;
+  final LiveEndAnalytics? endAnalytics;
 
   // NEW (gift toast)
   final GiftEvent? gift;
@@ -30,6 +32,7 @@ class LiveHostState {
     this.pendingRequest,
     this.gift,
     this.showGiftToast = false,
+    this.endAnalytics,
   });
 
   LiveHostState copyWith({
@@ -44,6 +47,8 @@ class LiveHostState {
     bool clearRequest = false,
     GiftEvent? gift,
     bool? showGiftToast,
+    LiveEndAnalytics? endAnalytics,
+    bool clearEndAnalytics = false,
   }) {
     return LiveHostState(
       isLive: isLive ?? this.isLive,
@@ -58,6 +63,9 @@ class LiveHostState {
           : (pendingRequest ?? this.pendingRequest),
       gift: gift ?? this.gift,
       showGiftToast: showGiftToast ?? this.showGiftToast,
+      endAnalytics: clearEndAnalytics
+          ? null
+          : (endAnalytics ?? this.endAnalytics),
     );
   }
 
@@ -76,6 +84,7 @@ class LiveHostState {
     pendingRequest: null,
     gift: null,
     showGiftToast: false,
+    endAnalytics: null,
   );
 }
 
@@ -144,6 +153,11 @@ class JoinHandledReceived extends LiveHostEvent {
   JoinHandledReceived(this.payload);
 }
 
+class SendChatMessage extends LiveHostEvent {
+  final String text;
+  SendChatMessage(this.text);
+}
+
 // ===== Bloc =====
 class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   final LiveSessionRepository repo;
@@ -157,11 +171,22 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   StreamSubscription<GiftEvent>? _gSub;
   StreamSubscription<void>? _eSub;
   StreamSubscription<JoinHandled>? _jhSub;
+  @override
+  Stream<LiveHostState> mapEventToState(LiveHostEvent event) async* {
+    if (event is SendChatMessage) {
+      await repo.sendChatMessage(event.text);
+      // No state change needed - message will appear via Pusher stream
+    }
+    // ... rest of your existing event handling
+  }
 
   LiveHostBloc(this.repo) : super(LiveHostState.initial('')) {
     on<LiveStarted>(_onStart);
     on<LiveTick>(_onTick);
-
+    on<SendChatMessage>((event, emit) async {
+      await repo.sendChatMessage(event.text);
+      // Message will appear via the existing chat stream
+    });
     on<ViewerCountUpdated>(
       (e, emit) => emit(state.copyWith(viewers: e.viewers)),
     );
@@ -269,8 +294,20 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   }
 
   Future<void> _onEnd(EndPressed e, Emitter<LiveHostState> emit) async {
-    await _cleanDown();
-    emit(state.copyWith(isLive: false));
+    try {
+      // 1) Call server to end + get analytics
+      final analytics = await repo.endAndFetchAnalytics();
+
+      // 2) Local cleanup (mute/leave etc.)
+      await _cleanDown();
+
+      // 3) Put analytics in state and flip off isLive (UI will navigate)
+      emit(state.copyWith(isLive: false, endAnalytics: analytics));
+    } catch (_) {
+      // Still attempt to cleanup locally, but keep UX consistent
+      await _cleanDown();
+      emit(state.copyWith(isLive: false));
+    }
   }
 
   Future<void> _onAccept(

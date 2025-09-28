@@ -304,9 +304,7 @@ class _CameraCard extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: s.camOn && s.camReady
-                      ? Text(
-                          "",
-                        ) //context.read<GoLiveCubit>().camera.buildPreview()
+                      ? context.read<GoLiveCubit>().camera.buildPreview()
                       : Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -504,7 +502,7 @@ class _BonusCard extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              "First Stream Bonus\nStream for 5+ minutes and earn \$20 bonus! Perfect time to connect with your audience.",
+              "First Stream Bonus: \nStream for 5+ minutes and earn \$20 bonus! Perfect time to connect with your audience.",
               style: TextStyle(color: Colors.white, height: 1.25),
             ),
           ),

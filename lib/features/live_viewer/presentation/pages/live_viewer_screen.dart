@@ -146,29 +146,30 @@ class _BackgroundVideo extends StatelessWidget {
         : null;
     final localPreview = videoProvider?.buildLocalPreview();
 
+    final fallback = Image.asset(
+      'assets/images/onboard_1.jpg',
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Image.network(
+        'https://images.pexels.com/photos/414886/pexels-photo-414886.jpeg?auto=compress&w=800',
+        fit: BoxFit.cover,
+      ),
+    );
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (videoProvider != null)
-          Positioned.fill(child: videoProvider.buildHostVideo())
+        if (videoProvider == null)
+          fallback
         else
-          Image.asset(
-            'assets/images/onboard_1.jpg',
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Image.network(
-              'https://images.pexels.com/photos/414886/pexels-photo-414886.jpeg?auto=compress&w=800',
-              fit: BoxFit.cover,
-            ),
+          ValueListenableBuilder<bool>(
+            valueListenable: videoProvider.hostHasVideo,
+            builder: (_, hasVideo, __) =>
+                hasVideo ? videoProvider.buildHostVideo() : fallback,
           ),
-        // slight darken overlay
         Container(color: Colors.black.withOpacity(0.15)),
         child,
         if (localPreview != null)
-          Positioned(
-            right: 12,
-            bottom: 150, // above the comment bar
-            child: localPreview,
-          ),
+          Positioned(right: 12, bottom: 150, child: localPreview),
       ],
     );
   }

@@ -25,7 +25,11 @@ class PusherService {
 
   bool _initialized = false;
   bool _connected = false;
+  // Tracks what the app *wants* (sticky across reconnects)
+  final Set<String> _desired = <String>{};
 
+  // Tracks what the SDK is *actually* subscribed to right now
+  final Set<String> _active = <String>{};
   // Track what we subscribed to
   final Set<String> _subscriptions = <String>{};
   final Set<String> _subscribing = <String>{}; // ✅ NEW
@@ -68,28 +72,56 @@ class PusherService {
     if (_connected) return;
     _connectFuture ??= _pusher.connect();
     await _connectFuture;
-    _connected = true;
+    // _connected = true;
   }
 
   Future<void> subscribe(String channelName) async {
+    // Mark sticky intent first so reconnect can replay this later
+    _desired.add(channelName);
+
     await connect();
-    if (_subscriptions.contains(channelName) ||
-        _subscribing.contains(channelName)) {
-      return; // ✅ no-op if already (being) subscribed
+
+    // If already active or in the middle of subscribing, no-op
+    if (_active.contains(channelName) || _subscribing.contains(channelName)) {
+      return;
     }
+
     _subscribing.add(channelName);
     try {
       await _pusher.subscribe(channelName: channelName);
-      _subscriptions.add(channelName);
+      _active.add(channelName);
     } on PlatformException catch (e) {
-      // Treat "Already subscribed" as success
       if ((e.message ?? '').contains('Already subscribed')) {
-        _subscriptions.add(channelName);
+        _active.add(channelName);
       } else {
         rethrow;
       }
     } finally {
       _subscribing.remove(channelName);
+    }
+  }
+
+  /// Subscribe many at once (handy for replay)
+  Future<void> subscribeMany(Iterable<String> channels) async {
+    for (final ch in channels) {
+      try {
+        await subscribe(ch);
+      } catch (_) {
+        // keep going per-channel
+      }
+    }
+  }
+
+  /// Unsubscribe only channels that start with [prefix]
+  Future<void> unsubscribePrefix(String prefix) async {
+    final toDrop = _active.where((c) => c.startsWith(prefix)).toList();
+    for (final ch in toDrop) {
+      try {
+        await _pusher.unsubscribe(channelName: ch);
+      } catch (_) {}
+      _active.remove(ch);
+      _desired.remove(ch);
+      _handlers.remove(ch);
     }
   }
 
@@ -109,27 +141,52 @@ class PusherService {
   }
 
   Future<void> unsubscribeAll() async {
-    for (final ch in _subscriptions.toList()) {
-      await _pusher.unsubscribe(channelName: ch);
+    for (final ch in _active.toList()) {
+      try {
+        await _pusher.unsubscribe(channelName: ch);
+      } catch (_) {}
     }
     _subscribing.clear();
-    _subscriptions.clear();
+    _active.clear();
+    _desired.clear();
     _handlers.clear();
   }
 
   Future<void> disconnect() async {
+    // Keep desired? Usually a full disconnect is a teardown,
+    // so we clear both to avoid accidental replay later.
     await unsubscribeAll();
     await _pusher.disconnect();
     _connected = false;
     _initialized = false;
-    _connectFuture = null; // ✅ IMPORTANT: allow a fresh connect next time
+    _connectFuture = null;
   }
 
   // ===== Pusher callbacks (from the plugin) =====
 
   void _onConnectionStateChange(dynamic currentState, dynamic previousState) {
-    // Useful for logging if needed
-    // debugPrint('Pusher connection: $previousState -> $currentState');
+    // States come as strings like "CONNECTING", "CONNECTED", "DISCONNECTED"
+    final s = (currentState ?? '').toString().toUpperCase();
+    if (s == 'CONNECTED') {
+      _connected = true;
+
+      // On reconnect, the SDK loses all channel subscriptions.
+      // Replay intent for any desired channel that isn't active.
+      // (Active set may be wrong after a reconnect; ensure it's rebuilt.)
+      // Reset active to force replay, then subscribe desired.
+      _active.clear();
+
+      // Fire-and-forget; this repopulates _active on success
+      // but don't await inside callback chain.
+      // If you prefer, you can ignore the returned Future.
+      // Triggering serially is fine for the small number of channels we use.
+      subscribeMany(_desired);
+    } else if (s == 'DISCONNECTED') {
+      _connected = false;
+      _connectFuture = null; // allow fresh connect next time
+      // Keep _desired so we can replay on next CONNECTED
+      _active.clear();
+    }
   }
 
   void _onError(String message, int? code, dynamic e) {
@@ -140,7 +197,7 @@ class PusherService {
   }
 
   void _onSubscriptionSucceeded(String channelName, dynamic data) {
-    // debugPrint('Pusher subscribed: $channelName data=$data');
+    _active.add(channelName); // mark as active (reconnect path)
   }
 
   void _onSubscriptionError(String message, dynamic e) {

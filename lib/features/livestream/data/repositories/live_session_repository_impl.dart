@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/services/agora_service.dart';
+import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
@@ -21,6 +23,18 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     this._agora,
     this._tracker,
   );
+
+  Map<String, dynamic> _asMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return data.cast<String, dynamic>();
+    if (data is String) {
+      try {
+        final m = jsonDecode(data);
+        if (m is Map) return m.cast<String, dynamic>();
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
 
   // Streams
   final _chatCtrl = StreamController<LiveChatMessage>.broadcast();
@@ -59,9 +73,9 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
   @override
   Future<void> startSession({required String topic}) async {
     final s = _tracker.current;
-    // Ensure we don't carry old channels/handlers from a prior session
+    // NEW: only drop previous live.* channels for *this* livestream id
     try {
-      await _pusher.unsubscribeAll();
+      await _pusher.unsubscribePrefix('live.${_tracker.current!.livestreamId}');
     } catch (_) {}
     // (connect() is called automatically inside subscribe(); no need here)
     if (s == null) throw StateError('No active LiveStartPayload found.');
@@ -81,6 +95,7 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       final chat = 'live.${s.livestreamId}.chat';
       final join = 'live.${s.livestreamId}.join';
       final root = 'live.${s.livestreamId}';
+      final viewer = 'live.${s.livestreamId}.viewer';
       final guest =
           'live.${s.livestreamId}.guest'; // guestbox (if back-end uses it)
 
@@ -93,6 +108,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       await _pusher.subscribe(root);
       debugPrint('subscribed live.${s.livestreamId}');
       await _pusher.subscribe(guest);
+      await _pusher.subscribe(viewer);
+      debugPrint('subscribed live.${s.livestreamId}.viewer');
 
       // helpers
       Map<String, dynamic> _normalize(dynamic raw) {
@@ -115,10 +132,28 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
         }
       }
 
-      // viewer.count
-      _bindAny(meta, ['viewer.count', 'App\\Events\\ViewerCount'], (m) {
-        final raw = m['count'] ?? m['viewers'];
-        _viewersCtrl.add(int.tryParse('$raw') ?? 0);
+      // Remove the complex _bindAny call and replace with:
+
+      // 1) Direct binding like viewer repository
+      _pusher.bind(viewer, 'viewer.count', (raw) {
+        final m = _asMap(raw);
+        final rawCount = (m['count'] ?? m['viewers'] ?? 0);
+        final count = rawCount is num
+            ? rawCount.toInt()
+            : int.tryParse('$rawCount') ?? 0;
+        debugPrint('🎯 HOST: Viewer count updated to $count');
+        _viewersCtrl.add(count);
+      });
+
+      // 2) Also bind to main channel as backup (like viewer repo does for live.ended)
+      _pusher.bind('live.${s.livestreamId}', 'viewer.count', (raw) {
+        final m = _asMap(raw);
+        final rawCount = (m['count'] ?? m['viewers'] ?? 0);
+        final count = rawCount is num
+            ? rawCount.toInt()
+            : int.tryParse('$rawCount') ?? 0;
+        debugPrint('🎯 HOST (main channel): Viewer count updated to $count');
+        _viewersCtrl.add(count);
       });
 
       // live.paused
@@ -129,28 +164,47 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
         setLocalPause(paused);
       });
 
-      // live.ended
-      _bindAny(root, ['live.ended', 'App\\Events\\LiveEnded'], (_) {
+      // Live ended
+      _pusher.bind(root, 'live.ended', (raw) {
+        debugPrint('🎯 Live ended event received');
         _endedCtrl.add(null);
       });
 
       // chat.message
-      _bindAny(chat, ['chat.message', 'App\\Events\\ChatMessage'], (m) {
-        final body = (m['chat'] is Map)
-            ? (m['chat'] as Map).cast<String, dynamic>()
-            : m;
-        final text = (body['text'] ?? '').toString();
+      // _bindAny(chat, ['chat.message', 'App\\Events\\ChatMessage'], (m) {
+      //   final body = (m['chat'] is Map)
+      //       ? (m['chat'] as Map).cast<String, dynamic>()
+      //       : m;
+      //   final text = (body['text'] ?? '').toString();
 
-        String handle;
-        if (body['user'] is Map) {
-          final u = (body['user'] as Map).cast<String, dynamic>();
-          handle = '@${(u['user_slug'] ?? u['slug'] ?? 'user')}';
+      //   String handle;
+      //   if (body['user'] is Map) {
+      //     final u = (body['user'] as Map).cast<String, dynamic>();
+      //     handle = '@${(u['user_slug'] ?? u['slug'] ?? 'user')}';
+      //   } else {
+      //     handle = '@${(body['user'] ?? 'user').toString()}';
+      //   }
+      //   _chatCtrl.add(LiveChatMessage(handle, text));
+      // });
+
+      // Chat message
+      _pusher.bind(chat, 'chat.message', (raw) {
+        final m = _asMap(raw);
+        final chatData = (m['chat'] is Map) ? _asMap(m['chat']) : m;
+
+        final text = (chatData['text'] ?? '').toString();
+        String handle = '@user';
+
+        if (chatData['user'] is Map) {
+          final user = _asMap(chatData['user']);
+          handle = '@${user['user_slug'] ?? user['slug'] ?? 'user'}';
         } else {
-          handle = '@${(body['user'] ?? 'user').toString()}';
+          handle = '@${chatData['user'] ?? 'user'}';
         }
+
+        debugPrint('🎯 Chat message: $handle: $text');
         _chatCtrl.add(LiveChatMessage(handle, text));
       });
-
       // gifts
       _bindAny(root, ['gift.sent', 'App\\Events\\GiftSent'], (m) {
         final from = (m['from'] ?? 'Someone').toString();
@@ -253,6 +307,37 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
   }
 
   @override
+  Future<LiveEndAnalytics> endAndFetchAnalytics() async {
+    final current = _tracker.current;
+    if (current == null) {
+      throw StateError('No active livestream session.');
+    }
+    // numeric id – your backend accepts numeric here
+    final id = current.livestreamId;
+
+    final res = await _client.dio.post('/api/v1/live/$_id/end');
+    final data = (res.data as Map).cast<String, dynamic>();
+
+    final analytics =
+        (data['analytics'] as Map?)?.cast<String, dynamic>() ?? {};
+    final dur =
+        (analytics['stream_duration'] as Map?)?.cast<String, dynamic>() ?? {};
+    final coins =
+        (analytics['coins_earned'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    return LiveEndAnalytics(
+      status: (data['status'] ?? '').toString(),
+      endedAtIso: data['ended_at'] as String?,
+      durationFormatted: (dur['formatted'] ?? '00:00:00').toString(),
+      durationSeconds: double.tryParse('${dur['seconds'] ?? 0}') ?? 0.0,
+      totalViewers: int.tryParse('${analytics['total_viewers'] ?? 0}') ?? 0,
+      totalChats: int.tryParse('${analytics['total_chats'] ?? 0}') ?? 0,
+      coinsAmount: int.tryParse('${coins['amount'] ?? 0}') ?? 0,
+      coinsCurrency: (coins['currency'] ?? 'coins').toString(),
+    );
+  }
+
+  @override
   Future<void> acceptJoinRequest(String requestId) async {
     await _client.dio.post(
       '/api/v1/live/$_id/join/$requestId/accept',
@@ -276,6 +361,23 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     final paused = p == true || p == 'true' || p == 1;
     _pauseCtrl.add(paused);
     setLocalPause(paused);
+  }
+
+  @override
+  Future<void> sendChatMessage(String text) async {
+    final trimmedText = text.trim();
+    if (trimmedText.isEmpty) return;
+
+    try {
+      await _client.dio.post(
+        '/api/v1/live/$_id/chat',
+        data: {'text': trimmedText},
+      );
+      // The message will appear via Pusher chat.message event
+    } catch (e) {
+      debugPrint('❌ Failed to send chat: $e');
+      // You might want to show an error to the user
+    }
   }
 
   @override

@@ -17,5 +17,7 @@ class RouteNames {
   static const chatFullscreen = '/live/chat';
   static const liveHost = '/live/host';
   static const liveViewer = '/live/viewer';
+  static const listViewers = '/list-viewers';
   static const postsPage = 'postsPage';
+  static const livestreamEnded = '/livestream-ended';
 }

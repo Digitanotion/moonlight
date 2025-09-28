@@ -19,13 +19,16 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
+import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
 import 'package:moonlight/features/livestream/domain/repositories/live_repository.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/live_cubits.dart';
 import 'package:moonlight/features/livestream/presentation/pages/go_live_screen.dart';
+import 'package:moonlight/features/livestream/presentation/pages/list_viewers.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_host_page.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_viewer.dart';
+import 'package:moonlight/features/livestream/presentation/pages/livestream_ended.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -212,6 +215,13 @@ class AppRouter {
       case RouteNames.postsPage:
         return MaterialPageRoute(builder: (_) => const PostsScreen());
 
+      case RouteNames.listViewers:
+        return MaterialPageRoute(builder: (_) => const ViewersListPage());
+      case RouteNames.livestreamEnded:
+        final args = settings.arguments as LiveEndAnalytics?;
+        return MaterialPageRoute(
+          builder: (_) => LivestreamEndedScreen(analytics: args),
+        );
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

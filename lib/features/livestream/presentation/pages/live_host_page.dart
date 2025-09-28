@@ -3,9 +3,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
+import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
+import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 
 class LiveHostPage extends StatefulWidget {
@@ -91,19 +94,28 @@ class _LiveHostPageState extends State<LiveHostPage> {
         listeners: [
           // 1) Navigate out when stream ends (you already had this in BlocConsumer)
           BlocListener<LiveHostBloc, LiveHostState>(
-            listenWhen: (p, c) => p.isLive != c.isLive,
+            listenWhen: (p, c) =>
+                p.isLive != c.isLive || p.endAnalytics != c.endAnalytics,
             listener: (context, state) {
               if (!state.isLive) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Live stream has ended'),
-                    behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil(RouteNames.home, (r) => false);
+                // Prefer analytics route if present
+                if (state.endAnalytics != null) {
+                  Navigator.of(context).pushReplacementNamed(
+                    RouteNames.livestreamEnded,
+                    arguments: state.endAnalytics,
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Live stream has ended'),
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil(RouteNames.home, (r) => false);
+                }
               }
             },
           ),
@@ -138,7 +150,7 @@ class _LiveHostPageState extends State<LiveHostPage> {
                       if (!agora.joined) {
                         return const Center(
                           child: Text(
-                            'Connecting to Agora…',
+                            'Please wait a min...',
                             style: TextStyle(color: Colors.white),
                           ),
                         );
@@ -211,18 +223,19 @@ class _LiveHostPageState extends State<LiveHostPage> {
                   ),
 
                 // Chat overlay (stable wrapping + spacing)
+                // Enhanced Chat overlay with input
                 if (state.chatVisible && !state.isPaused)
                   Positioned(
                     left: 20,
                     right: 20,
                     bottom: 135,
-                    child: _Glass(
-                      radius: 18,
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                      child: _ChatList(messages: state.messages),
+                    child: _HostChatWidget(
+                      messages: state.messages,
+                      onSendMessage: (text) {
+                        context.read<LiveHostBloc>().add(SendChatMessage(text));
+                      },
                     ),
                   ),
-
                 // Bottom actions
                 Positioned(
                   left: 0,
@@ -237,8 +250,20 @@ class _LiveHostPageState extends State<LiveHostPage> {
                         ToggleChatVisibility(),
                       ),
                       onGifts: () => _toast(context, 'Gifts'),
-                      onViewers: () =>
-                          Navigator.pushNamed(context, RouteNames.liveViewer),
+                      onViewers: () {
+                        final tracker = sl<LiveSessionTracker>();
+                        // Numeric for Pusher channels:
+                        final numericId = tracker.current!.livestreamId;
+                        // REST param — use uuid if you track it, else the same numeric id is fine:
+                        final restParam = '${tracker.current!.livestreamId}';
+
+                        registerParticipantsScope(
+                          livestreamIdNumeric: numericId,
+                          livestreamParam: restParam,
+                        );
+
+                        Navigator.pushNamed(context, RouteNames.listViewers);
+                      },
                       onPremium: () => _toast(context, 'Premium'),
                     ),
                   ),
@@ -499,7 +524,7 @@ class _BottomActions extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _item(Icons.chat_bubble_rounded, 'Chat', onChatToggle),
-          _item(Icons.visibility_rounded, 'Viewers', () => {}),
+          _item(Icons.visibility_rounded, 'Viewers', onViewers),
 
           InkWell(
             onTap: onPause,
@@ -866,6 +891,211 @@ class _HeaderBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// ===== Enhanced Host Chat Widget =====
+class _HostChatWidget extends StatefulWidget {
+  final List<LiveChatMessage> messages;
+  final Function(String) onSendMessage;
+
+  const _HostChatWidget({required this.messages, required this.onSendMessage});
+
+  @override
+  State<_HostChatWidget> createState() => _HostChatWidgetState();
+}
+
+class _HostChatWidgetState extends State<_HostChatWidget> {
+  final TextEditingController _textController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _showEmojiPicker = false;
+
+  void _sendMessage() {
+    final text = _textController.text.trim();
+    if (text.isNotEmpty) {
+      widget.onSendMessage(text);
+      _textController.clear();
+      _focusNode.unfocus();
+      setState(() => _showEmojiPicker = false);
+    }
+  }
+
+  void _toggleEmojiPicker() {
+    setState(() {
+      _showEmojiPicker = !_showEmojiPicker;
+      if (_showEmojiPicker) {
+        _focusNode.unfocus();
+      } else {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  void _insertEmoji(String emoji) {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    final newText = text.replaceRange(selection.start, selection.end, emoji);
+    _textController.text = newText;
+    _textController.selection = selection.copyWith(
+      baseOffset: selection.start + emoji.length,
+      extentOffset: selection.start + emoji.length,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Chat messages list
+        _Glass(
+          radius: 18,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          child: _ChatList(messages: widget.messages),
+        ),
+
+        const SizedBox(height: 8),
+
+        // Chat input area
+        _Glass(
+          radius: 24,
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              // Emoji picker button
+              IconButton(
+                icon: Icon(
+                  _showEmojiPicker
+                      ? Icons.keyboard_rounded
+                      : Icons.emoji_emotions_rounded,
+                  color: Colors.white.withOpacity(0.7),
+                  size: 20,
+                ),
+                onPressed: _toggleEmojiPicker,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              ),
+
+              const SizedBox(width: 8),
+
+              // Text field
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  focusNode: _focusNode,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Send a message...',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onSubmitted: (_) => _sendMessage(),
+                  maxLines: 1,
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // Send button
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6A00),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  color: Colors.white,
+                  onPressed: _sendMessage,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Emoji picker (conditional)
+        if (_showEmojiPicker) ...[
+          const SizedBox(height: 8),
+          _Glass(
+            radius: 16,
+            padding: const EdgeInsets.all(12),
+            child: _EmojiGrid(onEmojiSelected: _insertEmoji),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+}
+
+/// ===== Simple Emoji Grid =====
+class _EmojiGrid extends StatelessWidget {
+  final Function(String) onEmojiSelected;
+
+  final List<String> emojis = [
+    '😂',
+    '😍',
+    '🥰',
+    '😭',
+    '😊',
+    '👍',
+    '❤️',
+    '🔥',
+    '🙏',
+    '😎',
+    '🎉',
+    '💯',
+    '🤔',
+    '😢',
+    '👏',
+    '🙌',
+    '😘',
+    '🤣',
+    '😅',
+    '😡',
+    '👀',
+    '✨',
+    '💕',
+    '🎶',
+  ];
+
+  _EmojiGrid({required this.onEmojiSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 6,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+      ),
+      itemCount: emojis.length,
+      itemBuilder: (context, index) {
+        return GestureDetector(
+          onTap: () => onEmojiSelected(emojis[index]),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: Colors.white.withOpacity(0.1),
+            ),
+            child: Center(
+              child: Text(emojis[index], style: const TextStyle(fontSize: 20)),
+            ),
+          ),
+        );
+      },
     );
   }
 }

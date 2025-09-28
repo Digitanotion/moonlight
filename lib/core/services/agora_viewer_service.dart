@@ -33,6 +33,9 @@ class AgoraViewerService with ChangeNotifier {
   // First remote uid treated as the “host” stream for the background
   final ValueNotifier<int?> hostUid = ValueNotifier<int?>(null);
 
+  // NEW: simple flag the UI can listen to
+  final ValueNotifier<bool> _hasVideo = ValueNotifier<bool>(false);
+  ValueListenable<bool> get hostHasVideo => _hasVideo;
   // ---------------- Getters ----------------
   bool get isJoined => _joined;
   bool get isCoHost => _isCoHost;
@@ -72,6 +75,7 @@ class AgoraViewerService with ChangeNotifier {
           _isCoHost = false;
           _previewing = false;
           hostUid.value = null;
+          _hasVideo.value = false;
           if (kDebugMode) {
             debugPrint('🚪 [Viewer] left: ch=${conn.channelId}');
           }
@@ -83,6 +87,7 @@ class AgoraViewerService with ChangeNotifier {
         onUserJoined: (conn, remoteUid, elapsed) {
           // Consider the first remote as host camera feed
           hostUid.value ??= remoteUid;
+          _hasVideo.value = hostUid.value != null;
           if (kDebugMode) {
             debugPrint('👤 [Viewer] remote joined: $remoteUid');
           }
@@ -91,6 +96,7 @@ class AgoraViewerService with ChangeNotifier {
           if (hostUid.value == remoteUid) {
             hostUid.value = null;
           }
+          _hasVideo.value = hostUid.value != null;
           if (kDebugMode) {
             debugPrint('👤 [Viewer] remote left: $remoteUid reason=$reason');
           }
@@ -192,7 +198,6 @@ class AgoraViewerService with ChangeNotifier {
       const VideoEncoderConfiguration(
         dimensions: VideoDimensions(width: 720, height: 1280),
         frameRate: 30,
-        bitrate: 1800,
         orientationMode: OrientationMode.orientationModeFixedPortrait,
       ),
     );

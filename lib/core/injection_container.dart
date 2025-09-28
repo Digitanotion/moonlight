@@ -6,6 +6,9 @@ import 'package:moonlight/features/home/data/datasources/live_feed_remote_dataso
 import 'package:moonlight/features/home/data/repositories/live_feed_repository_impl.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
+import 'package:moonlight/features/livestream/data/repositories/participants_repository_impl.dart';
+import 'package:moonlight/features/livestream/domain/repositories/participants_repository.dart';
+import 'package:moonlight/features/livestream/presentation/bloc/participants_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/config/runtime_config.dart';
@@ -265,6 +268,55 @@ Future<void> init() async {
   _registerGoLive(); // camera/mic + go live repo
   _registerLiveHost(); // session repo (agora + pusher)
   _registerLiveViewer(); // viewer mock (until implemented)
+}
+
+/// ======= Participants (Viewers List) — session-scoped =======
+/// Call this right before opening the Viewers List, when you *know* the ids.
+/// It will (re)register the repository with the current livestream identifiers.
+///
+/// `livestreamIdNumeric` -> for Pusher channels: `live.{id}`
+/// `livestreamParam`     -> REST segment (numeric id **or** UUID) for /api paths
+void registerParticipantsScope({
+  required int livestreamIdNumeric,
+  required String livestreamParam,
+}) {
+  // Repo is session-scoped: drop the old one if any (e.g., previous live)
+  if (sl.isRegistered<ParticipantsRepository>()) {
+    try {
+      sl<ParticipantsRepository>().dispose();
+    } catch (_) {}
+    sl.unregister<ParticipantsRepository>();
+  }
+
+  sl.registerLazySingleton<ParticipantsRepository>(
+    () => ParticipantsRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(),
+      livestreamIdNumeric: livestreamIdNumeric,
+      livestreamParam: livestreamParam,
+    ),
+  );
+
+  // Optional: factory for the BLoC (useful if you prefer sl<ParticipantsBloc>())
+  if (sl.isRegistered<ParticipantsBloc>()) {
+    sl.unregister<ParticipantsBloc>();
+  }
+  sl.registerFactory<ParticipantsBloc>(
+    () => ParticipantsBloc(sl<ParticipantsRepository>()),
+  );
+}
+
+/// Call this when the viewers list is no longer needed (optional but tidy).
+Future<void> unregisterParticipantsScope() async {
+  if (sl.isRegistered<ParticipantsRepository>()) {
+    try {
+      await sl<ParticipantsRepository>().dispose();
+    } catch (_) {}
+    sl.unregister<ParticipantsRepository>();
+  }
+  if (sl.isRegistered<ParticipantsBloc>()) {
+    sl.unregister<ParticipantsBloc>();
+  }
 }
 
 void _registerAgora() {

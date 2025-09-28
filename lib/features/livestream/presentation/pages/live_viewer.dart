@@ -65,12 +65,12 @@ class LiveViewerPage extends StatelessWidget {
           const Positioned(top: 170, left: 16, right: 16, child: GiftBanner()),
 
           // Request to join button
-          const Positioned(
-            left: 16,
-            right: 16,
-            bottom: 80,
-            child: RequestToJoinButton(),
-          ),
+          // const Positioned(
+          //   left: 16,
+          //   right: 16,
+          //   bottom: 80,
+          //   child: RequestToJoinButton(),
+          // ),
 
           // Comment input row
           const Positioned(

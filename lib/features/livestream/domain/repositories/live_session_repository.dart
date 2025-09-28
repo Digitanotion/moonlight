@@ -1,3 +1,4 @@
+import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
 
@@ -13,6 +14,9 @@ abstract class LiveSessionRepository {
   Stream<void> endedStream();
   Stream<JoinHandled> joinHandledStream();
 
+  /// Ends the livestream on the server and returns final analytics.
+  Future<LiveEndAnalytics> endAndFetchAnalytics();
+
   // Session control
   Future<void> startSession({required String topic});
   Future<void> endSession();
@@ -22,7 +26,7 @@ abstract class LiveSessionRepository {
   // Join moderation
   Future<void> acceptJoinRequest(String requestId);
   Future<void> declineJoinRequest(String requestId);
-
+  Future<void> sendChatMessage(String text);
   void dispose();
 }
 

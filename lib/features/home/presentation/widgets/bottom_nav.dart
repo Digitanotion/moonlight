@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:moonlight/features/livestream/presentation/pages/livestream_ended.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 
 class HomeBottomNav extends StatefulWidget {
@@ -83,13 +84,22 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                 icon: Icons.groups_2_outlined,
                 label: 'Clubs',
                 active: widget.currentIndex == 3,
-                onTap: () => widget.onTap(3),
+                onTap: () {
+                  widget.onTap(3);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LivestreamEndedScreen(),
+                    ),
+                  );
+                },
               ),
               _NavItem(
                 icon: Icons.person_outline,
                 label: 'Profile',
                 active: widget.currentIndex == 4,
                 onTap: () {
+                  widget.onTap(4);
                   Navigator.pushNamed(context, RouteNames.myProfile);
                 },
               ),

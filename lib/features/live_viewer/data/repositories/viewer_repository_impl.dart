@@ -69,7 +69,8 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   String? _myJoinRequestId;
 
   String get _basePath => '/api/v1/live/$livestreamParam';
-
+  @override
+  ValueListenable<bool> get hostHasVideo => _rtc.hostHasVideo;
   // ========= Host info =========
   @override
   Future<HostInfo> fetchHostInfo() async {
@@ -93,15 +94,37 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   Future<void> _wire() async {
     if (_wired) return;
 
-    // Optionally let backend count the viewer; ignore errors (idempotent server-side)
+    // Auto-join as audience immediately
     try {
-      final res = await http.dio.post('$_basePath/enter');
-      final data = (res.data is Map)
-          ? (res.data as Map)
-          : jsonDecode(res.data as String) as Map;
-      final v = (data['viewers'] ?? 0) as int;
+      // 1. First, call enter endpoint to update viewer count
+      final enterRes = await http.dio.post('$_basePath/enter');
+      final enterData = (enterRes.data is Map)
+          ? (enterRes.data as Map)
+          : jsonDecode(enterRes.data as String) as Map;
+      final v = (enterData['viewers'] ?? 0) as int;
       _viewerCtrl.add(v);
-    } catch (_) {}
+
+      // 2. Auto-join as audience without waiting for approval
+      final creds = await _fetchRtcCreds(role: 'audience');
+      debugPrint(
+        '[RTC] Auto-joining as audience: appId=${creds.appId}, ch=${creds.channel}, '
+        'uidType=${creds.uidType}, uid=${creds.uid}, token.len=${creds.token.length}',
+      );
+
+      await _rtc.joinAudience(
+        appId: creds.appId,
+        channel: creds.channel,
+        uidType: creds.uidType,
+        uid: creds.uid,
+        rtcToken: creds.token,
+      );
+
+      // Notify that we've successfully joined as audience
+      _myApprovalCtrl.add(true);
+    } catch (e) {
+      debugPrint('⚠️ Auto-join as audience failed: $e');
+      _myApprovalCtrl.add(false);
+    }
 
     final id = livestreamIdNumeric;
     final chMeta = 'live.$id.meta';
@@ -113,6 +136,33 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     await pusher.subscribe(chChat);
     await pusher.subscribe(chJoin);
     await pusher.subscribe(chRoot);
+
+    // ========= PARTICIPANT EVENTS (NEW) =========
+    // Listen for participant events to track who's in the stream
+    pusher.bind(chMeta, 'participant.added', (m) {
+      debugPrint('participant.added: $m');
+      // You can process participant data here if needed
+      final participantData = m is Map
+          ? m.cast<String, dynamic>()
+          : <String, dynamic>{};
+      // Handle participant addition (optional)
+    });
+
+    pusher.bind(chMeta, 'participant.removed', (m) {
+      debugPrint('participant.removed: $m');
+      final participantData = m is Map
+          ? m.cast<String, dynamic>()
+          : <String, dynamic>{};
+      // Handle participant removal (optional)
+    });
+
+    pusher.bind(chMeta, 'participant.role_changed', (m) {
+      debugPrint('participant.role_changed: $m');
+      final participantData = m is Map
+          ? m.cast<String, dynamic>()
+          : <String, dynamic>{};
+      // Handle role changes (optional)
+    });
 
     // viewer.count
     pusher.bind(chMeta, 'viewer.count', (m) {
@@ -127,7 +177,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       _pauseCtrl.add(paused);
     });
 
-    // live.ended (some backends send here too)
+    // live.ended
     void _ended(Map<String, dynamic> _) {
       _endedCtrl.add(null);
       _rtc.leave().ignore();
@@ -152,73 +202,8 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       );
     });
 
-    // join flow (view-only gate)
-    // join.created often broadcasts who requested (for banners, optional)
-    final Map<String, String> joinUserById = {};
-    pusher.bind(chJoin, 'join.created', (m) {
-      final rid = '${m['id'] ?? ''}';
-      final u = (m['user'] ?? const {}) as Map<String, dynamic>;
-      joinUserById[rid] = '${u['slug'] ?? u['user_slug'] ?? 'viewer'}';
-    });
-
-    // join.accepted / join.declined → decision for a specific join request
-    Future<void> _handleJoinDecision(
-      Map<String, dynamic> m, {
-      required bool accepted,
-    }) async {
-      final ridFromEvent = '${m['id'] ?? m['request_id'] ?? ''}';
-
-      // ✅ string-to-string compare (e.g., "jr_01K5F5...")
-      if (_myJoinRequestId != null && ridFromEvent == _myJoinRequestId) {
-        if (accepted) {
-          try {
-            final creds = await _fetchRtcCreds(role: 'audience');
-            debugPrint(
-              '[RTC] audience creds: appId=${creds.appId}, ch=${creds.channel}, '
-              'uidType=${creds.uidType}, uid=${creds.uid}, token.len=${creds.token.length}',
-            );
-
-            await _rtc.joinAudience(
-              appId: creds.appId,
-              channel: creds.channel,
-              uidType: creds.uidType,
-              uid: creds.uid,
-              rtcToken: creds.token,
-            );
-            _myApprovalCtrl.add(true);
-          } catch (e) {
-            debugPrint('⚠️ audience join failed: $e');
-            _myApprovalCtrl.add(false);
-          }
-        } else {
-          _myApprovalCtrl.add(false);
-        }
-      } else {
-        // (Optional) log unmatched decisions for debugging
-        if (kDebugMode) {
-          debugPrint(
-            'ℹ️ join decision for $ridFromEvent did not match my $_myJoinRequestId',
-          );
-        }
-      }
-    }
-
-    // Bind both decision events
-    pusher.bind(chJoin, 'join.accepted', (m) async {
-      await _handleJoinDecision(
-        (m is Map) ? m.cast<String, dynamic>() : <String, dynamic>{},
-        accepted: true,
-      );
-    });
-
-    pusher.bind(chJoin, 'join.declined', (m) async {
-      await _handleJoinDecision(
-        (m is Map) ? m.cast<String, dynamic>() : <String, dynamic>{},
-        accepted: false,
-      );
-    });
-
-    // gifts
+    // Remove the join request approval logic since we auto-join
+    // Keep gift events
     pusher.bind(chRoot, 'gift.sent', (m) {
       final from = '${m['from'] ?? 'Someone'}';
       final gift = '${m['gift'] ?? 'Gift'}';
@@ -228,7 +213,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       _giftCtrl.add(GiftNotice(from: from, giftName: gift, coins: coins));
     });
 
-    // hydrate chat (best-effort)
+    // hydrate chat
     await _hydrateRecentChat();
 
     // live clock
