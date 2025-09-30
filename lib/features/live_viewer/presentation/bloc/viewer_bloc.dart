@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
+import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import '../../domain/entities.dart';
 import '../../domain/repositories/viewer_repository.dart';
 
@@ -10,17 +12,16 @@ part 'viewer_state.dart';
 class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   final ViewerRepository repo;
   StreamSubscription? _clockSub, _viewerSub, _chatSub, _guestSub, _giftSub;
-  StreamSubscription? _pauseSub;
-  StreamSubscription? _endedSub;
-  StreamSubscription? _approvalSub;
+  StreamSubscription? _pauseSub, _endedSub, _approvalSub;
+  StreamSubscription? _errorSub, _roleChangeSub, _removalSub;
+  StreamSubscription<String?>? _activeGuestSub;
 
-  ViewerBloc(this.repo) : super(const ViewerState.initial()) {
+  ViewerBloc(this.repo) : super(ViewerState.initial()) {
     on<ViewerStarted>(_onStarted);
     on<_Ticked>((e, emit) => emit(state.copyWith(elapsed: e.elapsed)));
     on<_ViewerCountUpdated>(
       (e, emit) => emit(state.copyWith(viewers: e.count)),
     );
-
     on<_ChatArrived>((e, emit) {
       final list = List<ChatMessage>.from(state.chat)..add(e.message);
       emit(state.copyWith(chat: list));
@@ -44,10 +45,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     on<CommentSent>(_onCommentSent);
     on<LikePressed>(_onLikePressed);
     on<SharePressed>(_onSharePressed);
-
-    // Button kept for UX, but we auto-request on start too.
     on<RequestToJoinPressed>(_onRequestToJoinPressed);
-
     on<ChatVisibilityToggled>(
       (e, emit) => emit(state.copyWith(showChatUI: !state.showChatUI)),
     );
@@ -55,7 +53,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     on<ChatHideRequested>((e, emit) => emit(state.copyWith(showChatUI: false)));
     on<_PauseChanged>((e, emit) => emit(state.copyWith(isPaused: e.paused)));
     on<_LiveEnded>((e, emit) => emit(state.copyWith(isEnded: true)));
-
     on<_MyApprovalChanged>((e, emit) {
       if (e.accepted) {
         emit(state.copyWith(awaitingApproval: false));
@@ -63,6 +60,79 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         emit(state.copyWith(awaitingApproval: false, joinRequested: false));
       }
     });
+
+    // ✅ ADD THESE NEW EVENT HANDLERS
+    on<ErrorOccurred>((e, emit) {
+      emit(state.copyWith(errorMessage: e.message));
+      Future.delayed(const Duration(seconds: 5), () {
+        add(const ErrorOccurred(''));
+      });
+    });
+
+    on<ParticipantRoleChanged>((e, emit) {
+      debugPrint('🎯 Viewer role changed to: ${e.role}');
+      emit(
+        state.copyWith(
+          currentRole: e.role,
+          showRoleChangeToast: true,
+          roleChangeMessage: _getRoleChangeMessage(e.role),
+        ),
+      );
+      _autoHide(() => add(const RoleChangeToastDismissed()));
+    });
+
+    on<ParticipantRemoved>((e, emit) {
+      debugPrint('🎯 Viewer removed: ${e.reason}');
+      emit(
+        state.copyWith(
+          isRemoved: true,
+          removalReason: e.reason,
+          errorMessage: _getRemovalMessage(e.reason),
+          showRemovalOverlay: true,
+        ),
+      );
+
+      Future.delayed(const Duration(seconds: 3), () {
+        add(const NavigateBackRequested());
+      });
+    });
+
+    on<RoleChangeToastDismissed>(
+      (e, emit) => emit(state.copyWith(showRoleChangeToast: false)),
+    );
+    on<NavigateBackRequested>(
+      (e, emit) => emit(state.copyWith(shouldNavigateBack: true)),
+    );
+    on<_ActiveGuestUpdated>(
+      (e, emit) => emit(state.copyWith(activeGuestUuid: e.uuid)),
+    );
+  }
+
+  // Helper methods for messages
+  String _getRoleChangeMessage(String role) {
+    switch (role) {
+      case 'guest':
+        return 'You are now a guest! You can participate in the stream.';
+      case 'cohost':
+        return 'You are now a co-host! You have host privileges.';
+      case 'audience':
+        return 'You are back in the audience.';
+      default:
+        return 'Your role has been changed to $role.';
+    }
+  }
+
+  String _getRemovalMessage(String reason) {
+    switch (reason) {
+      case 'removed_by_host':
+        return 'You have been removed from the stream by the host.';
+      case 'violated_guidelines':
+        return 'You have been removed for violating community guidelines.';
+      case 'banned':
+        return 'You have been banned from this stream.';
+      default:
+        return 'You have been removed from the stream.';
+    }
   }
 
   Future<void> _onStarted(
@@ -72,16 +142,16 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     emit(state.copyWith(status: ViewerStatus.loading));
 
     final host = await repo.fetchHostInfo();
-    // Set joinRequested to true since we auto-join as audience
     emit(
       state.copyWith(
         status: ViewerStatus.active,
         host: host,
-        joinRequested: true, // We're automatically joined
-        awaitingApproval: false, // No approval needed for audience
+        joinRequested: true,
+        awaitingApproval: false,
       ),
     );
 
+    // Existing subscriptions...
     _pauseSub?.cancel();
     _pauseSub = repo.watchPause().listen((p) => add(_PauseChanged(p)));
     _endedSub?.cancel();
@@ -101,17 +171,37 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _chatSub = repo.watchChat().listen((m) => add(_ChatArrived(m)));
     _guestSub = repo.watchGuestJoins().listen((n) => add(_GuestJoined(n)));
     _giftSub = repo.watchGifts().listen((n) => add(_GiftArrived(n)));
-    _approvalSub = repo.watchMyApproval().listen((ok) {
-      if (ok) {
-        // Successfully joined as audience
-        add(const _MyApprovalChanged(true));
-      } else {
-        // Failed to join - show error or retry
-        add(const _MyApprovalChanged(false));
+    _approvalSub = repo.watchMyApproval().listen(
+      (ok) => add(_MyApprovalChanged(ok)),
+    );
+
+    // ✅ ADD NEW SUBSCRIPTIONS FOR PARTICIPANT EVENTS
+    _errorSub?.cancel();
+    _roleChangeSub?.cancel();
+    _removalSub?.cancel();
+    _activeGuestSub?.cancel();
+    _errorSub = repo.watchErrors().listen((error) {
+      if (error.isNotEmpty) {
+        add(ErrorOccurred(error));
       }
     });
 
-    // Remove the auto-request join logic since we handle it in repository
+    _roleChangeSub = repo.watchParticipantRoleChanges().listen((role) {
+      add(ParticipantRoleChanged(role));
+    });
+
+    _removalSub = repo.watchParticipantRemovals().listen((reason) {
+      add(ParticipantRemoved(reason));
+    });
+
+    // NEW: active guest (global) for layout
+    if (repo is ViewerRepositoryImpl) {
+      _activeGuestSub = (repo as ViewerRepositoryImpl)
+          .watchActiveGuestUuid()
+          .listen((uuid) {
+            add(_ActiveGuestUpdated(uuid));
+          });
+    }
   }
 
   Future<void> _onFollowToggled(
@@ -167,7 +257,16 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _pauseSub?.cancel();
     _endedSub?.cancel();
     _approvalSub?.cancel();
+    _errorSub?.cancel();
+    _roleChangeSub?.cancel();
+    _removalSub?.cancel();
+    _activeGuestSub?.cancel();
     repo.dispose();
     return super.close();
   }
+}
+
+class _ActiveGuestUpdated extends ViewerEvent {
+  final String? uuid;
+  const _ActiveGuestUpdated(this.uuid);
 }

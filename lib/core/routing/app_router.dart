@@ -5,6 +5,7 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/widgets/auth_guard.dart';
+import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/auth/presentation/pages/email_verification.dart';
 import 'package:moonlight/features/auth/presentation/pages/forget_password.dart';
@@ -184,10 +185,12 @@ class AppRouter {
               ? null
               : DateTime.tryParse(startedAtIso);
 
-          // ✅ REST will use numeric id, sockets also use numeric id
+          // ✅ FIX: Add authLocalDataSource parameter
           final repo = ViewerRepositoryImpl(
             http: GetIt.I<DioClient>(),
             pusher: GetIt.I<PusherService>(),
+            authLocalDataSource:
+                GetIt.I<AuthLocalDataSource>(), // Add this line
             livestreamParam: id.toString(), // ✅ REST path uses numeric id
             livestreamIdNumeric: id, // ✅ Pusher channels use numeric id
             channelName: channel,

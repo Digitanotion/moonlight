@@ -4,117 +4,168 @@ enum ViewerStatus { initial, loading, active }
 
 class ViewerState extends Equatable {
   final ViewerStatus status;
-  final HostInfo? host;
   final Duration elapsed;
   final int viewers;
   final int likes;
   final int shares;
   final List<ChatMessage> chat;
-  final bool joinRequested;
   final bool showChatUI;
-  final bool isPaused;
-  final bool isEnded;
-
-  final bool awaitingApproval; // 👈 NEW
-
+  final HostInfo? host;
   final GuestJoinNotice? guest;
   final bool showGuestBanner;
-
   final GiftNotice? gift;
   final bool showGiftToast;
+  final bool isPaused;
+  final bool isEnded;
+  final bool joinRequested;
+  final bool awaitingApproval;
+
+  // New properties
+  final String? errorMessage;
+  final String? currentRole;
+  final bool isRemoved;
+  final String? removalReason;
+  final bool showRoleChangeToast;
+  final String? roleChangeMessage;
+  final bool showRemovalOverlay;
+  final bool shouldNavigateBack;
+  final String? activeGuestUuid;
 
   const ViewerState({
     required this.status,
-    required this.host,
     required this.elapsed,
     required this.viewers,
     required this.likes,
     required this.shares,
     required this.chat,
-    required this.joinRequested,
-    required this.guest,
-    required this.showGuestBanner,
-    required this.gift,
-    required this.showGiftToast,
     required this.showChatUI,
-    required this.isPaused,
-    required this.isEnded,
-    required this.awaitingApproval,
+    this.host,
+    this.guest,
+    this.showGuestBanner = false,
+    this.gift,
+    this.showGiftToast = false,
+    this.isPaused = false,
+    this.isEnded = false,
+    this.joinRequested = false,
+    this.awaitingApproval = false,
+    // New properties with defaults
+    this.errorMessage,
+    this.currentRole = 'audience',
+    this.isRemoved = false,
+    this.removalReason,
+    this.showRoleChangeToast = false,
+    this.roleChangeMessage,
+    this.showRemovalOverlay = false,
+    this.shouldNavigateBack = false,
+    this.activeGuestUuid,
   });
 
-  const ViewerState.initial()
-    : status = ViewerStatus.initial,
-      host = null,
-      elapsed = Duration.zero,
-      viewers = 0,
-      likes = 23500,
-      showChatUI = false,
-      shares = 0,
-      chat = const [],
-      joinRequested = false,
-      guest = null,
-      showGuestBanner = false,
-      gift = null,
-      showGiftToast = false,
-      isPaused = false,
-      isEnded = false,
-      awaitingApproval = false; // 👈 NEW
+  // Fixed initial method
+  static ViewerState initial() => const ViewerState(
+    status: ViewerStatus.initial,
+    elapsed: Duration.zero,
+    viewers: 0,
+    likes: 0,
+    shares: 0,
+    chat: [],
+    showChatUI: true,
+    // All new properties are initialized
+    errorMessage: null,
+    currentRole: 'audience',
+    isRemoved: false,
+    removalReason: null,
+    showRoleChangeToast: false,
+    roleChangeMessage: null,
+    showRemovalOverlay: false,
+    shouldNavigateBack: false,
+    activeGuestUuid: null,
+  );
 
   ViewerState copyWith({
     ViewerStatus? status,
-    HostInfo? host,
     Duration? elapsed,
     int? viewers,
-    bool? showChatUI,
     int? likes,
     int? shares,
     List<ChatMessage>? chat,
-    bool? joinRequested,
+    bool? showChatUI,
+    HostInfo? host,
     GuestJoinNotice? guest,
     bool? showGuestBanner,
     GiftNotice? gift,
     bool? showGiftToast,
     bool? isPaused,
     bool? isEnded,
-    bool? awaitingApproval, // 👈 NEW
+    bool? joinRequested,
+    bool? awaitingApproval,
+    // New properties
+    String? errorMessage,
+    String? currentRole,
+    bool? isRemoved,
+    String? removalReason,
+    bool? showRoleChangeToast,
+    String? roleChangeMessage,
+    bool? showRemovalOverlay,
+    bool? shouldNavigateBack,
+    String? activeGuestUuid,
   }) {
     return ViewerState(
       status: status ?? this.status,
-      host: host ?? this.host,
       elapsed: elapsed ?? this.elapsed,
       viewers: viewers ?? this.viewers,
       likes: likes ?? this.likes,
       shares: shares ?? this.shares,
       chat: chat ?? this.chat,
-      joinRequested: joinRequested ?? this.joinRequested,
+      showChatUI: showChatUI ?? this.showChatUI,
+      host: host ?? this.host,
       guest: guest ?? this.guest,
       showGuestBanner: showGuestBanner ?? this.showGuestBanner,
       gift: gift ?? this.gift,
       showGiftToast: showGiftToast ?? this.showGiftToast,
-      showChatUI: showChatUI ?? this.showChatUI,
       isPaused: isPaused ?? this.isPaused,
       isEnded: isEnded ?? this.isEnded,
+      joinRequested: joinRequested ?? this.joinRequested,
       awaitingApproval: awaitingApproval ?? this.awaitingApproval,
+      // New properties
+      errorMessage: errorMessage ?? this.errorMessage,
+      currentRole: currentRole ?? this.currentRole,
+      isRemoved: isRemoved ?? this.isRemoved,
+      removalReason: removalReason ?? this.removalReason,
+      showRoleChangeToast: showRoleChangeToast ?? this.showRoleChangeToast,
+      roleChangeMessage: roleChangeMessage ?? this.roleChangeMessage,
+      showRemovalOverlay: showRemovalOverlay ?? this.showRemovalOverlay,
+      shouldNavigateBack: shouldNavigateBack ?? this.shouldNavigateBack,
+      activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
     );
   }
 
   @override
   List<Object?> get props => [
     status,
-    host,
     elapsed,
     viewers,
     likes,
     shares,
     chat,
-    joinRequested,
+    showChatUI,
+    host,
     guest,
     showGuestBanner,
     gift,
     showGiftToast,
-    showChatUI,
     isPaused,
     isEnded,
-    awaitingApproval, // 👈 NEW
+    joinRequested,
+    awaitingApproval,
+    // New properties
+    errorMessage,
+    currentRole,
+    isRemoved,
+    removalReason,
+    showRoleChangeToast,
+    roleChangeMessage,
+    showRemovalOverlay,
+    shouldNavigateBack,
+    activeGuestUuid,
   ];
 }

@@ -62,7 +62,13 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
               const _GiftToast(),
               const _PauseOverlay(),
               const _WaitingOverlay(),
+              const _RoleChangeToast(),
 
+              // Removal overlay
+              const _RemovalOverlay(),
+
+              // Error messages
+              const _ErrorToast(),
               // chat (bottom-left)
               Align(
                 alignment: Alignment.bottomLeft,
@@ -125,6 +131,10 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
 
               // right rail
               const Positioned(right: 10, bottom: 140, child: _RightRail()),
+              // NEW: Two-up layout overlay when guest is active
+              Positioned.fill(
+                child: _TwoUpSwitch(repository: widget.repository),
+              ),
             ],
           ),
         ),
@@ -168,8 +178,20 @@ class _BackgroundVideo extends StatelessWidget {
           ),
         Container(color: Colors.black.withOpacity(0.15)),
         child,
+        // Keep the small bubble ONLY when we are not in the two-up layout.
         if (localPreview != null)
-          Positioned(right: 12, bottom: 150, child: localPreview),
+          BlocBuilder<ViewerBloc, ViewerState>(
+            buildWhen: (p, n) =>
+                p.activeGuestUuid != n.activeGuestUuid ||
+                p.currentRole != n.currentRole,
+            builder: (_, s) {
+              final iAmGuest =
+                  s.currentRole == 'guest' || s.currentRole == 'cohost';
+              final anyGuest = s.activeGuestUuid != null || iAmGuest;
+              if (anyGuest) return const SizedBox.shrink();
+              return Positioned(right: 12, bottom: 150, child: localPreview);
+            },
+          ),
       ],
     );
   }
@@ -1100,4 +1122,252 @@ class _WaitingOverlay extends StatelessWidget {
   //     },
   //   );
   // }
+}
+
+/// Shows when user's role changes (promoted to guest, etc.)
+class _RoleChangeToast extends StatelessWidget {
+  const _RoleChangeToast();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) => p.showRoleChangeToast != n.showRoleChangeToast,
+      builder: (_, s) {
+        if (!s.showRoleChangeToast || s.roleChangeMessage == null) {
+          return const SizedBox.shrink();
+        }
+
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 120),
+            child: _glass(
+              radius: 16,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      s.currentRole == 'guest' || s.currentRole == 'cohost'
+                          ? Icons.star
+                          : Icons.info,
+                      color: Colors.orange,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      s.roleChangeMessage!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Shows when user is removed from the stream
+class _RemovalOverlay extends StatelessWidget {
+  const _RemovalOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) => p.showRemovalOverlay != n.showRemovalOverlay,
+      builder: (_, s) {
+        if (!s.showRemovalOverlay) return const SizedBox.shrink();
+
+        return IgnorePointer(
+          child: Container(
+            color: Colors.black.withOpacity(0.9),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.block, color: Colors.red, size: 64),
+                const SizedBox(height: 20),
+                Text(
+                  s.removalReason ?? 'You have been removed from the stream',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Returning to home screen...',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 20),
+                const CircularProgressIndicator(color: Colors.white),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Shows error messages
+class _ErrorToast extends StatelessWidget {
+  const _ErrorToast();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) => p.errorMessage != n.errorMessage,
+      builder: (context, state) {
+        if (state.errorMessage?.isEmpty ?? true) {
+          return const SizedBox.shrink();
+        }
+        return Positioned(
+          top: 100,
+          left: 20,
+          right: 20,
+          child: _glass(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.redAccent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      state.errorMessage!,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        context.read<ViewerBloc>().add(const ErrorOccurred('')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Renders the two-up tiles when either you are guest or there is an active guest.
+class _TwoUpSwitch extends StatelessWidget {
+  final ViewerRepository repository;
+  const _TwoUpSwitch({required this.repository});
+
+  @override
+  Widget build(BuildContext context) {
+    final vp = repository is VideoSurfaceProvider
+        ? repository as VideoSurfaceProvider
+        : null;
+    if (vp == null) return const SizedBox.shrink();
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) =>
+          p.activeGuestUuid != n.activeGuestUuid ||
+          p.currentRole != n.currentRole,
+      builder: (_, s) {
+        final iAmGuest = s.currentRole == 'guest' || s.currentRole == 'cohost';
+        final anyGuest = s.activeGuestUuid != null || iAmGuest;
+        if (!anyGuest) return const SizedBox.shrink();
+
+        // Two tiles: host (top) + guest (bottom). If I am guest -> bottom = my local.
+        final top = vp.buildHostVideo();
+        final bottom = iAmGuest
+            ? (vp.buildLocalPreview() ?? const SizedBox.shrink())
+            : vp.buildGuestVideo();
+
+        return Column(
+          children: [
+            Expanded(child: top),
+            const SizedBox(height: 2),
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: bottom),
+                  if (iAmGuest) const _GuestControls(),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _GuestControls extends StatefulWidget {
+  const _GuestControls();
+  @override
+  State<_GuestControls> createState() => _GuestControlsState();
+}
+
+class _GuestControlsState extends State<_GuestControls> {
+  bool micOn = true;
+  bool camOn = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.read<ViewerBloc>().repo;
+    final vp = repo is VideoSurfaceProvider
+        ? repo as VideoSurfaceProvider
+        : null;
+    if (vp == null) return const SizedBox.shrink();
+    return Positioned(
+      right: 12,
+      bottom: 12,
+      child: _glass(
+        radius: 16,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () async {
+                  final next = !micOn;
+                  setState(() => micOn = next);
+                  await vp.setMicEnabled(next);
+                },
+                icon: Icon(
+                  micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: () async {
+                  final next = !camOn;
+                  setState(() => camOn = next);
+                  await vp.setCamEnabled(next);
+                },
+                icon: Icon(
+                  camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

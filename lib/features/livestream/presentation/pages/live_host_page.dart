@@ -14,6 +14,7 @@ import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.d
 class LiveHostPage extends StatefulWidget {
   final String hostName;
   final String hostBadge; // e.g., "Superstar"
+
   final String topic; // e.g., "Talking about Mental Health"
   final int initialViewers;
   final String startedAtIso;
@@ -155,9 +156,33 @@ class _LiveHostPageState extends State<LiveHostPage> {
                           ),
                         );
                       }
-                      return ClipRRect(
-                        borderRadius: BorderRadius.zero,
-                        child: agora.localPreview(),
+                      final hasGuest = context.select<LiveHostBloc, bool>(
+                        (b) => b.state.activeGuestUuid != null,
+                      );
+                      if (!hasGuest || agora.primaryRemoteUid == null) {
+                        // Default: single host preview
+                        return ClipRRect(
+                          borderRadius: BorderRadius.zero,
+                          child: agora.localPreview(),
+                        );
+                      }
+                      // Two-up: host (top), guest (bottom)
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.zero,
+                              child: agora.localPreview(),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.zero,
+                              child: agora.primaryRemoteView(),
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),

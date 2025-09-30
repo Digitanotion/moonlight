@@ -12,7 +12,7 @@ typedef PusherCallback = void Function(Map<String, dynamic> payload);
 /// - Manages subscriptions
 /// - Lets you register per-channel, per-event callbacks (like channel.bind)
 /// - Routes PusherEvent -> your callbacks with JSON parsing
-class PusherService {
+class HostPusherService {
   final String apiKey;
   final String cluster;
 
@@ -33,13 +33,11 @@ class PusherService {
   // Track what we subscribed to
   final Set<String> _subscriptions = <String>{};
   final Set<String> _subscribing = <String>{}; // ✅ NEW
-  Future<void>? _connectFuture; //
+  Future<void>? _connectFuture; // ✅ NEW
   // Handlers[channel][event] = [callbacks...]
   final Map<String, Map<String, List<PusherCallback>>> _handlers = {};
-  // Improved connection state tracking
-  Completer<void>? _connectionCompleter;
-  bool _isConnecting = false;
-  PusherService({
+
+  HostPusherService({
     required this.apiKey,
     required this.cluster,
     this.authEndpoint,
@@ -71,25 +69,10 @@ class PusherService {
 
   Future<void> connect() async {
     await _initIfNeeded();
-
     if (_connected) return;
-    if (_isConnecting) {
-      return _connectionCompleter?.future;
-    }
-
-    _isConnecting = true;
-    _connectionCompleter = Completer<void>();
-
-    try {
-      await _pusher.connect();
-      // Wait for connection state change to set _connected = true
-      // Don't set _connected here immediately
-    } catch (e) {
-      _isConnecting = false;
-      _connectionCompleter?.completeError(e);
-      _connectionCompleter = null;
-      rethrow;
-    }
+    _connectFuture ??= _pusher.connect();
+    await _connectFuture;
+    // _connected = true;
   }
 
   Future<void> subscribe(String channelName) async {
@@ -180,40 +163,29 @@ class PusherService {
   }
 
   // ===== Pusher callbacks (from the plugin) =====
-  void _onConnectionStateChange(dynamic currentState, dynamic previousState) {
-    final s = (currentState ?? '').toString().toUpperCase();
-    debugPrint('Pusher Connection State: $s');
 
+  void _onConnectionStateChange(dynamic currentState, dynamic previousState) {
+    // States come as strings like "CONNECTING", "CONNECTED", "DISCONNECTED"
+    final s = (currentState ?? '').toString().toUpperCase();
     if (s == 'CONNECTED') {
       _connected = true;
-      _isConnecting = false;
-      _connectionCompleter?.complete();
-      _connectionCompleter = null;
 
-      // Resubscribe to desired channels on reconnect
-      _resubscribeOnReconnect();
-    } else if (s == 'DISCONNECTED' || s == 'FAILED') {
-      _connected = false;
-      _isConnecting = false;
-      _connectionCompleter?.completeError(Exception('Connection failed'));
-      _connectionCompleter = null;
+      // On reconnect, the SDK loses all channel subscriptions.
+      // Replay intent for any desired channel that isn't active.
+      // (Active set may be wrong after a reconnect; ensure it's rebuilt.)
+      // Reset active to force replay, then subscribe desired.
       _active.clear();
-    } else if (s == 'CONNECTING') {
-      _connected = false;
-      _isConnecting = true;
-    }
-  }
 
-  Future<void> _resubscribeOnReconnect() async {
-    final channelsToResubscribe = _desired.toList();
-    for (final channel in channelsToResubscribe) {
-      if (!_active.contains(channel) && !_subscribing.contains(channel)) {
-        try {
-          await subscribe(channel);
-        } catch (e) {
-          debugPrint('Failed to resubscribe to $channel: $e');
-        }
-      }
+      // Fire-and-forget; this repopulates _active on success
+      // but don't await inside callback chain.
+      // If you prefer, you can ignore the returned Future.
+      // Triggering serially is fine for the small number of channels we use.
+      subscribeMany(_desired);
+    } else if (s == 'DISCONNECTED') {
+      _connected = false;
+      _connectFuture = null; // allow fresh connect next time
+      // Keep _desired so we can replay on next CONNECTED
+      _active.clear();
     }
   }
 
@@ -249,29 +221,16 @@ class PusherService {
   }
 
   void _onEvent(PusherEvent event) {
-    debugPrint(
-      '📡 Pusher Event Received: ${event.channelName}.${event.eventName}',
-    );
-    debugPrint('   Data: ${event.data}');
-
+    // Route to registered callbacks
     final ch = event.channelName;
     final name = event.eventName;
 
     final cbList = _handlers[ch]?[name];
-    if (cbList == null || cbList.isEmpty) {
-      debugPrint('   ⚠️ No handlers registered for this event');
-      return;
-    }
+    if (cbList == null || cbList.isEmpty) return;
 
-    debugPrint('   ✅ Found ${cbList.length} handler(s)');
     final payload = _asMap(event.data);
-
     for (final cb in cbList) {
-      try {
-        cb(payload);
-      } catch (e) {
-        debugPrint('   ❌ Handler error: $e');
-      }
+      cb(payload);
     }
   }
 
@@ -284,18 +243,5 @@ class PusherService {
       } catch (_) {}
     }
     return <String, dynamic>{};
-  }
-
-  // Add this method to debug current subscriptions
-  void debugSubscriptions() {
-    debugPrint('📡 Current Pusher Subscriptions:');
-    debugPrint('   Connected: $_connected');
-    debugPrint('   Desired channels: ${_desired.toList()}');
-    debugPrint('   Active channels: ${_active.toList()}');
-    debugPrint('   Subscribing channels: ${_subscribing.toList()}');
-    debugPrint('   Handlers registered:');
-    _handlers.forEach((channel, events) {
-      debugPrint('     - $channel: ${events.keys.toList()}');
-    });
   }
 }

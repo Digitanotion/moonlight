@@ -32,10 +32,13 @@ class AgoraViewerService with ChangeNotifier {
 
   // First remote uid treated as the “host” stream for the background
   final ValueNotifier<int?> hostUid = ValueNotifier<int?>(null);
-
+  // Second remote publisher (the guest) when you are NOT the guest
+  final ValueNotifier<int?> guestUid = ValueNotifier<int?>(null);
   // NEW: simple flag the UI can listen to
   final ValueNotifier<bool> _hasVideo = ValueNotifier<bool>(false);
   ValueListenable<bool> get hostHasVideo => _hasVideo;
+  final ValueNotifier<bool> _guestHasVideo = ValueNotifier<bool>(false);
+  ValueListenable<bool> get guestHasVideo => _guestHasVideo;
   // ---------------- Getters ----------------
   bool get isJoined => _joined;
   bool get isCoHost => _isCoHost;
@@ -75,7 +78,9 @@ class AgoraViewerService with ChangeNotifier {
           _isCoHost = false;
           _previewing = false;
           hostUid.value = null;
+          guestUid.value = null;
           _hasVideo.value = false;
+          _guestHasVideo.value = false;
           if (kDebugMode) {
             debugPrint('🚪 [Viewer] left: ch=${conn.channelId}');
           }
@@ -86,8 +91,14 @@ class AgoraViewerService with ChangeNotifier {
         },
         onUserJoined: (conn, remoteUid, elapsed) {
           // Consider the first remote as host camera feed
-          hostUid.value ??= remoteUid;
+          // First remote we see → treat as host feed
+          if (hostUid.value == null) {
+            hostUid.value = remoteUid;
+          } else if (guestUid.value == null && remoteUid != hostUid.value) {
+            guestUid.value = remoteUid;
+          }
           _hasVideo.value = hostUid.value != null;
+          _guestHasVideo.value = guestUid.value != null;
           if (kDebugMode) {
             debugPrint('👤 [Viewer] remote joined: $remoteUid');
           }
@@ -95,8 +106,11 @@ class AgoraViewerService with ChangeNotifier {
         onUserOffline: (conn, remoteUid, reason) {
           if (hostUid.value == remoteUid) {
             hostUid.value = null;
+          } else if (guestUid.value == remoteUid) {
+            guestUid.value = null;
           }
           _hasVideo.value = hostUid.value != null;
+          _guestHasVideo.value = guestUid.value != null;
           if (kDebugMode) {
             debugPrint('👤 [Viewer] remote left: $remoteUid reason=$reason');
           }
@@ -268,6 +282,39 @@ class AgoraViewerService with ChangeNotifier {
         ),
       ),
     );
+  }
+
+  /// Guest remote video surface (when you are *not* the guest)
+  Widget guestVideoView() {
+    final e = _engine;
+    final ch = _channel;
+    final gid = guestUid.value;
+    if (e == null || ch == null || gid == null) {
+      return const SizedBox.expand(child: ColoredBox(color: Colors.black));
+    }
+    return AgoraVideoView(
+      controller: VideoViewController.remote(
+        rtcEngine: e,
+        connection: RtcConnection(channelId: ch),
+        canvas: VideoCanvas(uid: gid),
+      ),
+    );
+  }
+
+  // Basic guest mic/cam toggles
+  Future<void> setMicEnabled(bool on) async {
+    await _engine?.muteLocalAudioStream(!on);
+  }
+
+  Future<void> setCamEnabled(bool on) async {
+    await _engine?.muteLocalVideoStream(!on);
+    if (on && !_previewing) {
+      await _engine?.startPreview();
+      _previewing = true;
+    } else if (!on && _previewing) {
+      await _engine?.stopPreview();
+      _previewing = false;
+    }
   }
 
   /// Leave the channel (keeps engine for potential re-join).

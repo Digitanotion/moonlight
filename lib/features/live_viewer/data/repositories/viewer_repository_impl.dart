@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
+import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 
 import '../../domain/entities.dart';
 import '../../domain/repositories/viewer_repository.dart';
@@ -16,6 +17,7 @@ import '../../domain/video_surface_provider.dart';
 class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   final DioClient http;
   final PusherService pusher;
+  final AuthLocalDataSource authLocalDataSource;
 
   /// REST path segment: UUID or numeric (both accepted by backend)
   final String livestreamParam;
@@ -32,6 +34,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   ViewerRepositoryImpl({
     required this.http,
     required this.pusher,
+    required this.authLocalDataSource,
     required this.livestreamParam,
     required this.livestreamIdNumeric,
     required this.channelName,
@@ -61,7 +64,8 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   final _pauseCtrl = StreamController<bool>.broadcast();
   final _endedCtrl = StreamController<void>.broadcast();
   final _myApprovalCtrl = StreamController<bool>.broadcast();
-
+  final _activeGuestCtrl = StreamController<String?>.broadcast();
+  String? _activeGuestUuid;
   Timer? _clockTimer;
   Future<void>? _wiringFuture;
   bool _wired = false;
@@ -71,6 +75,8 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   String get _basePath => '/api/v1/live/$livestreamParam';
   @override
   ValueListenable<bool> get hostHasVideo => _rtc.hostHasVideo;
+  @override
+  ValueListenable<bool> get guestHasVideo => _rtc.guestHasVideo;
   // ========= Host info =========
   @override
   Future<HostInfo> fetchHostInfo() async {
@@ -124,6 +130,15 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     } catch (e) {
       debugPrint('⚠️ Auto-join as audience failed: $e');
       _myApprovalCtrl.add(false);
+
+      // Check if it's an API error (like being removed from stream)
+      if (e is DioException) {
+        final errorMessage = _extractErrorMessage(e);
+        if (errorMessage.isNotEmpty) {
+          // Broadcast the error message to the UI
+          _errorCtrl.add(errorMessage);
+        }
+      }
     }
 
     final id = livestreamIdNumeric;
@@ -137,47 +152,90 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     await pusher.subscribe(chJoin);
     await pusher.subscribe(chRoot);
 
-    // ========= PARTICIPANT EVENTS (NEW) =========
-    // Listen for participant events to track who's in the stream
-    pusher.bind(chMeta, 'participant.added', (m) {
+    // ========= PARTICIPANT EVENTS HANDLING =========
+    pusher.bind(chMeta, 'participant.added', (m) async {
       debugPrint('participant.added: $m');
-      // You can process participant data here if needed
       final participantData = m is Map
           ? m.cast<String, dynamic>()
           : <String, dynamic>{};
-      // Handle participant addition (optional)
+
+      final currentUserUuid = await _getCurrentUserUuid();
+      final participantUuid = participantData['user_uuid']?.toString();
+
+      if (participantUuid == currentUserUuid) {
+        final role = participantData['role']?.toString() ?? 'audience';
+        debugPrint('🎯 Current user added as: $role');
+        _participantRoleCtrl.add(role);
+      }
     });
 
-    pusher.bind(chMeta, 'participant.removed', (m) {
+    pusher.bind(chMeta, 'participant.removed', (m) async {
       debugPrint('participant.removed: $m');
       final participantData = m is Map
           ? m.cast<String, dynamic>()
           : <String, dynamic>{};
-      // Handle participant removal (optional)
+
+      final currentUserUuid = await _getCurrentUserUuid();
+      final participantUuid = participantData['user_uuid']?.toString();
+
+      if (participantUuid == currentUserUuid) {
+        final reason =
+            participantData['reason']?.toString() ?? 'removed_by_host';
+        debugPrint('🎯 Current user removed: $reason');
+
+        _rtc.leave().ignore();
+        _participantRemovedCtrl.add(reason);
+        _errorCtrl.add(_getRemovalMessage(reason));
+      }
+
+      // If active guest was removed, clear it for everyone
+      if (participantUuid != null && participantUuid == _activeGuestUuid) {
+        _activeGuestUuid = null;
+        _activeGuestCtrl.add(null);
+      }
     });
 
-    pusher.bind(chMeta, 'participant.role_changed', (m) {
+    pusher.bind(chMeta, 'participant.role_changed', (m) async {
       debugPrint('participant.role_changed: $m');
       final participantData = m is Map
           ? m.cast<String, dynamic>()
           : <String, dynamic>{};
-      // Handle role changes (optional)
+
+      final currentUserUuid = await _getCurrentUserUuid();
+      final participantUuid = participantData['user_uuid']?.toString();
+
+      if (participantUuid == currentUserUuid) {
+        final newRole = participantData['role']?.toString() ?? 'audience';
+        debugPrint('🎯 Current user role changed to: $newRole');
+
+        // await _handleRoleChange(newRole);
+        await _handleRoleChange(newRole);
+        _participantRoleCtrl.add(newRole);
+      }
+
+      // Track global active guest for layout
+      final role = (participantData['role']?.toString() ?? '').toLowerCase();
+      if (role == 'guest' || role == 'cohost') {
+        _activeGuestUuid = participantUuid;
+        _activeGuestCtrl.add(_activeGuestUuid);
+      } else if (participantUuid != null &&
+          participantUuid == _activeGuestUuid) {
+        _activeGuestUuid = null;
+        _activeGuestCtrl.add(null);
+      }
     });
 
-    // viewer.count
     pusher.bind(chMeta, 'viewer.count', (m) {
       final raw = (m['count'] ?? m['viewers'] ?? 0);
       final v = raw is num ? raw.toInt() : int.tryParse('$raw') ?? 0;
       _viewerCtrl.add(v);
     });
 
-    // live.paused
     pusher.bind(chMeta, 'live.paused', (m) {
       final paused = (m['paused'] ?? false) == true;
       _pauseCtrl.add(paused);
     });
 
-    // live.ended
     void _ended(Map<String, dynamic> _) {
       _endedCtrl.add(null);
       _rtc.leave().ignore();
@@ -186,7 +244,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     pusher.bind(chMeta, 'live.ended', _ended);
     pusher.bind(chRoot, 'live.ended', _ended);
 
-    // chat.message
     pusher.bind(chChat, 'chat.message', (m) {
       final Map<String, dynamic> obj = (m['chat'] is Map)
           ? (m['chat'] as Map).cast<String, dynamic>()
@@ -202,8 +259,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       );
     });
 
-    // Remove the join request approval logic since we auto-join
-    // Keep gift events
     pusher.bind(chRoot, 'gift.sent', (m) {
       final from = '${m['from'] ?? 'Someone'}';
       final gift = '${m['gift'] ?? 'Gift'}';
@@ -213,13 +268,92 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       _giftCtrl.add(GiftNotice(from: from, giftName: gift, coins: coins));
     });
 
-    // hydrate chat
     await _hydrateRecentChat();
-
-    // live clock
     _startClock();
-
     _wired = true;
+  }
+
+  // Add these new stream controllers for error and participant events
+  final _errorCtrl = StreamController<String>.broadcast();
+  final _participantRoleCtrl = StreamController<String>.broadcast();
+  final _participantRemovedCtrl = StreamController<String>.broadcast();
+
+  // Add these new stream getters to the repository interface
+  Stream<String> watchErrors() {
+    _ensureWiredOnce();
+    return _errorCtrl.stream;
+  }
+
+  Stream<String> watchParticipantRoleChanges() {
+    _ensureWiredOnce();
+    return _participantRoleCtrl.stream;
+  }
+
+  Stream<String> watchParticipantRemovals() {
+    _ensureWiredOnce();
+    return _participantRemovedCtrl.stream;
+  }
+
+  // Helper method to get current user UUID
+  Future<String?> _getCurrentUserUuid() async {
+    try {
+      return await authLocalDataSource.getCurrentUserUuid();
+    } catch (e) {
+      debugPrint('⚠️ Failed to get current user UUID: $e');
+      return null;
+    }
+  }
+
+  // Helper method to handle role changes
+  Future<void> _handleRoleChange(String newRole) async {
+    try {
+      if (newRole == 'guest' || newRole == 'cohost') {
+        // ✅ Correct path: promote-in-place to publisher
+        final creds = await _fetchRtcCreds(role: 'publisher');
+        await _rtc.promoteToCoHost(rtcToken: creds.token);
+        // Rejoin with publisher role for guest/cohost
+        // final creds = await _fetchRtcCreds(role: 'publisher');
+        // await _rtc.leave();
+        // await _rtc.joinAudience(
+        //   appId: creds.appId,
+        //   channel: creds.channel,
+        //   uidType: creds.uidType,
+        //   uid: creds.uid,
+        //   rtcToken: creds.token,
+        // );
+      }
+    } catch (e) {
+      debugPrint('⚠️ Role change handling failed: $e');
+    }
+  }
+
+  // Helper method to extract error messages from DioException
+  String _extractErrorMessage(DioException e) {
+    try {
+      if (e.response?.data is Map) {
+        final data = e.response!.data as Map;
+        return data['message']?.toString() ??
+            data['error']?.toString() ??
+            'An error occurred';
+      }
+      return e.message ?? 'Connection error';
+    } catch (_) {
+      return 'An unexpected error occurred';
+    }
+  }
+
+  // Helper method to get removal message based on reason
+  String _getRemovalMessage(String reason) {
+    switch (reason) {
+      case 'removed_by_host':
+        return 'You have been removed from the stream by the host';
+      case 'violated_guidelines':
+        return 'You have been removed for violating community guidelines';
+      case 'banned':
+        return 'You have been banned from this stream';
+      default:
+        return 'You have been removed from the stream';
+    }
   }
 
   // ========= Hydration & utils =========
@@ -383,25 +517,44 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     _pauseCtrl.close();
     _endedCtrl.close();
     _myApprovalCtrl.close();
-
+    _activeGuestCtrl.close();
     _rtc.leave().ignore();
     _rtc.disposeEngine().ignore();
   }
 
   // ========= RTC creds helpers =========
   Future<_RtcCreds> _fetchRtcCreds({required String role}) async {
-    final res = await http.dio.get(
-      '$_basePath/rtc',
-      queryParameters: {'role': role}, // 'audience' for view-only
-    );
-    final m = _asMap(res.data);
-    return _RtcCreds(
-      appId: '${m['agora']?['app_id'] ?? m['app_id']}',
-      token: '${m['agora']?['rtc_token'] ?? m['rtc_token']}',
-      uidType: '${m['uid_type'] ?? 'uid'}',
-      uid: '${m['rtc_uid']}',
-      channel: '${m['channel'] ?? channelName}',
-    );
+    try {
+      final res = await http.dio.get(
+        '$_basePath/rtc',
+        queryParameters: {'role': role},
+      );
+      final m = _asMap(res.data);
+
+      // Check for API errors in response
+      if (m['error'] != null) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '$_basePath/rtc'),
+          response: Response(
+            requestOptions: RequestOptions(path: '$_basePath/rtc'),
+            data: m,
+          ),
+        );
+      }
+
+      return _RtcCreds(
+        appId: '${m['agora']?['app_id'] ?? m['app_id']}',
+        token: '${m['agora']?['rtc_token'] ?? m['rtc_token']}',
+        uidType: '${m['uid_type'] ?? 'uid'}',
+        uid: '${m['rtc_uid']}',
+        channel: '${m['channel'] ?? channelName}',
+      );
+    } on DioException catch (e) {
+      // Propagate the error with proper message
+      final errorMessage = _extractErrorMessage(e);
+      _errorCtrl.add(errorMessage);
+      rethrow;
+    }
   }
 
   static Future<String> _fetchRtcTokenStatic({
@@ -425,6 +578,21 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
 
   @override
   Widget? buildLocalPreview() => _rtc.localPreviewBubble();
+
+  @override
+  Widget buildGuestVideo() => _rtc.guestVideoView();
+
+  @override
+  Future<void> setMicEnabled(bool on) => _rtc.setMicEnabled(on);
+
+  @override
+  Future<void> setCamEnabled(bool on) => _rtc.setCamEnabled(on);
+
+  // ====== Active guest (global) exposure ======
+  Stream<String?> watchActiveGuestUuid() {
+    _ensureWiredOnce();
+    return _activeGuestCtrl.stream;
+  }
 }
 
 class _RtcCreds {

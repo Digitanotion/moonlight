@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
@@ -16,6 +17,7 @@ class LiveHostState {
   final bool chatVisible;
   final LiveJoinRequest? pendingRequest;
   final LiveEndAnalytics? endAnalytics;
+  final String? activeGuestUuid;
 
   // NEW (gift toast)
   final GiftEvent? gift;
@@ -33,6 +35,7 @@ class LiveHostState {
     this.gift,
     this.showGiftToast = false,
     this.endAnalytics,
+    this.activeGuestUuid,
   });
 
   LiveHostState copyWith({
@@ -49,6 +52,7 @@ class LiveHostState {
     bool? showGiftToast,
     LiveEndAnalytics? endAnalytics,
     bool clearEndAnalytics = false,
+    String? activeGuestUuid,
   }) {
     return LiveHostState(
       isLive: isLive ?? this.isLive,
@@ -66,6 +70,7 @@ class LiveHostState {
       endAnalytics: clearEndAnalytics
           ? null
           : (endAnalytics ?? this.endAnalytics),
+      activeGuestUuid: null,
     );
   }
 
@@ -171,6 +176,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   StreamSubscription<GiftEvent>? _gSub;
   StreamSubscription<void>? _eSub;
   StreamSubscription<JoinHandled>? _jhSub;
+  StreamSubscription<String?>? _guestSub;
   @override
   Stream<LiveHostState> mapEventToState(LiveHostEvent event) async* {
     if (event is SendChatMessage) {
@@ -183,10 +189,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   LiveHostBloc(this.repo) : super(LiveHostState.initial('')) {
     on<LiveStarted>(_onStart);
     on<LiveTick>(_onTick);
-    on<SendChatMessage>((event, emit) async {
-      await repo.sendChatMessage(event.text);
-      // Message will appear via the existing chat stream
-    });
+
     on<ViewerCountUpdated>(
       (e, emit) => emit(state.copyWith(viewers: e.viewers)),
     );
@@ -223,7 +226,14 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       // Clear card no matter where it was accepted/declined from
       emit(state.copyWith(clearRequest: true));
     });
+    on<SendChatMessage>((event, emit) async {
+      await repo.sendChatMessage(event.text);
+      // Message will appear via the existing chat stream - no state change needed
+    });
     on<_HideGiftToast>((e, emit) => emit(state.copyWith(showGiftToast: false)));
+    on<_ActiveGuestChanged>(
+      (e, emit) => emit(state.copyWith(activeGuestUuid: e.uuid)),
+    );
   }
 
   Future<void> _onStart(LiveStarted e, Emitter<LiveHostState> emit) async {
@@ -243,38 +253,85 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       ),
     );
 
+    // Start the timer first
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => add(LiveTick()));
 
     try {
+      // Then start the session
       await repo.startSession(topic: e.topic);
-    } catch (_) {
-      // keep UI alive
+      debugPrint('✅ Live session started successfully');
+    } catch (error) {
+      debugPrint('❌ Failed to start live session: $error');
+      // Don't rethrow - keep the UI functional but show error state
+      emit(state.copyWith(isLive: false));
+      return;
     }
 
+    // Then setup stream subscriptions
+    await _setupStreamSubscriptions();
+  }
+
+  Future<void> _setupStreamSubscriptions() async {
+    // Cancel existing subscriptions first
     await _vSub?.cancel();
-    _vSub = repo.viewersStream().listen((v) => add(ViewerCountUpdated(v)));
-
     await _cSub?.cancel();
-    _cSub = repo.chatStream().listen((m) => add(IncomingMessage(m)));
-
     await _rSub?.cancel();
-    _rSub = repo.joinRequestStream().listen((r) => add(IncomingJoinRequest(r)));
-
     await _pSub?.cancel();
-    _pSub = repo.pauseStream().listen((p) => add(PauseStatusChanged(p)));
-
-    // NEW
     await _gSub?.cancel();
-    _gSub = repo.giftsStream().listen((g) => add(GiftArrived(g)));
-
     await _eSub?.cancel();
-    _eSub = repo.endedStream().listen((_) => add(LiveEndedReceived()));
-
     await _jhSub?.cancel();
-    _jhSub = repo.joinHandledStream().listen(
-      (j) => add(JoinHandledReceived(j)),
-    );
+    await _guestSub?.cancel();
+
+    // Setup new subscriptions
+    _vSub = repo.viewersStream().listen((v) {
+      debugPrint('👥 Viewer count update: $v');
+      add(ViewerCountUpdated(v));
+    });
+
+    _cSub = repo.chatStream().listen((m) {
+      debugPrint('💬 Chat message received');
+      add(IncomingMessage(m));
+    });
+
+    _rSub = repo.joinRequestStream().listen((r) {
+      debugPrint('🙋 Join request received');
+      add(IncomingJoinRequest(r));
+    });
+
+    _pSub = repo.pauseStream().listen((p) {
+      debugPrint('⏸️ Pause status: $p');
+      add(PauseStatusChanged(p));
+    });
+
+    _gSub = repo.giftsStream().listen((g) {
+      debugPrint('🎁 Gift received');
+      add(GiftArrived(g));
+    });
+
+    _eSub = repo.endedStream().listen((_) {
+      debugPrint('🔴 Live ended event received');
+      add(LiveEndedReceived());
+    });
+
+    _jhSub = repo.joinHandledStream().listen((j) {
+      debugPrint('✅ Join handled: ${j.accepted}');
+      add(JoinHandledReceived(j));
+
+      // NEW: listen for active guest changes
+      if (repo is LiveSessionRepository) {
+        _guestSub = (repo as LiveSessionRepository).activeGuestUuidStream().listen((
+          uuid,
+        ) {
+          debugPrint('🎥 Active guest UUID (host view): $uuid');
+          // Just store it; host UI will layout accordingly
+          // (We don't map to RTC uid here; AgoraService handles the remote video)
+          add(_ActiveGuestChanged(uuid));
+        });
+      }
+    });
+
+    debugPrint('✅ All stream subscriptions setup');
   }
 
   void _onTick(LiveTick e, Emitter<LiveHostState> emit) {
@@ -352,6 +409,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     _gSub?.cancel();
     _eSub?.cancel();
     _jhSub?.cancel();
+    _guestSub?.cancel();
     // End session idempotently; server ignores if already ended
     return super.close().whenComplete(() async {
       try {
@@ -364,3 +422,14 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
 
 // private event
 class _HideGiftToast extends LiveHostEvent {}
+
+class _ActiveGuestChanged extends LiveHostEvent {
+  final String? uuid;
+  _ActiveGuestChanged(this.uuid);
+}
+
+// register small handler
+extension _GuestHandlers on LiveHostBloc {
+  // add inside constructor after other on<...>:
+  // on<_ActiveGuestChanged>((e, emit) => emit(state.copyWith(activeGuestUuid: e.uuid)));
+}

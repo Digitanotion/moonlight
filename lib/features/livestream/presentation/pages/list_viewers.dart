@@ -236,6 +236,8 @@ class _ViewersListPageState extends State<ViewersListPage> {
   }
 
   Widget _buildActionMenu(Participant p) {
+    final isGuest = p.role.toLowerCase() == 'guest';
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
@@ -254,10 +256,17 @@ class _ViewersListPageState extends State<ViewersListPage> {
           PopupMenuItem(
             value: 'guest',
             child: Row(
-              children: const [
-                Icon(Icons.mic_rounded, color: AppColors.dark, size: 16),
-                SizedBox(width: 8),
-                Text('Make Guest', style: TextStyle(color: AppColors.dark)),
+              children: [
+                Icon(
+                  isGuest ? Icons.undo_rounded : Icons.mic_rounded,
+                  color: AppColors.dark,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isGuest ? 'Return to Viewer' : 'Make Guest',
+                  style: const TextStyle(color: AppColors.dark),
+                ),
               ],
             ),
           ),
@@ -280,13 +289,20 @@ class _ViewersListPageState extends State<ViewersListPage> {
   void _handleMenuAction(String action, Participant p) {
     switch (action) {
       case 'guest':
+        final isGuest = p.role.toLowerCase() == 'guest';
+        final targetRole = isGuest ? 'viewer' : 'guest';
+        final display = p.userSlug.isEmpty ? p.userUuid : p.userSlug;
+
         _confirm(
-          'Make Guest',
-          'Invite ${p.userSlug.isEmpty ? p.userUuid : p.userSlug} as a guest?',
+          isGuest ? 'Return to Viewer' : 'Make Guest',
+          isGuest
+              ? 'Return $display to the audience?'
+              : 'Invite $display as a guest?',
           onConfirm: () =>
-              _bloc.add(ParticipantActionRole(p.userUuid, 'guest')),
+              _bloc.add(ParticipantActionRole(p.userUuid, targetRole)),
         );
         break;
+
       case 'remove':
         _confirm(
           'Remove Viewer',

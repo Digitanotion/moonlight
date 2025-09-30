@@ -24,6 +24,8 @@ abstract class ViewerRepository {
   Future<void> requestToJoin();
 
   Future<bool> toggleFollow(bool follow);
-
+  Stream<String> watchErrors();
+  Stream<String> watchParticipantRoleChanges();
+  Stream<String> watchParticipantRemovals();
   void dispose();
 }

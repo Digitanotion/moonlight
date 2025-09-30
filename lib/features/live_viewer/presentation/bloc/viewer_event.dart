@@ -108,3 +108,33 @@ class _MyApprovalChanged extends ViewerEvent {
   @override
   List<Object?> get props => [accepted];
 }
+
+class ErrorOccurred extends ViewerEvent {
+  final String message;
+  const ErrorOccurred(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+class ParticipantRoleChanged extends ViewerEvent {
+  final String role;
+  const ParticipantRoleChanged(this.role);
+  @override
+  List<Object?> get props => [role];
+}
+
+class ParticipantRemoved extends ViewerEvent {
+  final String reason;
+  const ParticipantRemoved(this.reason);
+  @override
+  List<Object?> get props => [reason];
+}
+
+// ✅ ADD THESE MISSING EVENT CLASSES
+class RoleChangeToastDismissed extends ViewerEvent {
+  const RoleChangeToastDismissed();
+}
+
+class NavigateBackRequested extends ViewerEvent {
+  const NavigateBackRequested();
+}

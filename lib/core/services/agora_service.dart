@@ -29,6 +29,10 @@ class AgoraService with ChangeNotifier {
   String? get channelId => _channelId;
   RtcEngine? get engine => _engine;
 
+  // Primary remote publisher (your single guest). Null when none.
+  int? _primaryRemoteUid;
+  int? get primaryRemoteUid => _primaryRemoteUid;
+
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
@@ -165,6 +169,22 @@ class AgoraService with ChangeNotifier {
           }
           notifyListeners();
         },
+        onUserJoined: (RtcConnection conn, int remoteUid, int elapsed) {
+          // For host: the only other publisher is the guest.
+          _primaryRemoteUid ??= remoteUid;
+          if (kDebugMode)
+            debugPrint('[Agora] remote joined (guest?) $remoteUid');
+          notifyListeners();
+        },
+        onUserOffline:
+            (RtcConnection conn, int remoteUid, UserOfflineReasonType reason) {
+              if (_primaryRemoteUid == remoteUid) {
+                _primaryRemoteUid = null;
+                if (kDebugMode)
+                  debugPrint('[Agora] guest went offline $remoteUid');
+                notifyListeners();
+              }
+            },
 
         onLocalAudioStateChanged: (RtcConnection conn, state, error) {
           debugPrint('[Agora] localAudio state=$state error=$error');
@@ -174,6 +194,7 @@ class AgoraService with ChangeNotifier {
         },
         onLeaveChannel: (RtcConnection conn, RtcStats stats) {
           _joined = false;
+          _primaryRemoteUid = null;
           if (kDebugMode)
             debugPrint('[Agora] onLeaveChannel ch=${conn.channelId}');
           notifyListeners();
@@ -311,6 +332,7 @@ class AgoraService with ChangeNotifier {
       _localUid = null;
       _lastError = null;
       _joined = false;
+      _primaryRemoteUid = null;
       notifyListeners();
     }
   }
@@ -343,6 +365,15 @@ class AgoraService with ChangeNotifier {
         connection: RtcConnection(channelId: ch),
       ),
     );
+  }
+
+  /// Convenience: render the "primary" remote (guest) if present.
+  Widget primaryRemoteView({double? width, double? height}) {
+    final uid = _primaryRemoteUid;
+    if (uid == null) {
+      return const SizedBox.shrink();
+    }
+    return remoteView(uid);
   }
 
   // ---------------------------------------------------------------------------

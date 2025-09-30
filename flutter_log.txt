@@ -1,0 +1,2057 @@
+Launching lib\main.dart on 23106RN0DA in debug mode...
+Running Gradle task 'assembleDebug'...                             84.1s
+√ Built build\app\outputs\flutter-apk\app-debug.apk
+Installing build\app\outputs\flutter-apk\app-debug.apk...          15.4s
+I/flutter ( 2438): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(61)] Using the Impeller rendering backend (Vulkan).
+Syncing files to device 23106RN0DA...                              699ms
+
+Flutter run key commands.
+r Hot reload. 
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+A Dart VM Service on 23106RN0DA is available at: http://127.0.0.1:49934/LxQjHMN5dG8=/
+The Flutter DevTools debugger and profiler on 23106RN0DA is available at: http://127.0.0.1:9103?uri=http://127.0.0.1:49934/LxQjHMN5dG8=/
+W/libc    ( 2438): Access denied finding property "persist.vendor.debug.gpud.enable"
+E/ample.moonlight( 2438): DF open fail: No such file or directory
+W/ample.moonlight( 2438): remote service is not exist
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+I/gralloc4( 2438): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+D/BLASTBufferQueue( 2438): [SurfaceView[com.example.moonlight/com.example.moonlight.MainActivity]#1](f:0,a:1) acquireNextBufferLocked size=720x1600 mFrameNumber=1 applyTransaction=true mTimestamp=77888551985949(auto) mPendingTransactions.size=0 graphicBufferId=10471130267658 transform=0
+I/Choreographer( 2438): Skipped 80 frames!  The application may be doing too much work on its main thread.
+W/Looper  ( 2438): PerfMonitor doFrame : time=1ms vsyncFrame=0 latency=1313ms procState=-1
+I/gralloc4( 2438): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/DecorView[]( 2438): getWindowModeFromSystem  windowmode is 1
+D/DecorView[]( 2438): updateDecorCaptionStatus windowMode is 1
+D/VRI[MainActivity]( 2438): vri.reportNextDraw android.view.ViewRootImpl.performTraversals:3916 android.view.ViewRootImpl.doTraversal:2651 android.view.ViewRootImpl$TraversalRunnable.run:9819 android.view.Choreographer$CallbackRecord.run:1429 android.view.Choreographer$CallbackRecord.run:1437 
+D/VRI[MainActivity]( 2438): vri.Setup new sync id=0 syncSeqId=0
+W/FramePredict( 2438): "FramePredict won 't run in other process: com.example.moonlight"
+D/ample.moonlight( 2438): MiuiProcessManagerServiceStub setSchedFifo
+I/MiuiProcessManagerImpl( 2438): setSchedFifo pid:2438, mode:3
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+E/libEGL  ( 2438): pre_cache appList: ,,
+D/BLASTBufferQueue( 2438): [VRI[MainActivity]#0](f:0,a:1) acquireNextBufferLocked size=720x1600 mFrameNumber=1 applyTransaction=true mTimestamp=77888739213564(auto) mPendingTransactions.size=0 graphicBufferId=10471130267663 transform=0
+W/Parcel  ( 2438): Expecting binder but got null!
+D/VRI[MainActivity]( 2438): vri.reportDrawFinished syncSeqId=0 android.view.ViewRootImpl.lambda$createSyncIfNeeded$4$android-view-ViewRootImpl:3984 android.view.ViewRootImpl$$ExternalSyntheticLambda1.run:6 android.os.Handler.handleCallback:942 android.os.Handler.dispatchMessage:99 android.os.Looper.loopOnce:211 
+I/gralloc4( 2438): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/DecorView[]( 2438): onWindowFocusChanged hasWindowFocus true
+I/HandWritingStubImpl( 2438): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 2438): getCurrentKeyboardType: 1
+I/HandWritingStubImpl( 2438): getCurrentKeyboardType: 1
+I/gralloc4( 2438): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+I/flutter ( 2438): auth_token: 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/flutter ( 2438): hasCompletedOnboarding: true
+D/ProfileInstaller( 2438): Installing profile for com.example.moonlight
+I/gralloc4( 2438): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+W/OnBackInvokedCallback( 2438): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 2438): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/active?order=trending&page=1&per_page=20
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+W/MirrorManager( 2438): this model don't Support
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/categories
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+W/OnBackInvokedCallback( 2438): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 2438): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/DecorView[]( 2438): onWindowFocusChanged hasWindowFocus false
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/first-bonus-eligible
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+W/AudioCapabilities( 2438): Unsupported mime audio/x-adpcm-dvi-ima
+W/AudioCapabilities( 2438): Unsupported mime audio/x-adpcm-dvi-ima
+W/AudioCapabilities( 2438): Unsupported mime audio/x-adpcm-ms
+W/AudioCapabilities( 2438): Unsupported mime audio/x-adpcm-ms
+W/AudioCapabilities( 2438): Unsupported mime audio/alac
+W/AudioCapabilities( 2438): Unsupported mime audio/alac
+W/AudioCapabilities( 2438): Unsupported mime audio/ape
+W/AudioCapabilities( 2438): Unsupported mime audio/ape
+W/VideoCapabilities( 2438): Unrecognized profile/level 32768/256 for video/mp4v-es
+W/VideoCapabilities( 2438): Unrecognized profile/level 32768/256 for video/mp4v-es
+D/AudioRecord( 2438): set(): 0xb400007a7994d100, inputSource 0, sampleRate 44100, format 0x1, channelMask 0xc, frameCount 3528, notificationFrames 0, sessionId 0, transferType 0, flags 0, attributionSource AttributionSourceState{pid: -1, uid: 10354, packageName: com.example.moonlight, attributionTag: (null), token: , renouncedPermissions: [], next: []} uid -1, pid -1,isIsolated 0
+D/AudioRecord( 2438): PackageName[com.example.moonlight], uid[10354]
+D/AudioRecord( 2438): PackageName[com.example.moonlight], uid[10354]
+D/AudioRecord( 2438): openRecord_l: 0xb400007a7994d100, mCblk = 0x7bb5402000
+I/AudioEffect( 2438): queryNumberEffects(): *numEffects = 16, ret = 0
+I/AudioEffect( 2438): set 0xb400007a81dbb200 uuid: 0x7a596743b0 timeLow 0a8abfe0
+I/AudioEffect( 2438): set() 0xb400007a81dbb200 OK effect: Automatic Gain Control id: 187 status 0 enabled 0 pid 2438
+I/AudioEffect( 2438): queryNumberEffects(): *numEffects = 16, ret = 0
+I/AudioEffect( 2438): set 0xb400007a81dbb400 uuid: 0x7a596745f0 timeLow 7b491460
+I/AudioEffect( 2438): set() 0xb400007a81dbb400 OK effect: Acoustic Echo Canceler id: 195 status 0 enabled 0 pid 2438
+I/AudioEffect( 2438): queryNumberEffects(): *numEffects = 16, ret = 0
+I/AudioEffect( 2438): set 0xb400007a81dbb600 uuid: 0x7a596745f0 timeLow 58b4b260
+I/AudioEffect( 2438): set() 0xb400007a81dbb600 OK effect: Noise Suppression id: 203 status 0 enabled 0 pid 2438
+D/AudioRecord( 2438): start(1028): 0xb400007a7994d100, sync event 0 trigger session 0
+D/AudioSystem( 2438): +setParameters(): HDR_RECORD=on 
+D/AudioSystem( 2438): start get log level!
+D/AudioRecord( 2438): start(1028): return status 0
+D/MediaCodec( 2438): CreateByComponentName: name c2.android.aac.encoder
+D/CCodecBufferChannel( 2438): mBufferCountDebug=0 mIsUserLoad=1
+I/MiMediaCodecStub( 2438): MiMediaCodecStub::MiMediaCodecStub
+I/MediaCodec( 2438): init video box disabled for codec not supported
+D/MediaCodec( 2438): [0xb400007a7bdcf000] init: CCodec 0xb400007a83935f80, CCodecBufferChannel 0xb400007a832e4c00
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 1
+I/MediaCodec( 2438): [mId: 0] video-debug setState: INITIALIZING
+D/CCodec  ( 2438): allocate(c2.android.aac.encoder)
+I/Codec2Client( 2438): Available Codec2 services: "default" "software"
+I/CCodec  ( 2438): setting up 'default' as default (vendor) store
+I/CCodec  ( 2438): Created component [c2.android.aac.encoder]
+D/CCodecBufferChannel( 2438): [0xb400007a832e4c00] setComponent: mName c2.android.aac.encoder#832, mPipelineWatcher 0xb400007a832e5068
+D/CCodecBufferChannel( 2438): PipelineWatcher debug info [c2.android.aac.encoder#832] enable=0
+D/CCodecConfig( 2438): read media type: audio/mp4a-latm
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.max-count.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.subscribed-indices.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: input.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.buffers.pool-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.pool-ids.values
+I/CCodecConfig( 2438): query failed after returning 9 values (BAD_INDEX)
+D/CCodecConfig( 2438): c2 config diff is Dict {
+D/CCodecConfig( 2438):   c2::u32 coded.bitrate.value = 64000
+D/CCodecConfig( 2438):   c2::u32 coded.pl.level = 0
+D/CCodecConfig( 2438):   c2::u32 coded.pl.profile = 8192
+D/CCodecConfig( 2438):   c2::u32 coding.aac-sbr-mode.value = 3
+D/CCodecConfig( 2438):   c2::u32 input.buffers.max-size.value = 2048
+D/CCodecConfig( 2438):   c2::u32 input.delay.value = 0
+D/CCodecConfig( 2438):   string input.media-type.value = "audio/raw"
+D/CCodecConfig( 2438):   string output.media-type.value = "audio/mp4a-latm"
+D/CCodecConfig( 2438):   c2::u32 raw.channel-count.value = 1
+D/CCodecConfig( 2438):   c2::u32 raw.sample-rate.value = 44100
+D/CCodecConfig( 2438): }
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 2
+I/MediaCodec( 2438): [mId: 0] video-debug setState: INITIALIZED
+I/MediaCodec( 2438): MediaCodec will operate in async mode
+D/MediaCodec( 2438): [0xb400007a7bdcf000] [c2.android.aac.encoder] configure
+D/MediaCodec( 2438): [mId: 0] video-debug configure: ClientName: com.example.moonlight ComponentName: c2.android.aac.encoder
+D/MediaCodec( 2438): [mId: 0] video-debug configure: ClientFormat: AMessage(what = 0x00000000) = {
+D/MediaCodec( 2438):   int32_t sample-rate = 44100
+D/MediaCodec( 2438):   string mime = "audio/mp4a-latm"
+D/MediaCodec( 2438):   int32_t channel-count = 2
+D/MediaCodec( 2438):   int32_t bitrate = 128000
+D/MediaCodec( 2438):   int32_t aac-profile = 2
+D/MediaCodec( 2438): }
+I/MediaCodec( 2438): fps video to display enabled
+I/MediaCodec( 2438): The Fps from player is 0.000000  frameRateFloat -1.000000 frameRateInt -1
+I/MediaCodec( 2438): MediaStub sendMine
+V/MediaStub( 2438): MediaStub::GetImplInstance for debug create,0x7a5f2bc6e0
+D/MediaImpl( 2438): MediaImpl::sendMine: audio/mp4a-latm
+D/MediaStub( 2438): MediaStub::sendMine audio/mp4a-latm
+I/MediaCodec( 2438): MediaStub sendDolbyVision
+I/MediaCodec( 2438): MediaStub sendPackageName
+D/MediaImpl( 2438): MediaImpl::sendPackageName: com.example.moonlight
+D/MediaStub( 2438): MediaStub::sendPackageName com.example.moonlight
+D/CodecSeeding( 2438): Seed: codec c2.android.aac.encoder, mediatype audio/mp4a-latm, overrideable 1
+D/CodecProperties( 2438): setFeatureValue(_vq_eligible.device,1)
+D/CodecProperties( 2438): setFeatureValue(_quality.target,1)
+D/CodecSeeding( 2438): Seed: codec c2.android.aac.encoder, mediatype audio/mp4a-latm, overrideable 0
+D/MediaCodec( 2438): shapeMediaFormat: deltas(0): AMessage(what = 0x00000000) = {
+D/MediaCodec( 2438):   }
+D/MediaCodec( 2438): flushMediametrics
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 3
+I/MediaCodec( 2438): [mId: 0] video-debug setState: CONFIGURING
+D/CCodec  ( 2438): [c2.android.aac.encoder] buffers are bound to CCodec for this session
+D/CCodecConfig( 2438): no c2 equivalents for flags
+D/CCodecConfig( 2438): no c2 equivalents for encoder
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 coded.bitrate.value = 128000
+D/CCodecConfig( 2438):   c2::u32 raw.channel-count.value = 2
+W/Codec2Client( 2438): query -- param skipped: index = 1107298332.
+D/CCodec  ( 2438): encoding statistics level = 0
+D/CCodec  ( 2438): setup formats input: AMessage(what = 0x00000000) = {
+D/CCodec  ( 2438):   int32_t sample-rate = 44100
+D/CCodec  ( 2438):   int32_t channel-count = 2
+D/CCodec  ( 2438):   int32_t max-input-size = 4096
+D/CCodec  ( 2438):   string mime = "audio/raw"
+D/CCodec  ( 2438):   int32_t android._config-pcm-encoding = 2
+D/CCodec  ( 2438): }
+D/CCodec  ( 2438): setup formats output: AMessage(what = 0x00000000) = {
+D/CCodec  ( 2438):   int32_t sample-rate = 44100
+D/CCodec  ( 2438):   int32_t bitrate = 128000
+D/CCodec  ( 2438):   int32_t channel-count = 2
+D/CCodec  ( 2438):   int32_t level = 0
+D/CCodec  ( 2438):   int32_t max-bitrate = 128000
+D/CCodec  ( 2438):   string mime = "audio/mp4a-latm"
+D/CCodec  ( 2438):   int32_t profile = 2
+D/CCodec  ( 2438): }
+I/CCodecConfig( 2438): query failed after returning 9 values (BAD_INDEX)
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 input.buffers.max-size.value = 4096
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 4
+I/MediaCodec( 2438): [mId: 0] video-debug setState: CONFIGURED
+D/MediaCodec( 2438): keep callback message for reclaim
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 5
+I/MediaCodec( 2438): [mId: 0] video-debug setState: STARTING
+W/Codec2Client( 2438): query -- param skipped: index = 1342179345.
+W/Codec2Client( 2438): query -- param skipped: index = 2415921170.
+W/Codec2Client( 2438): query -- param skipped: index = 3254792206.
+W/Codec2Client( 2438): query -- param skipped: index = 3254792194.
+D/C2Store ( 2438): Using ION
+D/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] Created input block pool with allocatorID 16 => poolID 17 - OK (0)
+D/CCodecBufferChannel( 2438): [mId: 0] video-debug start: inputFormat: AMessage(what = 0x00000000) = {
+D/CCodecBufferChannel( 2438):   int32_t sample-rate = 44100
+D/CCodecBufferChannel( 2438):   int32_t channel-count = 2
+D/CCodecBufferChannel( 2438):   int32_t max-input-size = 4096
+D/CCodecBufferChannel( 2438):   string mime = "audio/raw"
+D/CCodecBufferChannel( 2438):   int32_t android._config-pcm-encoding = 2
+D/CCodecBufferChannel( 2438): }
+I/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] Created output block pool with allocatorID 16 => poolID 171 - OK
+D/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] Configured output block pool ids 171 => OK
+D/CCodecBufferChannel( 2438): [0xb400007a832e4c00] [c2.android.aac.encoder#832] start: output->outputDelay 0, output->numSlots 4
+D/CCodecBufferChannel( 2438): [mId: 0] video-debug start: outputFormat: AMessage(what = 0x00000000) = {
+D/CCodecBufferChannel( 2438):   int32_t sample-rate = 44100
+D/CCodecBufferChannel( 2438):   int32_t bitrate = 128000
+D/CCodecBufferChannel( 2438):   int32_t channel-count = 2
+D/CCodecBufferChannel( 2438):   int32_t level = 0
+D/CCodecBufferChannel( 2438):   int32_t max-bitrate = 128000
+D/CCodecBufferChannel( 2438):   string mime = "audio/mp4a-latm"
+D/CCodecBufferChannel( 2438):   int32_t profile = 2
+D/CCodecBufferChannel( 2438): }
+D/CCodecBuffers( 2438): [c2.android.aac.encoder#832:1D-Output.Impl[N]] converted 0 buffers to array mode of 4
+E/ion     ( 2438): ioctl c0044901 failed with code -1: Invalid argument
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 6
+I/MediaCodec( 2438): [mId: 0] video-debug setState: STARTED
+D/PipelineWatcher( 2438): [0xb400007a832e5068] pipelineFull: too many frames in pipeline (4)
+D/MPEG4Writer( 2438): PreAllocation enabled
+E/Utils   ( 2438): convertMessageToMetaData, Mime = audio/mp4a-latm
+D/MPEG4Writer( 2438): fpathconf _PC_FILESIZEBITS:64
+D/MPEG4Writer( 2438): File size limit set to 4503599627370495 bytes implicitly
+D/MPEG4Writer( 2438): MP4WtrCtrlHlpLooper Started
+I/MPEG4Writer( 2438): limits: 4503599627370495/0 bytes/us, bit rate: -1 bps and the estimated moov size 3192 bytes
+D/MediaCodecEncoder( 2438): Output format set: {max-bitrate=128000, sample-rate=44100, level=0, mime=audio/mp4a-latm, profile=2, channel-count=2, bitrate=128000, csd-0=java.nio.HeapByteBuffer[pos=0 lim=2 cap=2]}
+I/MPEG4Writer( 2438): setStartTimestampUs: 0
+I/MPEG4Writer( 2438): Earliest track starting time: 0
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/preview?title=&premium=false&allow_guestbox=false&comments=true&show_count=true
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/flutter ( 2438): ❌ 422 GET https://svc.moonlightstream.app/api/v1/live/preview?title=&premium=false&allow_guestbox=false&comments=true&show_count=true
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 1, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: frameIndex = 157 elapsed = 4ms
+D/MediaCodec( 2438): [mId: 0] video-debug Stats over last 5004ms:
+D/MediaCodec( 2438): [mId: 0] video-debug Qinput: 258, DQinput: 0 success out of 0 tries
+D/MediaCodec( 2438): [mId: 0] video-debug Render: 0, Drop: 222, DQoutput: 0 success out of 0 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 5(20480 size) total buffers - 4(16384 size) used buffers - 276/281 (recycle/alloc) - 5/553 (fetch/transfer)
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 1, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 0, n 0
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 0, n 0
+D/MediaCodec( 2438): [mId: 0] video-debug Stats over last 5037ms:
+D/MediaCodec( 2438): [mId: 0] video-debug Qinput: 251, DQinput: 0 success out of 0 tries
+D/MediaCodec( 2438): [mId: 0] video-debug Render: 0, Drop: 216, DQoutput: 0 success out of 0 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 5(20480 size) total buffers - 4(16384 size) used buffers - 532/537 (recycle/alloc) - 5/1065 (fetch/transfer)
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 1, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: frameIndex = 654 elapsed = 0ms
+D/MediaCodec( 2438): [mId: 0] video-debug Stats over last 5027ms:
+D/MediaCodec( 2438): [mId: 0] video-debug Qinput: 252, DQinput: 0 success out of 0 tries
+D/MediaCodec( 2438): [mId: 0] video-debug Render: 0, Drop: 217, DQoutput: 0 success out of 0 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 5(20480 size) total buffers - 4(16384 size) used buffers - 793/798 (recycle/alloc) - 5/1588 (fetch/transfer)
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 1, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: frameIndex = 820 elapsed = 2ms
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 0, n 0
+D/MediaCodec( 2438): [mId: 0] video-debug Stats over last 5055ms:
+D/MediaCodec( 2438): [mId: 0] video-debug Qinput: 252, DQinput: 0 success out of 0 tries
+D/MediaCodec( 2438): [mId: 0] video-debug Render: 0, Drop: 217, DQoutput: 0 success out of 0 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 5(20480 size) total buffers - 4(16384 size) used buffers - 1056/1061 (recycle/alloc) - 5/2113 (fetch/transfer)
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 1, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: frameIndex = 1151 elapsed = 4ms
+D/MediaCodec( 2438): [mId: 0] video-debug Stats over last 5001ms:
+D/MediaCodec( 2438): [mId: 0] video-debug Qinput: 251, DQinput: 0 success out of 0 tries
+D/MediaCodec( 2438): [mId: 0] video-debug Render: 0, Drop: 217, DQoutput: 0 success out of 0 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 5(20480 size) total buffers - 4(16384 size) used buffers - 1314/1319 (recycle/alloc) - 5/2630 (fetch/transfer)
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 0, n 0
+I/ample.moonlight( 2438): Background concurrent copying GC freed 3658KB AllocSpace bytes, 59(944KB) LOS objects, 49% free, 4463KB/8926KB, paused 178us,60us total 119.550ms
+D/CompatibilityChangeReporter( 2438): Compat change id reported: 78294732; UID 10354; state: ENABLED
+D/DecorView[]( 2438): onWindowFocusChanged hasWindowFocus true
+I/HandWritingStubImpl( 2438): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 2438): getCurrentKeyboardType: 1
+I/ScrollIdentify( 2438): on fling
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 0
+D/PipelineWatcher( 2438): [0xb400007a832e5068] elapsed: mFramesInPipeline 0, n 0
+D/MediaCodec( 2438): [mId: 0] video-debug Stats over last 5059ms:
+D/MediaCodec( 2438): [mId: 0] video-debug Qinput: 253, DQinput: 0 success out of 0 tries
+D/MediaCodec( 2438): [mId: 0] video-debug Render: 0, Drop: 217, DQoutput: 0 success out of 0 tries
+I/ScrollIdentify( 2438): on fling
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 5(20480 size) total buffers - 4(16384 size) used buffers - 1588/1593 (recycle/alloc) - 5/3177 (fetch/transfer)
+D/AudioRecord( 2438): stop(1028): 0xb400007a7994d100, mActive:1
+D/AudioSystem( 2438): +setParameters(): HDR_RECORD=off 
+D/AudioSystem( 2438): start get log level!
+D/AudioTrackShared( 2438): this(0xb400007a834e6140), mCblk(0x7bb5402000), front(1411200), mIsOut 0, interrupt() FUTEX_WAKE
+D/AudioRecord( 2438): stop(1028) done
+D/AudioRecord( 2438): stop(1028): 0xb400007a7994d100, mActive:0
+D/AudioRecord( 2438): ~AudioRecord(1028): mStatus 0
+D/AudioRecord( 2438): stop(1028): 0xb400007a7994d100, mActive:0
+I/AudioEffect( 2438): Destructor 0xb400007a81dbb200
+I/AudioEffect( 2438): Destructor 0xb400007a81dbb400
+I/AudioEffect( 2438): Destructor 0xb400007a81dbb600
+D/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] input EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+I/CCodecBufferChannel( 2438): [mId: 0] video-debug feedInputBufferIfAvailableInternal: Input met EOS
+D/MediaCodec( 2438): [0xb400007a7bdcf000] [c2.android.aac.encoder] stop
+I/MediaCodec( 2438): [mId: 0] video-debug stop
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 9
+I/MediaCodec( 2438): [mId: 0] video-debug setState: STOPPING
+D/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.android.aac.encoder#832] MediaCodec discarded an unknown buffer
+D/MediaCodec( 2438): [0xb400007a7bdcf000] [c2.android.aac.encoder] kWhatStopCompleted
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 2
+I/MediaCodec( 2438): [mId: 0] video-debug setState: INITIALIZED
+D/MediaCodec( 2438): [0xb400007a7bdcf000] [c2.android.aac.encoder] releaseAsync
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 10
+I/MediaCodec( 2438): [mId: 0] video-debug setState: RELEASING
+D/MPEG4Writer( 2438): reset()
+V/MediaWriter( 2438): Track event err/info msg:101, trackId:1, type:1000,val:-1011
+D/MPEG4Writer( 2438): Audio track stopping. Stop source
+D/MPEG4Writer( 2438): Audio track source stopping
+D/MPEG4Writer( 2438): Audio track source stopped
+I/MPEG4Writer( 2438): Received total/0-length (1381/0) buffers and encoded 1381 frames. - Audio
+I/MPEG4Writer( 2438): Audio track drift time: 0 us
+D/MPEG4Writer( 2438): Audio track stopped. Status:0. Stop source
+D/MPEG4Writer( 2438): 0 chunks are written in the last batch
+D/MPEG4Writer( 2438): WriterThread stopped. Status:0
+I/MPEG4Writer( 2438): Adjust the moov start time from 0 us -> 0 us
+I/MPEG4Writer( 2438): The mp4 file will not be streamable.
+I/MPEG4Writer( 2438): MOOV atom was written to the file
+D/MPEG4Writer( 2438): release()
+D/MPEG4Writer( 2438): ftruncate mPreAllocateFileEndOffset:523249 mOffset:522498 mMdatEndOffset:516301 diff:751
+I/hw-BpHwBinder( 2438): onLastStrongRef automatically unlinking death recipients
+D/MediaCodec( 2438): [0xb400007a7bdcf000] [c2.android.aac.encoder] kWhatReleaseCompleted
+D/MediaCodec( 2438): [0xb400007a7bdcf000] setState: 0
+I/MediaCodec( 2438): [mId: 0] video-debug setState: UNINITIALIZED
+I/MediaCodec( 2438): MediaStub sendHdrInfo/sendFrameRateFloatCal/updateFrcAieAisState
+D/MediaImpl( 2438): FRC not support: valueSupport : 
+D/MediaImpl( 2438): AIE not support: valueSupport : 
+D/MediaImpl( 2438): AIS not support: valueSupport : 
+D/MediaCodec( 2438): flushMediametrics
+D/MPEG4Writer( 2438): final fsync() takes 3 ms, file size 522498
+D/MediaCodec( 2438): [0xb400007a7bdcf000] ~MediaCodec
+D/MPEG4Writer( 2438): MP4WtrCtrlHlpLooper stopped
+D/MPEG4Writer( 2438): Top 5 write durations(microseconds): #1:346 #2:543 #3:929 #4:1201 #5:1368
+D/MPEG4Writer( 2438): reset()
+D/MPEG4Writer( 2438): Audio track stopping. Stop source
+E/MPEG4Writer( 2438): Stop() called but track is not started or stopped
+D/MediaCodec( 2438): flushMediametrics
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 0(0 size) total buffers - 0(0 size) used buffers - 1600/1605 (recycle/alloc) - 5/3200 (fetch/transfer)
+D/BufferPoolAccessor2.0( 2438): evictor expired: 1, evicted: 1
+I/ScrollIdentify( 2438): on fling
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/active?order=trending&page=1&per_page=20
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/flutter ( 2438): ➡️  POST https://svc.moonlightstream.app/api/v1/live/39/enter
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+W/OnBackInvokedCallback( 2438): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 2438): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/39/rtc?role=audience
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/flutter ( 2438): [RTC] Auto-joining as audience: appId=2cb821b4813a4e87af6e9ccd9077e6a8, ch=live_Ig8ZB1xK9x85, uidType=uid, uid=6, token.len=159
+I/spdlog  ( 2438): [2025-09-28 07:01:08.645][2438][I][iris_logger.cc:157] reset logger to /agora-iris.log
+I/spdlog  ( 2438): [2025-09-28 07:01:08.648][2438][I][iris_logger.cc:159] iris version: 4.5.2-build.1 commit: 4eee5cf6a97f30848b12b95873f7a3ba72e710cf build: 34812
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libAgoraRtcWrapper.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes2.dex): ok
+I/spdlog  ( 2438): [2025-09-28 07:01:08.665][2438][I][iris_logger.cc:157] reset logger to /storage/emulated/0/Android/data/com.example.moonlight/files/agora-iris.log
+I/spdlog  ( 2438): [2025-09-28 07:01:08.665][2438][I][iris_logger.cc:159] iris version: 4.5.2-build.1 commit: 4eee5cf6a97f30848b12b95873f7a3ba72e710cf build: 34812
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libaosl.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora-ffmpeg.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora-fdkaac.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora-soundtouch.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora-rtc-sdk.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_ai_echo_cancellation_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_ai_echo_cancellation_ll_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_ai_noise_suppression_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_ai_noise_suppression_ll_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_audio_beauty_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_clear_vision_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_content_inspect_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_face_capture_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_face_detection_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_lip_sync_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_screen_capture_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_segmentation_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_spatial_audio_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_video_av1_decoder_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_video_av1_encoder_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_video_decoder_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_video_encoder_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+D/nativeloader( 2438): Load /data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!/lib/arm64-v8a/libagora_video_quality_analyzer_extension.so using class loader ns clns-4 (caller=/data/app/~~1IiElKIiVXyh0oIa8_juTA==/com.example.moonlight-GQ2QZ4bTNKMdi2MzEcLiGA==/base.apk!classes6.dex): ok
+I/spdlog  ( 2438): [2025-09-28 07:01:08.865][2438][I][iris_jni_rtc.cc:116] loaded extensions: agora_ai_echo_cancellation_extension,agora_ai_echo_cancellation_ll_extension,agora_ai_noise_suppression_extension,agora_ai_noise_suppression_ll_extension,agora_audio_beauty_extension,agora_clear_vision_extension,agora_content_inspect_extension,agora_face_capture_extension,agora_face_detection_extension,agora_lip_sync_extension,agora_screen_capture_extension,agora_segmentation_extension,agora_spatial_audio_extension,agora_video_av1_decoder_extension,agora_video_av1_encoder_extension,agora_video_decoder_extension,agora_video_encoder_extension,agora_video_quality_analyzer_extension,
+I/spdlog  ( 2438): [2025-09-28 07:01:09.064][3064][I][iris_rtc_api_engine.cc:436] api name RtcEngine_initialize_0320339 params "{"context":{"appId":"2cb***************6a8","channelProfile":1}}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.065][3064][I][iris_logger.cc:157] reset logger to /storage/emulated/0/Android/data/com.example.moonlight/files/agora-iris.log
+I/spdlog  ( 2438): [2025-09-28 07:01:09.065][3064][I][iris_logger.cc:159] iris version: 4.5.2-build.1 commit: 4eee5cf6a97f30848b12b95873f7a3ba72e710cf build: 34812
+D/CommonUtility( 2438): registerSystemEventListener: io.agora.utils2.internal.RtcSystemEventListener
+D/CompatibilityChangeReporter( 2438): Compat change id reported: 147600208; UID 10354; state: ENABLED
+D/CommonUtility( 2438): onNetworkChange: io.agora.utils2.internal.RtcSystemEventListener
+D/RtcSystemEventListener( 2438): onNetworkChange: 
+I/ample.moonlight( 2438): hiddenapi: Accessing hidden method Landroid/media/AudioManager;->getDevicesForStream(I)I (runtime_flags=0, domain=platform, api=unsupported) from Lio/agora/rtc2/internal/AudioRoutingController; (domain=app) using reflection: allowed
+D/libMEOW ( 2438): meow new tls: 0xb400007a5e5a2280
+D/libMEOW ( 2438): applied 1 plugins for [com.example.moonlight]:
+D/libMEOW ( 2438):   plugin 1: [libMEOW_gift.so]: 0xb400007b0b3a5dc0
+D/libMEOW ( 2438): rebuild call chain: 0xb400007a5e5b1540
+I/spdlog  ( 2438): [2025-09-28 07:01:09.293][3064][I][iris_rtc_rendering_impl.cc:64] initialize rendering
+I/spdlog  ( 2438): [2025-09-28 07:01:09.305][3064][I][iris_rtc_rendering_impl.cc:49] register video frame renderer observer 12970367452888552472
+I/spdlog  ( 2438): [2025-09-28 07:01:09.305][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_initialize_0320339 result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:09.310][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_setAppType params "{"appType":4}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.312][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_setAppType result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:09.324][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_setDefaultAudioRouteToSpeakerphone_5039d15 params "{"defaultToSpeaker":true}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.325][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_setDefaultAudioRouteToSpeakerphone_5039d15 result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:09.400][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_registerEventHandler_5fc0465 params "{}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.400][3064][I][iris_rtc_api_engine.cc:490] api name RtcEngine_registerEventHandler_5fc0465 extened params "{"event":12970367452852203968}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.401][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_registerEventHandler_5fc0465 result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:09.403][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_setClientRole_3426fa6 params "{"role":2,"options":null}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.405][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_setClientRole_3426fa6 result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:09.490][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_enableVideo params "{}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.492][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_enableVideo result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:09.500][3064][I][iris_rtc_api_engine.cc:436] api name RtcEngine_joinChannel_cdbb747 params "{"token":"007e***************oSXi","channelId":"live_Ig8ZB1xK9x85","uid":6,"options":{"autoSubscribeAudio":true,"autoSubscribeVideo":true,"clientRoleType":2,"channelProfile":1}}"
+I/spdlog  ( 2438): [2025-09-28 07:01:09.504][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_joinChannel_cdbb747 result 0 outdata {"result":0}
+I/PusherChannelsFlutter( 2438): Start com.pusher.client.Pusher@d22a5ac
+I/flutter ( 2438): 🔌 [Viewer] connState=ConnectionStateType.connectionStateConnecting reason=ConnectionChangedReasonType.connectionChangedConnecting
+D/ample.moonlight( 2438): PlayerBase::PlayerBase()
+D/ample.moonlight( 2438): TrackPlayerBase::TrackPlayerBase()
+I/libOpenSLES( 2438): Emulating old channel mask behavior (ignoring positional mask 0x3, using default mask 0x3 based on channel count of 2)
+D/AudioTrack( 2438): INSP: type=audio,case=1,set=0xb400007a81812400,stream_type=3,sample_rate=48000,format=0x1,channel_mask=0x3,frame_count=0,flags=0x104,notification_frames=-2,session_id=2921,transfer_type=0,uid=-1,pid=-1
+D/AudioTrack( 2438): getCallingPackageName packagename_processed is com.example.moonlight
+D/AudioTrack( 2438): set: mPowerTrackStatus=0
+I/flutter ( 2438): Pusher Connection State: CONNECTING
+I/AudioTrack( 2438): createTrack_l(-1275068294): AUDIO_OUTPUT_FLAG_FAST successful; frameCount 0 -> 512
+D/AudioTrack( 2438): createTrack_l(1030): 0xb400007a81812400, mCblk = 0x7bcc103000, mLatency = 52, mAfLatency = 42, frameCount = 512, mSampleRate = 48000, mFlags = 0x4, mReqFrameCount = 512, mNotificationFramesAct = 256
+D/AudioTrack( 2438): setMarkerPosition(1030): 0xb400007a81812400, marker = 0
+D/AudioTrack( 2438): setPositionUpdatePeriod(1030): 0xb400007a81812400, updatePeriod = 0
+D/AudioTrack( 2438): start(1030): 0xb400007a81812400, prior state:STATE_STOPPED
+I/flutter ( 2438): ✅ [Viewer] joined: ch=live_Ig8ZB1xK9x85 localUid=6
+I/flutter ( 2438): 🔌 [Viewer] connState=ConnectionStateType.connectionStateConnected reason=ConnectionChangedReasonType.connectionChangedJoinSuccess
+I/flutter ( 2438): 👤 [Viewer] remote joined: 5
+I/PlatformViewsController( 2438): Hosting view in view hierarchy for platform view: 0
+I/PlatformViewsController( 2438): PlatformView is using SurfaceProducer backend
+D/BufferQueueConsumer( 2438): [](id:98600000002,api:0,p:-1,c:2438) connect: controlledByApp=true
+D/Surface ( 2438): lockHardwareCanvas
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/Parcel  ( 2438): Expecting binder but got null!
+D/BufferQueueConsumer( 2438): [](id:98600000003,api:0,p:-1,c:2438) connect: controlledByApp=true
+D/Surface ( 2438): lockHardwareCanvas
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+D/TextureView( 2438): getHardwareLayer, createNewSurface:true
+D/BufferQueueConsumer( 2438): [](id:98600000004,api:0,p:-1,c:2438) connect: controlledByApp=true
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/Parcel  ( 2438): Expecting binder but got null!
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+I/spdlog  ( 2438): [2025-09-28 07:01:10.305][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngineEx_setupRemoteVideoEx_522a409 params "{"canvas":{"uid":5,"view":14362},"connection":{"channelId":"live_Ig8ZB1xK9x85"}}"
+E/ample.moonlight( 2438): No package ID ff found for ID 0xffffffff.
+D/BufferQueueConsumer( 2438): [ImageReader-1x1f22m6-2438-0](id:98600000002,api:0,p:-1,c:2438) disconnect
+I/spdlog  ( 2438): [2025-09-28 07:01:10.328][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngineEx_setupRemoteVideoEx_522a409 result 0 outdata {"result":0}
+D/libMEOW ( 2438): meow new tls: 0xb400007a5ee76c80
+D/libMEOW ( 2438): applied 1 plugins for [com.example.moonlight]:
+D/libMEOW ( 2438):   plugin 1: [libMEOW_gift.so]: 0xb400007b0b3a5dc0
+D/libMEOW ( 2438): rebuild call chain: 0xb400007a5eeb9280
+D/MediaCodec( 2438): CreateByComponentName: name c2.mtk.avc.decoder
+D/CCodecBufferChannel( 2438): mBufferCountDebug=0 mIsUserLoad=1
+I/MiMediaCodecStub( 2438): MiMediaCodecStub::MiMediaCodecStub
+I/MediaCodec( 2438): init video box disabled for codec not supported
+D/MediaCodec( 2438): [0xb400007a5f08e000] init: CCodec 0xb400007aa1599d00, CCodecBufferChannel 0xb400007a7af44600
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 1
+I/MediaCodec( 2438): [mId: 1] video-debug setState: INITIALIZING
+D/CCodec  ( 2438): allocate(c2.mtk.avc.decoder)
+I/CCodec  ( 2438): setting up 'default' as default (vendor) store
+I/CCodec  ( 2438): Created component [c2.mtk.avc.decoder]
+D/CCodecBufferChannel( 2438): [0xb400007a7af44600] setComponent: mName c2.mtk.avc.decoder#564, mPipelineWatcher 0xb400007a7af44a68
+D/CCodecBufferChannel( 2438): PipelineWatcher debug info [c2.mtk.avc.decoder#564] enable=0
+D/CCodecConfig( 2438): read media type: video/avc
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.max-count.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.subscribed-indices.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: input.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.buffers.pool-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.pool-ids.values
+D/ReflectedParamUpdater( 2438): ignored struct field coded.color-format.locations
+D/CCodecConfig( 2438): ignoring local param raw.size (0xd2001800) as it is already supported
+D/CCodecConfig( 2438): ignoring local param raw.crop (0xd2001801) as it is already supported
+D/CCodecConfig( 2438): ignoring local param default.color (0x5200180b) as it is already supported
+D/CCodecConfig( 2438): ignoring local param raw.hdr-static-info (0xd200180a) as it is already supported
+I/CCodecConfig( 2438): query failed after returning 17 values (BAD_INDEX)
+D/CCodecConfig( 2438): c2 config diff is Dict {
+D/CCodecConfig( 2438):   c2::i32 algo.priority.value = 1
+D/CCodecConfig( 2438):   c2::float algo.rate.value = 0
+D/CCodecConfig( 2438):   c2::float coded.frame-rate.value = 30
+D/CCodecConfig( 2438):   c2::u32 coded.pl.level = 20495
+D/CCodecConfig( 2438):   c2::u32 coded.pl.profile = 20481
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.matrix = 0
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.primaries = 0
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.range = 2
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.transfer = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.matrix = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.primaries = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.range = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.transfer = 0
+D/CCodecConfig( 2438):   c2::u32 input.buffers.max-size.value = 2097152
+D/CCodecConfig( 2438):   c2::u32 input.delay.value = 4
+D/CCodecConfig( 2438):   string input.media-type.value = "video/avc"
+D/CCodecConfig( 2438):   c2::u32 output.delay.value = 12
+D/CCodecConfig( 2438):   string output.media-type.value = "video/raw"
+D/CCodecConfig( 2438):   c2::u32 raw.color.matrix = 0
+D/CCodecConfig( 2438):   c2::u32 raw.color.primaries = 0
+D/CCodecConfig( 2438):   c2::u32 raw.color.range = 2
+D/CCodecConfig( 2438):   c2::u32 raw.color.transfer = 0
+D/CCodecConfig( 2438):   c2::u32 raw.crop.height = 239
+D/CCodecConfig( 2438):   c2::u32 raw.crop.left = 0
+D/CCodecConfig( 2438):   c2::u32 raw.crop.top = 0
+D/CCodecConfig( 2438):   c2::u32 raw.crop.width = 319
+D/CCodecConfig( 2438):   c2::float raw.hdr-static-info.mastering.blue.x = 0
+D/CCodecConfig( 2438):   c2::float raw.hdr-s
+W/ColorUtils( 2438): expected specified color aspects (2:0:0:0)
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 2
+I/MediaCodec( 2438): [mId: 1] video-debug setState: INITIALIZED
+D/VideoInfo( 2438): com.example.moonlight create c2.mtk.avc.decoder in MediaCodec
+D/MediaCodec( 2438): [0xb400007a5f08e000] [c2.mtk.avc.decoder] configure
+D/MediaCodec( 2438): [mId: 1] video-debug configure: ClientName: com.example.moonlight ComponentName: c2.mtk.avc.decoder
+D/MediaCodec( 2438): [mId: 1] video-debug configure: ClientFormat: AMessage(what = 0x00000000) = {
+D/MediaCodec( 2438):   int32_t color-format = 19
+D/MediaCodec( 2438):   string mime = "video/avc"
+D/MediaCodec( 2438):   int32_t width = 720
+D/MediaCodec( 2438):   int32_t height = 1280
+D/MediaCodec( 2438): }
+I/MediaCodec( 2438): fps video to display enabled
+I/MediaCodec( 2438): The Fps from player is 0.000000  frameRateFloat -1.000000 frameRateInt -1
+I/MediaCodec( 2438): MediaStub sendFrameRate
+D/MediaImpl( 2438): MediaImpl::sendFrameRate: -1
+I/MediaCodec( 2438): MediaStub sendMine
+D/MediaImpl( 2438): MediaImpl::sendMine: video/avc
+D/MediaStub( 2438): MediaStub::sendMine video/avc
+D/MediaCodec( 2438): [c2.mtk.avc.decoder] currery video mime = video/avc, mWidth 720 mHeight 1280
+I/MediaCodec( 2438): MediaStub sendDolbyVision
+I/MediaCodec( 2438): MediaStub sendPackageName
+D/MediaImpl( 2438): MediaImpl::sendPackageName: com.example.moonlight
+D/MediaStub( 2438): MediaStub::sendPackageName com.example.moonlight
+I/MediaCodec( 2438): MediaStub sendWidth/sendHeight
+I/MediaCodec( 2438): configure : init video box disabled
+D/MediaCodec( 2438): mClientName is : com.example.moonlight, mVideoBitrate is 145252337, width is 720, height is 1280, frame-rate is 0.000000
+D/MediaCodec( 2438): flushMediametrics
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 3
+I/MediaCodec( 2438): [mId: 1] video-debug setState: CONFIGURING
+D/MediaCodec( 2438): [c2.mtk.avc.decoder] current pid: 2438, current process name: com.example.moonlight
+D/MediaCodec( 2438): [c2.mtk.avc.decoder] config set c2 sleep timeout 1500 kC2SleepTimeoutMs=1500
+D/CCodec  ( 2438): [c2.mtk.avc.decoder] buffers are bound to CCodec for this session
+D/CCodecConfig( 2438): no c2 equivalents for color-format
+D/CCodecConfig( 2438): no c2 equivalents for flags
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.size.height = 1280
+D/CCodecConfig( 2438):   c2::u32 raw.size.width = 720
+W/ColorUtils( 2438): expected specified color aspects (2:0:0:0)
+W/Codec2Client( 2438): query -- param skipped: index = 1107298332.
+D/CCodec  ( 2438): encoding statistics level = 0
+D/CCodec  ( 2438): setup formats input: AMessage(what = 0x00000000) = {
+D/CCodec  ( 2438):   string mime = "video/avc"
+D/CCodec  ( 2438):   int32_t width = 720
+D/CCodec  ( 2438):   int32_t profile = 65536
+D/CCodec  ( 2438):   int32_t priority = -1
+D/CCodec  ( 2438):   int32_t frame-rate = 30
+D/CCodec  ( 2438):   int32_t height = 1280
+D/CCodec  ( 2438):   int32_t level = 32768
+D/CCodec  ( 2438):   int32_t max-input-size = 2097152
+D/CCodec  ( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodec  ( 2438): }
+D/CCodec  ( 2438): setup formats output: AMessage(what = 0x00000000) = {
+D/CCodec  ( 2438):   int32_t android._color-format = 2135033992
+D/CCodec  ( 2438):   int32_t android._video-scaling = 1
+D/CCodec  ( 2438):   int32_t sar-width = 1
+D/CCodec  ( 2438):   int32_t color-standard = 0
+D/CCodec  ( 2438):   int32_t color-range = 2
+D/CCodec  ( 2438):   int32_t color-transfer = 0
+D/CCodec  ( 2438):   int32_t android._dataspace = 268435456
+D/CCodec  ( 2438):   int32_t width = 720
+D/CCodec  ( 2438):   int32_t rotation-degrees = 0
+D/CCodec  ( 2438):   int32_t sar-height = 1
+D/CCodec  ( 2438):   int32_t max-width = 320
+D/CCodec  ( 2438):   int32_t max-height = 240
+D/CCodec  ( 2438):   int32_t priority = -1
+D/CCodec  ( 2438):   string mime = "video/raw"
+D/CCodec  ( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodec  ( 2438):   Buffer hdr-static-info = {
+D/CCodec  ( 2438):     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+D/CCodec  ( 2438):     00000010:  00 00 00 00 00 00 00 00  00                       .........
+D/CCodec  ( 2438):   }
+D/CCodec  ( 2438):   int32_t frame-rate = 30
+D/CCodec  ( 2438):   int32_t height = 1280
+D/CCodec  ( 2438):   int32_t color-format = 19
+D/CCodec  ( 2438): }
+I/CCodecConfig( 2438): query failed after returning 17 values (BAD_INDEX)
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.max-size.height = 1280
+D/CCodecConfig( 2438):   c2::u32 raw.max-size.width = 720
+W/ColorUtils( 2438): expected specified color aspects (2:0:0:0)
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 4
+I/MediaCodec( 2438): [mId: 1] video-debug setState: CONFIGURED
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 5
+I/MediaCodec( 2438): [mId: 1] video-debug setState: STARTING
+D/Surface ( 2438): lockHardwareCanvas
+W/Codec2Client( 2438): query -- param skipped: index = 1342179345.
+W/Codec2Client( 2438): query -- param skipped: index = 2415921170.
+W/Codec2Client( 2438): query -- param skipped: index = 1610614798.
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] Created input block pool with allocatorID 16 => poolID 18 - OK (0)
+D/CCodecBufferChannel( 2438): [mId: 1] video-debug start: inputFormat: AMessage(what = 0x00000000) = {
+D/CCodecBufferChannel( 2438):   string mime = "video/avc"
+D/CCodecBufferChannel( 2438):   int32_t width = 720
+D/CCodecBufferChannel( 2438):   int32_t profile = 65536
+D/CCodecBufferChannel( 2438):   int32_t priority = -1
+D/CCodecBufferChannel( 2438):   int32_t frame-rate = 30
+D/CCodecBufferChannel( 2438):   int32_t height = 1280
+D/CCodecBufferChannel( 2438):   int32_t level = 32768
+D/CCodecBufferChannel( 2438):   int32_t max-input-size = 2097152
+D/CCodecBufferChannel( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodecBufferChannel( 2438): }
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] Configured output block pool ids 1 => OK
+D/CCodecBufferChannel( 2438): [0xb400007a7af44600] [c2.mtk.avc.decoder#564] start: output->outputDelay 12, output->numSlots 16
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): [mId: 1] video-debug start: outputFormat: AMessage(what = 0x00000000) = {
+D/CCodecBufferChannel( 2438):   int32_t android._color-format = 2135033992
+D/CCodecBufferChannel( 2438):   int32_t android._video-scaling = 1
+D/CCodecBufferChannel( 2438):   int32_t sar-width = 1
+D/CCodecBufferChannel( 2438):   int32_t color-standard = 0
+D/CCodecBufferChannel( 2438):   int32_t color-range = 2
+D/CCodecBufferChannel( 2438):   int32_t color-transfer = 0
+D/CCodecBufferChannel( 2438):   int32_t android._dataspace = 268435456
+D/CCodecBufferChannel( 2438):   int32_t width = 720
+D/CCodecBufferChannel( 2438):   int32_t rotation-degrees = 0
+D/CCodecBufferChannel( 2438):   int32_t sar-height = 1
+D/CCodecBufferChannel( 2438):   int32_t max-width = 720
+D/CCodecBufferChannel( 2438):   int32_t max-height = 1280
+D/CCodecBufferChannel( 2438):   int32_t priority = -1
+D/CCodecBufferChannel( 2438):   string mime = "video/raw"
+D/CCodecBufferChannel( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodecBufferChannel( 2438):   Buffer hdr-static-info = {
+D/CCodecBufferChannel( 2438):     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+D/CCodecBufferChannel( 2438):     00000010:  00 00 00 00 00 00 00 00  00                       .........
+D/CCodecBufferChannel( 2438):   }
+D/CCodecBufferChannel( 2438):   int32_t frame-rate = 30
+D/CCodecBufferChannel( 2438):   int32_t height = 1280
+D/CCodecBufferChannel( 2438):   int32_t color-format = 19
+D/CCodecBufferChannel( 2438): }
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] Configured output usage [0x1]
+E/ample.moonlight( 2438): == MALI DEBUG ===eglp_winsys_populate_image_templates ==12288
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 6
+I/MediaCodec( 2438): [mId: 1] video-debug setState: STARTED
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#564:1D-Input.Impl[N]] converted 8 buffers to array mode of 8
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#564:2D-BB-Output.Impl[N]] converted 0 buffers to array mode of 16
+D/Surface ( 2438): lockHardwareCanvas
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+E/ample.moonlight( 2438): == MALI DEBUG ===eglp_winsys_populate_image_templates ==12288
+W/ample.moonlight( 2438): Long monitor contention with owner WebSocketConnectReadThread-158 (3156) at void com.android.org.conscrypt.ConscryptEngineSocket.startHandshake()(ConscryptEngineSocket.java:225) waiters=0 in void com.android.org.conscrypt.ConscryptEngineSocket.startHandshake() for 748ms
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.color.matrix = 3
+D/CCodecConfig( 2438):   c2::u32 raw.color.range = 1
+W/ColorUtils( 2438): expected specified color aspects (1:0:3:0)
+D/Codec2-OutputBufferQueue( 2438): set max dequeue count 19 from update
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] Ignoring stale input buffer done callback: last flush index = 0, frameIndex = 0
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.crop.height = 1280
+D/CCodecConfig( 2438):   c2::u32 raw.crop.width = 720
+D/CCodecConfig( 2438):   c2::u32 raw.pixel-format.value = 4096
+W/ColorUtils( 2438): expected specified color aspects (1:0:3:0)
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#564:Output[N]] popFromStashAndRegister: at 7824558000us, output format changed to AMessage(what = 0x00000000) = {
+D/CCodecBuffers( 2438):   int32_t android._color-format = 4096
+D/CCodecBuffers( 2438):   int32_t android._video-scaling = 1
+D/CCodecBuffers( 2438):   int32_t sar-width = 1
+D/CCodecBuffers( 2438):   int32_t color-standard = 85
+D/CCodecBuffers( 2438):   int32_t color-range = 1
+D/CCodecBuffers( 2438):   int32_t color-transfer = 0
+D/CCodecBuffers( 2438):   int32_t android._dataspace = 134283264
+D/CCodecBuffers( 2438):   int32_t width = 720
+D/CCodecBuffers( 2438):   int32_t rotation-degrees = 0
+D/CCodecBuffers( 2438):   int32_t sar-height = 1
+D/CCodecBuffers( 2438):   int32_t max-width = 720
+D/CCodecBuffers( 2438):   int32_t max-height = 1280
+D/CCodecBuffers( 2438):   int32_t priority = -1
+D/CCodecBuffers( 2438):   string mime = "video/raw"
+D/CCodecBuffers( 2438):   Rect crop(0, 0, 719, 1279)
+D/CCodecBuffers( 2438):   Buffer hdr-static-info = {
+D/CCodecBuffers( 2438):     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+D/CCodecBuffers( 2438):     00000010:  00 00 00 00 00 00 00 00  00                       .........
+D/CCodecBuffers( 2438):   }
+D/CCodecBuffers( 2438):   int32_t frame-rate = 30
+D/CCodecBuffers( 2438):   int32_t height = 1280
+D/CCodecBuffers( 2438):   int32_t color-format = 19
+D/CCodecBuffers( 2438): }
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+E/ion     ( 2438): ioctl c0044901 failed with code -1: Invalid argument
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#564:Output[N]] updating image-data
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#564:Output[N]] updating stride = 720, width: 720, height: 1280
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#564:Output[N]] updating vstride = 1280
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/flutter ( 2438): Pusher Connection State: CONNECTED
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/39/chats?limit=50
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.meta.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.chat.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.join.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 1] video-debug dequeueInputBuffer: Last successful request is 2181ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 1] video-debug queueInputBuffer: Input time interval reaches 2181ms before pts: 7826958000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007a7af44a68] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 5s(f:5003 m:552 s:0 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 1] video-debug Stats over last 5002ms:
+D/MediaCodec( 2438): [mId: 1] video-debug Qinput: 25, DQinput: 25 success out of 25 tries
+D/MediaCodec( 2438): [mId: 1] video-debug Render: 0, Drop: 24, DQoutput: 24 success out of 67 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007aa150d628 : 8(16777216 size) total buffers - 8(16777216 size) used buffers - 0/8 (recycle/alloc) - 8/25 (fetch/transfer)
+D/BufferPoolAccessor2.0( 2438): evictor expired: 1, evicted: 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 1] video-debug dequeueInputBuffer: Last successful request is 594ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 1] video-debug queueInputBuffer: Input time interval reaches 595ms before pts: 7829859000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 1] video-debug queueInputBuffer: Average input time interval reaches 161ms for 4 inputs by pts: 7830259000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007a7af44a68] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007a7af44a68] elapsed: mFramesInPipeline 1, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 10s(f:10000 m:803 s:48 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 1] video-debug Stats over last 5030ms:
+D/MediaCodec( 2438): [mId: 1] video-debug Qinput: 49, DQinput: 49 success out of 50 tries
+D/MediaCodec( 2438): [mId: 1] video-debug Render: 0, Drop: 50, DQoutput: 50 success out of 59 tries
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007aa150d628 : 8(16777216 size) total buffers - 8(16777216 size) used buffers - 0/8 (recycle/alloc) - 10/75 (fetch/transfer)
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/MiMediaCodec( 2438): send fps to display with mFrameRateByTimestamp:10.000000 state:1 id:1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007a7af44a68] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 15s(f:15003 m:803 s:48 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 1] video-debug Stats over last 5024ms:
+D/MediaCodec( 2438): [mId: 1] video-debug Qinput: 51, DQinput: 51 success out of 51 tries
+D/MediaCodec( 2438): [mId: 1] video-debug Render: 0, Drop: 51, DQoutput: 51 success out of 52 tries
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007aa150d628 : 8(16777216 size) total buffers - 8(16777216 size) used buffers - 0/8 (recycle/alloc) - 10/128 (fetch/transfer)
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 1, n 16
+D/PipelineWatcher( 2438): [0xb400007a7af44a68] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007a7af44a68] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 20s(f:20000 m:803 s:48 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 1] video-debug Stats over last 5001ms:
+D/MediaCodec( 2438): [mId: 1] video-debug Qinput: 51, DQinput: 51 success out of 50 tries
+D/MediaCodec( 2438): [mId: 1] video-debug Render: 0, Drop: 50, DQoutput: 51 success out of 57 tries
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.meta.participant.role_changed
+I/flutter ( 2438):    Data: {"user_uuid":"9fc79374-48ca-47b5-8b17-cb967de711a7","role":"guest","at":"2025-09-28T06:01:30+00:00"}
+I/flutter ( 2438):    ✅ Found 1 handler(s)
+I/flutter ( 2438): participant.role_changed: {user_uuid: 9fc79374-48ca-47b5-8b17-cb967de711a7, role: guest, at: 2025-09-28T06:01:30+00:00}
+I/flutter ( 2438): 🎯 Current user role changed to: guest
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/39/rtc?role=publisher
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007aa150d628 : 8(16777216 size) total buffers - 8(16777216 size) used buffers - 0/8 (recycle/alloc) - 10/181 (fetch/transfer)
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/spdlog  ( 2438): [2025-09-28 07:01:31.739][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_leaveChannel params "{"options":null}"
+D/libMEOW ( 2438): meow delete tls: 0xb400007a5ee76c80
+D/MediaCodec( 2438): [0xb400007a5f08e000] [c2.mtk.avc.decoder] stop
+I/MediaCodec( 2438): [mId: 1] video-debug stop
+I/MiMediaCodec( 2438): send fps to display when stop, state:0 mLastSendedFps:10.000000 tid:1
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 9
+I/MediaCodec( 2438): [mId: 1] video-debug setState: STOPPING
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#564] MediaCodec discarded an unknown buffer
+D/ample.moonlight( 2438): PlayerBase::stop() from IPlayer
+D/AudioTrack( 2438): stop(1030): 0xb400007a81812400, prior state:STATE_ACTIVE
+D/AudioTrackShared( 2438): this(0xb400007a77a26180), mCblk(0x7bcc103000), front(1061376), mIsOut 1, interrupt() FUTEX_WAKE
+D/AudioTrack( 2438): stop(1030): 0xb400007a81812400 stop done
+D/AudioTrack( 2438): flush(1030): 0xb400007a81812400, prior state:STATE_STOPPED
+I/spdlog  ( 2438): [2025-09-28 07:01:31.791][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_leaveChannel result 0 outdata {"result":0}
+D/MediaCodec( 2438): [0xb400007a5f08e000] [c2.mtk.avc.decoder] kWhatStopCompleted
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 2
+I/MediaCodec( 2438): [mId: 1] video-debug setState: INITIALIZED
+D/MediaCodec( 2438): [0xb400007a5f08e000] [c2.mtk.avc.decoder] releaseAsync
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 10
+I/MediaCodec( 2438): [mId: 1] video-debug setState: RELEASING
+I/flutter ( 2438): 🚪 [Viewer] left: ch=live_Ig8ZB1xK9x85
+I/flutter ( 2438): 🔌 [Viewer] connState=ConnectionStateType.connectionStateDisconnected reason=ConnectionChangedReasonType.connectionChangedLeaveChannel
+I/spdlog  ( 2438): [2025-09-28 07:01:31.805][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_setClientRole_3426fa6 params "{"role":2,"options":null}"
+I/spdlog  ( 2438): [2025-09-28 07:01:31.805][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_setClientRole_3426fa6 result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:01:31.807][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_enableVideo params "{}"
+I/spdlog  ( 2438): [2025-09-28 07:01:31.808][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_enableVideo result 0 outdata {"result":0}
+D/MediaCodec( 2438): [0xb400007a5f08e000] [c2.mtk.avc.decoder] kWhatReleaseCompleted
+D/MediaCodec( 2438): [0xb400007a5f08e000] setState: 0
+I/MediaCodec( 2438): [mId: 1] video-debug setState: UNINITIALIZED
+I/hw-BpHwBinder( 2438): onLastStrongRef automatically unlinking death recipients
+I/MediaCodec( 2438): MediaStub sendHdrInfo/sendFrameRateFloatCal/updateFrcAieAisState
+D/MediaImpl( 2438): FRC not support: valueSupport : 
+D/MediaImpl( 2438): AIE not support: valueSupport : 
+D/MediaImpl( 2438): AIS not support: valueSupport : 
+D/MediaCodec( 2438): flushMediametrics
+I/spdlog  ( 2438): [2025-09-28 07:01:31.813][3064][I][iris_rtc_api_engine.cc:436] api name RtcEngine_joinChannel_cdbb747 params "{"token":"007e***************LkI=","channelId":"live_Ig8ZB1xK9x85","uid":6,"options":{"autoSubscribeAudio":true,"autoSubscribeVideo":true,"clientRoleType":2,"channelProfile":1}}"
+D/MediaCodec( 2438): [0xb400007a5f08e000] ~MediaCodec
+D/VideoInfo( 2438): com.example.moonlight destroy c2.mtk.avc.decoder in MediaCodec, input num 188 output num 188 render num 0
+D/VideoInfo( 2438): max input intervel 2181ms max output intervel 2071ms max render interval 0ms
+D/MediaCodec( 2438): flushMediametrics
+I/spdlog  ( 2438): [2025-09-28 07:01:31.815][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_joinChannel_cdbb747 result 0 outdata {"result":0}
+D/BufferQueueConsumer( 2438): [SurfaceTexture-0-2438-0](id:98600000004,api:0,p:-1,c:2438) disconnect
+I/spdlog  ( 2438): [2025-09-28 07:01:31.834][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngineEx_setupRemoteVideoEx_522a409 params "{"canvas":{"uid":5,"view":14362,"setupMode":2},"connection":{"channelId":"live_Ig8ZB1xK9x85"}}"
+I/spdlog  ( 2438): [2025-09-28 07:01:31.835][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngineEx_setupRemoteVideoEx_522a409 result 0 outdata {"result":0}
+D/AudioTrack( 2438): start(1030): 0xb400007a81812400, prior state:STATE_FLUSHED
+D/BufferQueueConsumer( 2438): [ImageReader-720x1600f22m6-2438-1](id:98600000003,api:0,p:-1,c:2438) disconnect
+I/flutter ( 2438): 🎯 Viewer role changed to: guest
+I/flutter ( 2438): 🔌 [Viewer] connState=ConnectionStateType.connectionStateConnecting reason=ConnectionChangedReasonType.connectionChangedConnecting
+
+══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY ╞═════════════════════════════════════════════════════════
+The following assertion was thrown during layout:
+A RenderFlex overflowed by 34 pixels on the right.
+
+The relevant error-causing widget was:
+  Row
+  Row:file:///E:/projects/moonlight/lib/features/live_viewer/presentation/pages/live_viewer_screen.dart:1135:24
+
+To inspect this widget in Flutter DevTools, visit:
+http://127.0.0.1:9103/#/inspector?uri=http%3A%2F%2F127.0.0.1%3A49934%2FLxQjHMN5dG8%3D%2F&inspectorRef=inspector-0
+
+The overflowing RenderFlex has an orientation of Axis.horizontal.
+The edge of the RenderFlex that is overflowing has been marked in the rendering with a yellow and
+black striped pattern. This is usually caused by the contents being too big for the RenderFlex.
+Consider applying a flex factor (e.g. using an Expanded widget) to force the children of the
+RenderFlex to fit within the available space instead of being sized to their natural size.
+This is considered an error condition because it indicates that there is content that cannot be
+seen. If the content is legitimately bigger than the available space, consider clipping it with a
+ClipRect widget before putting it in the flex, or using a scrollable container rather than a Flex,
+like a ListView.
+The specific RenderFlex in question is: RenderFlex#6e117 relayoutBoundary=up8 OVERFLOWING:
+  creator: Row ← Padding ← Padding ← DecoratedBox ← Container ← BackdropFilter ← ClipRRect ← Padding ←
+    Align ← BlocListener<ViewerBloc, ViewerState> ← BlocBuilder<ViewerBloc, ViewerState> ←
+    _RoleChangeToast ← ⋯
+  parentData: offset=Offset(16.0, 12.0) (can use size)
+  constraints: BoxConstraints(0.0<=w<=416.0, 0.0<=h<=811.5)
+  size: Size(416.0, 24.0)
+  direction: horizontal
+  mainAxisAlignment: start
+  mainAxisSize: min
+  crossAxisAlignment: center
+  textDirection: ltr
+  verticalDirection: down
+  spacing: 0.0
+◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+D/AudioTrack( 2438): [audioTrackData][mute] 1s(f:21313 m:1002 s:48 k:199 sk:0 cm:199 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+I/flutter ( 2438): ✅ [Viewer] joined: ch=live_Ig8ZB1xK9x85 localUid=6
+I/flutter ( 2438): 🔌 [Viewer] connState=ConnectionStateType.connectionStateConnected reason=ConnectionChangedReasonType.connectionChangedJoinSuccess
+I/flutter ( 2438): 👤 [Viewer] remote joined: 5
+I/PlatformViewsController( 2438): Hosting view in view hierarchy for platform view: 1
+I/PlatformViewsController( 2438): PlatformView is using SurfaceProducer backend
+D/BufferQueueConsumer( 2438): [](id:98600000005,api:0,p:-1,c:2438) connect: controlledByApp=true
+D/Surface ( 2438): lockHardwareCanvas
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+I/spdlog  ( 2438): [2025-09-28 07:01:32.190][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngineEx_setupRemoteVideoEx_522a409 params "{"canvas":{"uid":5,"view":15718},"connection":{"channelId":"live_Ig8ZB1xK9x85"}}"
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/Parcel  ( 2438): Expecting binder but got null!
+E/ample.moonlight( 2438): No package ID ff found for ID 0xffffffff.
+I/spdlog  ( 2438): [2025-09-28 07:01:32.194][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngineEx_setupRemoteVideoEx_522a409 result 0 outdata {"result":0}
+D/libMEOW ( 2438): meow new tls: 0xb400007a08bb4200
+D/libMEOW ( 2438): applied 1 plugins for [com.example.moonlight]:
+D/libMEOW ( 2438):   plugin 1: [libMEOW_gift.so]: 0xb400007b0b3a5dc0
+D/libMEOW ( 2438): rebuild call chain: 0xb400007a08bc3880
+D/BufferQueueConsumer( 2438): [](id:98600000006,api:0,p:-1,c:2438) connect: controlledByApp=true
+D/Surface ( 2438): lockHardwareCanvas
+W/libc    ( 2438): Access denied finding property "ro.vendor.display.iris_x7.support"
+D/TextureView( 2438): getHardwareLayer, createNewSurface:true
+D/BufferQueueConsumer( 2438): [](id:98600000007,api:0,p:-1,c:2438) connect: controlledByApp=true
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/Parcel  ( 2438): Expecting binder but got null!
+D/BufferQueueConsumer( 2438): [ImageReader-1x1f22m6-2438-2](id:98600000005,api:0,p:-1,c:2438) disconnect
+D/MediaCodec( 2438): CreateByComponentName: name c2.mtk.avc.decoder
+D/CCodecBufferChannel( 2438): mBufferCountDebug=0 mIsUserLoad=1
+I/MiMediaCodecStub( 2438): MiMediaCodecStub::MiMediaCodecStub
+I/MediaCodec( 2438): init video box disabled for codec not supported
+D/MediaCodec( 2438): [0xb400007b16861000] init: CCodec 0xb400007b168c1000, CCodecBufferChannel 0xb400007b168f7500
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 1
+I/MediaCodec( 2438): [mId: 2] video-debug setState: INITIALIZING
+D/CCodec  ( 2438): allocate(c2.mtk.avc.decoder)
+I/CCodec  ( 2438): setting up 'default' as default (vendor) store
+I/CCodec  ( 2438): Created component [c2.mtk.avc.decoder]
+D/CCodecBufferChannel( 2438): [0xb400007b168f7500] setComponent: mName c2.mtk.avc.decoder#96, mPipelineWatcher 0xb400007b168f7968
+D/CCodecBufferChannel( 2438): PipelineWatcher debug info [c2.mtk.avc.decoder#96] enable=0
+D/CCodecConfig( 2438): read media type: video/avc
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.max-count.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.subscribed-indices.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: input.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.allocator-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: output.buffers.pool-ids.values
+D/ReflectedParamUpdater( 2438): extent() != 1 for single value type: algo.buffers.pool-ids.values
+D/ReflectedParamUpdater( 2438): ignored struct field coded.color-format.locations
+D/Surface ( 2438): lockHardwareCanvas
+D/CCodecConfig( 2438): ignoring local param raw.size (0xd2001800) as it is already supported
+D/CCodecConfig( 2438): ignoring local param raw.crop (0xd2001801) as it is already supported
+D/CCodecConfig( 2438): ignoring local param default.color (0x5200180b) as it is already supported
+D/CCodecConfig( 2438): ignoring local param raw.hdr-static-info (0xd200180a) as it is already supported
+I/CCodecConfig( 2438): query failed after returning 17 values (BAD_INDEX)
+D/CCodecConfig( 2438): c2 config diff is Dict {
+D/CCodecConfig( 2438):   c2::i32 algo.priority.value = 1
+D/CCodecConfig( 2438):   c2::float algo.rate.value = 0
+D/CCodecConfig( 2438):   c2::float coded.frame-rate.value = 30
+D/CCodecConfig( 2438):   c2::u32 coded.pl.level = 20495
+D/CCodecConfig( 2438):   c2::u32 coded.pl.profile = 20481
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.matrix = 0
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.primaries = 0
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.range = 2
+D/CCodecConfig( 2438):   c2::u32 coded.vui.color.transfer = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.matrix = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.primaries = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.range = 0
+D/CCodecConfig( 2438):   c2::u32 default.color.transfer = 0
+D/CCodecConfig( 2438):   c2::u32 input.buffers.max-size.value = 2097152
+D/CCodecConfig( 2438):   c2::u32 input.delay.value = 4
+D/CCodecConfig( 2438):   string input.media-type.value = "video/avc"
+D/CCodecConfig( 2438):   c2::u32 output.delay.value = 12
+D/CCodecConfig( 2438):   string output.media-type.value = "video/raw"
+D/CCodecConfig( 2438):   c2::u32 raw.color.matrix = 0
+D/CCodecConfig( 2438):   c2::u32 raw.color.primaries = 0
+D/CCodecConfig( 2438):   c2::u32 raw.color.range = 2
+D/CCodecConfig( 2438):   c2::u32 raw.color.transfer = 0
+D/CCodecConfig( 2438):   c2::u32 raw.crop.height = 239
+D/CCodecConfig( 2438):   c2::u32 raw.crop.left = 0
+D/CCodecConfig( 2438):   c2::u32 raw.crop.top = 0
+D/CCodecConfig( 2438):   c2::u32 raw.crop.width = 319
+D/CCodecConfig( 2438):   c2::float raw.hdr-static-info.mastering.blue.x = 0
+D/CCodecConfig( 2438):   c2::float raw.hdr-s
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/ColorUtils( 2438): expected specified color aspects (2:0:0:0)
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 2
+I/MediaCodec( 2438): [mId: 2] video-debug setState: INITIALIZED
+E/ample.moonlight( 2438): == MALI DEBUG ===eglp_winsys_populate_image_templates ==12288
+D/VideoInfo( 2438): com.example.moonlight create c2.mtk.avc.decoder in MediaCodec
+D/MediaCodec( 2438): [0xb400007b16861000] [c2.mtk.avc.decoder] configure
+D/MediaCodec( 2438): [mId: 2] video-debug configure: ClientName: com.example.moonlight ComponentName: c2.mtk.avc.decoder
+D/MediaCodec( 2438): [mId: 2] video-debug configure: ClientFormat: AMessage(what = 0x00000000) = {
+D/MediaCodec( 2438):   int32_t color-format = 19
+D/MediaCodec( 2438):   string mime = "video/avc"
+D/MediaCodec( 2438):   int32_t width = 720
+D/MediaCodec( 2438):   int32_t height = 1280
+D/MediaCodec( 2438): }
+I/MediaCodec( 2438): fps video to display enabled
+I/MediaCodec( 2438): The Fps from player is 0.000000  frameRateFloat -1.000000 frameRateInt -1
+I/MediaCodec( 2438): MediaStub sendFrameRate
+D/MediaImpl( 2438): MediaImpl::sendFrameRate: -1
+I/MediaCodec( 2438): MediaStub sendMine
+D/MediaImpl( 2438): MediaImpl::sendMine: video/avc
+D/MediaStub( 2438): MediaStub::sendMine video/avc
+D/MediaCodec( 2438): [c2.mtk.avc.decoder] currery video mime = video/avc, mWidth 720 mHeight 1280
+I/MediaCodec( 2438): MediaStub sendDolbyVision
+I/MediaCodec( 2438): MediaStub sendPackageName
+D/MediaImpl( 2438): MediaImpl::sendPackageName: com.example.moonlight
+D/MediaStub( 2438): MediaStub::sendPackageName com.example.moonlight
+I/MediaCodec( 2438): MediaStub sendWidth/sendHeight
+I/MediaCodec( 2438): configure : init video box disabled
+D/MediaCodec( 2438): mClientName is : com.example.moonlight, mVideoBitrate is 909457, width is 720, height is 1280, frame-rate is 0.000000
+D/MediaCodec( 2438): flushMediametrics
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 3
+I/MediaCodec( 2438): [mId: 2] video-debug setState: CONFIGURING
+D/MediaCodec( 2438): [c2.mtk.avc.decoder] current pid: 2438, current process name: com.example.moonlight
+D/MediaCodec( 2438): [c2.mtk.avc.decoder] config set c2 sleep timeout 1500 kC2SleepTimeoutMs=1500
+D/CCodec  ( 2438): [c2.mtk.avc.decoder] buffers are bound to CCodec for this session
+D/CCodecConfig( 2438): no c2 equivalents for color-format
+D/CCodecConfig( 2438): no c2 equivalents for flags
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.size.height = 1280
+D/CCodecConfig( 2438):   c2::u32 raw.size.width = 720
+W/ColorUtils( 2438): expected specified color aspects (2:0:0:0)
+W/Codec2Client( 2438): query -- param skipped: index = 1107298332.
+D/CCodec  ( 2438): encoding statistics level = 0
+D/CCodec  ( 2438): setup formats input: AMessage(what = 0x00000000) = {
+D/CCodec  ( 2438):   string mime = "video/avc"
+D/CCodec  ( 2438):   int32_t width = 720
+D/CCodec  ( 2438):   int32_t profile = 65536
+D/CCodec  ( 2438):   int32_t priority = -1
+D/CCodec  ( 2438):   int32_t frame-rate = 30
+D/CCodec  ( 2438):   int32_t height = 1280
+D/CCodec  ( 2438):   int32_t level = 32768
+D/CCodec  ( 2438):   int32_t max-input-size = 2097152
+D/CCodec  ( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodec  ( 2438): }
+D/CCodec  ( 2438): setup formats output: AMessage(what = 0x00000000) = {
+D/CCodec  ( 2438):   int32_t android._color-format = 2135033992
+D/CCodec  ( 2438):   int32_t android._video-scaling = 1
+D/CCodec  ( 2438):   int32_t sar-width = 1
+D/CCodec  ( 2438):   int32_t color-standard = 0
+D/CCodec  ( 2438):   int32_t color-range = 2
+D/CCodec  ( 2438):   int32_t color-transfer = 0
+D/CCodec  ( 2438):   int32_t android._dataspace = 268435456
+D/CCodec  ( 2438):   int32_t width = 720
+D/CCodec  ( 2438):   int32_t rotation-degrees = 0
+D/CCodec  ( 2438):   int32_t sar-height = 1
+D/CCodec  ( 2438):   int32_t max-width = 320
+D/CCodec  ( 2438):   int32_t max-height = 240
+D/CCodec  ( 2438):   int32_t priority = -1
+D/CCodec  ( 2438):   string mime = "video/raw"
+D/CCodec  ( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodec  ( 2438):   Buffer hdr-static-info = {
+D/CCodec  ( 2438):     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+D/CCodec  ( 2438):     00000010:  00 00 00 00 00 00 00 00  00                       .........
+D/CCodec  ( 2438):   }
+D/CCodec  ( 2438):   int32_t frame-rate = 30
+D/CCodec  ( 2438):   int32_t height = 1280
+D/CCodec  ( 2438):   int32_t color-format = 19
+D/CCodec  ( 2438): }
+I/CCodecConfig( 2438): query failed after returning 17 values (BAD_INDEX)
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.max-size.height = 1280
+D/CCodecConfig( 2438):   c2::u32 raw.max-size.width = 720
+W/ColorUtils( 2438): expected specified color aspects (2:0:0:0)
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 4
+I/MediaCodec( 2438): [mId: 2] video-debug setState: CONFIGURED
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 5
+I/MediaCodec( 2438): [mId: 2] video-debug setState: STARTING
+W/Codec2Client( 2438): query -- param skipped: index = 1342179345.
+W/Codec2Client( 2438): query -- param skipped: index = 2415921170.
+W/Codec2Client( 2438): query -- param skipped: index = 1610614798.
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] Created input block pool with allocatorID 16 => poolID 19 - OK (0)
+D/CCodecBufferChannel( 2438): [mId: 2] video-debug start: inputFormat: AMessage(what = 0x00000000) = {
+D/CCodecBufferChannel( 2438):   string mime = "video/avc"
+D/CCodecBufferChannel( 2438):   int32_t width = 720
+D/CCodecBufferChannel( 2438):   int32_t profile = 65536
+D/CCodecBufferChannel( 2438):   int32_t priority = -1
+D/CCodecBufferChannel( 2438):   int32_t frame-rate = 30
+D/CCodecBufferChannel( 2438):   int32_t height = 1280
+D/CCodecBufferChannel( 2438):   int32_t level = 32768
+D/CCodecBufferChannel( 2438):   int32_t max-input-size = 2097152
+D/CCodecBufferChannel( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodecBufferChannel( 2438): }
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] Configured output block pool ids 1 => OK
+D/CCodecBufferChannel( 2438): [0xb400007b168f7500] [c2.mtk.avc.decoder#96] start: output->outputDelay 12, output->numSlots 16
+D/CCodecBufferChannel( 2438): [mId: 2] video-debug start: outputFormat: AMessage(what = 0x00000000) = {
+D/CCodecBufferChannel( 2438):   int32_t android._color-format = 2135033992
+D/CCodecBufferChannel( 2438):   int32_t android._video-scaling = 1
+D/CCodecBufferChannel( 2438):   int32_t sar-width = 1
+D/CCodecBufferChannel( 2438):   int32_t color-standard = 0
+D/CCodecBufferChannel( 2438):   int32_t color-range = 2
+D/CCodecBufferChannel( 2438):   int32_t color-transfer = 0
+D/CCodecBufferChannel( 2438):   int32_t android._dataspace = 268435456
+D/CCodecBufferChannel( 2438):   int32_t width = 720
+D/CCodecBufferChannel( 2438):   int32_t rotation-degrees = 0
+D/CCodecBufferChannel( 2438):   int32_t sar-height = 1
+D/CCodecBufferChannel( 2438):   int32_t max-width = 720
+D/CCodecBufferChannel( 2438):   int32_t max-height = 1280
+D/CCodecBufferChannel( 2438):   int32_t priority = -1
+D/CCodecBufferChannel( 2438):   string mime = "video/raw"
+D/CCodecBufferChannel( 2438):   Rect crop(0, 0, 318, 238)
+D/CCodecBufferChannel( 2438):   Buffer hdr-static-info = {
+D/CCodecBufferChannel( 2438):     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+D/CCodecBufferChannel( 2438):     00000010:  00 00 00 00 00 00 00 00  00                       .........
+D/CCodecBufferChannel( 2438):   }
+D/CCodecBufferChannel( 2438):   int32_t frame-rate = 30
+D/CCodecBufferChannel( 2438):   int32_t height = 1280
+D/CCodecBufferChannel( 2438):   int32_t color-format = 19
+D/CCodecBufferChannel( 2438): }
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] Configured output usage [0x1]
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 6
+I/MediaCodec( 2438): [mId: 2] video-debug setState: STARTED
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#96:1D-Input.Impl[N]] converted 8 buffers to array mode of 8
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#96:2D-BB-Output.Impl[N]] converted 0 buffers to array mode of 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+E/ample.moonlight( 2438): == MALI DEBUG ===eglp_winsys_populate_image_templates ==12288
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.color.matrix = 3
+D/CCodecConfig( 2438):   c2::u32 raw.color.range = 1
+W/ColorUtils( 2438): expected specified color aspects (1:0:3:0)
+D/Codec2-OutputBufferQueue( 2438): set max dequeue count 19 from update
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] Ignoring stale input buffer done callback: last flush index = 0, frameIndex = 0
+D/Surface ( 2438): lockHardwareCanvas
+D/CCodecConfig( 2438): c2 config diff is   c2::u32 raw.crop.height = 1280
+D/CCodecConfig( 2438):   c2::u32 raw.crop.width = 720
+D/CCodecConfig( 2438):   c2::u32 raw.pixel-format.value = 4096
+W/ColorUtils( 2438): expected specified color aspects (1:0:3:0)
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#96:Output[N]] popFromStashAndRegister: at 7846560000us, output format changed to AMessage(what = 0x00000000) = {
+D/CCodecBuffers( 2438):   int32_t android._color-format = 4096
+D/CCodecBuffers( 2438):   int32_t android._video-scaling = 1
+D/CCodecBuffers( 2438):   int32_t sar-width = 1
+D/CCodecBuffers( 2438):   int32_t color-standard = 85
+D/CCodecBuffers( 2438):   int32_t color-range = 1
+D/CCodecBuffers( 2438):   int32_t color-transfer = 0
+D/CCodecBuffers( 2438):   int32_t android._dataspace = 134283264
+D/CCodecBuffers( 2438):   int32_t width = 720
+D/CCodecBuffers( 2438):   int32_t rotation-degrees = 0
+D/CCodecBuffers( 2438):   int32_t sar-height = 1
+D/CCodecBuffers( 2438):   int32_t max-width = 720
+D/CCodecBuffers( 2438):   int32_t max-height = 1280
+D/CCodecBuffers( 2438):   int32_t priority = -1
+D/CCodecBuffers( 2438):   string mime = "video/raw"
+D/CCodecBuffers( 2438):   Rect crop(0, 0, 719, 1279)
+D/CCodecBuffers( 2438):   Buffer hdr-static-info = {
+D/CCodecBuffers( 2438):     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+D/CCodecBuffers( 2438):     00000010:  00 00 00 00 00 00 00 00  00                       .........
+D/CCodecBuffers( 2438):   }
+D/CCodecBuffers( 2438):   int32_t frame-rate = 30
+D/CCodecBuffers( 2438):   int32_t height = 1280
+D/CCodecBuffers( 2438):   int32_t color-format = 19
+D/CCodecBuffers( 2438): }
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#96:Output[N]] updating image-data
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#96:Output[N]] updating stride = 720, width: 720, height: 1280
+D/CCodecBuffers( 2438): [c2.mtk.avc.decoder#96:Output[N]] updating vstride = 1280
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007b168f7968] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 2] video-debug dequeueInputBuffer: Last successful request is 2196ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Input time interval reaches 2196ms before pts: 7848861000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 25s(f:25004 m:1060 s:48 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007aa150d628 : 0(0 size) total buffers - 0(0 size) used buffers - 0/8 (recycle/alloc) - 10/188 (fetch/transfer)
+D/BufferPoolAccessor2.0( 2438): evictor expired: 1, evicted: 1
+W/MediaCodec( 2438): [mId: 2] video-debug dequeueInputBuffer: Last successful request is 1097ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Input time interval reaches 1098ms before pts: 7849861000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 2] video-debug Stats over last 5024ms:
+D/MediaCodec( 2438): [mId: 2] video-debug Qinput: 12, DQinput: 12 success out of 12 tries
+D/MediaCodec( 2438): [mId: 2] video-debug Render: 0, Drop: 12, DQoutput: 12 success out of 55 tries
+D/AudioTrack( 2438): [audioTrackData][mute] 2s(f:25602 m:2004 s:346 k:330 sk:48 cm:330 cs:48) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779dac28 : 8(16777216 size) total buffers - 8(16777216 size) used buffers - 0/8 (recycle/alloc) - 9/12 (fetch/transfer)
+D/BufferPoolAccessor2.0( 2438): evictor expired: 1, evicted: 1
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007b168f7968] elapsed: mFramesInPipeline 0, n 16
+W/MediaCodec( 2438): [mId: 2] video-debug dequeueInputBuffer: Last successful request is 1480ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Input time interval reaches 1480ms before pts: 7849961000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+E/ample.moonlight( 2438): == MALI DEBUG ===eglp_winsys_populate_image_templates ==12288
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Average input time interval reaches 109ms for 16 inputs by pts: 7851561000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Average input time interval reaches 120ms for 4 inputs by pts: 7853861000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 1, n 16
+D/PipelineWatcher( 2438): [0xb400007b168f7968] elapsed: mFramesInPipeline 0, n 16
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Average input time interval reaches 111ms for 6 inputs by pts: 7855061000
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 30s(f:30001 m:2005 s:357 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 2] video-debug Stats over last 5008ms:
+D/MediaCodec( 2438): [mId: 2] video-debug Qinput: 56, DQinput: 56 success out of 56 tries
+D/MediaCodec( 2438): [mId: 2] video-debug Render: 0, Drop: 55, DQoutput: 55 success out of 79 tries
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779dac28 : 8(16777216 size) total buffers - 8(16777216 size) used buffers - 0/8 (recycle/alloc) - 16/78 (fetch/transfer)
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+I/MiMediaCodec( 2438): send fps to display with mFrameRateByTimestamp:10.000000 state:1 id:2
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007b168f7968] elapsed: mFramesInPipeline 0, n 16
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/MediaCodec( 2438): [mId: 2] video-debug Stats over last 5033ms:
+D/MediaCodec( 2438): [mId: 2] video-debug Qinput: 45, DQinput: 45 success out of 45 tries
+D/MediaCodec( 2438): [mId: 2] video-debug Render: 0, Drop: 46, DQoutput: 46 success out of 58 tries
+W/MediaCodec( 2438): [mId: 2] video-debug dequeueInputBuffer: Last successful request is 850ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Input time interval reaches 850ms before pts: 7860062000
+I/MiMediaCodec( 2438): send last fps
+I/MiMediaCodec( 2438): send fps to display with mLastSendedFps:10.000000 state:1 id:2
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+D/AudioTrack( 2438): [audioTrackData][fine] 35s(f:35001 m:2746 s:469 k:0 sk:0 cm:0 cs:0) : pid 2438 uid 10354 sessionId 2921 sr 48000 ch 2 fmt 1
+D/Surface ( 2438): lockHardwareCanvas
+E/FrameEvents( 2438): updateAcquireFence: Did not find frame.
+W/MediaCodec( 2438): [mId: 2] video-debug dequeueInputBuffer: Last successful request is 630ms ago, 0 failures since then
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Average input time interval reaches 150ms for 7 inputs by pts: 7861963000
+W/MediaCodec( 2438): [mId: 2] video-debug queueInputBuffer: Input time interval reaches 630ms before pts: 7861963000
+I/MiMediaCodec( 2438): send last fps
+I/MiMediaCodec( 2438): send fps to display with mLastSendedFps:10.000000 state:1 id:2
+I/MiMediaCodec( 2438): The TimeStamp has skip, restart calc fps
+D/CCodecBufferChannel( 2438): elapsed: mInputMetEos 0, hasPendingOutputsInClient 0, n 16
+D/PipelineWatcher( 2438): [0xb400007b168f7968] elapsed: mFramesInPipeline 0, n 16
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.meta.participant.removed
+I/flutter ( 2438):    Data: {"user_uuid":"9fc79374-48ca-47b5-8b17-cb967de711a7","reason":"removed_by_host","at":"2025-09-28T06:01:48+00:00"}
+I/flutter ( 2438):    ✅ Found 1 handler(s)
+I/flutter ( 2438): participant.removed: {user_uuid: 9fc79374-48ca-47b5-8b17-cb967de711a7, reason: removed_by_host, at: 2025-09-28T06:01:48+00:00}
+I/flutter ( 2438): 🎯 Current user removed: removed_by_host
+I/spdlog  ( 2438): [2025-09-28 07:01:48.389][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngine_leaveChannel params "{"options":null}"
+I/flutter ( 2438): 🎯 Viewer removed: removed_by_host
+D/libMEOW ( 2438): meow delete tls: 0xb400007a08bb4200
+D/MediaCodec( 2438): [0xb400007b16861000] [c2.mtk.avc.decoder] stop
+I/MediaCodec( 2438): [mId: 2] video-debug stop
+I/MiMediaCodec( 2438): send fps to display when stop, state:0 mLastSendedFps:10.000000 tid:2
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 9
+I/MediaCodec( 2438): [mId: 2] video-debug setState: STOPPING
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/CCodecBufferChannel( 2438): [c2.mtk.avc.decoder#96] MediaCodec discarded an unknown buffer
+D/ample.moonlight( 2438): PlayerBase::stop() from IPlayer
+D/AudioTrack( 2438): stop(1030): 0xb400007a81812400, prior state:STATE_ACTIVE
+D/AudioTrackShared( 2438): this(0xb400007a77a26180), mCblk(0x7bcc103000), front(1854720), mIsOut 1, interrupt() FUTEX_WAKE
+D/AudioTrack( 2438): stop(1030): 0xb400007a81812400 stop done
+D/AudioTrack( 2438): flush(1030): 0xb400007a81812400, prior state:STATE_STOPPED
+I/spdlog  ( 2438): [2025-09-28 07:01:48.419][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngine_leaveChannel result 0 outdata {"result":0}
+D/MediaCodec( 2438): [0xb400007b16861000] [c2.mtk.avc.decoder] kWhatStopCompleted
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 2
+I/MediaCodec( 2438): [mId: 2] video-debug setState: INITIALIZED
+D/MediaCodec( 2438): [0xb400007b16861000] [c2.mtk.avc.decoder] releaseAsync
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 10
+I/MediaCodec( 2438): [mId: 2] video-debug setState: RELEASING
+D/MediaCodec( 2438): [0xb400007b16861000] [c2.mtk.avc.decoder] kWhatReleaseCompleted
+I/hw-BpHwBinder( 2438): onLastStrongRef automatically unlinking death recipients
+D/MediaCodec( 2438): [0xb400007b16861000] setState: 0
+I/MediaCodec( 2438): [mId: 2] video-debug setState: UNINITIALIZED
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779dac28 : 0(0 size) total buffers - 0(0 size) used buffers - 0/8 (recycle/alloc) - 22/121 (fetch/transfer)
+I/MediaCodec( 2438): MediaStub sendHdrInfo/sendFrameRateFloatCal/updateFrcAieAisState
+D/MediaImpl( 2438): FRC not support: valueSupport : 
+D/MediaImpl( 2438): AIE not support: valueSupport : 
+D/MediaImpl( 2438): AIS not support: valueSupport : 
+D/MediaCodec( 2438): flushMediametrics
+D/MediaCodec( 2438): [0xb400007b16861000] ~MediaCodec
+D/VideoInfo( 2438): com.example.moonlight destroy c2.mtk.avc.decoder in MediaCodec, input num 121 output num 121 render num 0
+D/VideoInfo( 2438): max input intervel 2196ms max output intervel 2157ms max render interval 0ms
+D/MediaCodec( 2438): flushMediametrics
+I/flutter ( 2438): 🚪 [Viewer] left: ch=live_Ig8ZB1xK9x85
+I/flutter ( 2438): 🔌 [Viewer] connState=ConnectionStateType.connectionStateDisconnected reason=ConnectionChangedReasonType.connectionChangedLeaveChannel
+I/spdlog  ( 2438): [2025-09-28 07:01:48.488][3064][I][iris_rtc_api_engine.cc:438] api name RtcEngineEx_setupRemoteVideoEx_522a409 params "{"canvas":{"uid":5,"view":15718,"setupMode":2},"connection":{"channelId":"live_Ig8ZB1xK9x85"}}"
+I/spdlog  ( 2438): [2025-09-28 07:01:48.489][3064][I][iris_rtc_api_engine.cc:504] api name RtcEngineEx_setupRemoteVideoEx_522a409 result 0 outdata {"result":0}
+D/BufferQueueConsumer( 2438): [SurfaceTexture-0-2438-1](id:98600000007,api:0,p:-1,c:2438) disconnect
+D/BufferQueueConsumer( 2438): [ImageReader-720x1600f22m6-2438-3](id:98600000006,api:0,p:-1,c:2438) disconnect
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779dac28 : 0(0 size) total buffers - 0(0 size) used buffers - 0/8 (recycle/alloc) - 22/121 (fetch/transfer)
+D/BufferPoolAccessor2.0( 2438): evictor expired: 1, evicted: 1
+D/BufferPoolAccessor2.0( 2438): bufferpool2 0xb400007a779daa28 : 0(0 size) total buffers - 0(0 size) used buffers - 1600/1605 (recycle/alloc) - 5/3200 (fetch/transfer)
+D/BufferPoolAccessor2.0( 2438): Destruction - bufferpool2 0xb400007a779daa28 cached: 0/0M, 0/0% in use; allocs: 1605, 100% recycled; transfers: 3200, 100% unfetched
+D/CompatibilityChangeReporter( 2438): Compat change id reported: 288912692; UID 10354; state: DISABLED
+D/BufferPoolAccessor2.0( 2438): evictor expired: 1, evicted: 0
+I/FlutterWorker(17775): Work beginning, waiting on exclusive lock
+I/FlutterWorker(17775): Work beginning, exclusive lock acquired
+I/FlutterWorker(17775): waiting for result
+I/FlutterWorkExecutor(17775): begin execute
+I/FlutterWorkExecutor(17775): execute
+I/FlutterWorkExecutor(17775): *** About to execute: votd-widget-update -> votd-widget-update
+I/FlutterWorkExecutor(17775): *** starting execution: votd-widget-update -> votd-widget-update
+I/FlutterWorkExecutor(17775): *** Completing with status (votd-widget-update -> votd-widget-update): SUCCESS
+I/FlutterWorker(17775): **** got result: Success {mOutputData=Data {}}
+D/FlutterWorkExecutor(17775): destroying engine
+I/FlutterWorkExecutor(17775): engine destroyed
+I/FlutterWorker(17775): Work finishing
+W/FlutterJNI(17775): Tried to send a platform message response, but FlutterJNI was detached from native C++. Could not send. Response ID: 13
+W/FlutterJNI(17775): Tried to send a platform message response, but FlutterJNI was detached from native C++. Could not send. Response ID: 62
+W/FlutterJNI(17775): Tried to send a platform message response, but FlutterJNI was detached from native C++. Could not send. Response ID: 61
+I/flutter ( 2438): Pusher Connection State: RECONNECTING
+I/flutter ( 2438): Pusher Connection State: CONNECTING
+W/User    ( 2438): An exception was thrown by the websocket
+I/flutter ( 2438): Pusher Connection State: RECONNECTING
+I/flutter ( 2438): Pusher error: An exception was thrown by the websocket (null) ex=java.net.UnknownHostException: Unable to resolve host "ws-mt1.pusher.com": No address associated with hostname
+W/WebSocketConnection( 2438): Received close from underlying socket when already disconnected.Close code [-1], Reason [Pong timeout], Remote [false]
+I/flutter ( 2438): Pusher Connection State: CONNECTING
+W/ample.moonlight( 2438): Long monitor contention with owner WebSocketConnectReadThread-185 (4684) at void com.android.org.conscrypt.ConscryptEngineSocket.startHandshake()(ConscryptEngineSocket.java:225) waiters=0 in void com.android.org.conscrypt.ConscryptEngineSocket.startHandshake() for 12.096s
+I/flutter ( 2438): Pusher Connection State: CONNECTED
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.meta.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.chat.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.join.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/HandWritingStubImpl( 2438): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 2438): getCurrentKeyboardType: 1
+D/InputMethodManager( 2438): showSoftInput() view=io.flutter.embedding.android.FlutterView{c7a476 VFE...... .F....ID 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure( 2438): Flattened final assist data: 468 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor( 2438): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback( 2438): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 2438): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InputMethodManager( 2438): showSoftInput() view=io.flutter.embedding.android.FlutterView{c7a476 VFE...... .F...... 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InsetsController( 2438): show(ime(), fromIme=true)
+D/InsetsController( 2438): show(ime(), fromIme=true)
+I/flutter ( 2438): ➡️  POST https://svc.moonlightstream.app/api/v1/live/39/chat
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+D/MIUIInput( 2438): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=78251109000000, downTime=78251109000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=07:06:02.866
+D/MIUIInput( 2438): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=78251111000000, downTime=78251111000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=07:06:02.868
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+V/VRI[MainActivity]( 2438): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@3f1358b
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@fcce7c at 2025-09-28 07:06:02.879
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ImeInputStage@275e305 at 2025-09-28 07:06:02.879
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@15cf16f at 2025-09-28 07:06:02.879
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@ce52253 at 2025-09-28 07:06:02.928
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@d371790 at 2025-09-28 07:06:02.928
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@15b6242 at 2025-09-28 07:06:02.928
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@3031889 at 2025-09-28 07:06:02.928
+V/VRI[MainActivity]( 2438): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@3f1358b
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@ce52253 at 2025-09-28 07:06:02.963
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@d371790 at 2025-09-28 07:06:02.963
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@15b6242 at 2025-09-28 07:06:02.963
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@3031889 at 2025-09-28 07:06:02.963
+D/InputConnectionAdaptor( 2438): The input method toggled cursor monitoring off
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.chat.chat.message
+I/flutter ( 2438):    Data: {"chat":{"id":"7e851f71-162e-44df-a9c2-9560e81d5722","text":"hey","user":"joshua","avatar":"https:\/\/svc.moonlightstream.app\/storage\/avatars\/5\/qNdFiC6Uej5wJqKWBnpadn1fMYwHk1MilUwXCyIa.jpg","at":"2025-09-28T06:05:57+00:00"}}
+I/flutter ( 2438):    ✅ Found 1 handler(s)
+D/MIUIInput( 2438): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=78252465000000, downTime=78252465000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=07:06:04.222
+D/MIUIInput( 2438): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=78252466000000, downTime=78252466000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=07:06:04.223
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+V/VRI[MainActivity]( 2438): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@3f1358b
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@fcce7c at 2025-09-28 07:06:04.226
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ImeInputStage@275e305 at 2025-09-28 07:06:04.226
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@15cf16f at 2025-09-28 07:06:04.226
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@ce52253 at 2025-09-28 07:06:04.229
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@d371790 at 2025-09-28 07:06:04.229
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@15b6242 at 2025-09-28 07:06:04.227
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@3031889 at 2025-09-28 07:06:04.295
+V/VRI[MainActivity]( 2438): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@3f1358b
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@ce52253 at 2025-09-28 07:06:04.296
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@d371790 at 2025-09-28 07:06:04.296
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@15b6242 at 2025-09-28 07:06:04.296
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@3031889 at 2025-09-28 07:06:04.300
+I/spdlog  ( 2438): [2025-09-28 07:06:04.614][5408][I][iris_rtc_api_engine.cc:438] api name RtcEngine_leaveChannel params "{"options":null}"
+I/flutter ( 2438): ➡️  POST https://svc.moonlightstream.app/api/v1/live/39/leave
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/spdlog  ( 2438): [2025-09-28 07:06:04.647][5408][I][iris_rtc_api_engine.cc:504] api name RtcEngine_leaveChannel result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:06:04.665][5408][I][iris_rtc_api_engine.cc:438] api name RtcEngine_unregisterEventHandler_5fc0465 params ""
+I/spdlog  ( 2438): [2025-09-28 07:06:04.665][5408][I][iris_rtc_api_engine.cc:490] api name RtcEngine_unregisterEventHandler_5fc0465 extened params "{"event":12970367452852203968}"
+I/spdlog  ( 2438): [2025-09-28 07:06:04.665][5408][I][iris_rtc_api_engine.cc:504] api name RtcEngine_unregisterEventHandler_5fc0465 result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:06:04.673][5408][I][iris_rtc_api_engine.cc:438] api name RtcEngine_release params "{"sync":false}"
+I/spdlog  ( 2438): [2025-09-28 07:06:04.674][5408][I][iris_rtc_api_engine.cc:504] api name RtcEngine_release result 0 outdata {"result":0}
+I/spdlog  ( 2438): [2025-09-28 07:06:04.683][5408][I][iris_rtc_rendering_impl.cc:49] register video frame renderer observer 0
+D/AudioTrack( 2438): flush(1030): 0xb400007a81812400, prior state:STATE_FLUSHED
+D/AudioTrack( 2438): stop(1030): 0xb400007a81812400, prior state:STATE_FLUSHED
+D/AudioTrack( 2438): ~AudioTrack(1030): 0xb400007a81812400
+D/AudioTrack( 2438): stop(1030): 0xb400007a81812400, prior state:STATE_FLUSHED
+D/AudioTrackShared( 2438): this(0xb400007a77a26180), mCblk(0x7bcc103000), front(1855232), mIsOut 1, interrupt() FUTEX_WAKE
+D/libMEOW ( 2438): meow delete tls: 0xb400007a5e5a2280
+I/flutter ( 2438): ➡️  POST https://svc.moonlightstream.app/api/v1/live/39/enter
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+W/OnBackInvokedCallback( 2438): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 2438): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+E/flutter ( 2438): [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: Bad state: Cannot add new events after calling close
+E/flutter ( 2438): #0      _BroadcastStreamController.add (dart:async/broadcast_stream_controller.dart:256:24)
+E/flutter ( 2438): #1      Bloc.add (package:bloc/src/bloc.dart:97:24)
+E/flutter ( 2438): #2      new ViewerBloc.<anonymous closure>.<anonymous closure> (package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart:66:9)
+E/flutter ( 2438): #3      new Future.delayed.<anonymous closure> (dart:async/future.dart:419:42)
+E/flutter ( 2438): #4      Timer._createTimer.<anonymous closure> (dart:async-patch/timer_patch.dart:18:15)
+E/flutter ( 2438): #5      _Timer._runTimers (dart:isolate-patch/timer_impl.dart:410:19)
+E/flutter ( 2438): #6      _Timer._handleMessage (dart:isolate-patch/timer_impl.dart:441:5)
+E/flutter ( 2438): #7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:193:12)
+E/flutter ( 2438): 
+I/flutter ( 2438): ❌ 403 POST https://svc.moonlightstream.app/api/v1/live/39/enter
+I/flutter ( 2438): ! Auto-join as audience failed: DioException [bad response]: This exception was thrown because the response has a status code of 403 and RequestOptions.validateStatus was configured to throw for this status code.
+I/flutter ( 2438): The status code of 403 has the following meaning: "Client error - the request contains bad syntax or cannot be fulfilled"
+I/flutter ( 2438): Read more about status codes at https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+I/flutter ( 2438): In order to resolve this exception you typically have either to verify and fix your request code or you have to fix the server code.
+I/flutter ( 2438): 
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/39/chats?limit=50
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.meta.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.chat.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.join.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+I/flutter ( 2438): 📡 Pusher Event Received: live.39.pusher:subscription_succeeded
+I/flutter ( 2438):    Data: {}
+I/flutter ( 2438):    ! No handlers registered for this event
+D/MIUIInput( 2438): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=78284790000000, downTime=78284790000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=07:06:36.547
+D/MIUIInput( 2438): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=78284791000000, downTime=78284791000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=07:06:36.547
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+I/MiuiKeyEventUtil( 2438): Can't match right device
+V/VRI[MainActivity]( 2438): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@3f1358b
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@fcce7c at 2025-09-28 07:06:36.551
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ImeInputStage@275e305 at 2025-09-28 07:06:36.551
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@15cf16f at 2025-09-28 07:06:36.551
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@ce52253 at 2025-09-28 07:06:36.552
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@d371790 at 2025-09-28 07:06:36.552
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@15b6242 at 2025-09-28 07:06:36.552
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@3031889 at 2025-09-28 07:06:36.555
+V/VRI[MainActivity]( 2438): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@3f1358b
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@ce52253 at 2025-09-28 07:06:36.556
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@d371790 at 2025-09-28 07:06:36.556
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@15b6242 at 2025-09-28 07:06:36.556
+V/VRI[MainActivity]( 2438): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@3031889 at 2025-09-28 07:06:36.559
+I/flutter ( 2438): ➡️  POST https://svc.moonlightstream.app/api/v1/live/39/leave
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+I/flutter ( 2438): ➡️  POST https://svc.moonlightstream.app/api/v1/live/39/enter
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+W/OnBackInvokedCallback( 2438): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 2438): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+E/flutter ( 2438): [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: Bad state: Cannot add new events after calling close
+E/flutter ( 2438): #0      _BroadcastStreamController.add (dart:async/broadcast_stream_controller.dart:256:24)
+E/flutter ( 2438): #1      Bloc.add (package:bloc/src/bloc.dart:97:24)
+E/flutter ( 2438): #2      new ViewerBloc.<anonymous closure>.<anonymous closure> (package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart:66:9)
+E/flutter ( 2438): #3      new Future.delayed.<anonymous closure> (dart:async/future.dart:419:42)
+E/flutter ( 2438): #4      Timer._createTimer.<anonymous closure> (dart:async-patch/timer_patch.dart:18:15)
+E/flutter ( 2438): #5      _Timer._runTimers (dart:isolate-patch/timer_impl.dart:410:19)
+E/flutter ( 2438): #6      _Timer._handleMessage (dart:isolate-patch/timer_impl.dart:441:5)
+E/flutter ( 2438): #7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:193:12)
+E/flutter ( 2438): 
+I/flutter ( 2438): ❌ null POST https://svc.moonlightstream.app/api/v1/live/39/leave
+I/flutter ( 2438): ❌ null POST https://svc.moonlightstream.app/api/v1/live/39/enter
+I/flutter ( 2438): ! Auto-join as audience failed: DioException [connection timeout]: The request connection took longer than 0:00:20.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:20.000000 or improve the response time of the server.
+I/flutter ( 2438): ➡️  GET https://svc.moonlightstream.app/api/v1/live/39/chats?limit=50
+I/flutter ( 2438):    Authorization: Bearer 50|8lTLpNRqtvtpkePpdBuQ34A7YbOeylHkKigGUiFKceb35a3c
+Lost connection to device.
+Terminate batch job (Y/N)? 

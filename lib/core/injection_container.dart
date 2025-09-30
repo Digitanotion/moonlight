@@ -2,6 +2,7 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/features/home/data/datasources/live_feed_remote_datasource.dart';
 import 'package:moonlight/features/home/data/repositories/live_feed_repository_impl.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
@@ -270,7 +271,6 @@ Future<void> init() async {
   _registerLiveViewer(); // viewer mock (until implemented)
 }
 
-/// ======= Participants (Viewers List) — session-scoped =======
 /// Call this right before opening the Viewers List, when you *know* the ids.
 /// It will (re)register the repository with the current livestream identifiers.
 ///
@@ -345,33 +345,13 @@ void _registerGoLive() {
   );
 }
 
-void _registerLiveHost() {
-  if (!sl.isRegistered<LiveSessionTracker>()) {
-    sl.registerLazySingleton<LiveSessionTracker>(() => LiveSessionTracker());
-  }
-
-  sl.registerLazySingleton<LiveSessionRepository>(
-    () => LiveSessionRepositoryImpl(
-      sl<DioClient>(),
-      sl<PusherService>(),
-      sl<AgoraService>(),
-      sl<LiveSessionTracker>(),
-    ),
-  );
-
-  // Register the bloc as a factory (new instance per page)
-  sl.registerFactory<LiveHostBloc>(
-    () => LiveHostBloc(sl<LiveSessionRepository>()),
-  );
-}
-
 void _registerLiveViewer() {
   // sl.registerLazySingleton<ViewerRepository>(() => ViewerRepositoryMock());
 }
 
+// In your injection_container.dart - remove HostPusherService registration
 void _registerPusher() {
   if (sl.isRegistered<PusherService>()) return;
-  // from RuntimeConfig (loaded above). Fallback to dart-define if empty.
   final cfg = sl<RuntimeConfig>();
   var key = cfg.pusherKey;
   var cluster = cfg.pusherCluster.isNotEmpty ? cfg.pusherCluster : 'mt1';
@@ -388,6 +368,25 @@ void _registerPusher() {
 
   sl.registerLazySingleton<PusherService>(
     () => PusherService(apiKey: key, cluster: cluster),
+  );
+}
+
+void _registerLiveHost() {
+  if (!sl.isRegistered<LiveSessionTracker>()) {
+    sl.registerLazySingleton<LiveSessionTracker>(() => LiveSessionTracker());
+  }
+
+  sl.registerLazySingleton<LiveSessionRepository>(
+    () => LiveSessionRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(), // Use the same PusherService
+      sl<AgoraService>(),
+      sl<LiveSessionTracker>(),
+    ),
+  );
+
+  sl.registerFactory<LiveHostBloc>(
+    () => LiveHostBloc(sl<LiveSessionRepository>()),
   );
 }
 
