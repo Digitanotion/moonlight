@@ -243,40 +243,86 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     debugPrint('   - Join channel: $joinChannel');
   }
 
+  // Enhance the participant added handler to log Agora UIDs
   void _handleParticipantAdded(Map<String, dynamic> raw) {
     debugPrint('👤 Participant added: $raw');
-    // You can process this if needed for host UI
-    // For example, you might want to show a notification when someone joins
+    final m = _asMap(raw);
+    final uuid = (m['user_uuid'] ?? m['uuid'] ?? '').toString();
+    final agoraUid = (m['agora_uid'] ?? m['uid'])?.toString();
+    final role = (m['role'] ?? 'viewer').toString().toLowerCase();
+
+    debugPrint(
+      '🎯 Participant details - UUID: $uuid, Agora UID: $agoraUid, Role: $role',
+    );
+
+    // If this is a guest and we don't have an active guest, set them
+    if ((role == 'guest' || role == 'cohost') && _activeGuestUuid == null) {
+      _activeGuestUuid = uuid;
+      _activeGuestCtrl.add(uuid);
+
+      if (agoraUid != null && agoraUid.isNotEmpty) {
+        final uid = int.tryParse(agoraUid);
+        if (uid != null) {
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            _agora.setPrimaryGuest(uid);
+          });
+        }
+      }
+    }
   }
 
   void _handleParticipantRemoved(Map<String, dynamic> raw) {
     debugPrint('👤 Participant removed: $raw');
-    // Handle participant removal if needed
-    // If the removed participant was the active guest, clear it.
     final m = _asMap(raw);
     final uuid = (m['user_uuid'] ?? m['uuid'] ?? '').toString();
+
     if (uuid.isNotEmpty && uuid == _activeGuestUuid) {
       _activeGuestUuid = null;
       _activeGuestCtrl.add(null);
+      _agora.clearGuest(); // ✅ also drop the pinned remote in the host engine
       debugPrint('🎯 Active guest cleared due to removal.');
     }
   }
 
+  // Add this method to properly handle guest promotion/demotion
   void _handleParticipantRoleChanged(Map<String, dynamic> raw) {
     debugPrint('👤 Participant role changed: $raw');
     final m = _asMap(raw);
     final uuid = (m['user_uuid'] ?? m['uuid'] ?? '').toString();
     final role = (m['role'] ?? '').toString().toLowerCase();
+    final agoraUid = (m['agora_uid'] ?? m['uid'])?.toString();
+
     if (uuid.isEmpty || role.isEmpty) return;
+
     if (role == 'guest' || role == 'cohost') {
-      // enforce single-guest model visually
-      _activeGuestUuid = uuid;
-      _activeGuestCtrl.add(uuid);
-      debugPrint('🎯 Active guest now: $_activeGuestUuid');
-    } else if (uuid == _activeGuestUuid) {
-      _activeGuestUuid = null;
-      _activeGuestCtrl.add(null);
-      debugPrint('🎯 Active guest cleared (role -> $role).');
+      // Enforce single-guest: visually pin whoever just became guest.
+      if (_activeGuestUuid != uuid) {
+        _activeGuestUuid = uuid;
+        _activeGuestCtrl.add(uuid);
+
+        // If we have an Agora UID, set it as primary guest immediately
+        if (agoraUid != null && agoraUid.isNotEmpty) {
+          final uid = int.tryParse(agoraUid);
+          if (uid != null) {
+            // Small delay to ensure user has joined Agora channel
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _agora.setPrimaryGuest(uid);
+            });
+          }
+        }
+
+        debugPrint(
+          '🎯 Active guest now: $_activeGuestUuid (Agora UID: $agoraUid)',
+        );
+      }
+    } else {
+      // Demoted back to viewer/audience → clear if it was the active guest
+      if (uuid == _activeGuestUuid) {
+        _activeGuestUuid = null;
+        _activeGuestCtrl.add(null);
+        _agora.clearGuest();
+        debugPrint('🎯 Active guest cleared (role -> $role).');
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
@@ -70,7 +71,7 @@ class LiveHostState {
       endAnalytics: clearEndAnalytics
           ? null
           : (endAnalytics ?? this.endAnalytics),
-      activeGuestUuid: null,
+      activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
     );
   }
 
@@ -90,6 +91,7 @@ class LiveHostState {
     gift: null,
     showGiftToast: false,
     endAnalytics: null,
+    activeGuestUuid: null,
   );
 }
 
@@ -163,9 +165,18 @@ class SendChatMessage extends LiveHostEvent {
   SendChatMessage(this.text);
 }
 
+// private events
+class _HideGiftToast extends LiveHostEvent {}
+
+class _ActiveGuestChanged extends LiveHostEvent {
+  final String? uuid;
+  _ActiveGuestChanged(this.uuid);
+}
+
 // ===== Bloc =====
 class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   final LiveSessionRepository repo;
+  final AgoraService agoraService;
   Timer? _timer;
   StreamSubscription<int>? _vSub;
   StreamSubscription<LiveChatMessage>? _cSub;
@@ -177,16 +188,12 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   StreamSubscription<void>? _eSub;
   StreamSubscription<JoinHandled>? _jhSub;
   StreamSubscription<String?>? _guestSub;
-  @override
-  Stream<LiveHostState> mapEventToState(LiveHostEvent event) async* {
-    if (event is SendChatMessage) {
-      await repo.sendChatMessage(event.text);
-      // No state change needed - message will appear via Pusher stream
-    }
-    // ... rest of your existing event handling
-  }
 
-  LiveHostBloc(this.repo) : super(LiveHostState.initial('')) {
+  // FIXED: Remove StreamSubscription for ValueNotifier since we use addListener
+  // ValueNotifier uses addListener/removeListener instead of StreamSubscription
+
+  LiveHostBloc(this.repo, this.agoraService)
+    : super(LiveHostState.initial('')) {
     on<LiveStarted>(_onStart);
     on<LiveTick>(_onTick);
 
@@ -231,9 +238,11 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       // Message will appear via the existing chat stream - no state change needed
     });
     on<_HideGiftToast>((e, emit) => emit(state.copyWith(showGiftToast: false)));
-    on<_ActiveGuestChanged>(
-      (e, emit) => emit(state.copyWith(activeGuestUuid: e.uuid)),
-    );
+
+    // FIXED: Only one handler for _ActiveGuestChanged (removed duplicate)
+    on<_ActiveGuestChanged>((e, emit) {
+      emit(state.copyWith(activeGuestUuid: e.uuid));
+    });
   }
 
   Future<void> _onStart(LiveStarted e, Emitter<LiveHostState> emit) async {
@@ -283,6 +292,9 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _jhSub?.cancel();
     await _guestSub?.cancel();
 
+    // FIXED: Remove Agora listener
+    _removeAgoraListener();
+
     // Setup new subscriptions
     _vSub = repo.viewersStream().listen((v) {
       debugPrint('👥 Viewer count update: $v');
@@ -317,21 +329,32 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     _jhSub = repo.joinHandledStream().listen((j) {
       debugPrint('✅ Join handled: ${j.accepted}');
       add(JoinHandledReceived(j));
-
-      // NEW: listen for active guest changes
-      if (repo is LiveSessionRepository) {
-        _guestSub = (repo as LiveSessionRepository).activeGuestUuidStream().listen((
-          uuid,
-        ) {
-          debugPrint('🎥 Active guest UUID (host view): $uuid');
-          // Just store it; host UI will layout accordingly
-          // (We don't map to RTC uid here; AgoraService handles the remote video)
-          add(_ActiveGuestChanged(uuid));
-        });
-      }
     });
 
+    // Enhanced guest subscription
+    _guestSub = repo.activeGuestUuidStream().listen((uuid) {
+      debugPrint('🎥 Active guest UUID (host view): $uuid');
+      add(_ActiveGuestChanged(uuid));
+    });
+
+    // FIXED: Use addListener for ValueNotifier instead of stream.listen
+    _setupAgoraListener();
+
     debugPrint('✅ All stream subscriptions setup');
+  }
+
+  // FIXED: Add methods for ValueNotifier listener management
+  void _setupAgoraListener() {
+    agoraService.primaryRemoteUid.addListener(_onAgoraRemoteUidChanged);
+  }
+
+  void _removeAgoraListener() {
+    agoraService.primaryRemoteUid.removeListener(_onAgoraRemoteUidChanged);
+  }
+
+  void _onAgoraRemoteUidChanged() {
+    final remoteUid = agoraService.primaryRemoteUid.value;
+    debugPrint('🎥 Agora primary remote UID changed: $remoteUid');
   }
 
   void _onTick(LiveTick e, Emitter<LiveHostState> emit) {
@@ -396,20 +419,29 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _gSub?.cancel();
     await _eSub?.cancel();
     await _jhSub?.cancel();
+    await _guestSub?.cancel();
+
+    // FIXED: Remove Agora listener
+    _removeAgoraListener();
+
     await repo.endSession(); // idempotent
   }
 
   @override
   Future<void> close() async {
     _timer?.cancel();
-    _vSub?.cancel();
-    _cSub?.cancel();
-    _rSub?.cancel();
-    _pSub?.cancel();
-    _gSub?.cancel();
-    _eSub?.cancel();
-    _jhSub?.cancel();
-    _guestSub?.cancel();
+    await _vSub?.cancel();
+    await _cSub?.cancel();
+    await _rSub?.cancel();
+    await _pSub?.cancel();
+    await _gSub?.cancel();
+    await _eSub?.cancel();
+    await _jhSub?.cancel();
+    await _guestSub?.cancel();
+
+    // FIXED: Remove Agora listener
+    _removeAgoraListener();
+
     // End session idempotently; server ignores if already ended
     return super.close().whenComplete(() async {
       try {
@@ -418,18 +450,4 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       repo.dispose();
     });
   }
-}
-
-// private event
-class _HideGiftToast extends LiveHostEvent {}
-
-class _ActiveGuestChanged extends LiveHostEvent {
-  final String? uuid;
-  _ActiveGuestChanged(this.uuid);
-}
-
-// register small handler
-extension _GuestHandlers on LiveHostBloc {
-  // add inside constructor after other on<...>:
-  // on<_ActiveGuestChanged>((e, emit) => emit(state.copyWith(activeGuestUuid: e.uuid)));
 }

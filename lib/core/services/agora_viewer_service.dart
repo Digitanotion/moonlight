@@ -134,6 +134,33 @@ class AgoraViewerService with ChangeNotifier {
     );
   }
 
+  Future<void> demoteToAudience() async {
+    final e = _engine;
+    if (e == null) return;
+
+    // stop preview if any
+    if (_previewing) {
+      await e.stopPreview();
+      _previewing = false;
+    }
+
+    // switch role & unpublish
+    await e.setClientRole(role: ClientRoleType.clientRoleAudience);
+    await e.updateChannelMediaOptions(
+      const ChannelMediaOptions(
+        publishCameraTrack: false,
+        publishMicrophoneTrack: false,
+        clientRoleType: ClientRoleType.clientRoleAudience,
+        channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
+        autoSubscribeAudio: true,
+        autoSubscribeVideo: true,
+      ),
+    );
+
+    _isCoHost = false;
+    notifyListeners();
+  }
+
   // ---------------- Public API ----------------
 
   /// Join the livestream as **Audience** (watch-only).
@@ -257,6 +284,7 @@ class AgoraViewerService with ChangeNotifier {
         return AgoraVideoView(
           controller: VideoViewController.remote(
             rtcEngine: e,
+            useFlutterTexture: true,
             connection: RtcConnection(channelId: ch),
             canvas: VideoCanvas(uid: remote),
           ),
@@ -276,6 +304,7 @@ class AgoraViewerService with ChangeNotifier {
         child: AgoraVideoView(
           controller: VideoViewController(
             rtcEngine: _engine!,
+            useFlutterTexture: true,
             // Local preview uses uid:0 canvas
             canvas: const VideoCanvas(uid: 0),
           ),
@@ -295,10 +324,17 @@ class AgoraViewerService with ChangeNotifier {
     return AgoraVideoView(
       controller: VideoViewController.remote(
         rtcEngine: e,
+        useFlutterTexture: true, // ✅ overlays draw on top
         connection: RtcConnection(channelId: ch),
         canvas: VideoCanvas(uid: gid),
       ),
     );
+  }
+
+  /// Public wrapper so repositories can refresh RTC token without touching the engine directly.
+  Future<void> renewToken(String newToken) async {
+    await _engine?.renewToken(newToken);
+    if (kDebugMode) debugPrint('🔄 [Viewer] renewToken applied');
   }
 
   // Basic guest mic/cam toggles

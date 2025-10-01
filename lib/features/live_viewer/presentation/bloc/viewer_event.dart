@@ -138,3 +138,11 @@ class RoleChangeToastDismissed extends ViewerEvent {
 class NavigateBackRequested extends ViewerEvent {
   const NavigateBackRequested();
 }
+
+// ✅ ADD THIS CRITICAL MISSING EVENT CLASS
+class _ActiveGuestUpdated extends ViewerEvent {
+  final String? uuid;
+  const _ActiveGuestUpdated(this.uuid);
+  @override
+  List<Object?> get props => [uuid];
+}

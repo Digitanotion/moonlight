@@ -38,7 +38,8 @@ class _LiveHostPageState extends State<LiveHostPage> {
   // CameraController? _controller;
   // List<CameraDescription> _cameras = const [];
   bool _initErr = false;
-
+  final AgoraService agora =
+      GetIt.I<AgoraService>(); // FIXED: Declare agora here
   @override
   void initState() {
     super.initState();
@@ -86,9 +87,43 @@ class _LiveHostPageState extends State<LiveHostPage> {
     return '$m:$s';
   }
 
+  // Add this helper method
+  Widget _buildLoadingState() {
+    return Container(
+      color: Colors.black,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF6A00)),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Setting up your livestream...',
+            style: TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Channel: ${agora.channelId ?? 'Unknown'}',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          if (agora.lastError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Error: ${agora.lastError}',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final agora = GetIt.I<AgoraService>();
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: MultiBlocListener(
@@ -148,45 +183,105 @@ class _LiveHostPageState extends State<LiveHostPage> {
                   child: AnimatedBuilder(
                     animation: agora,
                     builder: (_, __) {
-                      if (!agora.joined) {
-                        return const Center(
-                          child: Text(
-                            'Please wait a min...',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        );
-                      }
-                      final hasGuest = context.select<LiveHostBloc, bool>(
-                        (b) => b.state.activeGuestUuid != null,
-                      );
-                      if (!hasGuest || agora.primaryRemoteUid == null) {
-                        // Default: single host preview
-                        return ClipRRect(
-                          borderRadius: BorderRadius.zero,
-                          child: agora.localPreview(),
-                        );
-                      }
-                      // Two-up: host (top), guest (bottom)
-                      return Column(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: agora.localPreview(),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: agora.primaryRemoteView(),
-                            ),
-                          ),
-                        ],
+                      return Builder(
+                        builder: (context) {
+                          if (!agora.joined) {
+                            return _buildLoadingState();
+                          }
+
+                          final hasGuestInBloc = context
+                              .select<LiveHostBloc, bool>(
+                                (b) => b.state.activeGuestUuid != null,
+                              );
+
+                          final hasRemoteUid =
+                              agora.primaryRemoteUid.value != null;
+                          final remoteHasVideo = agora.remoteHasVideo;
+
+                          debugPrint(
+                            '🎥 Video State - Guest in BLoC: $hasGuestInBloc, '
+                            'Remote UID: $hasRemoteUid, '
+                            'Remote has video: $remoteHasVideo',
+                          );
+
+                          if (!hasGuestInBloc || !hasRemoteUid) {
+                            // Single host view - full screen with elegant overlay
+                            return Stack(
+                              children: [
+                                // Full screen host video
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.zero,
+                                    child: agora.localPreview(),
+                                  ),
+                                ),
+                                // Elegant gradient overlay
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.1),
+                                          Colors.black.withOpacity(0.3),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+
+                          // Modern two-up layout with host and guest
+                          return Stack(
+                            children: [
+                              // Host video - main content (larger)
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                // Host takes 65% of screen
+                                child: _buildHostVideoWithOverlay(),
+                              ),
+
+                              // Guest video - floating panel (smaller)
+                              Positioned(
+                                right: 16,
+                                bottom: 100, // Position above bottom actions
+                                width:
+                                    MediaQuery.of(context).size.width *
+                                    0.40, // 35% of screen width
+                                height:
+                                    MediaQuery.of(context).size.width *
+                                    0.40 *
+                                    1.77, // Maintain 16:9 aspect
+                                child: _buildGuestVideoFloatingPanel(),
+                              ),
+
+                              // Connection status indicator
+                              if (!remoteHasVideo)
+                                Positioned(
+                                  right: 16,
+                                  bottom:
+                                      100 +
+                                      MediaQuery.of(context).size.width *
+                                          0.35 *
+                                          1.77 +
+                                      8,
+                                  child: _buildConnectionStatus(),
+                                ),
+                            ],
+                          );
+                        },
                       );
                     },
                   ),
                 ),
+
                 // ===== Top Bar (fixed alignment) =====
                 // ===== Top header (single tight glass bar) =====
                 Positioned(
@@ -322,6 +417,174 @@ class _LiveHostPageState extends State<LiveHostPage> {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
     if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}k';
     return '$v';
+  }
+
+  Widget _buildHostVideoWithOverlay() {
+    return Stack(
+      children: [
+        // Host video
+        ClipRRect(borderRadius: BorderRadius.zero, child: agora.localPreview()),
+        // Elegant gradient overlay
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black.withOpacity(0.2)],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGuestVideoFloatingPanel() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: Stack(
+        children: [
+          // Main guest video container
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  // Guest video
+                  agora.primaryRemoteView(),
+
+                  // Shimmer effect overlay when connecting
+                  if (!agora.remoteHasVideo)
+                    Container(
+                      color: Colors.black,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFFFF6A00),
+                              ),
+                              strokeWidth: 2,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Connecting...',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          // Guest label
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.person_rounded,
+                    color: Colors.orangeAccent,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'GUEST',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Audio indicator
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.mic_rounded,
+                color: Colors.greenAccent,
+                size: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionStatus() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: agora.remoteHasVideo
+                  ? Colors.greenAccent
+                  : Colors.orangeAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            agora.remoteHasVideo ? 'Live' : 'Connecting...',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

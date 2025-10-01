@@ -265,8 +265,3 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     return super.close();
   }
 }
-
-class _ActiveGuestUpdated extends ViewerEvent {
-  final String? uuid;
-  const _ActiveGuestUpdated(this.uuid);
-}

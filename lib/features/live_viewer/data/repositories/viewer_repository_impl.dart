@@ -42,11 +42,10 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     this.startedAt,
   }) : _rtc = AgoraViewerService(
          onTokenRefresh: (_) async {
-           // Audience tokens might refresh; ask server for the correct role
            final token = await _fetchRtcTokenStatic(
              http: http,
              livestreamParam: livestreamParam,
-             role: "audience", // 'audience' | 'publisher'
+             role: "audience",
            );
            return token;
          },
@@ -65,6 +64,12 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   final _endedCtrl = StreamController<void>.broadcast();
   final _myApprovalCtrl = StreamController<bool>.broadcast();
   final _activeGuestCtrl = StreamController<String?>.broadcast();
+
+  // ✅ FIXED: Initialize missing stream controllers
+  final _errorCtrl = StreamController<String>.broadcast();
+  final _participantRoleCtrl = StreamController<String>.broadcast();
+  final _participantRemovedCtrl = StreamController<String>.broadcast();
+
   String? _activeGuestUuid;
   Timer? _clockTimer;
   Future<void>? _wiringFuture;
@@ -77,6 +82,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   ValueListenable<bool> get hostHasVideo => _rtc.hostHasVideo;
   @override
   ValueListenable<bool> get guestHasVideo => _rtc.guestHasVideo;
+
   // ========= Host info =========
   @override
   Future<HostInfo> fetchHostInfo() async {
@@ -131,11 +137,9 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       debugPrint('⚠️ Auto-join as audience failed: $e');
       _myApprovalCtrl.add(false);
 
-      // Check if it's an API error (like being removed from stream)
       if (e is DioException) {
         final errorMessage = _extractErrorMessage(e);
         if (errorMessage.isNotEmpty) {
-          // Broadcast the error message to the UI
           _errorCtrl.add(errorMessage);
         }
       }
@@ -208,7 +212,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
         final newRole = participantData['role']?.toString() ?? 'audience';
         debugPrint('🎯 Current user role changed to: $newRole');
 
-        // await _handleRoleChange(newRole);
         await _handleRoleChange(newRole);
         _participantRoleCtrl.add(newRole);
       }
@@ -222,6 +225,23 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
           participantUuid == _activeGuestUuid) {
         _activeGuestUuid = null;
         _activeGuestCtrl.add(null);
+      }
+    });
+
+    // ✅ FIXED: Handle participant leaving properly
+    pusher.bind(chMeta, 'participant.left', (m) async {
+      debugPrint('participant.left: $m');
+      final participantData = m is Map
+          ? m.cast<String, dynamic>()
+          : <String, dynamic>{};
+
+      final participantUuid = participantData['user_uuid']?.toString();
+
+      // If active guest left voluntarily, clear it
+      if (participantUuid != null && participantUuid == _activeGuestUuid) {
+        _activeGuestUuid = null;
+        _activeGuestCtrl.add(null);
+        debugPrint('🎯 Active guest left the stream: $participantUuid');
       }
     });
 
@@ -273,22 +293,20 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     _wired = true;
   }
 
-  // Add these new stream controllers for error and participant events
-  final _errorCtrl = StreamController<String>.broadcast();
-  final _participantRoleCtrl = StreamController<String>.broadcast();
-  final _participantRemovedCtrl = StreamController<String>.broadcast();
-
-  // Add these new stream getters to the repository interface
+  // ✅ FIXED: Add these new stream getters to the repository interface
+  @override
   Stream<String> watchErrors() {
     _ensureWiredOnce();
     return _errorCtrl.stream;
   }
 
+  @override
   Stream<String> watchParticipantRoleChanges() {
     _ensureWiredOnce();
     return _participantRoleCtrl.stream;
   }
 
+  @override
   Stream<String> watchParticipantRemovals() {
     _ensureWiredOnce();
     return _participantRemovedCtrl.stream;
@@ -304,26 +322,31 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     }
   }
 
-  // Helper method to handle role changes
+  // ✅ IMPROVED: Helper method to handle role changes
   Future<void> _handleRoleChange(String newRole) async {
     try {
+      debugPrint('🔄 Handling role change to: $newRole');
+
       if (newRole == 'guest' || newRole == 'cohost') {
-        // ✅ Correct path: promote-in-place to publisher
+        // promote → publisher
         final creds = await _fetchRtcCreds(role: 'publisher');
         await _rtc.promoteToCoHost(rtcToken: creds.token);
-        // Rejoin with publisher role for guest/cohost
-        // final creds = await _fetchRtcCreds(role: 'publisher');
-        // await _rtc.leave();
-        // await _rtc.joinAudience(
-        //   appId: creds.appId,
-        //   channel: creds.channel,
-        //   uidType: creds.uidType,
-        //   uid: creds.uid,
-        //   rtcToken: creds.token,
-        // );
+        debugPrint('✅ Successfully promoted to co-host/guest');
+      } else {
+        // demote → audience
+        await _rtc.demoteToAudience();
+        // Renew audience token
+        final audToken = await _fetchRtcTokenStatic(
+          http: http,
+          livestreamParam: livestreamParam,
+          role: 'audience',
+        );
+        await _rtc.engine?.renewToken(audToken);
+        debugPrint('✅ Successfully demoted to audience');
       }
     } catch (e) {
       debugPrint('⚠️ Role change handling failed: $e');
+      _errorCtrl.add('Failed to handle role change: $e');
     }
   }
 
@@ -390,18 +413,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     });
   }
 
-  Map<String, dynamic> _asMap(dynamic data) {
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return data.cast<String, dynamic>();
-    if (data is String) {
-      try {
-        final m = jsonDecode(data);
-        if (m is Map) return m.cast<String, dynamic>();
-      } catch (_) {}
-    }
-    return <String, dynamic>{};
-  }
-
   // ========= Contract (streams) =========
   @override
   Stream<Duration> watchLiveClock() {
@@ -458,9 +469,9 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     if (t.isEmpty) return;
     try {
       await http.dio.post('$_basePath/chat', data: {'text': t});
-      // message arrives via pusher
     } catch (e) {
       debugPrint('⚠️ sendComment failed: $e');
+      _errorCtrl.add('Failed to send comment: $e');
     }
   }
 
@@ -470,31 +481,9 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   @override
   Future<int> share() async => 0;
 
-  /// Viewer join (view-only). We listen for join.handled to be accepted/declined.
   @override
   Future<void> requestToJoin() async {
-    // await _ensureWiredOnce();
-    // try {
-    //   final res = await http.dio.post('$_basePath/join');
-    //   final m = _asMap(res.data);
-
-    //   // ✅ accept any shape and store as string
-    //   final rid = m['id'] ?? m['request_id'];
-    //   _myJoinRequestId = rid == null ? null : '$rid';
-
-    //   if (kDebugMode) debugPrint('▶️ join request id=$_myJoinRequestId');
-    // } on DioException catch (e) {
-    //   final m = _asMap(e.response?.data);
-    //   final msg = '${m['message'] ?? ''}'.toLowerCase();
-    //   final rid = m['id'] ?? m['request_id'];
-
-    //   // ✅ handle idempotent “already pending”
-    //   if (e.response?.statusCode == 200 || msg.contains('already')) {
-    //     if (rid != null) _myJoinRequestId = '$rid';
-    //     return;
-    //   }
-    //   rethrow;
-    // }
+    // Implementation commented out as per your code
   }
 
   @override
@@ -505,7 +494,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
   void dispose() {
     try {
       _clockTimer?.cancel();
-      http.dio.post('$_basePath/leave').ignore(); // idempotent server side
+      http.dio.post('$_basePath/leave').ignore();
       pusher.unsubscribeAll();
     } catch (_) {}
 
@@ -518,6 +507,9 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     _endedCtrl.close();
     _myApprovalCtrl.close();
     _activeGuestCtrl.close();
+    _errorCtrl.close();
+    _participantRoleCtrl.close();
+    _participantRemovedCtrl.close();
     _rtc.leave().ignore();
     _rtc.disposeEngine().ignore();
   }
@@ -531,7 +523,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       );
       final m = _asMap(res.data);
 
-      // Check for API errors in response
       if (m['error'] != null) {
         throw DioException(
           requestOptions: RequestOptions(path: '$_basePath/rtc'),
@@ -550,7 +541,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
         channel: '${m['channel'] ?? channelName}',
       );
     } on DioException catch (e) {
-      // Propagate the error with proper message
       final errorMessage = _extractErrorMessage(e);
       _errorCtrl.add(errorMessage);
       rethrow;
@@ -570,6 +560,18 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
         ? (res.data as Map)
         : jsonDecode(res.data as String) as Map;
     return '${m['agora']?['rtc_token'] ?? m['rtc_token']}';
+  }
+
+  Map<String, dynamic> _asMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return data.cast<String, dynamic>();
+    if (data is String) {
+      try {
+        final m = jsonDecode(data);
+        if (m is Map) return m.cast<String, dynamic>();
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
   }
 
   // ========= VideoSurfaceProvider =========
@@ -598,7 +600,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
 class _RtcCreds {
   final String appId;
   final String token;
-  final String uidType; // 'uid' | 'userAccount'
+  final String uidType;
   final String uid;
   final String channel;
   _RtcCreds({

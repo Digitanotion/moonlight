@@ -386,7 +386,8 @@ void _registerLiveHost() {
   );
 
   sl.registerFactory<LiveHostBloc>(
-    () => LiveHostBloc(sl<LiveSessionRepository>()),
+    () =>
+        LiveHostBloc(GetIt.I<LiveSessionRepository>(), GetIt.I<AgoraService>()),
   );
 }
 

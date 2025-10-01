@@ -4,9 +4,31 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+// Add this state class at the top level, outside AgoraService
+class RemoteUserState {
+  final int uid;
+  final bool hasVideo;
+  final bool hasAudio;
+  final bool joined;
+
+  const RemoteUserState({
+    required this.uid,
+    required this.hasVideo,
+    required this.hasAudio,
+    required this.joined,
+  });
+
+  RemoteUserState copyWith({bool? hasVideo, bool? hasAudio, bool? joined}) {
+    return RemoteUserState(
+      uid: uid,
+      hasVideo: hasVideo ?? this.hasVideo,
+      hasAudio: hasAudio ?? this.hasAudio,
+      joined: joined ?? this.joined,
+    );
+  }
+}
+
 /// AgoraService for hosting (Broadcaster).
-/// Supports BOTH numeric UID ("uid") and string userAccount ("userAccount").
-/// Your backend currently returns numeric: { uid_type: "uid", uid: 5 }.
 class AgoraService with ChangeNotifier {
   RtcEngine? _engine;
 
@@ -30,8 +52,26 @@ class AgoraService with ChangeNotifier {
   RtcEngine? get engine => _engine;
 
   // Primary remote publisher (your single guest). Null when none.
-  int? _primaryRemoteUid;
-  int? get primaryRemoteUid => _primaryRemoteUid;
+  final ValueNotifier<int?> primaryRemoteUid = ValueNotifier<int?>(null);
+  final ValueNotifier<bool> _remoteHasVideo = ValueNotifier<bool>(false);
+
+  bool get remoteHasVideo => _remoteHasVideo.value;
+
+  // Enhanced remote user tracking
+  final ValueNotifier<Map<int, RemoteUserState>> remoteUsers =
+      ValueNotifier<Map<int, RemoteUserState>>({});
+
+  // Legacy tracking maps (keep for compatibility if needed elsewhere)
+  final Map<int, bool> _remoteVideoStates = {};
+  final Map<int, bool> _remoteAudioStates = {};
+
+  @override
+  void dispose() {
+    remoteUsers.dispose();
+    primaryRemoteUid.dispose();
+    _remoteHasVideo.dispose();
+    super.dispose();
+  }
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -135,7 +175,6 @@ class AgoraService with ChangeNotifier {
     // 🔧 Lock front camera & set encoder BEFORE preview
     await e.setCameraCapturerConfiguration(
       const CameraCapturerConfiguration(
-        // preference: CaptureOutputPreference.performance,
         cameraDirection: CameraDirection.cameraFront,
       ),
     );
@@ -145,7 +184,7 @@ class AgoraService with ChangeNotifier {
       const VideoEncoderConfiguration(
         dimensions: VideoDimensions(width: 720, height: 1280),
         frameRate: 30,
-        bitrate: 1800, // kbps; let Agora auto if you prefer (set null)
+        bitrate: null, // kbps; let Agora auto if you prefer (set null)
         orientationMode: OrientationMode.orientationModeFixedPortrait,
       ),
     );
@@ -157,7 +196,7 @@ class AgoraService with ChangeNotifier {
       await e.setParameters(r'{"rtc.string_uid":true}');
     }
 
-    // Events
+    // Events - FIXED: Correct parameter types for Agora SDK
     e.registerEventHandler(
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection conn, int elapsed) {
@@ -169,36 +208,146 @@ class AgoraService with ChangeNotifier {
           }
           notifyListeners();
         },
+
         onUserJoined: (RtcConnection conn, int remoteUid, int elapsed) {
-          // For host: the only other publisher is the guest.
-          _primaryRemoteUid ??= remoteUid;
-          if (kDebugMode)
-            debugPrint('[Agora] remote joined (guest?) $remoteUid');
+          if (kDebugMode) {
+            debugPrint('[Agora] Remote user joined: $remoteUid');
+          }
+
+          // Initialize user state
+          remoteUsers.value = {
+            ...remoteUsers.value,
+            remoteUid: RemoteUserState(
+              uid: remoteUid,
+              hasVideo: false,
+              hasAudio: false,
+              joined: true,
+            ),
+          };
+
+          // Set as primary remote if we don't have one yet
+          if (primaryRemoteUid.value == null) {
+            primaryRemoteUid.value = remoteUid;
+            if (kDebugMode) {
+              debugPrint('[Agora] Setting primary remote UID: $remoteUid');
+            }
+          }
+
           notifyListeners();
         },
+
         onUserOffline:
             (RtcConnection conn, int remoteUid, UserOfflineReasonType reason) {
-              if (_primaryRemoteUid == remoteUid) {
-                _primaryRemoteUid = null;
-                if (kDebugMode)
-                  debugPrint('[Agora] guest went offline $remoteUid');
-                notifyListeners();
+              if (kDebugMode) {
+                debugPrint(
+                  '[Agora] Remote user offline: $remoteUid, reason: $reason',
+                );
               }
+
+              // Remove from tracking
+              remoteUsers.value = Map.from(remoteUsers.value)
+                ..remove(remoteUid);
+
+              // Clear primary if this was the primary
+              if (primaryRemoteUid.value == remoteUid) {
+                primaryRemoteUid.value = null;
+                _remoteHasVideo.value = false;
+              }
+
+              notifyListeners();
             },
 
-        onLocalAudioStateChanged: (RtcConnection conn, state, error) {
-          debugPrint('[Agora] localAudio state=$state error=$error');
+        onRemoteVideoStateChanged:
+            (
+              RtcConnection conn,
+              int remoteUid,
+              RemoteVideoState state,
+              RemoteVideoStateReason reason,
+              int elapsed,
+            ) {
+              if (kDebugMode) {
+                debugPrint(
+                  '[Agora] Remote video state changed - UID: $remoteUid, State: $state, Reason: $reason',
+                );
+              }
+
+              final hasVideo =
+                  state == RemoteVideoState.remoteVideoStateDecoding ||
+                  state == RemoteVideoState.remoteVideoStateStarting;
+
+              // Update user state
+              if (remoteUsers.value.containsKey(remoteUid)) {
+                remoteUsers.value = {
+                  ...remoteUsers.value,
+                  remoteUid: remoteUsers.value[remoteUid]!.copyWith(
+                    hasVideo: hasVideo,
+                  ),
+                };
+              }
+
+              // Update primary remote video state
+              if (remoteUid == primaryRemoteUid.value) {
+                _remoteHasVideo.value = hasVideo;
+                if (kDebugMode) {
+                  debugPrint('[Agora] Primary remote video state: $hasVideo');
+                }
+              }
+
+              notifyListeners();
+            },
+
+        onRemoteAudioStateChanged:
+            (
+              RtcConnection conn,
+              int remoteUid,
+              RemoteAudioState state,
+              RemoteAudioStateReason reason,
+              int elapsed,
+            ) {
+              final hasAudio =
+                  state == RemoteAudioState.remoteAudioStateDecoding;
+
+              // Update user state
+              if (remoteUsers.value.containsKey(remoteUid)) {
+                remoteUsers.value = {
+                  ...remoteUsers.value,
+                  remoteUid: remoteUsers.value[remoteUid]!.copyWith(
+                    hasAudio: hasAudio,
+                  ),
+                };
+              }
+
+              notifyListeners();
+            },
+
+        // FIXED: Correct parameter types for local audio state
+        onLocalAudioStateChanged:
+            (
+              RtcConnection conn,
+              LocalAudioStreamState state,
+              LocalAudioStreamReason error,
+            ) {
+              debugPrint('[Agora] localAudio state=$state error=$error');
+            },
+
+        // FIXED: Correct parameter types for camera exposure (int, int, int, int)
+        onCameraExposureAreaChanged: (int x, int y, int width, int height) {
+          debugPrint(
+            '[Agora] camera exposure area changed: x=$x, y=$y, w=$width, h=$height',
+          );
         },
-        onCameraExposureAreaChanged: (x, y, w, h) {
-          debugPrint('[Agora] camera exposure area changed');
-        },
+
         onLeaveChannel: (RtcConnection conn, RtcStats stats) {
           _joined = false;
-          _primaryRemoteUid = null;
-          if (kDebugMode)
+          primaryRemoteUid.value = null;
+          _remoteHasVideo.value = false;
+          remoteUsers.value = {};
+          if (kDebugMode) {
             debugPrint('[Agora] onLeaveChannel ch=${conn.channelId}');
+          }
           notifyListeners();
         },
+
         onError: (ErrorCodeType code, String? msg) {
           _lastError = 'Agora error $code ${msg ?? ""}';
           debugPrint('❌ $_lastError');
@@ -207,6 +356,7 @@ class AgoraService with ChangeNotifier {
           );
           notifyListeners();
         },
+
         onTokenPrivilegeWillExpire: (RtcConnection conn, String t) {
           if (kDebugMode)
             debugPrint(
@@ -306,11 +456,14 @@ class AgoraService with ChangeNotifier {
     await _engine?.switchCamera();
   }
 
+  // Make sure we reset on leave
   Future<void> leave() async {
     try {
       await _engine?.leaveChannel();
     } finally {
       _joined = false;
+      primaryRemoteUid.value = null;
+      _remoteHasVideo.value = false;
       notifyListeners();
     }
   }
@@ -332,20 +485,29 @@ class AgoraService with ChangeNotifier {
       _localUid = null;
       _lastError = null;
       _joined = false;
-      _primaryRemoteUid = null;
+      primaryRemoteUid.value = null;
+      _remoteHasVideo.value = false;
       notifyListeners();
     }
+  }
+
+  /// Clear remote guest explicitly (e.g., when host returns them to viewer)
+  void clearGuest() {
+    primaryRemoteUid.value = null;
+    _remoteHasVideo.value = false;
   }
 
   // Render local preview (uid:0 canvas is standard for local view)
   Widget localPreview({double? width, double? height}) {
     final e = _engine;
-    if (e == null) return const Center(child: CircularProgressIndicator());
+    if (e == null)
+      return const SizedBox.expand(child: ColoredBox(color: Colors.black));
     return SizedBox(
       width: width,
       height: height,
       child: AgoraVideoView(
         controller: VideoViewController(
+          useFlutterTexture: true,
           rtcEngine: e,
           canvas: const VideoCanvas(uid: 0),
         ),
@@ -361,20 +523,77 @@ class AgoraService with ChangeNotifier {
     return AgoraVideoView(
       controller: VideoViewController.remote(
         rtcEngine: e,
+        useFlutterTexture: true,
         canvas: VideoCanvas(uid: remoteUid),
         connection: RtcConnection(channelId: ch),
       ),
     );
   }
 
-  /// Convenience: render the "primary" remote (guest) if present.
-  Widget primaryRemoteView({double? width, double? height}) {
-    final uid = _primaryRemoteUid;
-    if (uid == null) {
-      return const SizedBox.shrink();
+  /// Render the primary remote (guest). Black if none.
+  Widget primaryRemoteView() {
+    final e = _engine;
+    final ch = _channelId;
+
+    if (e == null || ch == null || primaryRemoteUid.value == null) {
+      return _buildBlackPlaceholder('No guest');
     }
-    return remoteView(uid);
+
+    return ValueListenableBuilder<int?>(
+      valueListenable: primaryRemoteUid,
+      builder: (_, remoteUid, __) {
+        if (remoteUid == null) {
+          return _buildBlackPlaceholder('No guest');
+        }
+
+        return ValueListenableBuilder<bool>(
+          valueListenable: _remoteHasVideo,
+          builder: (_, hasVideo, __) {
+            if (!hasVideo) {
+              return _buildBlackPlaceholder('Guest video\nconnecting...');
+            }
+
+            return AgoraVideoView(
+              controller: VideoViewController.remote(
+                rtcEngine: e,
+                useFlutterTexture: true,
+                canvas: VideoCanvas(uid: remoteUid),
+                connection: RtcConnection(channelId: ch),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
+
+  Widget _buildBlackPlaceholder(String text) {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white54, fontSize: 14),
+        ),
+      ),
+    );
+  }
+
+  // Method to explicitly set a guest (useful for manual guest management)
+  void setPrimaryGuest(int remoteUid) {
+    if (remoteUsers.value.containsKey(remoteUid)) {
+      primaryRemoteUid.value = remoteUid;
+      _remoteHasVideo.value = remoteUsers.value[remoteUid]!.hasVideo;
+      if (kDebugMode) {
+        debugPrint('[Agora] Manually set primary guest: $remoteUid');
+      }
+      notifyListeners();
+    }
+  }
+
+  // Get all remote users for debugging
+  List<int> get remoteUserIds => remoteUsers.value.keys.toList();
 
   // ---------------------------------------------------------------------------
   // Internals

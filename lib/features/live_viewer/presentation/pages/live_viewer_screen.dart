@@ -27,7 +27,6 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Assumes ViewerBloc is provided higher up (e.g., by the route)
     return Scaffold(
       body: _BackgroundVideo(
         repository: widget.repository,
@@ -36,7 +35,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
           bottom: false,
           child: Stack(
             children: [
-              // Live ended → toast + pop
+              // Live ended listener
               BlocListener<ViewerBloc, ViewerState>(
                 listenWhen: (p, n) => p.isEnded != n.isEnded,
                 listener: (ctx, s) async {
@@ -54,13 +53,18 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
                 child: const SizedBox.shrink(),
               ),
 
-              // overlays
+              // Two-up layout overlay - MOVED UP in the stack for proper layering
+              Positioned.fill(
+                child: _TwoUpSwitch(repository: widget.repository),
+              ),
+
+              // All other overlays - these should be above the video layout
               const _TopStatusBar(),
               const _TopicPill(),
               const _HostCard(),
               const _GuestJoinedBanner(),
               const _GiftToast(),
-              const _PauseOverlay(),
+              const _PauseOverlay(), // This will handle global pause state
               const _WaitingOverlay(),
               const _RoleChangeToast(),
 
@@ -69,7 +73,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
 
               // Error messages
               const _ErrorToast(),
-              // chat (bottom-left)
+
+              // Chat panel (bottom-left)
               Align(
                 alignment: Alignment.bottomLeft,
                 child: Padding(
@@ -89,7 +94,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
                 ),
               ),
 
-              // request-to-join (bottom-center)
+              // Request-to-join button (bottom-center)
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
@@ -108,7 +113,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
                 ),
               ),
 
-              // comment bar (bottom)
+              // Comment bar (bottom)
               Align(
                 alignment: Alignment.bottomCenter,
                 child: BlocBuilder<ViewerBloc, ViewerState>(
@@ -129,12 +134,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
                 ),
               ),
 
-              // right rail
+              // Right rail
               const Positioned(right: 10, bottom: 140, child: _RightRail()),
-              // NEW: Two-up layout overlay when guest is active
-              Positioned.fill(
-                child: _TwoUpSwitch(repository: widget.repository),
-              ),
             ],
           ),
         ),
@@ -165,34 +166,45 @@ class _BackgroundVideo extends StatelessWidget {
       ),
     );
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (videoProvider == null)
-          fallback
-        else
-          ValueListenableBuilder<bool>(
-            valueListenable: videoProvider.hostHasVideo,
-            builder: (_, hasVideo, __) =>
-                hasVideo ? videoProvider.buildHostVideo() : fallback,
-          ),
-        Container(color: Colors.black.withOpacity(0.15)),
-        child,
-        // Keep the small bubble ONLY when we are not in the two-up layout.
-        if (localPreview != null)
-          BlocBuilder<ViewerBloc, ViewerState>(
-            buildWhen: (p, n) =>
-                p.activeGuestUuid != n.activeGuestUuid ||
-                p.currentRole != n.currentRole,
-            builder: (_, s) {
-              final iAmGuest =
-                  s.currentRole == 'guest' || s.currentRole == 'cohost';
-              final anyGuest = s.activeGuestUuid != null || iAmGuest;
-              if (anyGuest) return const SizedBox.shrink();
-              return Positioned(right: 12, bottom: 150, child: localPreview);
-            },
-          ),
-      ],
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) =>
+          p.activeGuestUuid != n.activeGuestUuid ||
+          p.currentRole != n.currentRole,
+      builder: (context, s) {
+        final iAmGuest = s.currentRole == 'guest' || s.currentRole == 'cohost';
+        final anyGuest = s.activeGuestUuid != null || iAmGuest;
+
+        // When in two-up mode, show black background and let _TwoUpSwitch handle videos
+        if (anyGuest) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              const ColoredBox(color: Colors.black),
+              child,
+            ],
+          );
+        }
+
+        // Normal single-host view
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (videoProvider == null)
+              fallback
+            else
+              ValueListenableBuilder<bool>(
+                valueListenable: videoProvider.hostHasVideo,
+                builder: (_, hasVideo, __) =>
+                    hasVideo ? videoProvider.buildHostVideo() : fallback,
+              ),
+            Container(color: Colors.black.withOpacity(0.15)),
+            child,
+            // Local preview bubble only when NOT in two-up mode AND not paused
+            if (localPreview != null && !anyGuest && !s.isPaused)
+              Positioned(right: 12, bottom: 150, child: localPreview),
+          ],
+        );
+      },
     );
   }
 }
@@ -1270,6 +1282,7 @@ class _ErrorToast extends StatelessWidget {
 }
 
 /// Renders the two-up tiles when either you are guest or there is an active guest.
+/// Renders the two-up tiles when either you are guest or there is an active guest.
 class _TwoUpSwitch extends StatelessWidget {
   final ViewerRepository repository;
   const _TwoUpSwitch({required this.repository});
@@ -1280,36 +1293,78 @@ class _TwoUpSwitch extends StatelessWidget {
         ? repository as VideoSurfaceProvider
         : null;
     if (vp == null) return const SizedBox.shrink();
+
     return BlocBuilder<ViewerBloc, ViewerState>(
       buildWhen: (p, n) =>
           p.activeGuestUuid != n.activeGuestUuid ||
-          p.currentRole != n.currentRole,
+          p.currentRole != n.currentRole ||
+          p.isPaused != n.isPaused, // ADD PAUSE STATE
       builder: (_, s) {
         final iAmGuest = s.currentRole == 'guest' || s.currentRole == 'cohost';
         final anyGuest = s.activeGuestUuid != null || iAmGuest;
+
+        // CRITICAL FIX: Only show two-up layout when there's actually a guest
         if (!anyGuest) return const SizedBox.shrink();
 
-        // Two tiles: host (top) + guest (bottom). If I am guest -> bottom = my local.
-        final top = vp.buildHostVideo();
-        final bottom = iAmGuest
-            ? (vp.buildLocalPreview() ?? const SizedBox.shrink())
-            : vp.buildGuestVideo();
+        return IgnorePointer(
+          // Allow taps to pass through to underlying UI when not paused
+          ignoring: s.isPaused,
+          child: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Host video background
+                    Positioned.fill(child: vp.buildHostVideo()),
+                    // Overlay for pause state - show when stream is paused
+                    if (s.isPaused) _buildPauseOverlay(),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Guest video or local preview
+                    Positioned.fill(
+                      child: iAmGuest
+                          ? (vp.buildLocalPreview() ?? const SizedBox.shrink())
+                          : vp.buildGuestVideo(),
+                    ),
+                    // Guest controls if I am guest
+                    if (iAmGuest && !s.isPaused) const _GuestControls(),
+                    // Show pause overlay on guest video too when stream is paused
+                    if (s.isPaused) _buildPauseOverlay(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-        return Column(
+  Widget _buildPauseOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(child: top),
-            const SizedBox(height: 2),
-            Expanded(
-              child: Stack(
-                children: [
-                  Positioned.fill(child: bottom),
-                  if (iAmGuest) const _GuestControls(),
-                ],
+            Icon(Icons.pause_circle_filled, color: Colors.white, size: 64),
+            SizedBox(height: 16),
+            Text(
+              'Stream Paused',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }

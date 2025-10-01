@@ -13,6 +13,7 @@ abstract class LiveSessionRepository {
   Stream<GiftEvent> giftsStream();
   Stream<void> endedStream();
   Stream<JoinHandled> joinHandledStream();
+  Stream<String?> activeGuestUuidStream();
 
   /// Ends the livestream on the server and returns final analytics.
   Future<LiveEndAnalytics> endAndFetchAnalytics();
