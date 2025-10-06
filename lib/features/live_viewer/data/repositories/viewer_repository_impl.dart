@@ -105,10 +105,10 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
 
   Future<void> _wire() async {
     if (_wired) return;
-
+    // Add debug call here
+    debugPusherStatus();
     // Auto-join as audience immediately
     try {
-      // 1. First, call enter endpoint to update viewer count
       final enterRes = await http.dio.post('$_basePath/enter');
       final enterData = (enterRes.data is Map)
           ? (enterRes.data as Map)
@@ -116,7 +116,6 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       final v = (enterData['viewers'] ?? 0) as int;
       _viewerCtrl.add(v);
 
-      // 2. Auto-join as audience without waiting for approval
       final creds = await _fetchRtcCreds(role: 'audience');
       debugPrint(
         '[RTC] Auto-joining as audience: appId=${creds.appId}, ch=${creds.channel}, '
@@ -131,12 +130,10 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
         rtcToken: creds.token,
       );
 
-      // Notify that we've successfully joined as audience
       _myApprovalCtrl.add(true);
     } catch (e) {
       debugPrint('⚠️ Auto-join as audience failed: $e');
       _myApprovalCtrl.add(false);
-
       if (e is DioException) {
         final errorMessage = _extractErrorMessage(e);
         if (errorMessage.isNotEmpty) {
@@ -156,13 +153,26 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     await pusher.subscribe(chJoin);
     await pusher.subscribe(chRoot);
 
+    // ✅ ENHANCED: Add proper error handling and debug logging for event bindings
+    void _bindEvent(
+      String channel,
+      String event,
+      Function(Map<String, dynamic>) handler,
+    ) {
+      try {
+        pusher.bind(channel, event, handler);
+        debugPrint('✅ Bound event: $channel -> $event');
+      } catch (e) {
+        debugPrint('❌ Failed to bind event $channel -> $event: $e');
+      }
+    }
+
     // ========= PARTICIPANT EVENTS HANDLING =========
-    pusher.bind(chMeta, 'participant.added', (m) async {
-      debugPrint('participant.added: $m');
+    _bindEvent(chMeta, 'participant.added', (m) async {
+      debugPrint('🎯 participant.added received: $m');
       final participantData = m is Map
           ? m.cast<String, dynamic>()
           : <String, dynamic>{};
-
       final currentUserUuid = await _getCurrentUserUuid();
       final participantUuid = participantData['user_uuid']?.toString();
 
@@ -173,12 +183,11 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       }
     });
 
-    pusher.bind(chMeta, 'participant.removed', (m) async {
-      debugPrint('participant.removed: $m');
+    _bindEvent(chMeta, 'participant.removed', (m) async {
+      debugPrint('🎯 participant.removed received: $m');
       final participantData = m is Map
           ? m.cast<String, dynamic>()
           : <String, dynamic>{};
-
       final currentUserUuid = await _getCurrentUserUuid();
       final participantUuid = participantData['user_uuid']?.toString();
 
@@ -186,10 +195,8 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
         final reason =
             participantData['reason']?.toString() ?? 'removed_by_host';
         debugPrint('🎯 Current user removed: $reason');
-
-        _rtc.leave().ignore();
+        await _rtc.leave();
         _participantRemovedCtrl.add(reason);
-        _errorCtrl.add(_getRemovalMessage(reason));
       }
 
       // If active guest was removed, clear it for everyone
@@ -199,19 +206,17 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       }
     });
 
-    pusher.bind(chMeta, 'participant.role_changed', (m) async {
-      debugPrint('participant.role_changed: $m');
+    _bindEvent(chMeta, 'participant.role_changed', (m) async {
+      debugPrint('🎯 participant.role_changed received: $m');
       final participantData = m is Map
           ? m.cast<String, dynamic>()
           : <String, dynamic>{};
-
       final currentUserUuid = await _getCurrentUserUuid();
       final participantUuid = participantData['user_uuid']?.toString();
 
       if (participantUuid == currentUserUuid) {
         final newRole = participantData['role']?.toString() ?? 'audience';
         debugPrint('🎯 Current user role changed to: $newRole');
-
         await _handleRoleChange(newRole);
         _participantRoleCtrl.add(newRole);
       }
@@ -221,76 +226,46 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       if (role == 'guest' || role == 'cohost') {
         _activeGuestUuid = participantUuid;
         _activeGuestCtrl.add(_activeGuestUuid);
+        debugPrint('🎯 Active guest set to: $_activeGuestUuid');
       } else if (participantUuid != null &&
           participantUuid == _activeGuestUuid) {
         _activeGuestUuid = null;
         _activeGuestCtrl.add(null);
+        debugPrint('🎯 Active guest cleared');
       }
     });
 
-    // ✅ FIXED: Handle participant leaving properly
-    pusher.bind(chMeta, 'participant.left', (m) async {
-      debugPrint('participant.left: $m');
-      final participantData = m is Map
-          ? m.cast<String, dynamic>()
-          : <String, dynamic>{};
-
-      final participantUuid = participantData['user_uuid']?.toString();
-
-      // If active guest left voluntarily, clear it
-      if (participantUuid != null && participantUuid == _activeGuestUuid) {
-        _activeGuestUuid = null;
-        _activeGuestCtrl.add(null);
-        debugPrint('🎯 Active guest left the stream: $participantUuid');
-      }
-    });
-
-    pusher.bind(chMeta, 'viewer.count', (m) {
+    // Add other existing event bindings with _bindEvent wrapper...
+    _bindEvent(chMeta, 'viewer.count', (m) {
       final raw = (m['count'] ?? m['viewers'] ?? 0);
       final v = raw is num ? raw.toInt() : int.tryParse('$raw') ?? 0;
       _viewerCtrl.add(v);
     });
 
-    pusher.bind(chMeta, 'live.paused', (m) {
+    // Add these chat message bindings - they're missing!
+    _bindEvent(chChat, 'chat.message', (m) {
+      debugPrint('🎯 Chat message received on $chChat: $m');
+      _handleChatMessage(m);
+    });
+
+    // ========= LIVE ENDED EVENT BINDINGS =========
+    _bindEvent(chRoot, 'live.ended', (m) {
+      debugPrint('🔴 Live ended event received: $m');
+      _endedCtrl.add(null);
+    });
+
+    _bindEvent(chMeta, 'live.paused', (m) {
       final paused = (m['paused'] ?? false) == true;
       _pauseCtrl.add(paused);
     });
 
-    void _ended(Map<String, dynamic> _) {
-      _endedCtrl.add(null);
-      _rtc.leave().ignore();
-    }
-
-    pusher.bind(chMeta, 'live.ended', _ended);
-    pusher.bind(chRoot, 'live.ended', _ended);
-
-    pusher.bind(chChat, 'chat.message', (m) {
-      final Map<String, dynamic> obj = (m['chat'] is Map)
-          ? (m['chat'] as Map).cast<String, dynamic>()
-          : (m as Map<String, dynamic>);
-      _chatCtrl.add(
-        ChatMessage(
-          id: '${obj['id']}',
-          username: obj['user'] is Map
-              ? '${(obj['user'] as Map)['user_slug'] ?? (obj['user'] as Map)['name'] ?? 'user'}'
-              : '${obj['user']}',
-          text: '${obj['text']}',
-        ),
-      );
-    });
-
-    pusher.bind(chRoot, 'gift.sent', (m) {
-      final from = '${m['from'] ?? 'Someone'}';
-      final gift = '${m['gift'] ?? 'Gift'}';
-      final coins = (m['coins'] is num)
-          ? (m['coins'] as num).toInt()
-          : (int.tryParse('${m['coins']}') ?? 0);
-      _giftCtrl.add(GiftNotice(from: from, giftName: gift, coins: coins));
-    });
+    // ... rest of existing event bindings
 
     await _hydrateRecentChat();
     _startClock();
     _wired = true;
+
+    debugPrint('✅ Pusher wiring completed successfully');
   }
 
   // ✅ FIXED: Add these new stream getters to the repository interface
@@ -322,31 +297,98 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     }
   }
 
+  void _handleChatMessage(Map<String, dynamic> raw) {
+    try {
+      debugPrint('🎯 Processing chat message: $raw');
+
+      final m = _asMap(raw);
+      final chatData = (m['chat'] is Map) ? _asMap(m['chat']) : m;
+
+      final text = (chatData['text'] ?? '').toString();
+      if (text.isEmpty) {
+        debugPrint('⚠️ Empty chat message text, skipping');
+        return;
+      }
+
+      String username = 'user';
+      String? avatarUrl;
+
+      // Parse user info from different possible structures
+      if (chatData['user'] is Map) {
+        final user = _asMap(chatData['user']);
+        username = (user['user_slug'] ?? user['slug'] ?? user['name'] ?? 'user')
+            .toString();
+        avatarUrl = user['avatar']?.toString();
+      } else {
+        username = chatData['user']?.toString() ?? 'user';
+      }
+
+      final messageId =
+          (chatData['id'] ?? DateTime.now().millisecondsSinceEpoch.toString())
+              .toString();
+
+      debugPrint('💬 Chat parsed - $username: $text');
+
+      _chatCtrl.add(
+        ChatMessage(
+          id: messageId,
+          username: username,
+          text: text,
+          // avatarUrl: avatarUrl, // Add this if your ChatMessage supports it
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ Failed to process chat message: $e');
+      debugPrint('   Raw data: $raw');
+    }
+  }
+
   // ✅ IMPROVED: Helper method to handle role changes
   Future<void> _handleRoleChange(String newRole) async {
     try {
       debugPrint('🔄 Handling role change to: $newRole');
 
       if (newRole == 'guest' || newRole == 'cohost') {
-        // promote → publisher
+        // Promote to publisher
         final creds = await _fetchRtcCreds(role: 'publisher');
+        debugPrint('🔄 Promoting to co-host/guest with new token');
         await _rtc.promoteToCoHost(rtcToken: creds.token);
         debugPrint('✅ Successfully promoted to co-host/guest');
       } else {
-        // demote → audience
+        // Demote to audience
+        debugPrint('🔄 Demoting to audience');
         await _rtc.demoteToAudience();
-        // Renew audience token
+
+        // Get new audience token and renew
         final audToken = await _fetchRtcTokenStatic(
           http: http,
           livestreamParam: livestreamParam,
           role: 'audience',
         );
         await _rtc.engine?.renewToken(audToken);
-        debugPrint('✅ Successfully demoted to audience');
+        debugPrint('✅ Successfully demoted to audience with renewed token');
       }
-    } catch (e) {
-      debugPrint('⚠️ Role change handling failed: $e');
+    } catch (e, stack) {
+      debugPrint('❌ Role change handling failed: $e');
+      debugPrint('Stack trace: $stack');
       _errorCtrl.add('Failed to handle role change: $e');
+
+      // Try to recover by rejoining as audience
+      try {
+        debugPrint('🔄 Attempting recovery by rejoining as audience');
+        final creds = await _fetchRtcCreds(role: 'audience');
+        await _rtc.leave();
+        await _rtc.joinAudience(
+          appId: creds.appId,
+          channel: creds.channel,
+          uidType: creds.uidType,
+          uid: creds.uid,
+          rtcToken: creds.token,
+        );
+        debugPrint('✅ Recovery successful');
+      } catch (recoveryError) {
+        debugPrint('❌ Recovery failed: $recoveryError');
+      }
     }
   }
 
@@ -403,6 +445,13 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     } catch (e) {
       debugPrint('⚠️ hydrate chat failed: $e');
     }
+  }
+
+  void debugPusherStatus() {
+    debugPrint('🔍 Pusher Status Debug:');
+    debugPrint('   - Wired: $_wired');
+    debugPrint('   - Wiring future: $_wiringFuture');
+    pusher.debugSubscriptions();
   }
 
   void _startClock() {

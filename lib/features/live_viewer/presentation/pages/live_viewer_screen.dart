@@ -1298,25 +1298,26 @@ class _TwoUpSwitch extends StatelessWidget {
       buildWhen: (p, n) =>
           p.activeGuestUuid != n.activeGuestUuid ||
           p.currentRole != n.currentRole ||
-          p.isPaused != n.isPaused, // ADD PAUSE STATE
+          p.isPaused != n.isPaused,
       builder: (_, s) {
         final iAmGuest = s.currentRole == 'guest' || s.currentRole == 'cohost';
         final anyGuest = s.activeGuestUuid != null || iAmGuest;
 
-        // CRITICAL FIX: Only show two-up layout when there's actually a guest
+        debugPrint(
+          '🎯 TwoUpSwitch: iAmGuest=$iAmGuest, anyGuest=$anyGuest, activeGuestUuid=${s.activeGuestUuid}',
+        );
+
+        // Only show two-up layout when there's actually a guest
         if (!anyGuest) return const SizedBox.shrink();
 
         return IgnorePointer(
-          // Allow taps to pass through to underlying UI when not paused
           ignoring: s.isPaused,
           child: Column(
             children: [
               Expanded(
                 child: Stack(
                   children: [
-                    // Host video background
                     Positioned.fill(child: vp.buildHostVideo()),
-                    // Overlay for pause state - show when stream is paused
                     if (s.isPaused) _buildPauseOverlay(),
                   ],
                 ),
@@ -1325,15 +1326,12 @@ class _TwoUpSwitch extends StatelessWidget {
               Expanded(
                 child: Stack(
                   children: [
-                    // Guest video or local preview
                     Positioned.fill(
                       child: iAmGuest
                           ? (vp.buildLocalPreview() ?? const SizedBox.shrink())
                           : vp.buildGuestVideo(),
                     ),
-                    // Guest controls if I am guest
                     if (iAmGuest && !s.isPaused) const _GuestControls(),
-                    // Show pause overlay on guest video too when stream is paused
                     if (s.isPaused) _buildPauseOverlay(),
                   ],
                 ),

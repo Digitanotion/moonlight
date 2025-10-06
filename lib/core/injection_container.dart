@@ -1,6 +1,7 @@
 // lib/core/injection_container.dart
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/features/home/data/datasources/live_feed_remote_datasource.dart';
@@ -126,10 +127,15 @@ Future<void> init() async {
   );
 
   // Load runtime config (with fallback if API is unreachable)
+  // --------- Load RuntimeConfig FIRST ---------
+  debugPrint('🔄 STEP 1: Loading RuntimeConfig...');
   RuntimeConfig cfg;
   try {
-    cfg = await ConfigServiceHttp(bootstrap).load(); // GET /api/config
-  } catch (_) {
+    cfg = await ConfigServiceHttp(bootstrap).load();
+    debugPrint('✅ RuntimeConfig loaded successfully!');
+  } catch (e) {
+    debugPrint('❌ RuntimeConfig loading failed: $e');
+    debugPrint('🔄 Using fallback configuration...');
     cfg = RuntimeConfig(
       agoraAppId: const String.fromEnvironment(
         'AGORA_APP_ID',
@@ -351,24 +357,30 @@ void _registerLiveViewer() {
 
 // In your injection_container.dart - remove HostPusherService registration
 void _registerPusher() {
-  if (sl.isRegistered<PusherService>()) return;
-  final cfg = sl<RuntimeConfig>();
-  var key = cfg.pusherKey;
-  var cluster = cfg.pusherCluster.isNotEmpty ? cfg.pusherCluster : 'mt1';
-
-  if (key.isEmpty) {
-    const envKey = String.fromEnvironment('PUSHER_KEY');
-    const envCluster = String.fromEnvironment(
-      'PUSHER_CLUSTER',
-      defaultValue: 'mt1',
-    );
-    key = envKey;
-    cluster = envCluster;
+  if (sl.isRegistered<PusherService>()) {
+    debugPrint('⚠️ PusherService already registered');
+    return;
   }
 
-  sl.registerLazySingleton<PusherService>(
-    () => PusherService(apiKey: key, cluster: cluster),
-  );
+  final cfg = sl<RuntimeConfig>();
+
+  debugPrint('🔧 Registering PusherService with:');
+  debugPrint('   - pusherKey: "${cfg.pusherKey}"');
+  debugPrint('   - pusherCluster: "${cfg.pusherCluster}"');
+  debugPrint('   - keyIsEmpty: ${cfg.pusherKey.isEmpty}');
+
+  if (cfg.pusherKey.isEmpty) {
+    debugPrint('❌ ERROR: Pusher key is empty in RuntimeConfig!');
+    debugPrint('   This means the config loading failed or returned empty key');
+    throw Exception('Pusher API key is empty - check config loading');
+  }
+
+  sl.registerLazySingleton<PusherService>(() {
+    debugPrint('🎯 Creating PusherService instance...');
+    return PusherService(apiKey: cfg.pusherKey, cluster: cfg.pusherCluster);
+  });
+
+  debugPrint('✅ PusherService registered successfully');
 }
 
 void _registerLiveHost() {

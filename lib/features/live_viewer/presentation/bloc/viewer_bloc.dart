@@ -151,19 +151,21 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       ),
     );
 
-    // Existing subscriptions...
-    _pauseSub?.cancel();
-    _pauseSub = repo.watchPause().listen((p) => add(_PauseChanged(p)));
-    _endedSub?.cancel();
-    _endedSub = repo.watchEnded().listen((_) => add(const _LiveEnded()));
-
+    // Cancel all existing subscriptions first
     _clockSub?.cancel();
     _viewerSub?.cancel();
     _chatSub?.cancel();
     _guestSub?.cancel();
     _giftSub?.cancel();
+    _pauseSub?.cancel();
+    _endedSub?.cancel();
     _approvalSub?.cancel();
+    _errorSub?.cancel();
+    _roleChangeSub?.cancel();
+    _removalSub?.cancel();
+    _activeGuestSub?.cancel();
 
+    // Set up all subscriptions
     _clockSub = repo.watchLiveClock().listen((d) => add(_Ticked(d)));
     _viewerSub = repo.watchViewerCount().listen(
       (c) => add(_ViewerCountUpdated(c)),
@@ -171,15 +173,13 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _chatSub = repo.watchChat().listen((m) => add(_ChatArrived(m)));
     _guestSub = repo.watchGuestJoins().listen((n) => add(_GuestJoined(n)));
     _giftSub = repo.watchGifts().listen((n) => add(_GiftArrived(n)));
+    _pauseSub = repo.watchPause().listen((p) => add(_PauseChanged(p)));
+    _endedSub = repo.watchEnded().listen((_) => add(const _LiveEnded()));
     _approvalSub = repo.watchMyApproval().listen(
       (ok) => add(_MyApprovalChanged(ok)),
     );
 
-    // ✅ ADD NEW SUBSCRIPTIONS FOR PARTICIPANT EVENTS
-    _errorSub?.cancel();
-    _roleChangeSub?.cancel();
-    _removalSub?.cancel();
-    _activeGuestSub?.cancel();
+    // ✅ CRITICAL FIX: Add the missing participant event subscriptions
     _errorSub = repo.watchErrors().listen((error) {
       if (error.isNotEmpty) {
         add(ErrorOccurred(error));
@@ -187,18 +187,21 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     });
 
     _roleChangeSub = repo.watchParticipantRoleChanges().listen((role) {
+      debugPrint('🎯 Role change received in bloc: $role');
       add(ParticipantRoleChanged(role));
     });
 
     _removalSub = repo.watchParticipantRemovals().listen((reason) {
+      debugPrint('🎯 Removal received in bloc: $reason');
       add(ParticipantRemoved(reason));
     });
 
-    // NEW: active guest (global) for layout
+    // Active guest subscription
     if (repo is ViewerRepositoryImpl) {
       _activeGuestSub = (repo as ViewerRepositoryImpl)
           .watchActiveGuestUuid()
           .listen((uuid) {
+            debugPrint('🎯 Active guest updated: $uuid');
             add(_ActiveGuestUpdated(uuid));
           });
     }
