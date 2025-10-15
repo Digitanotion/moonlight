@@ -51,12 +51,17 @@ class AgoraService with ChangeNotifier {
   String? get channelId => _channelId;
   RtcEngine? get engine => _engine;
 
+  // Add mute state tracking
+  bool _isMicEnabled = true;
+  bool _isCameraEnabled = true;
+
   // Primary remote publisher (your single guest). Null when none.
   final ValueNotifier<int?> primaryRemoteUid = ValueNotifier<int?>(null);
   final ValueNotifier<bool> _remoteHasVideo = ValueNotifier<bool>(false);
 
   bool get remoteHasVideo => _remoteHasVideo.value;
-
+  bool get isMicEnabled => _isMicEnabled;
+  bool get isCameraEnabled => _isCameraEnabled;
   // Enhanced remote user tracking
   final ValueNotifier<Map<int, RemoteUserState>> remoteUsers =
       ValueNotifier<Map<int, RemoteUserState>>({});
@@ -431,18 +436,20 @@ class AgoraService with ChangeNotifier {
       debugPrint('[Agora] renewToken ok token=${_safe(newToken)}');
   }
 
-  /// Toggle mic (true = ON/publishing)
   Future<void> setMicEnabled(bool enabled) async {
     final e = _engine;
     if (e == null) return;
+    _isMicEnabled = enabled;
     await e.muteLocalAudioStream(!enabled);
+    notifyListeners();
   }
 
-  /// Toggle camera (true = ON/publishing)
   Future<void> setCameraEnabled(bool enabled) async {
     final e = _engine;
     if (e == null) return;
+    _isCameraEnabled = enabled;
     await e.muteLocalVideoStream(!enabled);
+
     if (enabled && !_previewing) {
       await e.startPreview();
       _previewing = true;
@@ -450,6 +457,7 @@ class AgoraService with ChangeNotifier {
       await e.stopPreview();
       _previewing = false;
     }
+    notifyListeners();
   }
 
   Future<void> switchCamera() async {

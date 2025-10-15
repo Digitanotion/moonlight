@@ -1,0 +1,311 @@
+Launching lib\main.dart on 23106RN0DA in debug mode...
+Running Gradle task 'assembleDebug'...                            127.9s
+√ Built build\app\outputs\flutter-apk\app-debug.apk
+Installing build\app\outputs\flutter-apk\app-debug.apk...          44.9s
+I/flutter ( 7694): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(61)] Using the Impeller rendering backend (Vulkan).
+I/flutter ( 7694): 🔄 STEP 1: Loading RuntimeConfig...
+I/flutter ( 7694): 🚀 Loading runtime config...
+I/flutter ( 7694):    - Base URL: https://svc.moonlightstream.app/api
+I/flutter ( 7694):    - Full URL: https://svc.moonlightstream.app/api/v1/config
+I/flutter ( 7694):    - Headers: {Accept: application/json}
+I/flutter ( 7694): ✅ Config API response status: 200
+I/flutter ( 7694): 📦 Config API response data: {api_base_url: https://svc.moonlightstream.app, agora_app_id: 09cb2ade18414800b9b382991ae40a20, pusher_key: 8e56d4a6a17965b57cd3, pusher_cluster: mt1}
+I/flutter ( 7694): 📦 Response data type: _Map<String, dynamic>
+I/flutter ( 7694): 🔍 Parsed config fields:
+I/flutter ( 7694):    - agora_app_id: 09cb2ade18414800b9b382991ae40a20
+I/flutter ( 7694):    - api_base_url: https://svc.moonlightstream.app
+I/flutter ( 7694):    - pusher_key: 8e56d4a6a17965b57cd3
+I/flutter ( 7694):    - pusher_cluster: mt1
+I/flutter ( 7694): 🎯 Final RuntimeConfig:
+I/flutter ( 7694):    - agoraAppId: 09cb2ade18414800b9b382991ae40a20
+I/flutter ( 7694):    - apiBaseUrl: https://svc.moonlightstream.app
+I/flutter ( 7694):    - pusherKey: 8e56d4a6a17965b57cd3 (length: 20)
+I/flutter ( 7694):    - pusherCluster: mt1
+I/flutter ( 7694): ✅ RuntimeConfig loaded successfully!
+I/flutter ( 7694): 🔧 Registering PusherService with:
+I/flutter ( 7694):    - pusherKey: "8e56d4a6a17965b57cd3"
+I/flutter ( 7694):    - pusherCluster: "mt1"
+I/flutter ( 7694):    - keyIsEmpty: false
+I/flutter ( 7694): ✅ PusherService registered successfully
+Syncing files to device 23106RN0DA...                           
+W/libc    ( 7694): Access denied finding property "persist.vendor.debug.gpud.enable"
+E/ample.moonlight( 7694): DF open fail: No such file or directory
+W/ample.moonlight( 7694): remote service is not exist
+W/libc    ( 7694): Access denied finding property "ro.vendor.display.iris_x7.support"
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+W/libc    ( 7694): Access denied finding property "ro.vendor.display.iris_x7.support"
+D/BLASTBufferQueue( 7694): [SurfaceView[com.example.moonlight/com.example.moonlight.MainActivity]#1](f:0,a:1) acquireNextBufferLocked size=720x1600 mFrameNumber=1 applyTransaction=true mTimestamp=9994332446133(auto) mPendingTransactions.size=0 graphicBufferId=33045478375434 transform=0
+I/Choreographer( 7694): Skipped 85 frames!  The application may be doing too much work on its main thread.
+W/Looper  ( 7694): PerfMonitor doFrame : time=0ms vsyncFrame=0 latency=1422ms procState=-1
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+W/FramePredict( 7694): "FramePredict won 't run in other process: com.example.moonlight"
+D/DecorView[]( 7694): getWindowModeFromSystem  windowmode is 1
+D/DecorView[]( 7694): updateDecorCaptionStatus windowMode is 1
+D/VRI[MainActivity]( 7694): vri.reportNextDraw android.view.ViewRootImpl.performTraversals:3916 android.view.ViewRootImpl.doTraversal:2651 android.view.ViewRootImpl$TraversalRunnable.run:9819 android.view.Choreographer$CallbackRecord.run:1429 android.view.Choreographer$CallbackRecord.run:1437 
+D/VRI[MainActivity]( 7694): vri.Setup new sync id=0 syncSeqId=0
+D/ample.moonlight( 7694): MiuiProcessManagerServiceStub setSchedFifo
+I/MiuiProcessManagerImpl( 7694): setSchedFifo pid:7694, mode:3
+W/libc    ( 7694): Access denied finding property "ro.vendor.display.iris_x7.support"
+E/libEGL  ( 7694): pre_cache appList: ,,
+D/BLASTBufferQueue( 7694): [VRI[MainActivity]#0](f:0,a:1) acquireNextBufferLocked size=720x1600 mFrameNumber=1 applyTransaction=true mTimestamp=9994506475364(auto) mPendingTransactions.size=0 graphicBufferId=33045478375439 transform=0
+W/Parcel  ( 7694): Expecting binder but got null!
+D/VRI[MainActivity]( 7694): vri.reportDrawFinished syncSeqId=0 android.view.ViewRootImpl.lambda$createSyncIfNeeded$4$android-view-ViewRootImpl:3984 android.view.ViewRootImpl$$ExternalSyntheticLambda1.run:6 android.os.Handler.handleCallback:942 android.os.Handler.dispatchMessage:99 android.os.Looper.loopOnce:211 
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/DecorView[]( 7694): onWindowFocusChanged hasWindowFocus true
+I/HandWritingStubImpl( 7694): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+Syncing files to device 23106RN0DA...                              415ms
+
+Flutter run key commands.
+r Hot reload. 
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+A Dart VM Service on 23106RN0DA is available at: http://127.0.0.1:59957/3ZragYMn_zE=/
+The Flutter DevTools debugger and profiler on 23106RN0DA is available at: http://127.0.0.1:9101?uri=http://127.0.0.1:59957/3ZragYMn_zE=/
+I/flutter ( 7694): auth_token: 58|c3L6n1psCpxc2jWTrVi3LO05TG91uDRztt0SvqY698e936ff
+I/flutter ( 7694): hasCompletedOnboarding: true
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+I/flutter ( 7694): ➡️  GET https://svc.moonlightstream.app/api/v1/live/active?order=trending&page=1&per_page=20
+I/flutter ( 7694):    Authorization: Bearer 58|c3L6n1psCpxc2jWTrVi3LO05TG91uDRztt0SvqY698e936ff
+D/ProfileInstaller( 7694): Installing profile for com.example.moonlight
+W/MirrorManager( 7694): this model don't Support
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/DecorView[]( 7694): getWindowModeFromSystem  windowmode is 1
+D/DecorView[]( 7694): updateDecorCaptionStatus windowMode is 1
+W/libc    ( 7694): Access denied finding property "ro.vendor.display.iris_x7.support"
+I/Choreographer( 7694): Skipped 34 frames!  The application may be doing too much work on its main thread.
+W/Looper  ( 7694): PerfMonitor doFrame : time=0ms vsyncFrame=0 latency=560ms procState=-1 historyMsgCount=1
+I/HandWritingStubImpl( 7694): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F....ID 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure( 7694): Flattened final assist data: 472 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring off
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10194084000000, downTime=10194084000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:31:55.061
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10194086000000, downTime=10194086000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:31:55.063
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ImeInputStage@fccb44c at 2025-10-12 18:31:55.070
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:31:55.145
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:31:55.073
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:31:55.073
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@4a88c7f at 2025-10-12 18:31:55.070
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@5b6a99e at 2025-10-12 18:31:55.070
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:31:55.073
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:31:55.170
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:31:55.167
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:31:55.167
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:31:55.167
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10313434000000, downTime=10313434000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:33:54.411
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10313435000000, downTime=10313435000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:33:54.412
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ImeInputStage@fccb44c at 2025-10-12 18:33:54.413
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:33:54.420
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:33:54.414
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:33:54.414
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@4a88c7f at 2025-10-12 18:33:54.413
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@5b6a99e at 2025-10-12 18:33:54.413
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:33:54.414
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:33:54.425
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:33:54.421
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:33:54.421
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:33:54.421
+D/BLASTBufferQueue( 7694): [SurfaceView[com.example.moonlight/com.example.moonlight.MainActivity]#1](f:0,a:1) destructor()
+D/BufferQueueConsumer( 7694): [SurfaceView[com.example.moonlight/com.example.moonlight.MainActivity]#1(BLAST Consumer)1](id:1e0e00000001,api:0,p:-1,c:7694) disconnect
+D/BLASTBufferQueue( 7694): [VRI[MainActivity]#0](f:0,a:1) destructor()
+D/BufferQueueConsumer( 7694): [VRI[MainActivity]#0(BLAST Consumer)0](id:1e0e00000000,api:0,p:-1,c:7694) disconnect
+I/GED     ( 7694): ged_boost_gpu_freq, level 100, eOrigin 2, final_idx 31, oppidx_max 31, oppidx_min 0
+W/Looper  ( 7694): PerfMonitor doFrame : time=80ms vsyncFrame=0 latency=432ms procState=-1 historyMsgCount=1
+D/DecorView[]( 7694): onWindowFocusChanged hasWindowFocus false
+I/ForceDarkHelperStubImpl( 7694): setViewRootImplForceDark: false for com.example.moonlight.MainActivity@8a81fc4, reason: AppDarkModeEnable
+D/BufferQueueConsumer( 7694): [](id:1e0e00000002,api:0,p:-1,c:7694) connect: controlledByApp=false
+D/BufferQueueConsumer( 7694): [](id:1e0e00000003,api:0,p:-1,c:7694) connect: controlledByApp=false
+E/gralloc4( 7694): ERROR: Format allocation info not found for format: 38
+E/gralloc4( 7694): ERROR: Format allocation info not found for format: 0
+E/gralloc4( 7694): Invalid base format! req_base_format = 0x0, req_format = 0x38, type = 0x0
+E/gralloc4( 7694): ERROR: Unrecognized and/or unsupported format 0x38 and usage 0xb00
+E/Gralloc4( 7694): isSupported(1, 1, 56, 1, ...) failed with 5
+E/GraphicBufferAllocator( 7694): Failed to allocate (4 x 4) layerCount 1 format 56 usage b00: 5
+E/AHardwareBuffer( 7694): GraphicBuffer(w=4, h=4, lc=1) failed (Unknown error -5), handle=0x0
+E/gralloc4( 7694): ERROR: Format allocation info not found for format: 38
+E/gralloc4( 7694): ERROR: Format allocation info not found for format: 0
+E/gralloc4( 7694): Invalid base format! req_base_format = 0x0, req_format = 0x38, type = 0x0
+E/gralloc4( 7694): ERROR: Unrecognized and/or unsupported format 0x38 and usage 0xb00
+E/Gralloc4( 7694): isSupported(1, 1, 56, 1, ...) failed with 5
+E/GraphicBufferAllocator( 7694): Failed to allocate (4 x 4) layerCount 1 format 56 usage b00: 5
+E/AHardwareBuffer( 7694): GraphicBuffer(w=4, h=4, lc=1) failed (Unknown error -5), handle=0x0
+D/VRI[MainActivity]( 7694): vri.reportNextDraw android.view.ViewRootImpl.performTraversals:3916 android.view.ViewRootImpl.doTraversal:2651 android.view.ViewRootImpl$TraversalRunnable.run:9819 android.view.Choreographer$CallbackRecord.run:1429 android.view.Choreographer$CallbackRecord.run:1437 
+D/SurfaceView( 7694): UPDATE Surface(name=SurfaceView[com.example.moonlight/com.example.moonlight.MainActivity])/@0xc8af068, mIsProjectionMode = false
+D/SurfaceControl( 7694): nativeSetScreenProjection ===> setScreenProjection
+D/SurfaceControl( 7694): nativeSetScreenProjection ===> setScreenProjection
+D/SurfaceControl( 7694): nativeSetScreenProjection ===> setScreenProjection
+D/VRI[MainActivity]( 7694): vri.Setup new sync id=1 syncSeqId=0
+D/BLASTBufferQueue( 7694): [VRI[MainActivity]#2](f:0,a:1) acquireNextBufferLocked size=720x1600 mFrameNumber=1 applyTransaction=true mTimestamp=10935014313497(auto) mPendingTransactions.size=0 graphicBufferId=33045478375458 transform=0
+D/VRI[MainActivity]( 7694): vri.reportDrawFinished syncSeqId=0 android.view.ViewRootImpl.lambda$createSyncIfNeeded$4$android-view-ViewRootImpl:3984 android.view.ViewRootImpl$$ExternalSyntheticLambda1.run:6 android.os.Handler.handleCallback:942 android.os.Handler.dispatchMessage:99 android.os.Looper.loopOnce:211 
+D/DecorView[]( 7694): onWindowFocusChanged hasWindowFocus true
+I/HandWritingStubImpl( 7694): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/BLASTBufferQueue( 7694): [SurfaceView[com.example.moonlight/com.example.moonlight.MainActivity]#3](f:0,a:1) acquireNextBufferLocked size=720x1600 mFrameNumber=1 applyTransaction=true mTimestamp=10935056350189(auto) mPendingTransactions.size=0 graphicBufferId=33045478375453 transform=0
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+
+Performing hot restart...                                       
+Restarted application in 4,291ms.
+I/flutter ( 7694): 🔄 STEP 1: Loading RuntimeConfig...
+I/flutter ( 7694): 🚀 Loading runtime config...
+I/flutter ( 7694):    - Base URL: https://svc.moonlightstream.app/api
+I/flutter ( 7694):    - Full URL: https://svc.moonlightstream.app/api/v1/config
+I/flutter ( 7694):    - Headers: {Accept: application/json}
+I/flutter ( 7694): ✅ Config API response status: 200
+I/flutter ( 7694): 📦 Config API response data: {api_base_url: https://svc.moonlightstream.app, agora_app_id: 09cb2ade18414800b9b382991ae40a20, pusher_key: 8e56d4a6a17965b57cd3, pusher_cluster: mt1}
+I/flutter ( 7694): 📦 Response data type: _Map<String, dynamic>
+I/flutter ( 7694): 🔍 Parsed config fields:
+I/flutter ( 7694):    - agora_app_id: 09cb2ade18414800b9b382991ae40a20
+I/flutter ( 7694):    - api_base_url: https://svc.moonlightstream.app
+I/flutter ( 7694):    - pusher_key: 8e56d4a6a17965b57cd3
+I/flutter ( 7694):    - pusher_cluster: mt1
+I/flutter ( 7694): 🎯 Final RuntimeConfig:
+I/flutter ( 7694):    - agoraAppId: 09cb2ade18414800b9b382991ae40a20
+I/flutter ( 7694):    - apiBaseUrl: https://svc.moonlightstream.app
+I/flutter ( 7694):    - pusherKey: 8e56d4a6a17965b57cd3 (length: 20)
+I/flutter ( 7694):    - pusherCluster: mt1
+I/flutter ( 7694): ✅ RuntimeConfig loaded successfully!
+I/flutter ( 7694): 🔧 Registering PusherService with:
+I/flutter ( 7694):    - pusherKey: "8e56d4a6a17965b57cd3"
+I/flutter ( 7694):    - pusherCluster: "mt1"
+I/flutter ( 7694):    - keyIsEmpty: false
+I/flutter ( 7694): ✅ PusherService registered successfully
+D/DecorView[]( 7694): getWindowModeFromSystem  windowmode is 1
+D/DecorView[]( 7694): updateDecorCaptionStatus windowMode is 1
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+I/flutter ( 7694): auth_token: 58|c3L6n1psCpxc2jWTrVi3LO05TG91uDRztt0SvqY698e936ff
+I/flutter ( 7694): hasCompletedOnboarding: true
+I/gralloc4( 7694): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+I/flutter ( 7694): ➡️  GET https://svc.moonlightstream.app/api/v1/live/active?order=trending&page=1&per_page=20
+I/flutter ( 7694):    Authorization: Bearer 58|c3L6n1psCpxc2jWTrVi3LO05TG91uDRztt0SvqY698e936ff
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/DecorView[]( 7694): getWindowModeFromSystem  windowmode is 1
+D/DecorView[]( 7694): updateDecorCaptionStatus windowMode is 1
+I/ScrollIdentify( 7694): on fling
+I/ScrollIdentify( 7694): on fling
+I/HandWritingStubImpl( 7694): refreshLastKeyboardType: 1
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F....ID 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F....ID 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure( 7694): Flattened final assist data: 464 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring off
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F...... 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10976456000000, downTime=10976456000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:44:57.433
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10976459000000, downTime=10976459000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:44:57.436
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ImeInputStage@fccb44c at 2025-10-12 18:44:57.438
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:44:57.452
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:44:57.452
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:44:57.452
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@4a88c7f at 2025-10-12 18:44:57.438
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@5b6a99e at 2025-10-12 18:44:57.438
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:44:57.452
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:44:57.455
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:44:57.455
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:44:57.455
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:44:57.455
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring off
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10977207000000, downTime=10977207000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:44:58.184
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10977208000000, downTime=10977208000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:44:58.185
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ImeInputStage@fccb44c at 2025-10-12 18:44:58.187
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:44:58.246
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:44:58.187
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:44:58.187
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@4a88c7f at 2025-10-12 18:44:58.187
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@5b6a99e at 2025-10-12 18:44:58.187
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:44:58.187
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:44:58.250
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:44:58.247
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:44:58.247
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:44:58.247
+I/ScrollIdentify( 7694): on fling
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10980232000000, downTime=10980232000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:45:01.208
+D/MIUIInput( 7694): [KeyEvent] ViewRootImpl windowName 'com.example.moonlight/com.example.moonlight.MainActivity', KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x48, repeatCount=0, eventTime=10980234000000, downTime=10980234000000, deviceId=-1, source=0x101, displayId=-1 }, phoneEventTime=18:45:01.211
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+I/MiuiKeyEventUtil( 7694): Can't match right device
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ImeInputStage@fccb44c at 2025-10-12 18:45:01.212
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:45:01.217
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:45:01.213
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:45:01.213
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPreImeInputStage@4a88c7f at 2025-10-12 18:45:01.212
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePreImeInputStage@5b6a99e at 2025-10-12 18:45:01.212
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:45:01.213
+V/VRI[MainActivity]( 7694): [ANR Warning]Input routeing takes more than 6000ms since 1970-01-01 01:00:00.000, this = com.mediatek.view.impl.ViewDebugManagerImpl@35fc1aa
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$SyntheticInputStage@b649fb5 at 2025-10-12 18:45:01.219
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$NativePostImeInputStage@1cd529f at 2025-10-12 18:45:01.217
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$EarlyPostImeInputStage@438343e at 2025-10-12 18:45:01.217
+V/VRI[MainActivity]( 7694): Input event delivered to android.view.ViewRootImpl$ViewPostImeInputStage@992cfec at 2025-10-12 18:45:01.217
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F...... 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure( 7694): Flattened final assist data: 472 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring off
+I/HandWritingStubImpl( 7694): getCurrentKeyboardType: 1
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F...... 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InputMethodManager( 7694): showSoftInput() view=io.flutter.embedding.android.FlutterView{f36218f VFE...... .F...... 0,0-720,1600 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure( 7694): Flattened final assist data: 464 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback( 7694): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback( 7694): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/InsetsController( 7694): show(ime(), fromIme=true)
+D/InputConnectionAdaptor( 7694): The input method toggled cursor monitoring off
+Lost connection to device.
+Terminate batch job (Y/N)? 

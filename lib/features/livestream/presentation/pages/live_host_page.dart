@@ -10,6 +10,7 @@ import 'package:moonlight/features/livestream/domain/entities/live_join_request.
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
 import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class LiveHostPage extends StatefulWidget {
   final String hostName;
@@ -34,15 +35,23 @@ class LiveHostPage extends StatefulWidget {
   State<LiveHostPage> createState() => _LiveHostPageState();
 }
 
-class _LiveHostPageState extends State<LiveHostPage> {
+class _LiveHostPageState extends State<LiveHostPage>
+    with WidgetsBindingObserver {
   // CameraController? _controller;
   // List<CameraDescription> _cameras = const [];
   bool _initErr = false;
   final AgoraService agora =
       GetIt.I<AgoraService>(); // FIXED: Declare agora here
+  bool _isAudioMuted = false;
+  bool _isVideoMuted = false;
+  bool _showSettingsMenu = false;
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Prevent screen from sleeping during live stream
+    WakelockPlus.enable();
     // schedule event once the widget is mounted & provider is in the tree
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<LiveHostBloc>().add(
@@ -78,7 +87,81 @@ class _LiveHostPageState extends State<LiveHostPage> {
   @override
   void dispose() {
     // _controller?.dispose();
+    // Re-enable screen sleep when leaving live stream
+    WakelockPlus.disable();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Re-enable wakelock when app comes to foreground
+      WakelockPlus.enable();
+    }
+  }
+
+  // Add mute control methods
+  void _toggleAudioMute() {
+    setState(() {
+      _isAudioMuted = !_isAudioMuted;
+    });
+    agora.setMicEnabled(!_isAudioMuted);
+  }
+
+  void _toggleVideoMute() {
+    setState(() {
+      _isVideoMuted = !_isVideoMuted;
+    });
+    agora.setCameraEnabled(!_isVideoMuted);
+  }
+
+  void _toggleSettingsMenu() {
+    setState(() {
+      _showSettingsMenu = !_showSettingsMenu;
+    });
+  }
+
+  // Add this widget method for settings menu
+  Widget _buildSettingsMenu() {
+    return Positioned(
+      right: 18,
+      bottom: 80, // Position above the bottom actions
+      child: AnimatedOpacity(
+        opacity: _showSettingsMenu ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Visibility(
+          visible: _showSettingsMenu,
+          child: _Glass(
+            radius: 16,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: Colors.black.withOpacity(0.8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SettingsMenuItem(
+                  icon: _isAudioMuted
+                      ? Icons.mic_off_rounded
+                      : Icons.mic_rounded,
+                  label: _isAudioMuted ? 'Unmute Audio' : 'Mute Audio',
+                  isActive: _isAudioMuted,
+                  onTap: _toggleAudioMute,
+                ),
+                const SizedBox(height: 12),
+                _SettingsMenuItem(
+                  icon: _isVideoMuted
+                      ? Icons.videocam_off_rounded
+                      : Icons.videocam_rounded,
+                  label: _isVideoMuted ? 'Show Video' : 'Hide Video',
+                  isActive: _isVideoMuted,
+                  onTap: _toggleVideoMute,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   String _mmss(int total) {
@@ -384,11 +467,14 @@ class _LiveHostPageState extends State<LiveHostPage> {
 
                         Navigator.pushNamed(context, RouteNames.listViewers);
                       },
-                      onPremium: () => _toast(context, 'Premium'),
+                      onPremium: () =>
+                          Navigator.pushNamed(context, RouteNames.profile_view),
+                      onSettings: _toggleSettingsMenu,
                     ),
                   ),
                 ),
-
+                // Settings Menu - NEW
+                _buildSettingsMenu(),
                 // Paused overlay
                 if (state.isPaused)
                   _PausedOverlay(
@@ -769,6 +855,7 @@ class _BottomActions extends StatelessWidget {
   final VoidCallback onViewers;
   final VoidCallback onGifts;
   final VoidCallback onPremium;
+  final VoidCallback onSettings; // NEW
 
   const _BottomActions({
     required this.isPaused,
@@ -777,22 +864,32 @@ class _BottomActions extends StatelessWidget {
     required this.onViewers,
     required this.onGifts,
     required this.onPremium,
+    required this.onSettings, // NEW
   });
 
-  Widget _item(IconData icon, String label, VoidCallback onTap) {
+  Widget _item(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool isSettings = false,
+  }) {
     return InkWell(
       onTap: onTap,
       child: Column(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: isSettings ? 44 : 48, // Slightly smaller for settings
+            height: isSettings ? 44 : 48,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.08),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white.withOpacity(0.12)),
             ),
-            child: Icon(icon, color: Colors.white),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: isSettings ? 20 : 24, // Slightly smaller icon for settings
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -841,8 +938,58 @@ class _BottomActions extends StatelessWidget {
           ),
 
           _item(Icons.card_giftcard_rounded, 'Gifts', onGifts),
-          _item(Icons.workspace_premium_rounded, 'Premium', onPremium),
+          _item(Icons.card_giftcard_rounded, 'Premiums', onPremium),
+          _item(
+            Icons.settings_rounded,
+            'Settings',
+            onSettings,
+            isSettings: true,
+          ), // NEW
         ],
+      ),
+    );
+  }
+}
+
+// Add this new widget for settings menu items
+class _SettingsMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SettingsMenuItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? Colors.orangeAccent : Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.orangeAccent : Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

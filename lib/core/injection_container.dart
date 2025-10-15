@@ -3,7 +3,17 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/network/interceptors/cache_interceptor.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
+import 'package:moonlight/core/services/like_memory.dart';
+import 'package:moonlight/features/create_post/data/datasources/create_post_remote_datasource.dart';
+import 'package:moonlight/features/create_post/data/repositories/create_post_repository_impl.dart';
+import 'package:moonlight/features/create_post/domain/repositories/create_post_repository.dart';
+import 'package:moonlight/features/create_post/presentation/cubit/create_post_cubit.dart';
+import 'package:moonlight/features/feed/data/datasources/feed_remote_datasource.dart';
+import 'package:moonlight/features/feed/data/repositories/feed_repository_impl.dart';
+import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
+import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/home/data/datasources/live_feed_remote_datasource.dart';
 import 'package:moonlight/features/home/data/repositories/live_feed_repository_impl.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
@@ -11,6 +21,11 @@ import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bl
 import 'package:moonlight/features/livestream/data/repositories/participants_repository_impl.dart';
 import 'package:moonlight/features/livestream/domain/repositories/participants_repository.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/participants_bloc.dart';
+import 'package:moonlight/features/post_view/data/datasources/post_remote_datasource.dart';
+import 'package:moonlight/features/post_view/data/repositories/post_repository_impl.dart';
+import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
+import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
+import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/config/runtime_config.dart';
@@ -275,6 +290,19 @@ Future<void> init() async {
   _registerGoLive(); // camera/mic + go live repo
   _registerLiveHost(); // session repo (agora + pusher)
   _registerLiveViewer(); // viewer mock (until implemented)
+  registerPosts();
+  creatPost();
+  sl.registerLazySingleton<LikeMemory>(
+    () => LikeMemory(sl<SharedPreferences>()),
+  );
+  // ---- FEED ----
+  sl.registerLazySingleton(() => FeedRemoteDataSource(sl<DioClient>()));
+  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl()));
+  sl.registerFactory(() => FeedCubit(sl()));
+
+  // ---- PROFILE VIEW ----
+
+  sl.registerFactory(() => ProfileCubit(sl()));
 }
 
 /// Call this right before opening the Viewers List, when you *know* the ids.
@@ -416,6 +444,35 @@ liveFeeds() {
 
   // Blocs
   sl.registerFactory<LiveFeedBloc>(() => LiveFeedBloc(sl()));
+}
+
+registerPosts() {
+  sl<Dio>().interceptors.add(EtagCacheInterceptor());
+
+  // register post remote datasource + repository
+  sl.registerLazySingleton<PostRemoteDataSource>(
+    () => PostRemoteDataSource(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<PostRepository>(
+    () => PostRepositoryImpl(sl<PostRemoteDataSource>()),
+  );
+
+  // // small factory for PostCubit (so you can get it with a postUuid at runtime)
+  // PostCubit makePostCubit(String postUuid) =>
+  //     PostCubit(sl<PostRepository>(), postUuid);
+}
+
+creatPost() {
+  // ---- CREATE POST ----
+  sl.registerLazySingleton<CreatePostRemoteDataSource>(
+    () => CreatePostRemoteDataSource(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<CreatePostRepository>(
+    () => CreatePostRepositoryImpl(sl<CreatePostRemoteDataSource>()),
+  );
+  sl.registerFactory<CreatePostCubit>(
+    () => CreatePostCubit(sl<CreatePostRepository>()),
+  );
 }
 
 // Optional helper if some legacy code still uses it.

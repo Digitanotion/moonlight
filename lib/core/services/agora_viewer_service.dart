@@ -44,7 +44,9 @@ class AgoraViewerService with ChangeNotifier {
   bool get isCoHost => _isCoHost;
   String? get channelId => _channel;
   RtcEngine? get engine => _engine;
-
+  // ✅ ADD MUTE STATE TRACKING
+  bool _isMicMuted = true; // Default muted for safety
+  bool _isCamMuted = true; // Default muted for safety
   // ---------------- Engine lifecycle ----------------
   Future<void> _init(String appId) async {
     if (_engine != null) return;
@@ -134,6 +136,11 @@ class AgoraViewerService with ChangeNotifier {
     );
   }
 
+  // ✅ ADD GETTERS FOR MUTE STATE (optional, for UI)
+  bool get isMicMuted => _isMicMuted;
+  bool get isCamMuted => _isCamMuted;
+
+  // ✅ UPDATE DEMOTE TO RESET MUTE STATE
   Future<void> demoteToAudience() async {
     final e = _engine;
     if (e == null) return;
@@ -143,6 +150,10 @@ class AgoraViewerService with ChangeNotifier {
       await e.stopPreview();
       _previewing = false;
     }
+
+    // Reset mute state for next promotion
+    _isMicMuted = true;
+    _isCamMuted = true;
 
     // switch role & unpublish
     await e.setClientRole(role: ClientRoleType.clientRoleAudience);
@@ -158,9 +169,9 @@ class AgoraViewerService with ChangeNotifier {
     );
 
     _isCoHost = false;
+    if (kDebugMode) debugPrint('🔇 Demoted to audience, reset mute state');
     notifyListeners();
   }
-
   // ---------------- Public API ----------------
 
   /// Join the livestream as **Audience** (watch-only).
@@ -230,6 +241,10 @@ class AgoraViewerService with ChangeNotifier {
       throw StateError('Camera/Microphone permission denied');
     }
 
+    // ✅ ENSURE DEFAULT MUTE STATE BEFORE PROMOTION
+    _isMicMuted = true;
+    _isCamMuted = true;
+
     // Role → Broadcaster
     await e.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
     await e.enableVideo();
@@ -247,11 +262,14 @@ class AgoraViewerService with ChangeNotifier {
     await e.startPreview();
     _previewing = true;
 
-    // Begin publishing
+    // ✅ MUTE BEFORE PUBLISHING - CRITICAL FOR PRIVACY
+    await _enforceMuteState();
+
+    // Begin publishing (but muted)
     await e.updateChannelMediaOptions(
       const ChannelMediaOptions(
-        publishCameraTrack: true,
-        publishMicrophoneTrack: true,
+        publishCameraTrack: true, // Camera track published but muted
+        publishMicrophoneTrack: true, // Mic track published but muted
         clientRoleType: ClientRoleType.clientRoleBroadcaster,
         channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
         autoSubscribeAudio: true,
@@ -262,9 +280,49 @@ class AgoraViewerService with ChangeNotifier {
     // Switch to publisher token
     await e.renewToken(rtcToken);
 
+    // ✅ DOUBLE-CHECK MUTE STATE AFTER PROMOTION
+    await Future.delayed(const Duration(milliseconds: 200));
+    await _enforceMuteState();
+
     _isCoHost = true;
-    if (kDebugMode) debugPrint('🎤 [Viewer] promoted to co-host');
+    if (kDebugMode) {
+      debugPrint('🎤 [Viewer] promoted to co-host (mic: muted, cam: muted)');
+    }
     notifyListeners();
+  }
+
+  // ✅ ADD PRIVATE METHOD TO ENFORCE MUTE STATE
+  Future<void> _enforceMuteState() async {
+    try {
+      final e = _engine;
+      if (e == null) return;
+
+      // Mute/unmute audio stream
+      await e.muteLocalAudioStream(_isMicMuted);
+      if (kDebugMode) {
+        debugPrint('🎤 Mic ${_isMicMuted ? 'muted' : 'unmuted'}');
+      }
+
+      // Mute/unmute video stream
+      await e.muteLocalVideoStream(_isCamMuted);
+      if (kDebugMode) {
+        debugPrint('📷 Camera ${_isCamMuted ? 'muted' : 'unmuted'}');
+      }
+
+      // Handle preview based on camera state
+      if (_isCamMuted && _previewing) {
+        await e.stopPreview();
+        _previewing = false;
+      } else if (!_isCamMuted && !_previewing && _isCoHost) {
+        await e.startPreview();
+        _previewing = true;
+      }
+
+      // Small delay to ensure Agora processes the commands
+      await Future.delayed(const Duration(milliseconds: 50));
+    } catch (e) {
+      debugPrint('❌ Failed to enforce mute state: $e');
+    }
   }
 
   /// Render the host's remote video as the background.
@@ -338,18 +396,30 @@ class AgoraViewerService with ChangeNotifier {
   }
 
   // Basic guest mic/cam toggles
+  // ✅ ENHANCED MIC/CAM CONTROLS WITH STATE TRACKING
   Future<void> setMicEnabled(bool on) async {
-    await _engine?.muteLocalAudioStream(!on);
+    try {
+      _isMicMuted = !on;
+      await _enforceMuteState();
+      if (kDebugMode) {
+        debugPrint('🎤 Mic ${on ? 'enabled' : 'disabled'} by user');
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to set mic enabled: $e');
+      rethrow;
+    }
   }
 
   Future<void> setCamEnabled(bool on) async {
-    await _engine?.muteLocalVideoStream(!on);
-    if (on && !_previewing) {
-      await _engine?.startPreview();
-      _previewing = true;
-    } else if (!on && _previewing) {
-      await _engine?.stopPreview();
-      _previewing = false;
+    try {
+      _isCamMuted = !on;
+      await _enforceMuteState();
+      if (kDebugMode) {
+        debugPrint('📷 Camera ${on ? 'enabled' : 'disabled'} by user');
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to set camera enabled: $e');
+      rethrow;
     }
   }
 

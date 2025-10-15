@@ -12,6 +12,7 @@ class RouteNames {
   static const String user_profile = '/user_profile';
   static const editProfile = '/edit-profile';
   static const myProfile = '/my-profile';
+  static const profile_view = '/profile_view';
   static const accountSettings = '/account-settings';
   static const goLive = '/live/go';
   static const chatFullscreen = '/live/chat';
@@ -20,4 +21,7 @@ class RouteNames {
   static const listViewers = '/list-viewers';
   static const postsPage = 'postsPage';
   static const livestreamEnded = '/livestream-ended';
+  static const postView = '/post_views';
+  static const postComments = '/post_comments';
+  static const createPost = '/create-post';
 }

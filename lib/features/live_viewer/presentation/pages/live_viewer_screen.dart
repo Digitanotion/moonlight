@@ -2,8 +2,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
+import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 
 import 'package:moonlight/features/live_viewer/domain/video_surface_provider.dart';
+import 'package:moonlight/features/live_viewer/presentation/pages/viewers_list_screen.dart';
 import '../../domain/entities.dart';
 import '../../domain/repositories/viewer_repository.dart';
 import '../bloc/viewer_bloc.dart';
@@ -209,6 +214,67 @@ class _BackgroundVideo extends StatelessWidget {
   }
 }
 
+class _ViewersListButton extends StatelessWidget {
+  const _ViewersListButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) => p.viewers != n.viewers,
+      builder: (context, state) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            // Get the repository from Bloc to access livestream IDs
+            final viewerBloc = context.read<ViewerBloc>();
+            final repository = viewerBloc.repo;
+
+            if (repository is ViewerRepositoryImpl) {
+              // Use GetIt to access dependencies instead of context.read
+              final dioClient = sl<DioClient>();
+              final authLocalDataSource = sl<AuthLocalDataSource>();
+
+              // Navigate to viewers list screen with livestream IDs and providers
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ViewersListScreen(
+                    livestreamIdNumeric: repository.livestreamIdNumeric,
+                    livestreamParam: repository.livestreamParam,
+                    dioClient: dioClient,
+                    authLocalDataSource: authLocalDataSource,
+                  ),
+                ),
+              );
+            }
+          },
+          child: _glass(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.remove_red_eye_outlined,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${state.viewers}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _TopStatusBar extends StatelessWidget {
   const _TopStatusBar();
 
@@ -265,31 +331,7 @@ class _TopStatusBar extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              _glass(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.remove_red_eye_outlined,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${state.viewers}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const _ViewersListButton(),
             ],
           ),
         );
@@ -1374,8 +1416,8 @@ class _GuestControls extends StatefulWidget {
 }
 
 class _GuestControlsState extends State<_GuestControls> {
-  bool micOn = true;
-  bool camOn = true;
+  bool micOn = false;
+  bool camOn = false;
 
   @override
   Widget build(BuildContext context) {

@@ -59,7 +59,8 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
 
               /// Emphasized Post Button (Floating style)
               GestureDetector(
-                onTap: () => widget.onTap(2),
+                onTap: () =>
+                    Navigator.of(context).pushNamed(RouteNames.createPost),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOut,

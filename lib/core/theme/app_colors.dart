@@ -25,5 +25,23 @@ class AppColors {
   static const accentGreen = Color(0xFF31D377);
   static const textPrimary = Colors.white;
   static const textSecondary = Color(0xFFB7C0D9);
-  static const divider = Color(0xFF1D2646);
+  // static const divider = Color(0xFF1D2646);
+  static const Color navy = Color(
+    0xFF07133A,
+  ); // deep navy used in comments header
+  static const Color navyDark = Color(0xFF050D2C);
+  static const Color bluePrimary = Color(0xFF0B1E6B); // gradient top
+  static const Color bluePrimaryDark = Color(0xFF031049);
+  static const Color surface = Color(
+    0xFF0F1529,
+  ); // dark card surface under photo
+  static const Color onSurface = Color(0xFFE8ECF6);
+  static const Color secondaryText = Color(0xFF98A2B3);
+  static const Color divider = Color(0xFF1E2438);
+  static const Color success = Color(0xFF31D873); // green pill (Superstar)
+  static const Color warning = Color(0xFFFFC107); // badge dot
+  static const Color like = Color(0xFFFF5A5F);
+  static const Color hashtag = Color(0xFF39C17F); // tag chip outline/fill
+  static const Color info = Color(0xFF4C8DFF); // Nominal member pill
+  static const Color vip = Color(0xFF9B5CFF);
 }

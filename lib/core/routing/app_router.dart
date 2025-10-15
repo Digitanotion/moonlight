@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+// import 'package:moonlight/core/services/local_cache.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/widgets/auth_guard.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -11,32 +12,44 @@ import 'package:moonlight/features/auth/presentation/pages/email_verification.da
 import 'package:moonlight/features/auth/presentation/pages/forget_password.dart';
 import 'package:moonlight/features/auth/presentation/pages/login_screen.dart';
 import 'package:moonlight/features/auth/presentation/pages/register_screen.dart';
+import 'package:moonlight/features/create_post/presentation/cubit/create_post_cubit.dart';
+import 'package:moonlight/features/create_post/presentation/pages/create_post_screen.dart';
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
 import 'package:moonlight/features/edit_profile/presentation/pages/edit_profile_screen.dart';
+import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
+import 'package:moonlight/features/feed/presentation/pages/feed_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/posts_screen.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
-import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
+// import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
-import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
-import 'package:moonlight/features/livestream/domain/repositories/live_repository.dart';
+// import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
+// import 'package:moonlight/features/livestream/domain/repositories/live_repository.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
-import 'package:moonlight/features/livestream/presentation/cubits/live_cubits.dart';
+// import 'package:moonlight/features/livestream/presentation/cubits/live_cubits.dart';
 import 'package:moonlight/features/livestream/presentation/pages/go_live_screen.dart';
 import 'package:moonlight/features/livestream/presentation/pages/list_viewers.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_host_page.dart';
-import 'package:moonlight/features/livestream/presentation/pages/live_viewer.dart';
+// import 'package:moonlight/features/livestream/presentation/pages/live_viewer.dart';
 import 'package:moonlight/features/livestream/presentation/pages/livestream_ended.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+// import 'package:moonlight/features/post_view/data/datasources/post_local_datasource.dart';
+// import 'package:moonlight/features/post_view/data/repositories/post_repository_impl.dart';
+import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
+import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
+import 'package:moonlight/features/post_view/presentation/pages/comments_page.dart';
+import 'package:moonlight/features/post_view/presentation/pages/post_view_screen.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
 import 'package:moonlight/features/profile_setup/presentation/pages/my_profile_screen.dart';
 import 'package:moonlight/features/profile_setup/presentation/pages/profile_setup_screen.dart';
+import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
+import 'package:moonlight/features/profile_view/presentation/pages/profile_view.dart';
 
 import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
 import 'package:moonlight/features/search/presentation/pages/search_screen.dart';
@@ -207,6 +220,15 @@ class AppRouter {
           );
         }
 
+      case RouteNames.createPost:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider<CreatePostCubit>(
+            create: (_) => sl<CreatePostCubit>(),
+            child: const CreatePostScreen(),
+          ),
+          settings: settings,
+        );
+
       case RouteNames.accountSettings:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
@@ -216,8 +238,34 @@ class AppRouter {
         );
 
       case RouteNames.postsPage:
-        return MaterialPageRoute(builder: (_) => const PostsScreen());
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => sl<FeedCubit>(),
+            child: const FeedScreen(),
+          ),
+        );
+      case RouteNames.postView:
+        {
+          final a = (settings.arguments as Map?) ?? const {};
+          final postId = a['postId'] as String?;
+          final isOwner = (a['isOwner'] as bool?) ?? false;
 
+          if (postId == null || postId.isEmpty) {
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(child: Text('Missing postId for PostView')),
+              ),
+            );
+          }
+
+          return MaterialPageRoute(
+            builder: (_) => BlocProvider<PostCubit>(
+              create: (_) => PostCubit(sl<PostRepository>(), postId)..load(),
+              child: PostViewScreen(isOwner: isOwner),
+            ),
+            settings: settings,
+          );
+        }
       case RouteNames.listViewers:
         return MaterialPageRoute(builder: (_) => const ViewersListPage());
       case RouteNames.livestreamEnded:
@@ -225,6 +273,36 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => LivestreamEndedScreen(analytics: args),
         );
+
+      case RouteNames.postView:
+        {
+          // Expect: {'postId': String, 'isOwner': bool}
+          final a = (settings.arguments as Map?) ?? const {};
+          final postId = (a['postId'] as String?) ?? 'demo-post-1';
+          final isOwner = (a['isOwner'] as bool?) ?? false;
+
+          return MaterialPageRoute(
+            builder: (_) => BlocProvider<PostCubit>(
+              // Get the DI-registered PostRepository directly
+              create: (_) => PostCubit(sl<PostRepository>(), postId)..load(),
+              child: PostViewScreen(isOwner: isOwner),
+            ),
+            settings: settings,
+          );
+        }
+
+      case RouteNames.postComments:
+        {
+          final a = (settings.arguments as Map?) ?? const {};
+          final postCubit = a['postCubit'] as PostCubit;
+          return MaterialPageRoute(
+            builder: (_) => BlocProvider.value(
+              value: postCubit,
+              child: const CommentsPage(),
+            ),
+            settings: settings,
+          );
+        }
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
