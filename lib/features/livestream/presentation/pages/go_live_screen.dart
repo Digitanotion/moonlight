@@ -130,36 +130,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
                                   .read<GoLiveCubit>()
                                   .togglePremium,
                             ),
-                            const SizedBox(height: 8),
-                            _SettingTile(
-                              icon: Icons.group_add_outlined,
-                              title: 'Allow Guest Box',
-                              subtitle: 'Viewers can request to join',
-                              value: state.allowGuestBox,
-                              onChanged: context
-                                  .read<GoLiveCubit>()
-                                  .toggleGuestBox,
-                            ),
-                            const SizedBox(height: 8),
-                            _SettingTile(
-                              icon: Icons.mode_comment_outlined,
-                              title: 'Enable Comments',
-                              subtitle: 'Allow viewers to chat',
-                              value: state.comments,
-                              onChanged: context
-                                  .read<GoLiveCubit>()
-                                  .toggleComments,
-                            ),
-                            const SizedBox(height: 8),
-                            _SettingTile(
-                              icon: Icons.remove_red_eye_outlined,
-                              title: 'Show Viewer Count',
-                              subtitle: 'Display live viewer numbers',
-                              value: state.showCount,
-                              onChanged: context
-                                  .read<GoLiveCubit>()
-                                  .toggleShowCount,
-                            ),
+
                             const SizedBox(height: 14),
                             if (state.eligibleBonus) _BonusCard(),
                             const SizedBox(height: 14),
