@@ -15,7 +15,7 @@ class PostLocalDataSource {
     if (map['seeded'] == true) return;
 
     final user = AppUser(
-      id: 1,
+      id: "1",
       name: 'Alex Kim',
       avatarUrl: 'https://i.pravatar.cc/150?img=12',
       countryFlagEmoji: '🇺🇸',
@@ -82,7 +82,7 @@ class PostLocalDataSource {
     final p = map['post'] as Map<String, dynamic>;
     final authorMap = p['author'] as Map<String, dynamic>;
     final author = AppUser(
-      id: authorMap['id'] as int,
+      id: authorMap['id'] as String,
       name: authorMap['name'] as String,
       avatarUrl: authorMap['avatar'] as String,
       countryFlagEmoji: authorMap['flag'] as String,
@@ -185,7 +185,7 @@ class PostLocalDataSource {
   Future<Comment> addReply(String commentId, String text) async {
     final list = await getComments();
     final you = const AppUser(
-      id: 999,
+      id: "999",
       name: 'You',
       avatarUrl: 'https://i.pravatar.cc/150?img=5',
       countryFlagEmoji: '🇳🇬',

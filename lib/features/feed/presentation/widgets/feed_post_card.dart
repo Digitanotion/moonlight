@@ -1,4 +1,3 @@
-// lib/features/feed/presentation/widgets/feed_post_card.dart
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -35,6 +34,31 @@ class FeedPostCard extends StatelessWidget {
     return post.thumbUrl?.isNotEmpty == true ? post.thumbUrl! : post.mediaUrl;
   }
 
+  bool _isValidUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    final uri = Uri.tryParse(url);
+    return uri != null && uri.hasScheme && uri.hasAuthority;
+  }
+
+  Widget _buildAvatar() {
+    final avatar = post.author.avatarUrl;
+    final valid = _isValidUrl(avatar);
+
+    if (!valid) {
+      return CircleAvatar(
+        radius: 20,
+        backgroundColor: AppColors.primary.withOpacity(0.25),
+        child: const Icon(Icons.person, color: Colors.white70),
+      );
+    }
+
+    return CircleAvatar(
+      radius: 20,
+      backgroundImage: CachedNetworkImageProvider(avatar),
+      backgroundColor: AppColors.primary.withOpacity(0.06),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final timeAgo = DateFormat.MMMd().add_Hm().format(post.createdAt.toLocal());
@@ -62,15 +86,7 @@ class FeedPostCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             child: Row(
               children: [
-                GestureDetector(
-                  onTap: onOpenProfile,
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundImage: CachedNetworkImageProvider(
-                      post.author.avatarUrl,
-                    ),
-                  ),
-                ),
+                GestureDetector(onTap: onOpenProfile, child: _buildAvatar()),
                 const SizedBox(width: 10),
                 Expanded(
                   child: GestureDetector(

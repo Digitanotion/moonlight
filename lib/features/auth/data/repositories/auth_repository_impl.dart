@@ -81,31 +81,32 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final deviceName = await _getDeviceName();
 
-      // 1) Login -> tokens
+      // 1) Login -> get tokens
       final loginResponse = await remoteDataSource.loginWithEmail(
         email,
         password,
         deviceName,
       );
-      final userModel = loginResponse.toUserModel();
-      if (userModel.authToken != null) {
-        await localDataSource.cacheToken(userModel.authToken!);
-        await localDataSource.cacheUser(userModel);
+
+      // Cache the token first
+      if (loginResponse.accessToken != null) {
+        await localDataSource.cacheToken(loginResponse.accessToken!);
       }
-      // 2) Fetch full profile -> has `uuid`
-      //final me = await remoteDataSource.fetchMe();
-      print(email);
-      print(password);
-      // 3) Merge token fields into `me`
-      // final merged = me.copyWith(
-      //   authToken: loginResponse.accessToken,
-      //   tokenType: loginResponse.tokenType,
-      //   expiresIn: loginResponse.expiresIn,
-      // );
 
-      // 4) Cache token + user (with uuid)
+      // 2) Fetch full profile from /v1/me endpoint (has complete user data including avatar)
+      final fullUserProfile = await remoteDataSource.fetchMe();
 
-      return Right(userModel.toEntity());
+      // 3) Merge token fields into the full profile
+      final mergedUser = fullUserProfile.copyWith(
+        authToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresIn: loginResponse.expiresIn,
+      );
+
+      // 4) Cache the complete user data
+      await localDataSource.cacheUser(mergedUser);
+
+      return Right(mergedUser.toEntity());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {

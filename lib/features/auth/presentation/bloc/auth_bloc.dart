@@ -1,6 +1,7 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:moonlight/core/errors/failures.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/features/auth/domain/entities/user_entity.dart';
 import 'package:moonlight/features/auth/domain/repositories/auth_repository.dart';
 import 'package:moonlight/features/auth/domain/usecases/check_auth_status.dart'
@@ -22,6 +23,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final Logout logout;
   final GetCurrentUser getCurrentUser;
   final AuthRepository authRepository;
+  final CurrentUserService currentUserService;
 
   AuthBloc({
     required this.loginWithEmail,
@@ -31,6 +33,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.logout,
     required this.getCurrentUser,
     required this.authRepository,
+    required this.currentUserService,
   }) : super(AuthInitial()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LoginRequested>(_onLoginRequested);
@@ -58,11 +61,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     ) async {
       if (isLoggedIn) {
         final userResult = await getCurrentUser();
-        userResult.fold(
-          (failure) => emit(AuthFailure(failure.message)),
-          (user) => emit(AuthAuthenticated(user)),
-        );
+        userResult.fold((failure) => emit(AuthFailure(failure.message)), (
+          user,
+        ) {
+          currentUserService.setUser(user); // Sync with service
+          emit(AuthAuthenticated(user));
+        });
       } else {
+        currentUserService.clearUser();
         emit(AuthUnauthenticated());
       }
     });
@@ -79,10 +85,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       password: event.password,
     );
 
-    result.fold(
-      (failure) => emit(AuthFailure(failure.message)),
-      (user) => emit(AuthAuthenticated(user)),
-    );
+    result.fold((failure) => emit(AuthFailure(failure.message)), (user) {
+      currentUserService.setUser(user); // Sync with service
+      emit(AuthAuthenticated(user));
+    });
   }
 
   Future<void> _onLoginWithEmailRequested(
@@ -96,10 +102,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       event.password,
     );
 
-    result.fold(
-      (failure) => emit(AuthFailure(failure.message)),
-      (user) => emit(AuthAuthenticated(user)),
-    );
+    result.fold((failure) => emit(AuthFailure(failure.message)), (user) {
+      currentUserService.setUser(user); // Sync with service
+      emit(AuthAuthenticated(user));
+    });
   }
 
   Future<void> _onSignUpRequested(
@@ -128,10 +134,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     final result = await socialLogin(event.provider);
 
-    result.fold(
-      (failure) => emit(AuthFailure(failure.message)),
-      (user) => emit(AuthAuthenticated(user)),
-    );
+    result.fold((failure) => emit(AuthFailure(failure.message)), (user) {
+      currentUserService.setUser(user); // Sync with service
+      emit(AuthAuthenticated(user));
+    });
   }
 
   Future<void> _onLogoutRequested(
@@ -142,10 +148,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     final result = await logout();
 
-    result.fold(
-      (failure) => emit(AuthFailure(failure.message)),
-      (_) => emit(AuthUnauthenticated()),
-    );
+    result.fold((failure) => emit(AuthFailure(failure.message)), (_) {
+      currentUserService.clearUser(); // Clear service
+      emit(AuthUnauthenticated());
+    });
   }
 
   Future<void> _onGoogleSignInRequested(

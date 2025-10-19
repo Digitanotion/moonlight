@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/network/interceptors/cache_interceptor.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/core/services/like_memory.dart';
 import 'package:moonlight/features/create_post/data/datasources/create_post_remote_datasource.dart';
@@ -34,6 +35,14 @@ import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 
 import 'package:moonlight/core/services/google_signin_service.dart';
+// ✅ Profile View
+import 'package:moonlight/features/profile_view/data/datasources/profile_remote_datasource.dart'
+    as view_ds;
+import 'package:moonlight/features/profile_view/data/repositories/profile_repository_impl.dart'
+    as view_repo_impl;
+import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart'
+    as view_repo;
+import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 
 // AUTH
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -259,6 +268,7 @@ Future<void> init() async {
       logout: sl(),
       getCurrentUser: sl(),
       authRepository: sl(),
+      currentUserService: sl(), // Add this
     ),
   );
 
@@ -282,6 +292,8 @@ Future<void> init() async {
       prefs: sl(),
     ),
   );
+  // Current User Service
+  sl.registerLazySingleton(() => CurrentUserService());
   //Live Feeds for Homepage
   liveFeeds();
   // ======= Live stack (order matters) =======
@@ -290,6 +302,7 @@ Future<void> init() async {
   _registerGoLive(); // camera/mic + go live repo
   _registerLiveHost(); // session repo (agora + pusher)
   _registerLiveViewer(); // viewer mock (until implemented)
+  registerProfileView();
   registerPosts();
   creatPost();
   sl.registerLazySingleton<LikeMemory>(
@@ -302,7 +315,7 @@ Future<void> init() async {
 
   // ---- PROFILE VIEW ----
 
-  sl.registerFactory(() => ProfileCubit(sl()));
+  // sl.registerFactory(() => ProfileCubit(sl()));
 }
 
 /// Call this right before opening the Viewers List, when you *know* the ids.
@@ -383,6 +396,21 @@ void _registerLiveViewer() {
   // sl.registerLazySingleton<ViewerRepository>(() => ViewerRepositoryMock());
 }
 
+void registerProfileView() {
+  // ===== PROFILE VIEW
+  sl.registerLazySingleton<view_ds.ProfileRemoteDataSource>(
+    () => view_ds.ProfileRemoteDataSource(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<view_repo.ProfileRepository>(
+    () => view_repo_impl.ProfileRepositoryImpl(
+      sl<view_ds.ProfileRemoteDataSource>(),
+    ),
+  );
+  sl.registerFactory<ProfileCubit>(
+    () => ProfileCubit(sl<view_repo.ProfileRepository>()),
+  );
+}
+
 // In your injection_container.dart - remove HostPusherService registration
 void _registerPusher() {
   if (sl.isRegistered<PusherService>()) {
@@ -446,7 +474,7 @@ liveFeeds() {
   sl.registerFactory<LiveFeedBloc>(() => LiveFeedBloc(sl()));
 }
 
-registerPosts() {
+void registerPosts() {
   sl<Dio>().interceptors.add(EtagCacheInterceptor());
 
   // register post remote datasource + repository
@@ -457,9 +485,41 @@ registerPosts() {
     () => PostRepositoryImpl(sl<PostRemoteDataSource>()),
   );
 
-  // // small factory for PostCubit (so you can get it with a postUuid at runtime)
-  // PostCubit makePostCubit(String postUuid) =>
-  //     PostCubit(sl<PostRepository>(), postUuid);
+  // ✅ FIXED: Register as factory that takes postId parameter
+  sl.registerFactoryParam<PostCubit, String, void>((postId, _) {
+    debugPrint('🎯 GetIt: Creating PostCubit with postId: $postId');
+    final cubit = PostCubit(sl<PostRepository>(), postId);
+    debugPrint('🎯 GetIt: PostCubit created successfully');
+    return cubit;
+  });
+
+  // Test the registration immediately
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    try {
+      debugPrint('🧪 Testing PostCubit GetIt registration...');
+      final testCubit = sl<PostCubit>(param1: 'test-post-id');
+      debugPrint('✅ PostCubit GetIt registration SUCCESSFUL');
+    } catch (e) {
+      debugPrint('❌ PostCubit GetIt registration FAILED: $e');
+      debugPrint('🔄 Attempting alternative registration...');
+      _registerPostCubitAlternative();
+    }
+  });
+}
+
+// Alternative registration method
+void _registerPostCubitAlternative() {
+  // Unregister if already registered
+  if (sl.isRegistered<PostCubit>()) {
+    sl.unregister<PostCubit>();
+  }
+
+  // Register as a factory that returns a function
+  sl.registerFactory<PostCubit Function(String)>(() {
+    return (postId) => PostCubit(sl<PostRepository>(), postId);
+  });
+
+  debugPrint('✅ PostCubit alternative registration complete');
 }
 
 creatPost() {

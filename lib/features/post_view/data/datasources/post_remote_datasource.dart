@@ -69,6 +69,11 @@ class PostRemoteDataSource {
     await http.dio.post(_p(postUuid, '/report'), data: {'reason': reason});
   }
 
+  /// Fetch comments page
+  ///
+  /// NOTE: The API may return a `total_comments_and_replies` field (root)
+  /// which represents combined count of comments + replies. When present we
+  /// prefer that for the page total because the UI should show combined counts.
   Future<CommentsPageResult> getComments(
     String postUuid, {
     int page = 1,
@@ -78,6 +83,7 @@ class PostRemoteDataSource {
       _p(postUuid, '/comments'),
       queryParameters: {'page': page, 'per_page': perPage},
     );
+
     final m = _asMap(res.data);
 
     final data = ((m['data'] as List?) ?? const [])
@@ -85,10 +91,20 @@ class PostRemoteDataSource {
         .map((e) => e.toEntity())
         .toList();
 
+    // meta/links handling as before
     final meta = (m['meta'] as Map?)?.cast<String, dynamic>() ?? const {};
     final links = (m['links'] as Map?)?.cast<String, dynamic>() ?? const {};
     final current = (meta['current_page'] as num?)?.toInt() ?? page;
-    final total = (meta['total'] as num?)?.toInt() ?? data.length;
+
+    // Prefer API's "total_comments_and_replies" when present (includes replies).
+    // Fallback to meta['total'] which is the original behavior (may represent top-level comments).
+    int total;
+    if (m.containsKey('total_comments_and_replies')) {
+      total = (m['total_comments_and_replies'] as num?)?.toInt() ?? data.length;
+    } else {
+      total = (meta['total'] as num?)?.toInt() ?? data.length;
+    }
+
     final hasNext = links['next'] != null;
 
     return CommentsPageResult(
@@ -127,5 +143,21 @@ class PostRemoteDataSource {
     );
     final m = _unwrap(res.data);
     return (m['likes'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<Comment> editComment(
+    String postUuid,
+    String commentUuid,
+    String text,
+  ) async {
+    final res = await http.dio.put(
+      _p(postUuid, '/comments/$commentUuid'),
+      data: {'text': text},
+    );
+    return CommentDto.fromMap(_unwrap(res.data)).toEntity();
+  }
+
+  Future<void> deleteComment(String postUuid, String commentUuid) async {
+    await http.dio.delete(_p(postUuid, '/comments/$commentUuid'));
   }
 }

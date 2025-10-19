@@ -21,6 +21,7 @@ class PostRepositoryImpl implements PostRepository {
   @override
   Future<Post> toggleLike(String postId) async =>
       (await remote.toggleLike(postId)).toEntity();
+
   @override
   Future<int> share(String postId) => remote.share(postId);
 
@@ -47,4 +48,12 @@ class PostRepositoryImpl implements PostRepository {
   @override
   Future<int> toggleCommentLike(String postId, String commentId) =>
       remote.toggleCommentLike(postId, commentId);
+
+  @override
+  Future<Comment> editComment(String postId, String commentId, String text) =>
+      remote.editComment(postId, commentId, text);
+
+  @override
+  Future<void> deleteComment(String postId, String commentId) =>
+      remote.deleteComment(postId, commentId);
 }

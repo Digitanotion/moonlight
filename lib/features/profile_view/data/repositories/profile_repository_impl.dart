@@ -35,7 +35,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final posts = dataList.map<Post>((m) {
       final au = (m['author'] as Map).cast<String, dynamic>();
       final user = AppUser(
-        id: 0,
+        id: "0",
         name: '${au['name']}',
         avatarUrl: '${au['avatarUrl']}',
         countryFlagEmoji: '${au['countryFlagEmoji']}',

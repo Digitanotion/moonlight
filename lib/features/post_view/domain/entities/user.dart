@@ -1,5 +1,5 @@
 class AppUser {
-  final int id;
+  final String id;
   final String name;
   final String avatarUrl;
   final String countryFlagEmoji; // using emoji for simplicity

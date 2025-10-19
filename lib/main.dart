@@ -5,10 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/app_router.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
+import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
 import 'package:moonlight/firebase_options.dart';
+import 'package:provider/provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +30,7 @@ class MyApp extends StatelessWidget {
       providers: [
         BlocProvider<OnboardingBloc>(create: (_) => sl<OnboardingBloc>()),
         BlocProvider<AuthBloc>(create: (_) => sl<AuthBloc>()),
+        ChangeNotifierProvider(create: (context) => sl<CurrentUserService>()),
       ],
       child: MaterialApp(
         title: 'Moonlight',

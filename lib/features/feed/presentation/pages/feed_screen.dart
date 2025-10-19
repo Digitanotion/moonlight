@@ -102,7 +102,7 @@ class _FeedScreenState extends State<FeedScreen> {
       RouteNames.postView,
       arguments: {
         'postId': p.id, // <- keep using .id
-        'isOwner': false,
+        // 'isOwner': false,
       },
     );
 
@@ -123,7 +123,7 @@ class _FeedScreenState extends State<FeedScreen> {
   void _openProfile(Post p) {
     Navigator.pushNamed(
       context,
-      RouteNames.profile_view,
+      RouteNames.profileView,
       arguments: {
         'userUuid': p.author.id.toString(),
         'user_slug': p.author.name,

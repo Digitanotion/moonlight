@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
-// import 'package:moonlight/core/services/local_cache.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/widgets/auth_guard.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -22,24 +21,17 @@ import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/posts_screen.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
-// import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
-// import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
-// import 'package:moonlight/features/livestream/domain/repositories/live_repository.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
-// import 'package:moonlight/features/livestream/presentation/cubits/live_cubits.dart';
 import 'package:moonlight/features/livestream/presentation/pages/go_live_screen.dart';
 import 'package:moonlight/features/livestream/presentation/pages/list_viewers.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_host_page.dart';
-// import 'package:moonlight/features/livestream/presentation/pages/live_viewer.dart';
 import 'package:moonlight/features/livestream/presentation/pages/livestream_ended.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
-// import 'package:moonlight/features/post_view/data/datasources/post_local_datasource.dart';
-// import 'package:moonlight/features/post_view/data/repositories/post_repository_impl.dart';
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
 import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
 import 'package:moonlight/features/post_view/presentation/pages/comments_page.dart';
@@ -50,7 +42,6 @@ import 'package:moonlight/features/profile_setup/presentation/pages/my_profile_s
 import 'package:moonlight/features/profile_setup/presentation/pages/profile_setup_screen.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/profile_view.dart';
-
 import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
 import 'package:moonlight/features/search/presentation/pages/search_screen.dart';
 import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
@@ -62,14 +53,14 @@ class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case RouteNames.splash:
-        return MaterialPageRoute(builder: (_) => const SplashScreen());
+        return MaterialPageRoute(builder: (context) => const SplashScreen());
 
       case RouteNames.onboarding:
-        return MaterialPageRoute(builder: (_) => OnboardingScreen());
+        return MaterialPageRoute(builder: (context) => OnboardingScreen());
 
       case RouteNames.login:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
+          builder: (context) => BlocProvider(
             create: (context) => sl<AuthBloc>(),
             child: const LoginScreen(),
           ),
@@ -77,81 +68,197 @@ class AppRouter {
 
       case RouteNames.register:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
+          builder: (context) => BlocProvider(
             create: (context) => sl<AuthBloc>(),
             child: const RegisterScreen(),
           ),
         );
 
       case RouteNames.home:
-        return MaterialPageRoute(
-          builder: (_) => const HomeScreen(),
-        ); // or your HomeScreen
+        return MaterialPageRoute(builder: (context) => const HomeScreen());
+
       case RouteNames.email_verify:
         return MaterialPageRoute(
-          builder: (_) =>
+          builder: (context) =>
               const EmailVerificationScreen(email: "digitanotion@gmail.com"),
-        ); //
+        );
+
       case RouteNames.forget_password:
         return MaterialPageRoute(
-          builder: (_) => const ForgetPasswordScreen(),
-        ); // forget_password
-      // profile_setup
+          builder: (context) => const ForgetPasswordScreen(),
+        );
+
       case RouteNames.search:
         return MaterialPageRoute(
-          builder:
-              (_) => // In your route generator or screen navigation
-              BlocProvider(
-                create: (context) => sl<SearchBloc>(),
-                child: const SearchScreen(),
-              ),
-        ); //search
+          builder: (context) => BlocProvider(
+            create: (context) => sl<SearchBloc>(),
+            child: const SearchScreen(),
+          ),
+        );
 
       case RouteNames.profile_setup:
         return MaterialPageRoute(
-          builder:
-              (_) => // In your route generator or screen navigation
-              BlocProvider(
-                create: (context) => sl<ProfileSetupCubit>(),
-                child: const ProfileSetupScreen(),
-              ),
+          builder: (context) => BlocProvider(
+            create: (context) => sl<ProfileSetupCubit>(),
+            child: const ProfileSetupScreen(),
+          ),
         );
 
       case RouteNames.interests:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => sl<UserInterestCubit>(),
+          builder: (context) => BlocProvider(
+            create: (context) => sl<UserInterestCubit>(),
             child: const UserInterestScreen(),
           ),
         );
+
       case RouteNames.editProfile:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => sl<EditProfileCubit>(),
+          builder: (context) => BlocProvider(
+            create: (context) => sl<EditProfileCubit>(),
             child: const EditProfileScreen(),
           ),
         );
+
       case RouteNames.myProfile:
         return MaterialPageRoute(
-          builder: (_) => AuthGuard(
+          builder: (context) => AuthGuard(
             child: BlocProvider<ProfilePageCubit>(
-              create: (_) => sl<ProfilePageCubit>()..load(),
+              create: (context) => sl<ProfilePageCubit>()..load(),
               child: const MyProfileScreen(),
             ),
           ),
           settings: settings,
         );
+
+      case RouteNames.profileView:
+        {
+          // robust handling: require userUuid; if missing show friendly screen.
+          final a = (settings.arguments as Map?) ?? const {};
+          final userUuid = (a['userUuid'] as String?) ?? '';
+
+          if (userUuid.isEmpty) {
+            return MaterialPageRoute(
+              builder: (context) => Scaffold(
+                backgroundColor: Colors.black,
+                appBar: AppBar(
+                  backgroundColor: Colors.transparent,
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new),
+                    onPressed: () => Navigator.maybePop(context),
+                  ),
+                ),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 72,
+                          color: Colors.redAccent,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Invalid Profile',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No user identifier was provided. Returning to feed.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Back'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          // Try to create ProfileCubit via GetIt, but catch and show helpful error
+          try {
+            return MaterialPageRoute(
+              builder: (context) => BlocProvider<ProfileCubit>(
+                create: (context) => sl<ProfileCubit>()..load(userUuid),
+                child: const ProfileViewPage(),
+              ),
+              settings: settings,
+            );
+          } catch (err) {
+            debugPrint('❌ Failed to create ProfileCubit via GetIt: $err');
+            return MaterialPageRoute(
+              builder: (context) => Scaffold(
+                backgroundColor: Colors.black,
+                appBar: AppBar(
+                  backgroundColor: Colors.transparent,
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new),
+                    onPressed: () => Navigator.maybePop(context),
+                  ),
+                ),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 72,
+                          color: Colors.orangeAccent,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Profile unavailable',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'There was an internal configuration error. Please ensure dependency injection is initialized before navigating to the profile view.\n\nError: ${err.toString()}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Back'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+
       case RouteNames.goLive:
         return MaterialPageRoute(
-          builder: (_) => AuthGuard(child: const GoLiveScreen()),
+          builder: (context) => AuthGuard(child: const GoLiveScreen()),
           settings: settings,
         );
 
       case RouteNames.liveHost:
         final a = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
-          builder: (_) => BlocProvider<LiveHostBloc>(
-            create: (_) => GetIt.I<LiveHostBloc>(),
+          builder: (context) => BlocProvider<LiveHostBloc>(
+            create: (context) => GetIt.I<LiveHostBloc>(),
             child: LiveHostPage(
               hostName: a['host_name'] as String,
               hostBadge: a['host_badge'] as String,
@@ -172,9 +279,8 @@ class AppRouter {
           final uuid = a['uuid'] as String?;
           final channel = a['channel'] as String?;
           if (id == null || uuid == null || channel == null) {
-            // visible, friendly guard
             return MaterialPageRoute(
-              builder: (_) => const Scaffold(
+              builder: (context) => const Scaffold(
                 body: Center(
                   child: Text('Unable to open live (missing id/uuid/channel).'),
                 ),
@@ -182,11 +288,10 @@ class AppRouter {
             );
           }
 
-          // Build host card from args (or leave defaults)
           final host = HostInfo(
             name: (a['hostName'] as String?) ?? 'Host',
             title: (a['title'] as String?) ?? 'Live',
-            subtitle: '', // you can enrich from feed
+            subtitle: '',
             badge: (a['role'] as String?) ?? 'Host',
             avatarUrl:
                 (a['hostAvatar'] as String?) ??
@@ -198,22 +303,20 @@ class AppRouter {
               ? null
               : DateTime.tryParse(startedAtIso);
 
-          // ✅ FIX: Add authLocalDataSource parameter
           final repo = ViewerRepositoryImpl(
             http: GetIt.I<DioClient>(),
             pusher: GetIt.I<PusherService>(),
-            authLocalDataSource:
-                GetIt.I<AuthLocalDataSource>(), // Add this line
-            livestreamParam: id.toString(), // ✅ REST path uses numeric id
-            livestreamIdNumeric: id, // ✅ Pusher channels use numeric id
+            authLocalDataSource: GetIt.I<AuthLocalDataSource>(),
+            livestreamParam: id.toString(),
+            livestreamIdNumeric: id,
             channelName: channel,
             initialHost: host,
             startedAt: startedAt,
           );
 
           return MaterialPageRoute(
-            builder: (_) => BlocProvider(
-              create: (_) => ViewerBloc(repo)..add(const ViewerStarted()),
+            builder: (context) => BlocProvider(
+              create: (context) => ViewerBloc(repo)..add(const ViewerStarted()),
               child: LiveViewerScreen(repository: repo),
             ),
             settings: settings,
@@ -222,8 +325,8 @@ class AppRouter {
 
       case RouteNames.createPost:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider<CreatePostCubit>(
-            create: (_) => sl<CreatePostCubit>(),
+          builder: (context) => BlocProvider<CreatePostCubit>(
+            create: (context) => sl<CreatePostCubit>(),
             child: const CreatePostScreen(),
           ),
           settings: settings,
@@ -231,81 +334,82 @@ class AppRouter {
 
       case RouteNames.accountSettings:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => sl<AccountSettingsCubit>(),
+          builder: (context) => BlocProvider(
+            create: (context) => sl<AccountSettingsCubit>(),
             child: const AccountSettingsPage(),
           ),
         );
 
       case RouteNames.postsPage:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => sl<FeedCubit>(),
+          builder: (context) => BlocProvider(
+            create: (context) => sl<FeedCubit>(),
             child: const FeedScreen(),
           ),
         );
+
       case RouteNames.postView:
         {
           final a = (settings.arguments as Map?) ?? const {};
-          final postId = a['postId'] as String?;
+          final postId = (a['postId'] as String?) ?? 'demo-post-1';
           final isOwner = (a['isOwner'] as bool?) ?? false;
 
-          if (postId == null || postId.isEmpty) {
+          if (postId.isEmpty) {
             return MaterialPageRoute(
-              builder: (_) => const Scaffold(
+              builder: (context) => const Scaffold(
                 body: Center(child: Text('Missing postId for PostView')),
               ),
             );
           }
 
-          return MaterialPageRoute(
-            builder: (_) => BlocProvider<PostCubit>(
-              create: (_) => PostCubit(sl<PostRepository>(), postId)..load(),
-              child: PostViewScreen(isOwner: isOwner),
-            ),
-            settings: settings,
-          );
+          // ✅ METHOD 1: Try GetIt factory param first
+          try {
+            return MaterialPageRoute(
+              builder: (context) => BlocProvider(
+                create: (context) => sl<PostCubit>(param1: postId)..load(),
+                child: PostViewScreen(isOwner: isOwner, postId: postId),
+              ),
+              settings: settings,
+            );
+          } catch (e) {
+            debugPrint('❌ GetIt factory param failed: $e');
+
+            // ✅ METHOD 2: Fallback to direct creation
+            return MaterialPageRoute(
+              builder: (context) => BlocProvider(
+                create: (context) =>
+                    PostCubit(sl<PostRepository>(), postId)..load(),
+                child: PostViewScreen(isOwner: isOwner, postId: postId),
+              ),
+              settings: settings,
+            );
+          }
         }
       case RouteNames.listViewers:
-        return MaterialPageRoute(builder: (_) => const ViewersListPage());
+        return MaterialPageRoute(builder: (context) => const ViewersListPage());
+
       case RouteNames.livestreamEnded:
         final args = settings.arguments as LiveEndAnalytics?;
         return MaterialPageRoute(
-          builder: (_) => LivestreamEndedScreen(analytics: args),
+          builder: (context) => LivestreamEndedScreen(analytics: args),
         );
-
-      case RouteNames.postView:
-        {
-          // Expect: {'postId': String, 'isOwner': bool}
-          final a = (settings.arguments as Map?) ?? const {};
-          final postId = (a['postId'] as String?) ?? 'demo-post-1';
-          final isOwner = (a['isOwner'] as bool?) ?? false;
-
-          return MaterialPageRoute(
-            builder: (_) => BlocProvider<PostCubit>(
-              // Get the DI-registered PostRepository directly
-              create: (_) => PostCubit(sl<PostRepository>(), postId)..load(),
-              child: PostViewScreen(isOwner: isOwner),
-            ),
-            settings: settings,
-          );
-        }
 
       case RouteNames.postComments:
         {
           final a = (settings.arguments as Map?) ?? const {};
           final postCubit = a['postCubit'] as PostCubit;
           return MaterialPageRoute(
-            builder: (_) => BlocProvider.value(
+            builder: (context) => BlocProvider.value(
               value: postCubit,
               child: const CommentsPage(),
             ),
             settings: settings,
           );
         }
+
       default:
         return MaterialPageRoute(
-          builder: (_) => Scaffold(
+          builder: (context) => Scaffold(
             body: Center(child: Text('No route defined for ${settings.name}')),
           ),
         );

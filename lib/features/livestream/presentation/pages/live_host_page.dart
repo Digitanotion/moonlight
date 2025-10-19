@@ -468,7 +468,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                         Navigator.pushNamed(context, RouteNames.listViewers);
                       },
                       onPremium: () =>
-                          Navigator.pushNamed(context, RouteNames.profile_view),
+                          Navigator.pushNamed(context, RouteNames.profileView),
                       onSettings: _toggleSettingsMenu,
                     ),
                   ),

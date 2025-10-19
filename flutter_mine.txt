@@ -1,3 +1,540 @@
+
+┌─────────────────────────────────────────────────────────┐
+│ A new version of Flutter is available!                  │
+│                                                         │
+│ To update to the latest version, run "flutter upgrade". │
+└─────────────────────────────────────────────────────────┘
 Launching lib\main.dart on CPH2059 in debug mode...
-Running Gradle task 'assembleDebug'...                           1976.5s
+Running Gradle task 'assembleDebug'...                            617.1s
 √ Built build\app\outputs\flutter-apk\app-debug.apk
+Installing build\app\outputs\flutter-apk\app-debug.apk...          17.0s
+Syncing files to device CPH2059...                                 541ms
+
+Flutter run key commands.
+r Hot reload. 
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+A Dart VM Service on CPH2059 is available at: http://127.0.0.1:57803/RUT7O6slySA=/
+The Flutter DevTools debugger and profiler on CPH2059 is available at: http://127.0.0.1:9101?uri=http://127.0.0.1:57803/RUT7O6slySA=/
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following HttpExceptionWithStatus was thrown resolving an image codec:
+HttpException: Invalid statusCode: 403, uri =
+https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+When the exception was thrown, this was the stack
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+
+Performing hot restart...                                       
+Restarted application in 4,407ms.
+Try again after fixing the above error(s).
+
+Performing hot restart...                                       
+Restarted application in 5,384ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following HttpExceptionWithStatus was thrown resolving an image codec:
+HttpException: Invalid statusCode: 403, uri =
+https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+When the exception was thrown, this was the stack
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+
+Performing hot restart...                                       
+Restarted application in 6,640ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following HttpExceptionWithStatus was thrown resolving an image codec:
+HttpException: Invalid statusCode: 403, uri =
+https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+When the exception was thrown, this was the stack
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+
+Performing hot reload...                                        
+Reloaded 4 of 2392 libraries in 3,310ms (compile: 301 ms, reload: 1112 ms, reassemble: 1499 ms).
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+
+Performing hot reload...                                        
+Reloaded 4 of 2392 libraries in 2,833ms (compile: 138 ms, reload: 945 ms, reassemble: 1473 ms).
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: Invalid argument(s): No host specified in URI
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot restart...                                       
+Restarted application in 3,682ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: Exception: Invalid image data
+
+Performing hot restart...                                       
+Restarted application in 3,333ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+
+Performing hot restart...                                       
+Restarted application in 3,269ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following HttpExceptionWithStatus was thrown resolving an image codec:
+HttpException: Invalid statusCode: 403, uri =
+https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+When the exception was thrown, this was the stack
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot restart...                                       
+Restarted application in 3,228ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot reload...                                        
+Reloaded 2 of 2392 libraries in 2,829ms (compile: 64 ms, reload: 976 ms, reassemble: 1517 ms).
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot restart...                                       
+Restarted application in 3,048ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot restart...                                       
+Restarted application in 3,287ms.
+
+Performing hot restart...                                       
+Restarted application in 3,144ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot restart...                                       
+Restarted application in 3,467ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+
+Performing hot restart...                                       
+Restarted application in 2,997ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following _Exception was thrown resolving an image codec:
+Exception: Invalid image data
+
+When the exception was thrown, this was the stack:
+#0      _futurize (dart:ui/painting.dart:7977:5)
+#1      ImageDescriptor.encoded (dart:ui/painting.dart:7771:12)
+#2      instantiateImageCodecWithSize (dart:ui/painting.dart:2558:60)
+#3      PaintingBinding.instantiateImageCodecWithSize (package:flutter/src/painting/binding.dart:147:15)
+#4      ImageLoader.loadImageAsync.<anonymous closure> (package:cached_network_image/src/image_provider/_image_loader.dart:65:22)
+<asynchronous suspension>
+#5      ImageLoader._load (package:cached_network_image/src/image_provider/_image_loader.dart:124:27)
+<asynchronous suspension>
+#6      new MultiImageStreamCompleter.<anonymous closure> (package:cached_network_image/src/image_provider/multi_image_stream_completer.dart:26:7)
+<asynchronous suspension>
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/posts/5/2025/10/15/d285e781-0277-4ab9-ac7b-372457c2922f.mp4",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+Performing hot restart...                                       
+Restarted application in 5,657ms.
+
+Performing hot restart...                                       
+Restarted application in 3,018ms.
+
+══╡ EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE ╞════════════════════════════════════════════════════
+The following HttpExceptionWithStatus was thrown resolving an image codec:
+HttpException: Invalid statusCode: 403, uri =
+https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+
+When the exception was thrown, this was the stack
+
+Image provider:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+Image key:
+  CachedNetworkImageProvider("https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg",
+  scale: 1.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: HttpException: Invalid statusCode: 403, uri = https://svc.moonlightstream.app/storage/avatars/3/FWBFQ1yGXLzCPj5nMacvrEwHfRj8o2xotDaW7mWq.jpg
+Another exception was thrown: Exception: Invalid image data
+Lost connection to device.

@@ -30,7 +30,7 @@ class AppUserDto {
   );
 
   AppUser toEntity() => AppUser(
-    id: uuid.hashCode, // keep your int id requirement
+    id: uuid, // keep your int id requirement
     name: name,
     avatarUrl: avatarUrl,
     countryFlagEmoji: countryFlagEmoji,
