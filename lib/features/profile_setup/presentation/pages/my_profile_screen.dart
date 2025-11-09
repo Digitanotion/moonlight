@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+// new import
+import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart'; // if you have one
 
 class MyProfileScreen extends StatefulWidget {
@@ -13,10 +15,96 @@ class MyProfileScreen extends StatefulWidget {
 }
 
 class _MyProfileScreenState extends State<MyProfileScreen> {
+  bool _isShowingProgress = false;
+
   @override
   void initState() {
     super.initState();
     // context.read<ProfilePageCubit>().load();
+  }
+
+  void _showProgress() {
+    if (_isShowingProgress) return;
+    _isShowingProgress = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => WillPopScope(
+        onWillPop: () async => false,
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+
+  void _hideProgress() {
+    if (!_isShowingProgress) return;
+    _isShowingProgress = false;
+    if (Navigator.canPop(context)) Navigator.pop(context);
+  }
+
+  Future<void> _confirmLogout() async {
+    HapticFeedback.selectionClick();
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF0A0A0F),
+        title: const Text('Logout', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Are you sure you want to log out? You will need to sign in again to access your account.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(c).pop(false);
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              HapticFeedback.vibrate();
+              Navigator.of(c).pop(true);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF6F61),
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (res == true) {
+      // dispatch logout
+      context.read<AuthBloc>().add(LogoutRequested());
+    }
+  }
+
+  void _onAuthStateChanged(BuildContext ctx, AuthState state) {
+    if (state is AuthLoading) {
+      _showProgress();
+    } else {
+      // hide progress for any non-loading state
+      _hideProgress();
+    }
+
+    if (state is AuthUnauthenticated) {
+      // successful logout -> route to login/register and clear stack
+      Navigator.pushNamedAndRemoveUntil(
+        ctx,
+        RouteNames
+            .login, // replace with your login route name, e.g. RouteNames.login
+        (route) => false,
+      );
+    }
+
+    if (state is AuthFailure) {
+      // show error
+      ScaffoldMessenger.of(
+        ctx,
+      ).showSnackBar(SnackBar(content: Text(state.message)));
+    }
   }
 
   @override
@@ -28,236 +116,253 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       end: Alignment.bottomRight,
     );
 
-    return BlocConsumer<ProfilePageCubit, ProfilePageState>(
-      listener: (context, state) {
-        if (state.error != null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.error!)));
-        }
-      },
-      builder: (context, state) {
-        final user = state.user;
-        return Scaffold(
-          body: Container(
-            decoration: BoxDecoration(gradient: gradient),
-            child: SafeArea(
-              child: RefreshIndicator(
-                color: orange,
-                onRefresh: () =>
-                    context.read<ProfilePageCubit>().load(haptic: true),
-                child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            _iconButton(
-                              context,
-                              Icons.arrow_back,
-                              () => Navigator.pop(context),
-                            ),
-                            const Spacer(),
-                            Text(
-                              'My Profile',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                            const Spacer(),
-                            _iconButton(context, Icons.settings, () {
-                              HapticFeedback.selectionClick();
-                              // TODO: push settings route if you have one
-                            }),
-                          ],
+    // MultiBlocListener so we keep listening to ProfilePageCubit (existing)
+    // and also to AuthBloc for logout results.
+    return MultiBlocListener(
+      listeners: [
+        // keep your profile page listener (converted from BlocConsumer listener piece)
+        BlocListener<ProfilePageCubit, ProfilePageState>(
+          listener: (context, state) {
+            if (state.error != null) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(state.error!)));
+            }
+          },
+        ),
+        // Auth listener for logout flow
+        BlocListener<AuthBloc, AuthState>(listener: _onAuthStateChanged),
+      ],
+      child: BlocBuilder<ProfilePageCubit, ProfilePageState>(
+        builder: (context, state) {
+          final user = state.user;
+          return Scaffold(
+            body: Container(
+              decoration: BoxDecoration(gradient: gradient),
+              child: SafeArea(
+                child: RefreshIndicator(
+                  color: orange,
+                  onRefresh: () =>
+                      context.read<ProfilePageCubit>().load(haptic: true),
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              _iconButton(
+                                context,
+                                Icons.arrow_back,
+                                () => Navigator.pop(context),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'My Profile',
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const Spacer(),
+                              _iconButton(context, Icons.settings, () {
+                                HapticFeedback.selectionClick();
+                                // TODO: push settings route if you have one
+                              }),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
 
-                    // Header card
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: Column(
-                          children: [
-                            // avatar
-                            Container(
-                              width: 72,
-                              height: 72,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.08),
-                                image: (user?.avatarUrl != null)
-                                    ? DecorationImage(
-                                        image: NetworkImage(user!.avatarUrl!),
-                                        fit: BoxFit.cover,
+                      // Header card
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: Column(
+                            children: [
+                              // avatar
+                              Container(
+                                width: 72,
+                                height: 72,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withOpacity(0.08),
+                                  image: (user?.avatarUrl != null)
+                                      ? DecorationImage(
+                                          image: NetworkImage(user!.avatarUrl!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                  border: Border.all(
+                                    color: Colors.white24,
+                                    width: 1,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: (user?.avatarUrl == null)
+                                    ? const Icon(
+                                        Icons.person_outline,
+                                        color: Colors.white70,
                                       )
                                     : null,
-                                border: Border.all(
-                                  color: Colors.white24,
-                                  width: 1,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                '@${user?.userSlug ?? 'username'}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
                                 ),
                               ),
-                              alignment: Alignment.center,
-                              child: (user?.avatarUrl == null)
-                                  ? const Icon(
-                                      Icons.person_outline,
-                                      color: Colors.white70,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              '@${user?.username ?? 'username'}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
+                              const SizedBox(height: 4),
+                              Text(
+                                user?.fullname ?? '',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 13,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              user?.fullname ?? '',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _vipChip(),
-                            const SizedBox(height: 12),
-                            _bioLines(user?.bio),
-                            const SizedBox(height: 16),
+                              const SizedBox(height: 8),
+                              _vipChip(),
+                              const SizedBox(height: 12),
+                              _bioLines(user?.bio),
+                              const SizedBox(height: 16),
 
-                            // Edit Profile button
-                            SizedBox(
-                              width: 160,
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  HapticFeedback.selectionClick();
-                                  Navigator.pushNamed(
-                                    context,
-                                    RouteNames.editProfile,
-                                  );
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: orange,
-                                  foregroundColor: AppColors.textWhite,
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                              // Edit Profile button
+                              SizedBox(
+                                width: 160,
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    HapticFeedback.selectionClick();
+                                    Navigator.pushNamed(
+                                      context,
+                                      RouteNames.editProfile,
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: orange,
+                                    foregroundColor: AppColors.textWhite,
+                                    shape: const StadiumBorder(),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Edit Profile',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
-                                child: const Text(
-                                  'Edit Profile',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Stats card
+                              // _statsCard(
+                              //   orange: orange,
+                              //   fans: '12.5K',
+                              //   allies: '847',
+                              //   liveSessions: '150',
+                              //   coins: '2.8k',
+                              //   rankText: 'Ambassador Rank #124',
+                              // ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Segmented tabs
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _tabsBar(
+                            selected: state.tab,
+                            onTap: (t) =>
+                                context.read<ProfilePageCubit>().switchTab(t),
+                          ),
+                        ),
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+                      // Content
+                      if (state.loading && user == null)
+                        const SliverToBoxAdapter(child: _ShimmerList())
+                      else
+                        switch (state.tab) {
+                          ProfileTab.posts => SliverPadding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            sliver: _postsGrid(state.posts),
+                          ),
+                          ProfileTab.clubs => SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Column(
+                                children: state.clubs
+                                    .map((c) => _clubTile(c))
+                                    .toList(),
                               ),
                             ),
-                            const SizedBox(height: 16),
-
-                            // Stats card
-                            _statsCard(
-                              orange: orange,
-                              fans: '12.5K',
-                              allies: '847',
-                              liveSessions: '150',
-                              coins: '2.8k',
-                              rankText: 'Ambassador Rank #124',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Segmented tabs
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _tabsBar(
-                          selected: state.tab,
-                          onTap: (t) =>
-                              context.read<ProfilePageCubit>().switchTab(t),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-                    // Content
-                    if (state.loading && user == null)
-                      const SliverToBoxAdapter(child: _ShimmerList())
-                    else
-                      switch (state.tab) {
-                        ProfileTab.posts => SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          sliver: _postsGrid(state.posts),
-                        ),
-                        ProfileTab.clubs => SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Column(
-                              children: state.clubs
-                                  .map((c) => _clubTile(c))
-                                  .toList(),
+                          ),
+                          ProfileTab.livestreams => SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Column(
+                                children: state.replays
+                                    .map((r) => _replayCard(r, orange))
+                                    .toList(),
+                              ),
                             ),
                           ),
-                        ),
-                        ProfileTab.livestreams => SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Column(
-                              children: state.replays
-                                  .map((r) => _replayCard(r, orange))
-                                  .toList(),
-                            ),
-                          ),
-                        ),
-                      },
+                        },
 
-                    // Bottom action cards
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-                        child: _actionsPanel(
-                          onEdit: () => Navigator.pushNamed(
-                            context,
-                            RouteNames.editProfile,
-                          ),
-                          onAccount: () {
-                            /* TODO: route */
-                            Navigator.pushNamed(
+                      // Bottom action cards
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+                          child: _actionsPanel(
+                            onEdit: () => Navigator.pushNamed(
                               context,
-                              RouteNames.accountSettings,
-                            );
-                          },
-                          onEarnings: () {
-                            /* TODO: route */
-                          },
-                          onLogout: () {
-                            HapticFeedback.selectionClick();
-                            // fire your AuthBloc logout event and navigate to login/register
-                          },
+                              RouteNames.editProfile,
+                            ),
+                            onAccount: () {
+                              Navigator.pushNamed(
+                                context,
+                                RouteNames.accountSettings,
+                              );
+                            },
+                            onEarnings: () {
+                              HapticFeedback.selectionClick();
+                              Navigator.pushNamed(context, RouteNames.wallet);
+                            },
+                            onLogout: () {
+                              HapticFeedback.selectionClick();
+                              _confirmLogout();
+                            },
+                          ),
                         ),
                       ),
-                    ),
 
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                  ],
+                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -268,11 +373,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       child: Container(
         width: 36,
         height: 36,
-        // decoration: BoxDecoration(
-        //   color: Colors.white.withOpacity(0.08),
-        //   borderRadius: BorderRadius.circular(10),
-        //   border: Border.all(color: Colors.white24),
-        // ),
         child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
@@ -516,26 +616,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
               ],
             ),
           ),
-
-          // const SizedBox(width: 12),
-          // SizedBox(
-          //   height: 36,
-          //   child: ElevatedButton(
-          //     onPressed: () {},
-          //     style: ElevatedButton.styleFrom(
-          //       backgroundColor: isPresident
-          //           ? const Color(0xFFFF7A00)
-          //           : Colors.white.withOpacity(0.08),
-          //       foregroundColor: isPresident ? Colors.black : Colors.white,
-          //       shape: const StadiumBorder(),
-          //       padding: const EdgeInsets.symmetric(horizontal: 14),
-          //     ),
-          //     child: Text(
-          //       isPresident ? 'Manage Club' : 'Open Club',
-          //       style: const TextStyle(fontWeight: FontWeight.w700),
-          //     ),
-          //   ),
-          // ),
         ],
       ),
     );
@@ -552,7 +632,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // thumbnail
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Stack(
@@ -650,11 +729,11 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       ),
       child: Column(
         children: [
-          _actionRow(Icons.person_outline_rounded, 'Edit Profile', onEdit),
-          const Divider(color: Colors.white24, height: 1),
+          // _actionRow(Icons.person_outline_rounded, 'Edit Profile', onEdit),
+          // const Divider(color: Colors.white24, height: 1),
           _actionRow(Icons.settings_outlined, 'Account Settings', onAccount),
           const Divider(color: Colors.white24, height: 1),
-          _actionRow(Icons.bar_chart_rounded, 'Earnings Dashboard', onEarnings),
+          _actionRow(Icons.bar_chart_rounded, 'Wallet & Earnings', onEarnings),
           const Divider(color: Colors.white24, height: 1),
           _actionRow(Icons.logout_rounded, 'Logout', onLogout, danger: true),
         ],

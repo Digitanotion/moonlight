@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/features/auth/data/models/user_model.dart';
 
@@ -28,20 +29,26 @@ abstract class AuthRemoteDataSource {
   Future<UserModel> loginWithFirebase(String firebaseToken, String deviceName);
 
   Future<String> forgotPassword(String email);
+
+  /// Refresh the current auth token using server refresh endpoint.
+  /// On success this implementation persists the new token(s) into SharedPreferences
+  /// using keys 'access_token' and 'token'.
+  Future<void> refreshToken();
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final Dio client;
+  final SharedPreferences prefs;
 
-  AuthRemoteDataSourceImpl({required this.client});
+  AuthRemoteDataSourceImpl({required this.client, required this.prefs});
 
   final BaseUrl = "https://svc.moonlightstream.app/api";
+
   @override
   Future<UserModel> fetchMe() async {
     final res = await client.get(
       '${BaseUrl}/v1/me',
     ); // Sanctum token already on interceptor
-    // API shape: { "data": { ...UserResource } }
     final data = (res.data is Map && res.data['data'] is Map)
         ? Map<String, dynamic>.from(res.data['data'] as Map)
         : <String, dynamic>{};
@@ -56,7 +63,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   ) async {
     try {
       final response = await client.post(
-        'https://svc.moonlightstream.app/api/v1/login',
+        '${BaseUrl}/v1/login',
         data: {'email': email, 'password': password, 'device_name': deviceName},
       );
 
@@ -85,7 +92,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }) async {
     try {
       final response = await client.post(
-        'https://svc.moonlightstream.app/api/v1/register',
+        '${BaseUrl}/v1/register',
         data: {
           'email': email,
           'password': password,
@@ -145,7 +152,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   ) async {
     try {
       final response = await client.post(
-        'https://svc.moonlightstream.app/api/v1/login/firebase',
+        '${BaseUrl}/v1/login/firebase',
         data: {'firebase_token': firebaseToken, 'device_name': deviceName},
       );
 
@@ -169,7 +176,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   ) async {
     try {
       final response = await client.post(
-        'https://svc.moonlightstream.app/api/v1/login/firebase',
+        '${BaseUrl}/v1/login/firebase',
         data: {'firebase_token': firebaseToken, 'device_name': deviceName},
       );
 
@@ -190,7 +197,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<String> forgotPassword(String email) async {
     try {
       final response = await client.post(
-        "https://svc.moonlightstream.app/api/v1/forgot-password",
+        "${BaseUrl}/v1/forgot-password",
         data: {'email': email},
       );
 
@@ -228,5 +235,42 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     });
 
     return errorMessages.join(', ');
+  }
+
+  /// Refresh token implementation:
+  ///
+  /// - Calls `${BaseUrl}/v1/refresh` using current Authorization header (set by interceptors).
+  /// - On success expects server to return a JSON payload containing either:
+  ///     - { "access_token": "<token>", ... } OR
+  ///     - { "token": "<token>", ... }
+  /// - Persists token to SharedPreferences under keys 'access_token' and 'token' so other parts
+  ///   of the app (and existing code) can read it.
+  /// - Throws ServerException on failure.
+  @override
+  Future<void> refreshToken() async {
+    try {
+      final response = await client.post('${BaseUrl}/v1/refresh');
+      final data = response.data as Map<String, dynamic>? ?? {};
+      final token = (data['access_token'] ?? data['token'])?.toString();
+
+      if (token == null || token.isEmpty) {
+        throw ServerException(
+          'Refresh token failed: no token returned',
+          statusCode: response.statusCode,
+        );
+      }
+
+      // Persist to SharedPreferences using both common keys used by the app
+      await prefs.setString('access_token', token);
+      await prefs.setString('token', token);
+    } on DioException catch (e) {
+      // surface a friendly server exception with details if available
+      final message = e.response?.data is Map
+          ? (e.response!.data['message'] ?? 'Token refresh failed')
+          : 'Token refresh failed';
+      throw ServerException(message, statusCode: e.response?.statusCode);
+    } catch (e) {
+      throw ServerException('Token refresh failed: $e');
+    }
   }
 }

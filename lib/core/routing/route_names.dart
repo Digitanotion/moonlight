@@ -25,4 +25,12 @@ class RouteNames {
   static const postView = '/post_views';
   static const postComments = '/post_comments';
   static const createPost = '/create-post';
+  static const wallet = '/wallet';
+  static const buyCoins = '/wallet/buy';
+  static const transactionReceipt = '/wallet/receipt';
+  static const String giftCoins = '/gift-coins';
+  static const withdrawal = '/withdrawal';
+  static const String setPin = '/set-pin';
+
+  // static const transactionReceipt = '/transactionReceipt';
 }

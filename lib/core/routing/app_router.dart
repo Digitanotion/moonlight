@@ -17,6 +17,8 @@ import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_
 import 'package:moonlight/features/edit_profile/presentation/pages/edit_profile_screen.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/feed_screen.dart';
+import 'package:moonlight/features/gift_coins/presentation/cubit/transfer_cubit.dart';
+import 'package:moonlight/features/gift_coins/presentation/pages/gift_coins_page.dart';
 import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/posts_screen.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
@@ -48,6 +50,16 @@ import 'package:moonlight/features/settings/presentation/cubit/account_settings_
 import 'package:moonlight/features/settings/presentation/pages/account_settings_page.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/pages/user_interest_screen.dart';
+import 'package:moonlight/features/wallet/presentation/cubit/wallet_cubit.dart';
+import 'package:moonlight/features/wallet/presentation/pages/buy_coins_screen.dart';
+import 'package:moonlight/features/wallet/presentation/pages/set_pin_page.dart';
+import 'package:moonlight/features/wallet/presentation/pages/transaction_receipt_screen.dart';
+import 'package:moonlight/features/wallet/presentation/pages/wallet_screen.dart';
+import 'package:moonlight/features/withdrawal/data/datasources/withdrawal_remote_datasource.dart';
+import 'package:moonlight/features/withdrawal/data/repositories/withdrawal_repository_impl.dart';
+import 'package:moonlight/features/withdrawal/presentation/cubit/withdrawal_cubit.dart';
+import 'package:http/http.dart' as http;
+import 'package:moonlight/features/withdrawal/presentation/pages/withdrawal_page.dart';
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -262,6 +274,7 @@ class AppRouter {
             child: LiveHostPage(
               hostName: a['host_name'] as String,
               hostBadge: a['host_badge'] as String,
+              hostUuid: a['host_uuid'] as String,
               topic: a['topic'] as String,
               initialViewers: a['initial_viewers'] as int? ?? 0,
               startedAtIso:
@@ -278,6 +291,7 @@ class AppRouter {
           final id = a['id'] as int?;
           final uuid = a['uuid'] as String?;
           final channel = a['channel'] as String?;
+          final hostUuid = a['hostUuid'] as String?;
           if (id == null || uuid == null || channel == null) {
             return MaterialPageRoute(
               builder: (context) => const Scaffold(
@@ -310,6 +324,7 @@ class AppRouter {
             livestreamParam: id.toString(),
             livestreamIdNumeric: id,
             channelName: channel,
+            hostUserUuid: hostUuid,
             initialHost: host,
             startedAt: startedAt,
           );
@@ -385,6 +400,40 @@ class AppRouter {
             );
           }
         }
+      case RouteNames.giftCoins:
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider<TransferCubit>(
+            create: (context) => sl<TransferCubit>()..loadBalance(),
+            child: const GiftCoinsPage(),
+          ),
+        );
+
+      case RouteNames.wallet:
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider<WalletCubit>(
+            create: (context) => sl<WalletCubit>()..loadAll(),
+            child: const WalletScreen(),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.buyCoins:
+        // Reuse the same cubit instance if navigating from Wallet.
+        // If you want an independent instance, use create: (_) => sl<WalletCubit>() instead.
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider.value(
+            value: sl<WalletCubit>(),
+            child: const BuyCoinsScreen(),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.transactionReceipt:
+        return MaterialPageRoute(
+          builder: (context) => const TransactionReceiptScreen(),
+          settings: settings,
+        );
+
       case RouteNames.listViewers:
         return MaterialPageRoute(builder: (context) => const ViewersListPage());
 
@@ -406,6 +455,17 @@ class AppRouter {
             settings: settings,
           );
         }
+
+      case RouteNames.withdrawal:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (context) => sl<WithdrawalCubit>(), // Get from GetIt
+            child: const WithdrawalPage(),
+          ),
+        );
+
+      case RouteNames.setPin:
+        return MaterialPageRoute(builder: (context) => const SetPinPage());
 
       default:
         return MaterialPageRoute(

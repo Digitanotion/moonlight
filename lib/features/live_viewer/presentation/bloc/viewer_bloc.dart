@@ -15,6 +15,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   StreamSubscription? _pauseSub, _endedSub, _approvalSub;
   StreamSubscription? _errorSub, _roleChangeSub, _removalSub;
   StreamSubscription<String?>? _activeGuestSub;
+  StreamSubscription<GiftBroadcast>? _giftBroadcastSub;
 
   ViewerBloc(this.repo) : super(ViewerState.initial()) {
     on<ViewerStarted>(_onStarted);
@@ -106,6 +107,82 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     on<_ActiveGuestUpdated>(
       (e, emit) => emit(state.copyWith(activeGuestUuid: e.uuid)),
     );
+    on<GiftSheetRequested>((e, emit) {
+      emit(state.copyWith(showGiftSheet: true));
+      add(const GiftsFetchRequested());
+    });
+    on<GiftSheetClosed>((e, emit) {
+      emit(state.copyWith(showGiftSheet: false, sendErrorMessage: null));
+    });
+
+    // === GIFTS: fetch catalog
+    on<GiftsFetchRequested>((e, emit) async {
+      final (items, version) = await repo.fetchGiftCatalog();
+      emit(state.copyWith(giftCatalog: items, giftCatalogVersion: version));
+    });
+
+    // === GIFTS: send flow
+    on<GiftSendRequested>((e, emit) async {
+      emit(state.copyWith(isSendingGift: true, sendErrorMessage: null));
+      try {
+        final result = await repo.sendGift(
+          giftCode: e.code,
+          toUserUuid: e.toUserUuid,
+          livestreamId: e.livestreamId,
+          quantity: e.quantity,
+        );
+        add(GiftSendSucceeded(result));
+      } catch (err) {
+        add(GiftSendFailed(err.toString()));
+      }
+    });
+
+    on<GiftSendSucceeded>((e, emit) async {
+      // Stop spinner and close sheet (server confirmed send)
+      emit(state.copyWith(isSendingGift: false, showGiftSheet: false));
+
+      // Refresh canonical balance from wallet endpoint (do not trust sendGift payload as sole source)
+      try {
+        final refreshedBalance = await repo.fetchWalletBalance();
+        if (refreshedBalance != null) {
+          emit(state.copyWith(walletBalanceCoins: refreshedBalance));
+        }
+      } catch (err) {
+        debugPrint('⚠️ Failed to refresh wallet after gift: $err');
+        // Keep UI working with whatever we had — do not crash.
+      }
+
+      // Sender feedback toast (reuse existing path)
+      add(
+        _GiftArrived(
+          GiftNotice(
+            from: 'You',
+            giftName: e.result.broadcast.giftCode,
+            coins: e.result.broadcast.coinsSpent,
+          ),
+        ),
+      );
+
+      // Enqueue overlay for local user too
+      add(GiftBroadcastReceived(e.result.broadcast));
+    });
+
+    on<GiftSendFailed>((e, emit) {
+      emit(state.copyWith(isSendingGift: false, sendErrorMessage: e.message));
+    });
+
+    // === GIFTS: broadcasts drive overlay queue
+    on<GiftBroadcastReceived>((e, emit) {
+      final q = List<GiftBroadcast>.from(state.giftOverlayQueue)
+        ..add(e.broadcast);
+      emit(state.copyWith(giftOverlayQueue: q));
+    });
+
+    on<GiftOverlayDequeued>((e, emit) {
+      if (state.giftOverlayQueue.isEmpty) return;
+      final q = List<GiftBroadcast>.from(state.giftOverlayQueue)..removeAt(0);
+      emit(state.copyWith(giftOverlayQueue: q));
+    });
   }
 
   // Helper methods for messages
@@ -142,10 +219,21 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     emit(state.copyWith(status: ViewerStatus.loading));
 
     final host = await repo.fetchHostInfo();
+
+    // Prefetch wallet balance (canonical source)
+    int? walletBalance;
+    try {
+      walletBalance = await repo.fetchWalletBalance();
+    } catch (e) {
+      debugPrint('⚠️ fetchWalletBalance on start failed: $e');
+      walletBalance = null;
+    }
+
     emit(
       state.copyWith(
         status: ViewerStatus.active,
         host: host,
+        walletBalanceCoins: walletBalance,
         joinRequested: true,
         awaitingApproval: false,
       ),
@@ -175,6 +263,10 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _giftSub = repo.watchGifts().listen((n) => add(_GiftArrived(n)));
     _pauseSub = repo.watchPause().listen((p) => add(_PauseChanged(p)));
     _endedSub = repo.watchEnded().listen((_) => add(const _LiveEnded()));
+    _giftBroadcastSub?.cancel();
+    _giftBroadcastSub = repo.watchGiftBroadcasts().listen(
+      (b) => add(GiftBroadcastReceived(b)),
+    );
     _approvalSub = repo.watchMyApproval().listen(
       (ok) => add(_MyApprovalChanged(ok)),
     );
@@ -252,6 +344,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
 
   @override
   Future<void> close() {
+    _giftBroadcastSub?.cancel();
     _clockSub?.cancel();
     _viewerSub?.cancel();
     _chatSub?.cancel();

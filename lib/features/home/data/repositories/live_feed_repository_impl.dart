@@ -25,4 +25,12 @@ class LiveFeedRepositoryImpl implements LiveFeedRepository {
   @override
   Future<int> fetchViewers({required int liveId}) =>
       remote.getViewers(liveId: liveId);
+
+  @override
+  Future<Map<String, dynamic>> payPremium({
+    required int liveId,
+    required String idempotencyKey,
+  }) {
+    return remote.payPremium(liveId: liveId, idempotencyKey: idempotencyKey);
+  }
 }

@@ -10,6 +10,9 @@ class LiveItem {
   final int viewers;
   final String? title;
   final String? startedAt;
+  final String? hostUuid;
+  final int? isPremium;
+  final int? premiumFee;
 
   const LiveItem({
     required this.id,
@@ -23,5 +26,8 @@ class LiveItem {
     required this.viewers,
     required this.title,
     required this.startedAt,
+    required this.hostUuid,
+    required this.isPremium,
+    required this.premiumFee,
   });
 }

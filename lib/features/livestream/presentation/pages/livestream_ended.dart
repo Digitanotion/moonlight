@@ -1,11 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
+import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
 
-class LivestreamEndedScreen extends StatelessWidget {
+class LivestreamEndedScreen extends StatefulWidget {
   final LiveEndAnalytics? analytics;
   const LivestreamEndedScreen({super.key, this.analytics});
+
+  @override
+  State<LivestreamEndedScreen> createState() => _LivestreamEndedScreenState();
+}
+
+class _LivestreamEndedScreenState extends State<LivestreamEndedScreen> {
+  int? _coinsFromCollected;
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrateCoins();
+  }
+
+  Future<void> _hydrateCoins() async {
+    try {
+      final repo = GetIt.I<LiveSessionRepository>(); // statically typed
+      final List<HostGiftBroadcast> gifts = await repo.fetchCollectedGifts();
+      final sum = gifts.fold<int>(0, (s, g) => s + g.coinsSpent);
+      setState(() {
+        _coinsFromCollected = sum;
+      });
+    } catch (e, st) {
+      debugPrint('⚠️ Failed to hydrate collected coins: $e\n$st');
+    }
+  }
 
   String _fmtInt(int v) {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
@@ -15,12 +44,13 @@ class LivestreamEndedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final a = analytics;
+    final a = widget.analytics;
 
     final durationText = a?.durationFormatted ?? '00:00:00';
     final viewersText = a != null ? _fmtInt(a.totalViewers) : '0';
     final chatsText = a != null ? _fmtInt(a.totalChats) : '0';
-    final coinsText = a != null ? _fmtInt(a.coinsAmount) : '0';
+    final coinsSource = _coinsFromCollected ?? (a?.coinsAmount ?? 0);
+    final coinsText = _fmtInt(coinsSource);
 
     return Scaffold(
       backgroundColor: const Color(0xFF020024),

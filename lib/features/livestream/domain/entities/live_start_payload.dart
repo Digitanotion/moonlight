@@ -14,6 +14,7 @@ class LiveStartPayload {
   final String? hostDisplayName;
   final String? hostBadge;
   final String? hostAvatarUrl;
+  final String? hostUuid;
   final String? streamTitle;
   final int? initialViewers;
 
@@ -31,6 +32,7 @@ class LiveStartPayload {
     this.hostDisplayName,
     this.hostBadge,
     this.hostAvatarUrl,
+    this.hostUuid,
     this.streamTitle,
     this.initialViewers,
   });

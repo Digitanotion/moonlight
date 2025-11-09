@@ -100,7 +100,7 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                 label: 'Profile',
                 active: widget.currentIndex == 4,
                 onTap: () {
-                  widget.onTap(4);
+                  // widget.onTap(4);
                   Navigator.pushNamed(context, RouteNames.myProfile);
                 },
               ),

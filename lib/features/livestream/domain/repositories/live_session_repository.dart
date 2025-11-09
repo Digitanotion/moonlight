@@ -1,3 +1,4 @@
+import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
@@ -28,6 +29,7 @@ abstract class LiveSessionRepository {
   Future<void> acceptJoinRequest(String requestId);
   Future<void> declineJoinRequest(String requestId);
   Future<void> sendChatMessage(String text);
+  Future<List<HostGiftBroadcast>> fetchCollectedGifts();
   void dispose();
 }
 

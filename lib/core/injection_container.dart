@@ -3,7 +3,13 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/network/interceptors/auth_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/cache_interceptor.dart';
+import 'package:moonlight/core/network/interceptors/dio_extra_hook.dart';
+import 'package:moonlight/core/network/interceptors/error_normalizer_interceptor.dart';
+import 'package:moonlight/core/network/interceptors/idempotency_interceptor.dart';
+import 'package:moonlight/core/network/interceptors/request_id_interceptor.dart';
+import 'package:moonlight/core/network/interceptors/retry_interceptor.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/core/services/like_memory.dart';
@@ -15,6 +21,11 @@ import 'package:moonlight/features/feed/data/datasources/feed_remote_datasource.
 import 'package:moonlight/features/feed/data/repositories/feed_repository_impl.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
+import 'package:moonlight/features/gift_coins/data/datasources/gift_local_datasource.dart';
+import 'package:moonlight/features/gift_coins/data/datasources/gift_remote_datasource.dart';
+import 'package:moonlight/features/gift_coins/data/repositories/gift_repository_impl.dart';
+import 'package:moonlight/features/gift_coins/domain/repositories/gift_repository.dart';
+import 'package:moonlight/features/gift_coins/presentation/cubit/transfer_cubit.dart';
 import 'package:moonlight/features/home/data/datasources/live_feed_remote_datasource.dart';
 import 'package:moonlight/features/home/data/repositories/live_feed_repository_impl.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
@@ -27,6 +38,22 @@ import 'package:moonlight/features/post_view/data/repositories/post_repository_i
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
 import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
+import 'package:moonlight/features/wallet/data/datasources/local_wallet_datasource.dart';
+import 'package:moonlight/features/wallet/data/datasources/pin_remote_datasource.dart';
+import 'package:moonlight/features/wallet/data/datasources/remote_wallet_datasource.dart';
+import 'package:moonlight/features/wallet/data/repositories/pin_repository_impl.dart';
+import 'package:moonlight/features/wallet/data/repositories/wallet_repository_impl.dart';
+import 'package:moonlight/features/wallet/domain/repositories/pin_repository.dart';
+import 'package:moonlight/features/wallet/domain/repositories/wallet_repository.dart';
+import 'package:moonlight/features/wallet/domain/usecases/set_pin.dart';
+import 'package:moonlight/features/wallet/presentation/cubit/set_pin_cubit.dart';
+import 'package:moonlight/features/wallet/presentation/cubit/wallet_cubit.dart';
+import 'package:moonlight/features/wallet/services/idempotency_helper.dart';
+import 'package:moonlight/features/wallet/services/play_billing_service.dart';
+import 'package:moonlight/features/withdrawal/data/datasources/withdrawal_remote_datasource.dart';
+import 'package:moonlight/features/withdrawal/data/repositories/withdrawal_repository_impl.dart';
+import 'package:moonlight/features/withdrawal/domain/repositories/withdrawal_repository.dart';
+import 'package:moonlight/features/withdrawal/presentation/cubit/withdrawal_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/config/runtime_config.dart';
@@ -184,7 +211,10 @@ Future<void> init() async {
 
   // --------- Data sources ---------
   sl.registerLazySingleton<AuthRemoteDataSource>(
-    () => AuthRemoteDataSourceImpl(client: sl<Dio>()),
+    () => AuthRemoteDataSourceImpl(
+      client: sl<Dio>(),
+      prefs: sl<SharedPreferences>(),
+    ),
   );
   sl.registerLazySingleton<OnboardingLocalDataSource>(
     () => OnboardingLocalDataSourceImpl(sharedPreferences: sl()),
@@ -292,6 +322,37 @@ Future<void> init() async {
       prefs: sl(),
     ),
   );
+  sl.registerFactory<RequestIdInterceptor>(() => RequestIdInterceptor());
+  sl.registerFactory<IdempotencyInterceptor>(
+    () => IdempotencyInterceptor(sl<SharedPreferences>()),
+  );
+  sl.registerFactory<ErrorNormalizerInterceptor>(
+    () => ErrorNormalizerInterceptor(),
+  );
+  sl.registerFactory<RetryInterceptor>(() => RetryInterceptor(maxRetries: 3));
+  sl.registerFactory<AuthInterceptor>(
+    () =>
+        AuthInterceptor(sl<AuthLocalDataSource>(), sl<AuthRemoteDataSource>()),
+  );
+  sl.registerFactory<DioExtraHook>(() => DioExtraHook(sl<Dio>()));
+
+  // attach interceptors
+  final dioInstance = sl<Dio>();
+  dioInstance.interceptors.add(sl<DioExtraHook>());
+  dioInstance.interceptors.add(sl<RequestIdInterceptor>());
+  dioInstance.interceptors.add(sl<AuthInterceptor>());
+  dioInstance.interceptors.add(sl<IdempotencyInterceptor>());
+  dioInstance.interceptors.add(sl<ErrorNormalizerInterceptor>());
+  dioInstance.interceptors.add(sl<RetryInterceptor>());
+
+  // If WalletRepositoryImpl currently expects only Local, update constructor to accept remote as well or create a new impl.
+  // Example: register a small factory that picks remote by default
+  // sl.registerLazySingleton<WalletRepository>(
+  //   () => WalletRepositoryImpl(
+  //     local: sl<LocalWalletDataSource>(),
+  //     remote: sl<RemoteWalletDataSource>(),
+  //   ),
+  // );
   // Current User Service
   sl.registerLazySingleton(() => CurrentUserService());
   //Live Feeds for Homepage
@@ -303,6 +364,10 @@ Future<void> init() async {
   _registerLiveHost(); // session repo (agora + pusher)
   _registerLiveViewer(); // viewer mock (until implemented)
   registerProfileView();
+  wallet();
+  setWalletPin();
+  transfercoin();
+  withdrawal();
   registerPosts();
   creatPost();
   sl.registerLazySingleton<LikeMemory>(
@@ -409,6 +474,37 @@ void registerProfileView() {
   sl.registerFactory<ProfileCubit>(
     () => ProfileCubit(sl<view_repo.ProfileRepository>()),
   );
+}
+
+void wallet() {
+  // Data source
+  // DATA SOURCE - remote only
+  sl.registerLazySingleton<RemoteWalletDataSource>(
+    () => RemoteWalletDataSource(client: sl<Dio>()),
+  );
+
+  // REPOSITORY - remote-only impl
+  sl.registerLazySingleton<WalletRepository>(
+    () => WalletRepositoryImpl(remote: sl<RemoteWalletDataSource>()),
+  );
+  // CUBIT/PROVIDER
+  sl.registerFactory<WalletCubit>(() => WalletCubit(sl<WalletRepository>()));
+
+  // ID EMP helper + Play Billing service
+  sl.registerLazySingleton<IdempotencyHelper>(
+    () => IdempotencyHelper(sl<SharedPreferences>()),
+  );
+  // Play Billing service (optional - only register on Android)
+  sl.registerLazySingleton<PlayBillingService>(
+    () => PlayBillingService(
+      repo: sl<WalletRepository>() as WalletRepositoryImpl,
+      idem: sl<IdempotencyHelper>(),
+    ),
+  );
+
+  // Cubit (presentation)
+  // sl.registerFactory<WalletCubit>(() => WalletCubit(sl<WalletRepository>()));
+  // -------------------------------------------------
 }
 
 // In your injection_container.dart - remove HostPusherService registration
@@ -532,6 +628,60 @@ creatPost() {
   );
   sl.registerFactory<CreatePostCubit>(
     () => CreatePostCubit(sl<CreatePostRepository>()),
+  );
+}
+
+void transfercoin() {
+  // ✅ Use DioClient explicitly
+  sl.registerLazySingleton<GiftRemoteDataSource>(
+    () => GiftRemoteDataSource(sl<DioClient>()),
+  );
+
+  // ✅ Repository now explicitly depends on GiftRemoteDataSource
+  sl.registerLazySingleton<GiftRepository>(
+    () => GiftRepositoryImpl(sl<GiftRemoteDataSource>()),
+  );
+
+  // ✅ Cubit depends on strongly typed repository
+  sl.registerFactory<TransferCubit>(
+    () => TransferCubit(repository: sl<GiftRepository>()),
+  );
+}
+
+void withdrawal() {
+  // Data source
+  sl.registerLazySingleton<WithdrawalRemoteDataSource>(
+    () => WithdrawalRemoteDataSource(sl<DioClient>()),
+  );
+
+  // Repository
+  sl.registerLazySingleton<WithdrawalRepository>(
+    () => WithdrawalRepositoryImpl(sl<WithdrawalRemoteDataSource>()),
+  );
+
+  // Cubit
+  sl.registerFactory<WithdrawalCubit>(
+    () => WithdrawalCubit(repository: sl<WithdrawalRepository>()),
+  );
+}
+
+void setWalletPin() {
+  // Data source
+  sl.registerLazySingleton<PinRemoteDataSource>(
+    () => PinRemoteDataSourceImpl(client: sl<Dio>()),
+  );
+
+  // Repository
+  sl.registerLazySingleton<PinRepository>(
+    () => PinRepositoryImpl(remote: sl<PinRemoteDataSource>()),
+  );
+
+  // Usecase
+  sl.registerLazySingleton<SetPin>(() => SetPin(sl<PinRepository>()));
+
+  // Cubit (presentation)
+  sl.registerFactory<SetPinCubit>(
+    () => SetPinCubit(setPinUsecase: sl<SetPin>()),
   );
 }
 

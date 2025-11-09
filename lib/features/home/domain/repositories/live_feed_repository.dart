@@ -10,4 +10,10 @@ abstract class LiveFeedRepository {
   });
 
   Future<int> fetchViewers({required int liveId}); // optional stats endpoint
+
+  //Pay for premium access
+  Future<Map<String, dynamic>> payPremium({
+    required int liveId,
+    required String idempotencyKey,
+  });
 }

@@ -42,12 +42,23 @@ class DioClient {
           print(
             '   Authorization: ${options.headers['Authorization'] ?? '(none)'}',
           );
+          print('➡️ ${options.method} ${options.uri}');
+          print('   Headers: ${options.headers}');
+          print('   Query: ${options.queryParameters}');
+          print('   Body: ${options.data}');
 
           handler.next(options);
         },
+
+        onResponse: (resp, handler) {
+          print('⬅️ ${resp.statusCode} ${resp.requestOptions.uri}');
+          print('   Response headers: ${resp.headers.map}');
+          print('   Body: ${resp.data}');
+          handler.next(resp);
+        },
         onError: (e, handler) {
           // Compact error visibility
-          debugPrint(
+          print(
             '❌ ${e.response?.statusCode} ${e.requestOptions.method} ${e.requestOptions.uri}',
           );
           handler.next(e);

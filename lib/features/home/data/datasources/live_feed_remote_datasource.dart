@@ -12,6 +12,12 @@ abstract class LiveFeedRemoteDataSource {
     int perPage,
   });
   Future<int> getViewers({required int liveId});
+
+  // New: pay premium endpoint
+  Future<Map<String, dynamic>> payPremium({
+    required int liveId,
+    required String idempotencyKey,
+  });
 }
 
 class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
@@ -65,5 +71,18 @@ class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
   Future<int> getViewers({required int liveId}) async {
     final resp = await dio.get('/api/v1/live/$liveId/stats');
     return (resp.data['viewers'] as num?)?.toInt() ?? 0;
+  }
+
+  @override
+  Future<Map<String, dynamic>> payPremium({
+    required int liveId,
+    required String idempotencyKey,
+  }) async {
+    final resp = await dio.post(
+      '/api/v1/live/$liveId/pay-premium',
+      data: {'idempotency_key': idempotencyKey},
+    );
+    // Return the parsed JSON map directly to the repository for handling
+    return (resp.data as Map<String, dynamic>);
   }
 }

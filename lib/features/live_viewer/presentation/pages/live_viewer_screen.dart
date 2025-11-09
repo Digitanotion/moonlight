@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
+import 'package:moonlight/features/gifts/presentation/gift_bottom_sheet.dart';
+import 'package:moonlight/features/gifts/presentation/gift_overlay_layer.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 
 import 'package:moonlight/features/live_viewer/domain/video_surface_provider.dart';
@@ -66,6 +68,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
               // All other overlays - these should be above the video layout
               const _TopStatusBar(),
               const _TopicPill(),
+              const GiftOverlayLayer(), // NEW: animated gifts over video for everyone
+              const _GiftToast(), // your existing sender/receiver toast
               const _HostCard(),
               const _GuestJoinedBanner(),
               const _GiftToast(),
@@ -585,7 +589,7 @@ class _GiftToast extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${g.from} just sent you a ‘${g.giftName}’ gift',
+                              '${g.from} just sent streamer a ‘${g.giftName}’ gift',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -736,6 +740,44 @@ class _RightRail extends StatelessWidget {
               onTap: () =>
                   context.read<ViewerBloc>().add(const ChatShowRequested()),
               label: "", //_fmtCount(s.chat.length + 1200),
+            ),
+            _railButton(
+              icon: Icons.card_giftcard,
+              onTap: () async {
+                final bloc = context.read<ViewerBloc>();
+                bloc.add(const GiftSheetRequested());
+                // Open bottom sheet with toUserUuid & livestreamId
+                final repo = context.read<ViewerBloc>().repo;
+                // Try to get host uuid; if not available, you can pass viewer's current target uuid via route args
+                final livestreamId = (repo is ViewerRepositoryImpl)
+                    ? repo.livestreamIdNumeric.toString()
+                    : '0';
+                // Pick a toUserUuid: if available from auth/current stream context.
+                // For now, try current user target from DI (you can wire actual host uuid here)
+                final toUserUuid = (repo is ViewerRepositoryImpl)
+                    ? repo.hostUuid.toString()
+                    : '0';
+                // Show sheet
+                // (If you already know host's uuid elsewhere, pass that instead of current user uuid)
+                // In most cases, toUserUuid should be the host's uuid (stream owner).
+                if (context.mounted) {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => BlocProvider.value(
+                      value: context.read<ViewerBloc>(),
+                      child: GiftBottomSheet(
+                        toUserUuid: toUserUuid,
+                        livestreamId: livestreamId,
+                      ),
+                    ),
+                  ).whenComplete(() {
+                    if (context.mounted) bloc.add(const GiftSheetClosed());
+                  });
+                }
+              },
+              label: "", // optional label
             ),
             // const SizedBox(height: 12),
             // _railButton(

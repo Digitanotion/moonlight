@@ -104,6 +104,7 @@ class GoLiveRepositoryImpl implements GoLiveRepository {
       expiresAt: dto.expiresAt,
 
       hostDisplayName: dto.hostDisplayName,
+      hostUuid: dto.hostUuid,
       hostBadge: dto.hostBadge,
       hostAvatarUrl: dto.hostAvatarUrl,
       streamTitle: dto.streamTitle,

@@ -53,6 +53,7 @@ class StartLiveResponse {
 
   // NEW: host + stream bits used by UI
   final String hostDisplayName;
+  final String hostUuid;
   final String hostBadge;
   final String? hostAvatarUrl;
 
@@ -71,6 +72,7 @@ class StartLiveResponse {
     required this.rtcToken,
     this.expiresAt,
     required this.hostDisplayName,
+    required this.hostUuid,
     required this.hostBadge,
     required this.hostAvatarUrl,
     required this.streamTitle,
@@ -96,6 +98,7 @@ class StartLiveResponse {
 
       hostDisplayName: (host['display_name'] ?? 'Host').toString(),
       hostBadge: (host['badge'] ?? 'Host').toString(),
+      hostUuid: (host['host_uuid'] ?? 'Host').toString(),
       hostAvatarUrl: host['avatar_url'] as String?,
       streamTitle: (stream['title'] ?? 'Live').toString(),
       streamViewers: int.tryParse('${stream['viewers'] ?? 0}') ?? 0,

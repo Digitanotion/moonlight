@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -30,6 +31,10 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
 
   final HostInfo? initialHost;
   final DateTime? startedAt;
+  String? toUserUuid; // set from router or a fetch if needed
+  final String? hostUserUuid;
+
+  String? get hostUuid => hostUserUuid;
 
   ViewerRepositoryImpl({
     required this.http,
@@ -38,6 +43,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     required this.livestreamParam,
     required this.livestreamIdNumeric,
     required this.channelName,
+    this.hostUserUuid,
     this.initialHost,
     this.startedAt,
   }) : _rtc = AgoraViewerService(
@@ -50,6 +56,17 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
            return token;
          },
        );
+
+  // === GIFTS: controllers & cache ===
+  final _giftBroadcastCtrl = StreamController<GiftBroadcast>.broadcast();
+  List<GiftItem> _giftCatalogCache = const [];
+  String? _giftCatalogVersion;
+
+  @override
+  Stream<GiftBroadcast> watchGiftBroadcasts() {
+    _ensureWiredOnce();
+    return _giftBroadcastCtrl.stream;
+  }
 
   // ===== RTC viewer service (renders host video when joined) =====
   final AgoraViewerService _rtc;
@@ -162,11 +179,14 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     final chChat = 'live.$id.chat';
     final chJoin = 'live.$id.join';
     final chRoot = 'live.$id';
-
+    final chGifts = 'live.$id.gifts';
+    // keep track of which channel+event pairs we've already bound so we don't double-bind
+    final Set<String> _boundEventKeys = <String>{};
     await pusher.subscribe(chMeta);
     await pusher.subscribe(chChat);
     await pusher.subscribe(chJoin);
     await pusher.subscribe(chRoot);
+    await pusher.subscribe(chGifts);
 
     // ✅ ENHANCED: Add proper error handling and debug logging for event bindings
     void _bindEvent(
@@ -195,6 +215,24 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
         final role = participantData['role']?.toString() ?? 'audience';
         debugPrint('🎯 Current user added as: $role');
         _participantRoleCtrl.add(role);
+      }
+    });
+
+    // NEW: gift.sent broadcast
+    _bindEvent(chGifts, 'gift.sent', (m) {
+      try {
+        final b = GiftBroadcast.fromJson((m as Map).cast<String, dynamic>());
+        _giftBroadcastCtrl.add(b);
+        // Also emit legacy GiftNotice for your existing toast if you want:
+        _giftCtrl.add(
+          GiftNotice(
+            from: b.senderDisplayName,
+            giftName: b.giftCode,
+            coins: b.coinsSpent,
+          ),
+        );
+      } catch (e) {
+        debugPrint('❌ gift.sent parse failed: $e');
       }
     });
 
@@ -281,6 +319,99 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
     _wired = true;
 
     debugPrint('✅ Pusher wiring completed successfully');
+  }
+
+  /// Fetch the user's wallet details and return the coin balance (or null on error)
+  @override
+  Future<int?> fetchWalletBalance() async {
+    try {
+      final res = await http.dio.get('/api/v1/wallet');
+      final m = (res.data is Map)
+          ? res.data as Map
+          : jsonDecode('${res.data}') as Map;
+      final data = (m['data'] is Map)
+          ? (m['data'] as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      final balance = data['balance'];
+      if (balance is num) return balance.toInt();
+      if (balance is String) return int.tryParse(balance);
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ fetchWalletBalance failed: $e');
+      return null;
+    }
+  }
+
+  // === GIFTS: catalog fetch ===
+  @override
+  Future<(List<GiftItem>, String?)> fetchGiftCatalog() async {
+    try {
+      final res = await http.dio.get('/api/v1/wallet/gifts');
+      // print(res.data);
+      final data = (res.data is Map)
+          ? res.data as Map
+          : jsonDecode('${res.data}') as Map;
+      final List list = (data['data'] as List? ?? const []);
+      final items = list
+          .map((e) => GiftItem.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+      _giftCatalogCache = items;
+      _giftCatalogVersion = data['catalog_version']?.toString();
+      return (items, _giftCatalogVersion);
+    } catch (e) {
+      debugPrint('⚠️ fetchGiftCatalog failed: $e');
+      // return cache if any
+      return (_giftCatalogCache, _giftCatalogVersion);
+    }
+  }
+
+  String _genIdempotencyKey() {
+    // lightweight id generator (no new dependency)
+    final r = Random();
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final salt = List.generate(
+      8,
+      (_) => r.nextInt(16),
+    ).map((n) => n.toRadixString(16)).join();
+    return 'ml-$ts-$salt';
+    // Note: You also have IdempotencyInterceptor for headers; backend requires body field too.
+  }
+
+  @override
+  Future<GiftSendResult> sendGift({
+    required String giftCode,
+    required String toUserUuid,
+    required String livestreamId,
+    int quantity = 1,
+  }) async {
+    try {
+      final body = {
+        'gift_code': giftCode,
+        'to_user_uuid': toUserUuid,
+        'livestream_id': livestreamId,
+        'quantity': quantity,
+        'idempotency_key': _genIdempotencyKey(),
+      };
+      final res = await http.dio.post('/api/v1/wallet/gift', data: body);
+      final m = (res.data is Map)
+          ? res.data as Map
+          : jsonDecode('${res.data}') as Map;
+      final d = (m['data'] as Map).cast<String, dynamic>();
+      final serverTxnId = '${d['server_txn_id']}';
+      final newBal = (d['new_balance_coins'] as num).toInt();
+      final b = GiftBroadcast.fromJson(
+        (d['broadcast'] as Map).cast<String, dynamic>(),
+      );
+      return GiftSendResult(
+        serverTxnId: serverTxnId,
+        newBalanceCoins: newBal,
+        broadcast: b,
+      );
+    } on DioException catch (e) {
+      final msg = _extractErrorMessage(e);
+      _errorCtrl.add(msg);
+      rethrow;
+    }
   }
 
   // ✅ FIXED: Add these new stream getters to the repository interface
@@ -564,7 +695,7 @@ class ViewerRepositoryImpl implements ViewerRepository, VideoSurfaceProvider {
       http.dio.post('$_basePath/leave').ignore();
       pusher.unsubscribeAll();
     } catch (_) {}
-
+    _giftBroadcastCtrl.close();
     _clockCtrl.close();
     _viewerCtrl.close();
     _chatCtrl.close();

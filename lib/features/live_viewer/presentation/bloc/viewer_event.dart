@@ -146,3 +146,57 @@ class _ActiveGuestUpdated extends ViewerEvent {
   @override
   List<Object?> get props => [uuid];
 }
+
+// === GIFTS: new events (additive) ===
+
+class GiftSheetRequested extends ViewerEvent {
+  const GiftSheetRequested();
+}
+
+class GiftSheetClosed extends ViewerEvent {
+  const GiftSheetClosed();
+}
+
+class GiftsFetchRequested extends ViewerEvent {
+  const GiftsFetchRequested();
+}
+
+class GiftSendRequested extends ViewerEvent {
+  final String code;
+  final int quantity;
+  final String toUserUuid; // host uuid
+  final String livestreamId; // numeric as string (e.g., "63")
+  const GiftSendRequested(
+    this.code,
+    this.quantity,
+    this.toUserUuid,
+    this.livestreamId,
+  );
+  @override
+  List<Object?> get props => [code, quantity, toUserUuid, livestreamId];
+}
+
+class GiftSendSucceeded extends ViewerEvent {
+  final GiftSendResult result;
+  const GiftSendSucceeded(this.result);
+  @override
+  List<Object?> get props => [result];
+}
+
+class GiftSendFailed extends ViewerEvent {
+  final String message;
+  const GiftSendFailed(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+class GiftBroadcastReceived extends ViewerEvent {
+  final GiftBroadcast broadcast;
+  const GiftBroadcastReceived(this.broadcast);
+  @override
+  List<Object?> get props => [broadcast];
+}
+
+class GiftOverlayDequeued extends ViewerEvent {
+  const GiftOverlayDequeued();
+}

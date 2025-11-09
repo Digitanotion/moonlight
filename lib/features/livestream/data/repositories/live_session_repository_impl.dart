@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
+import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
+// import 'package:moonlight/features/livestream/data/models/go_live_models.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
@@ -44,6 +46,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
   final _giftsCtrl = StreamController<GiftEvent>.broadcast();
   final _endedCtrl = StreamController<void>.broadcast();
   final _joinHandledCtrl = StreamController<JoinHandled>.broadcast();
+  final _giftBroadcastCtrl = StreamController<HostGiftBroadcast>.broadcast();
+  final List<HostGiftBroadcast> _collectedGifts = [];
   // NEW: active guest UUID stream (null when no guest)
   final _activeGuestCtrl = StreamController<String?>.broadcast();
   String? _activeGuestUuid;
@@ -66,6 +70,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
   @override
   Stream<JoinHandled> joinHandledStream() => _joinHandledCtrl.stream;
   Stream<String?> activeGuestUuidStream() => _activeGuestCtrl.stream;
+  // Expose host-only gift broadcast stream (host listens and animates)
+  Stream<HostGiftBroadcast> watchGiftBroadcasts() => _giftBroadcastCtrl.stream;
 
   @override
   void setLocalPause(bool paused) {
@@ -134,6 +140,7 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       'live.$livestreamId.join',
       'live.$livestreamId',
       'live.$livestreamId.viewer',
+      'live.$livestreamId.gifts',
     ];
 
     for (final channel in channels) {
@@ -160,6 +167,7 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     final chatChannel = 'live.$livestreamId.chat';
     final rootChannel = 'live.$livestreamId';
     final joinChannel = 'live.$livestreamId.join';
+    final giftsChannel = 'live.$livestreamId.gifts';
 
     debugPrint('🔧 Setting up event bindings for livestream $livestreamId');
 
@@ -230,8 +238,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     });
 
     // ========= GIFT EVENTS =========
-    _pusher.bind(rootChannel, 'gift.sent', (raw) {
-      debugPrint('🎯 Gift event received');
+    _pusher.bind(giftsChannel, 'gift.sent', (raw) {
+      print('🎯 Gift event received');
       _handleGiftEvent(raw);
     });
 
@@ -402,6 +410,79 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
         coins: coins,
       ),
     );
+
+    // Also attempt to parse and emit HostGiftBroadcast for host overlay subscription
+    try {
+      final serverTxnId = (m['server_txn_id'] ?? '').toString();
+      final giftId = (m['gift_id'] ?? '').toString();
+      final giftCode = (m['gift_code'] ?? gift).toString();
+      final quantity = (m['quantity'] is int)
+          ? m['quantity'] as int
+          : int.tryParse('${m['quantity']}') ?? 1;
+      final coinsSpent = (m['coins_spent'] is int)
+          ? m['coins_spent'] as int
+          : int.tryParse('${m['coins_spent'] ?? m['coins']}') ?? coins;
+
+      String senderUuid = '';
+      String senderDisplayName = from;
+      String? senderAvatar;
+      if (m['sender'] is Map) {
+        final s = (m['sender'] as Map).cast<String, dynamic>();
+        senderUuid = (s['user_uuid'] ?? s['uuid'] ?? '').toString();
+        senderDisplayName = (s['display_name'] ?? s['name'] ?? from).toString();
+        senderAvatar = (s['avatar'] ?? s['avatar_url'] ?? '').toString();
+        if (senderAvatar.isEmpty) senderAvatar = null;
+      }
+
+      DateTime ts = DateTime.now().toUtc();
+      try {
+        if ((m['timestamp'] ?? '').toString().isNotEmpty) {
+          ts = DateTime.parse(m['timestamp'].toString()).toUtc();
+        }
+      } catch (_) {}
+
+      final combo = (m['combo'] is Map)
+          ? (m['combo'] as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      final comboIndex = combo['index'] is int
+          ? combo['index'] as int
+          : int.tryParse('${combo['index'] ?? ''}') ?? 0;
+      final comboWindowMs = combo['window_ms'] is int
+          ? combo['window_ms'] as int
+          : int.tryParse('${combo['window_ms'] ?? ''}') ?? 2000;
+
+      final hb = HostGiftBroadcast(
+        serverTxnId: serverTxnId.isEmpty
+            ? DateTime.now().millisecondsSinceEpoch.toString()
+            : serverTxnId,
+        giftId: giftId.isEmpty
+            ? DateTime.now().millisecondsSinceEpoch.toString()
+            : giftId,
+        giftCode: giftCode,
+        giftName: (m['gift_name'] ?? m['gift'] ?? '').toString(),
+        quantity: quantity,
+        coinsSpent: coinsSpent,
+        senderUuid: senderUuid,
+        senderDisplayName: senderDisplayName,
+        senderAvatar: senderAvatar,
+        timestamp: ts,
+        comboIndex: comboIndex,
+        comboWindowMs: comboWindowMs,
+      );
+
+      _giftBroadcastCtrl.add(hb);
+      try {
+        _collectedGifts.add(hb);
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('❌ Host gift broadcast parse failed: $e');
+    }
+  }
+
+  // Provide accumulated gifts for the current live session (host view)
+  Future<List<HostGiftBroadcast>> fetchCollectedGifts() async {
+    // return a copy to avoid external mutation
+    return List<HostGiftBroadcast>.unmodifiable(_collectedGifts);
   }
 
   @override
@@ -503,6 +584,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     _endedCtrl.close();
     _joinHandledCtrl.close();
     _activeGuestCtrl.close();
+    _giftBroadcastCtrl.close();
+    _collectedGifts.clear();
     // Also drop any lingering channel bindings (safe even if none)
     // If you share PusherService elsewhere, this only affects the live.* channels we created.
     // We already call unsubscribeAll() at startSession; this is a “belt & suspenders” cleanup.

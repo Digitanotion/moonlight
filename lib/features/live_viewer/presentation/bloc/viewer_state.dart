@@ -19,6 +19,13 @@ class ViewerState extends Equatable {
   final bool isEnded;
   final bool joinRequested;
   final bool awaitingApproval;
+  final bool showGiftSheet;
+  final List<GiftItem> giftCatalog;
+  final String? giftCatalogVersion;
+  final int? walletBalanceCoins; // updated on send success
+  final bool isSendingGift;
+  final String? sendErrorMessage;
+  final List<GiftBroadcast> giftOverlayQueue;
 
   // New properties
   final String? errorMessage;
@@ -38,7 +45,7 @@ class ViewerState extends Equatable {
     required this.likes,
     required this.shares,
     required this.chat,
-    required this.showChatUI,
+    this.showChatUI = false,
     this.host,
     this.guest,
     this.showGuestBanner = false,
@@ -58,6 +65,13 @@ class ViewerState extends Equatable {
     this.showRemovalOverlay = false,
     this.shouldNavigateBack = false,
     this.activeGuestUuid,
+    this.showGiftSheet = false,
+    this.giftCatalog = const [],
+    this.giftCatalogVersion,
+    this.walletBalanceCoins,
+    this.isSendingGift = false,
+    this.sendErrorMessage,
+    this.giftOverlayQueue = const [],
   });
 
   // Fixed initial method
@@ -79,6 +93,13 @@ class ViewerState extends Equatable {
     showRemovalOverlay: false,
     shouldNavigateBack: false,
     activeGuestUuid: null,
+    showGiftSheet: false,
+    giftCatalog: const [],
+    giftCatalogVersion: null,
+    walletBalanceCoins: null,
+    isSendingGift: false,
+    sendErrorMessage: null,
+    giftOverlayQueue: const [],
   );
 
   ViewerState copyWith({
@@ -108,6 +129,13 @@ class ViewerState extends Equatable {
     bool? showRemovalOverlay,
     bool? shouldNavigateBack,
     String? activeGuestUuid,
+    bool? showGiftSheet,
+    List<GiftItem>? giftCatalog,
+    String? giftCatalogVersion,
+    int? walletBalanceCoins,
+    bool? isSendingGift,
+    String? sendErrorMessage,
+    List<GiftBroadcast>? giftOverlayQueue,
   }) {
     return ViewerState(
       status: status ?? this.status,
@@ -136,6 +164,13 @@ class ViewerState extends Equatable {
       showRemovalOverlay: showRemovalOverlay ?? this.showRemovalOverlay,
       shouldNavigateBack: shouldNavigateBack ?? this.shouldNavigateBack,
       activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
+      showGiftSheet: showGiftSheet ?? this.showGiftSheet,
+      giftCatalog: giftCatalog ?? this.giftCatalog,
+      giftCatalogVersion: giftCatalogVersion ?? this.giftCatalogVersion,
+      walletBalanceCoins: walletBalanceCoins ?? this.walletBalanceCoins,
+      isSendingGift: isSendingGift ?? this.isSendingGift,
+      sendErrorMessage: sendErrorMessage ?? this.sendErrorMessage,
+      giftOverlayQueue: giftOverlayQueue ?? this.giftOverlayQueue,
     );
   }
 
@@ -167,5 +202,12 @@ class ViewerState extends Equatable {
     showRemovalOverlay,
     shouldNavigateBack,
     activeGuestUuid,
+    showGiftSheet,
+    giftCatalog,
+    giftCatalogVersion,
+    walletBalanceCoins,
+    isSendingGift,
+    sendErrorMessage,
+    giftOverlayQueue,
   ];
 }

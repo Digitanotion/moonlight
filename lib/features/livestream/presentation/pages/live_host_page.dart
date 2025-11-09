@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 // import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -6,10 +7,14 @@ import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/agora_service.dart';
+import 'package:moonlight/features/gifts/helpers/gift_visuals.dart';
+import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
+import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
 import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
+import 'package:moonlight/features/livestream/presentation/pages/live_gifts_page.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class LiveHostPage extends StatefulWidget {
@@ -20,6 +25,7 @@ class LiveHostPage extends StatefulWidget {
   final int initialViewers;
   final String startedAtIso;
   final String? avatarUrl; // optional for header
+  final String? hostUuid;
 
   const LiveHostPage({
     super.key,
@@ -29,6 +35,7 @@ class LiveHostPage extends StatefulWidget {
     required this.initialViewers,
     required this.startedAtIso,
     this.avatarUrl,
+    this.hostUuid,
   });
 
   @override
@@ -36,12 +43,23 @@ class LiveHostPage extends StatefulWidget {
 }
 
 class _LiveHostPageState extends State<LiveHostPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   // CameraController? _controller;
   // List<CameraDescription> _cameras = const [];
   bool _initErr = false;
   final AgoraService agora =
       GetIt.I<AgoraService>(); // FIXED: Declare agora here
+  // Host repository impl (we cast to impl to access host-only method)
+  final LiveSessionRepositoryImpl _repoImpl =
+      GetIt.I<LiveSessionRepository>() as LiveSessionRepositoryImpl;
+  StreamSubscription<HostGiftBroadcast>? _giftBroadcastSub;
+  final List<HostGiftBroadcast> _giftQueue = [];
+  HostGiftBroadcast? _currentGift;
+  Widget? _currentGiftWidget;
+  AnimationController? _giftAnimController;
+  bool _isPlayingGift = false;
+  int _overflowCount = 0;
+  static const int _maxQueueCap = 10;
   bool _isAudioMuted = false;
   bool _isVideoMuted = false;
   bool _showSettingsMenu = false;
@@ -61,6 +79,15 @@ class _LiveHostPageState extends State<LiveHostPage>
           startedAtIso: widget.startedAtIso,
         ),
       );
+      // Subscribe to host gift broadcasts (non-blocking)
+      try {
+        _giftBroadcastSub = _repoImpl.watchGiftBroadcasts().listen(
+          _onGiftBroadcast,
+          onError: (e) => debugPrint('❌ Gift broadcast stream error: $e'),
+        );
+      } catch (e) {
+        debugPrint('⚠️ Failed to subscribe to host gift broadcasts: $e');
+      }
     });
   }
 
@@ -90,8 +117,107 @@ class _LiveHostPageState extends State<LiveHostPage>
     // Re-enable screen sleep when leaving live stream
     WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
+    _giftBroadcastSub?.cancel();
+    _giftAnimController?.stop();
+    _giftAnimController?.dispose();
     super.dispose();
   }
+
+  void _onGiftBroadcast(HostGiftBroadcast b) {
+    // Ignore gifts from the host (if any)
+    final hostUuid = sl<LiveSessionTracker>().current?.hostUuid;
+    if (b.senderUuid.isNotEmpty &&
+        hostUuid != null &&
+        b.senderUuid == hostUuid) {
+      return;
+    }
+
+    // Enqueue with cap
+    if (_giftQueue.length >= _maxQueueCap && !_isPlayingGift) {
+      _overflowCount++;
+      return;
+    }
+
+    // If currently playing and same sender+gift within combo window, aggregate
+    if (_isPlayingGift && _currentGift != null) {
+      final window = Duration(milliseconds: b.comboWindowMs ?? 2000);
+      if (b.senderUuid == _currentGift!.senderUuid &&
+          b.giftCode == _currentGift!.giftCode &&
+          b.timestamp.difference(_currentGift!.timestamp).abs() <= window) {
+        setState(() {
+          _currentGift!.quantity += b.quantity;
+          _currentGift!.coinsSpent += b.coinsSpent;
+        });
+        return;
+      }
+    }
+
+    _giftQueue.add(b);
+    if (!_isPlayingGift) {
+      _playNextGift();
+    }
+  }
+
+  Future<void> _playNextGift() async {
+    if (_isPlayingGift) return;
+    if (_giftQueue.isEmpty) return;
+
+    _currentGift = _giftQueue.removeAt(0);
+    _overflowCount = _overflowCount > 0 ? _overflowCount - 1 : 0;
+    _isPlayingGift = true;
+    _currentGiftWidget = null;
+    setState(() {});
+
+    try {
+      // Build art (may be async)
+      _currentGiftWidget = await GiftVisuals.build(
+        _currentGift!.giftCode,
+        size: 84,
+        title: _currentGift!.giftName,
+        imageUrl: null,
+      );
+    } catch (e) {
+      debugPrint('⚠️ GiftVisuals build failed: $e');
+      _currentGiftWidget = const Icon(Icons.card_giftcard, size: 64);
+    }
+
+    // Determine durations
+    final entranceMs = 350;
+    final baseHoldMs = 1800;
+    final exitMs = 250;
+    final extraPerQuantity = 300;
+    final holdMs =
+        baseHoldMs +
+        ((_currentGift!.quantity - 1).clamp(0, 4) * extraPerQuantity);
+    final totalMs = entranceMs + holdMs + exitMs;
+
+    _giftAnimController?.dispose();
+    _giftAnimController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: totalMs),
+    );
+
+    _giftAnimController!.addStatusListener((s) {
+      if (s == AnimationStatus.completed) {
+        // finish and dequeue
+        setState(() {
+          _currentGift = null;
+          _currentGiftWidget = null;
+          _isPlayingGift = false;
+        });
+        // small delay before next play to avoid tight loops
+        Future.delayed(const Duration(milliseconds: 120), () {
+          if (mounted) _playNextGift();
+        });
+      }
+    });
+
+    _giftAnimController!.forward();
+    setState(() {});
+  }
+
+  double _evalEntrance(double t) => Curves.easeOutBack.transform(t);
+  double _evalExit(double t) => Curves.easeIn.transform(t);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -408,6 +534,189 @@ class _LiveHostPageState extends State<LiveHostPage>
                   ),
                 ),
 
+                // Host Gift Overlay (top-center)
+                if (_currentGift != null && _giftAnimController != null)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 64,
+                    left: 18,
+                    right: 18,
+                    child: RepaintBoundary(
+                      child: AnimatedBuilder(
+                        animation: _giftAnimController!,
+                        builder: (context, _) {
+                          final t = _giftAnimController!.value;
+                          // entrance: 0..entranceMs/total, hold: middle, exit: last part
+                          // Normalize with simple mapping
+                          final entrancePortion =
+                              350 /
+                              (_giftAnimController!.duration!.inMilliseconds);
+                          final exitPortion =
+                              250 /
+                              (_giftAnimController!.duration!.inMilliseconds);
+                          double opacity = 1.0;
+                          double translateY = 0.0;
+                          if (t < entrancePortion) {
+                            final nt = t / entrancePortion;
+                            opacity = nt;
+                            translateY = 40 * (1 - _evalEntrance(nt));
+                          } else if (t > (1 - exitPortion)) {
+                            final nt = (t - (1 - exitPortion)) / exitPortion;
+                            opacity = 1 - _evalExit(nt);
+                            translateY = 20 * nt;
+                          }
+
+                          return Opacity(
+                            opacity: opacity,
+                            child: Transform.translate(
+                              offset: Offset(0, translateY),
+                              child: Center(
+                                child: _Glass(
+                                  radius: 18,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Avatar
+                                      Transform.scale(
+                                        scale:
+                                            0.9 +
+                                            0.1 * (t < 0.5 ? t * 2 : (1 - t)),
+                                        child: CircleAvatar(
+                                          radius: 22,
+                                          backgroundImage:
+                                              _currentGift!.senderAvatar != null
+                                              ? NetworkImage(
+                                                  _currentGift!.senderAvatar!,
+                                                )
+                                              : const AssetImage(
+                                                      'assets/images/logo.png',
+                                                    )
+                                                    as ImageProvider,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      // Texts
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              '@${_currentGift!.senderDisplayName}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    'sent ${_currentGift!.giftCode} to you',
+                                                    style: const TextStyle(
+                                                      color: Colors.white70,
+                                                      fontSize: 13.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                // coins pill (always present)
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 6,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFFFF6A00,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    '+${_currentGift!.coinsSpent}',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      // Gift art
+                                      Container(
+                                        width: 84,
+                                        height: 84,
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(
+                                                0xFFFF6A00,
+                                              ).withOpacity(.12),
+                                              blurRadius: 18,
+                                              spreadRadius: 2,
+                                            ),
+                                          ],
+                                        ),
+                                        child:
+                                            _currentGiftWidget ??
+                                            const SizedBox.shrink(),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // multiplier badge if quantity > 1
+                                      if ((_currentGift!.quantity) > 1)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white24,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'x${_currentGift!.quantity}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 // Join Request card
                 if (state.pendingRequest != null && !state.isPaused)
                   Positioned(
@@ -452,7 +761,16 @@ class _LiveHostPageState extends State<LiveHostPage>
                       onChatToggle: () => context.read<LiveHostBloc>().add(
                         ToggleChatVisibility(),
                       ),
-                      onGifts: () => _toast(context, 'Gifts'),
+                      onGifts: () {
+                        final tracker = sl<LiveSessionTracker>();
+                        final numericId = tracker.current!.livestreamId;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                LiveGiftsPage(livestreamId: numericId),
+                          ),
+                        );
+                      },
                       onViewers: () {
                         final tracker = sl<LiveSessionTracker>();
                         // Numeric for Pusher channels:

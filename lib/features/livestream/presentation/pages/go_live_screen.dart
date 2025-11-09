@@ -588,6 +588,7 @@ class _StartButton extends StatelessWidget {
                   RouteNames.liveHost,
                   arguments: {
                     'host_name': dto.hostDisplayName,
+                    'host_uuid': dto.hostUuid,
                     'host_badge': dto.hostBadge,
                     'avatar_url': dto.hostAvatarUrl,
                     'topic': topic,

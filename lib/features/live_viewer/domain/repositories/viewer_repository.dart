@@ -27,5 +27,19 @@ abstract class ViewerRepository {
   Stream<String> watchErrors();
   Stream<String> watchParticipantRoleChanges();
   Stream<String> watchParticipantRemovals();
+  // Catalog
+  Future<(List<GiftItem>, String? catalogVersion)> fetchGiftCatalog();
+
+  // Send gift
+  Future<GiftSendResult> sendGift({
+    required String giftCode,
+    required String toUserUuid,
+    required String livestreamId,
+    int quantity = 1,
+  });
+
+  // Broadcast stream for gift.sent events
+  Stream<GiftBroadcast> watchGiftBroadcasts();
+  Future<int?> fetchWalletBalance();
   void dispose();
 }

@@ -15,6 +15,9 @@ class LiveItemModel extends LiveItem {
     required super.viewers,
     required super.title,
     required super.startedAt,
+    required super.hostUuid,
+    required super.isPremium,
+    required super.premiumFee,
   });
 
   factory LiveItemModel.fromJson(Map<String, dynamic> j) {
@@ -39,6 +42,9 @@ class LiveItemModel extends LiveItem {
       viewers: (j['viewers'] as num?)?.toInt() ?? 0,
       title: j['title'] as String,
       startedAt: j['started_at'] as String,
+      hostUuid: (host['host_uuid'] as String?) ?? 'Host',
+      isPremium: j['is_premium'] as int,
+      premiumFee: j['premium_fee'] as int,
     );
   }
 }
