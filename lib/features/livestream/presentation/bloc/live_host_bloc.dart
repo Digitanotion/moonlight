@@ -1,8 +1,10 @@
 // FILE: lib/features/livestream/presentation/bloc/live_host_bloc.dart
 
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
@@ -19,6 +21,12 @@ import 'package:moonlight/features/livestream/domain/session/live_session_tracke
 /// - Consolidated premium subscription (single)
 /// - Guarded PremiumStatusUpdated handler (apply only for current livestream)
 /// - PremiumActionFailed does not force-clear isPremium/premiumStatus (server is source-of-truth)
+/// - NEW: Beauty preference persistence & apply (Face Clean + Brighten)
+
+const _kPrefFaceEnabled = 'beauty_face_enabled';
+const _kPrefFaceLevel = 'beauty_face_level';
+const _kPrefBrightEnabled = 'beauty_bright_enabled';
+const _kPrefBrightLevel = 'beauty_bright_level';
 
 // ===== State =====
 class LiveHostState {
@@ -43,6 +51,12 @@ class LiveHostState {
   final bool premiumActionLoading;
   final String? premiumError;
 
+  // NEW beauty fields (persisted)
+  final bool faceCleanEnabled;
+  final int faceCleanLevel; // 0..100
+  final bool brightenEnabled;
+  final int brightenLevel; // 0..100
+
   const LiveHostState({
     required this.isLive,
     required this.isPaused,
@@ -60,6 +74,10 @@ class LiveHostState {
     this.premiumStatus,
     this.premiumActionLoading = false,
     this.premiumError,
+    this.faceCleanEnabled = false,
+    this.faceCleanLevel = 40,
+    this.brightenEnabled = false,
+    this.brightenLevel = 40,
   });
 
   LiveHostState copyWith({
@@ -81,6 +99,11 @@ class LiveHostState {
     PremiumStatusModel? premiumStatus,
     bool? premiumActionLoading,
     String? premiumError,
+    // beauty fields
+    bool? faceCleanEnabled,
+    int? faceCleanLevel,
+    bool? brightenEnabled,
+    int? brightenLevel,
   }) {
     return LiveHostState(
       isLive: isLive ?? this.isLive,
@@ -103,6 +126,10 @@ class LiveHostState {
       premiumStatus: premiumStatus ?? this.premiumStatus,
       premiumActionLoading: premiumActionLoading ?? this.premiumActionLoading,
       premiumError: premiumError ?? this.premiumError,
+      faceCleanEnabled: faceCleanEnabled ?? this.faceCleanEnabled,
+      faceCleanLevel: faceCleanLevel ?? this.faceCleanLevel,
+      brightenEnabled: brightenEnabled ?? this.brightenEnabled,
+      brightenLevel: brightenLevel ?? this.brightenLevel,
     );
   }
 
@@ -127,6 +154,11 @@ class LiveHostState {
     premiumStatus: null,
     premiumActionLoading: false,
     premiumError: null,
+    // beauty defaults (will be overwritten by prefs if present)
+    faceCleanEnabled: false,
+    faceCleanLevel: 40,
+    brightenEnabled: false,
+    brightenLevel: 40,
   );
 }
 
@@ -226,6 +258,23 @@ class PremiumActionFailed extends LiveHostEvent {
   PremiumActionFailed(this.message);
 }
 
+// ===== Beauty persistence events =====
+class LoadBeautyPreferences extends LiveHostEvent {}
+
+class BeautyPreferencesUpdated extends LiveHostEvent {
+  final bool faceCleanEnabled;
+  final int faceCleanLevel;
+  final bool brightenEnabled;
+  final int brightenLevel;
+
+  BeautyPreferencesUpdated({
+    required this.faceCleanEnabled,
+    required this.faceCleanLevel,
+    required this.brightenEnabled,
+    required this.brightenLevel,
+  });
+}
+
 // ===== Bloc =====
 class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   final LiveSessionRepository repo;
@@ -242,6 +291,9 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   StreamSubscription<JoinHandled>? _jhSub;
   StreamSubscription<String?>? _guestSub;
   StreamSubscription<PremiumStatusModel>? _premiumSub;
+
+  // Internal: whether we've applied beauty prefs after join
+  bool _beautyAppliedAfterJoin = false;
 
   LiveHostBloc(this.repo, this.agoraService)
     : super(LiveHostState.initial('')) {
@@ -338,6 +390,10 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
         ),
       ),
     );
+
+    // Beauty prefs events
+    on<LoadBeautyPreferences>(_onLoadBeautyPreferences);
+    on<BeautyPreferencesUpdated>(_onBeautyPreferencesUpdated);
   }
 
   Future<void> _onStart(LiveStarted e, Emitter<LiveHostState> emit) async {
@@ -371,6 +427,9 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       emit(state.copyWith(isLive: false));
       return;
     }
+
+    // Load persisted beauty preferences and setup subscriptions
+    add(LoadBeautyPreferences());
 
     // Then setup stream subscriptions
     await _setupStreamSubscriptions();
@@ -477,6 +536,89 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     return current.livestreamId;
   }
 
+  Future<void> _onLoadBeautyPreferences(
+    LoadBeautyPreferences e,
+    Emitter<LiveHostState> emit,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final faceEnabled = prefs.getBool(_kPrefFaceEnabled) ?? false;
+      final faceLevel = prefs.getInt(_kPrefFaceLevel) ?? 40;
+      final brightEnabled = prefs.getBool(_kPrefBrightEnabled) ?? false;
+      final brightLevel = prefs.getInt(_kPrefBrightLevel) ?? 40;
+
+      emit(
+        state.copyWith(
+          faceCleanEnabled: faceEnabled,
+          faceCleanLevel: faceLevel,
+          brightenEnabled: brightEnabled,
+          brightenLevel: brightLevel,
+        ),
+      );
+
+      // Try to apply immediately if Agora is joined; otherwise _onAgoraChanged will apply when joined.
+      await _applyBeautyFromStateIfReady();
+    } catch (err) {
+      debugPrint('⚠️ failed to load beauty prefs: $err');
+      // keep defaults
+    }
+  }
+
+  Future<void> _onBeautyPreferencesUpdated(
+    BeautyPreferencesUpdated e,
+    Emitter<LiveHostState> emit,
+  ) async {
+    final faceEnabled = e.faceCleanEnabled;
+    final faceLevel = e.faceCleanLevel.clamp(0, 100);
+    final brightEnabled = e.brightenEnabled;
+    final brightLevel = e.brightenLevel.clamp(0, 100);
+
+    emit(
+      state.copyWith(
+        faceCleanEnabled: faceEnabled,
+        faceCleanLevel: faceLevel,
+        brightenEnabled: brightEnabled,
+        brightenLevel: brightLevel,
+      ),
+    );
+
+    // persist
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kPrefFaceEnabled, faceEnabled);
+      await prefs.setInt(_kPrefFaceLevel, faceLevel);
+      await prefs.setBool(_kPrefBrightEnabled, brightEnabled);
+      await prefs.setInt(_kPrefBrightLevel, brightLevel);
+    } catch (err) {
+      debugPrint('⚠️ failed to persist beauty prefs: $err');
+    }
+
+    // apply immediately if possible
+    await _applyBeautyFromStateIfReady();
+  }
+
+  Future<void> _applyBeautyFromStateIfReady() async {
+    // If Agora is joined, apply immediately. Otherwise wait for join.
+    try {
+      if (agoraService.joined) {
+        // call AgoraService to apply
+        await agoraService.applyBeauty(
+          faceCleanEnabled: state.faceCleanEnabled,
+          faceCleanLevel: state.faceCleanLevel,
+          brightenEnabled: state.brightenEnabled,
+          brightenLevel: state.brightenLevel,
+        );
+        _beautyAppliedAfterJoin = true;
+      } else {
+        _beautyAppliedAfterJoin = false;
+        if (kDebugMode)
+          debugPrint('[Beauty] Agora not joined yet; will apply on join');
+      }
+    } catch (err) {
+      debugPrint('⚠️ failed to apply beauty options to Agora: $err');
+    }
+  }
+
   Future<void> _setupStreamSubscriptions() async {
     // Cancel existing subscriptions first
     await _vSub?.cancel();
@@ -553,7 +695,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       debugPrint('⚠️ premium subscription failed: $e');
     }
 
-    // FIXED: Use addListener for ValueNotifier instead of stream.listen
+    // Add Agora listener for join changes (and keep existing remote uid listener)
     _setupAgoraListener();
 
     debugPrint('✅ All stream subscriptions setup');
@@ -562,7 +704,10 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   // FIXED: Add methods for ValueNotifier listener management
   void _setupAgoraListener() {
     try {
+      // existing: remote uid listener
       agoraService.primaryRemoteUid.addListener(_onAgoraRemoteUidChanged);
+      // new: general service listener to detect join state changes
+      agoraService.addListener(_onAgoraChanged);
     } catch (_) {
       // ignore if not attachable
     }
@@ -571,6 +716,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   void _removeAgoraListener() {
     try {
       agoraService.primaryRemoteUid.removeListener(_onAgoraRemoteUidChanged);
+      agoraService.removeListener(_onAgoraChanged);
     } catch (_) {
       // ignore if listener wasn't attached
     }
@@ -579,6 +725,18 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   void _onAgoraRemoteUidChanged() {
     final remoteUid = agoraService.primaryRemoteUid.value;
     debugPrint('🎥 Agora primary remote UID changed: $remoteUid');
+  }
+
+  // Called when AgoraService notifies (join state may have changed)
+  void _onAgoraChanged() {
+    try {
+      if (agoraService.joined && !_beautyAppliedAfterJoin) {
+        // apply saved prefs now that engine is ready
+        _applyBeautyFromStateIfReady();
+      }
+    } catch (e) {
+      debugPrint('⚠️ error in agora change handler: $e');
+    }
   }
 
   void _onTick(LiveTick e, Emitter<LiveHostState> emit) {

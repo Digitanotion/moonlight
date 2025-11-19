@@ -303,108 +303,190 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   // Show a compact bottom sheet allowing toggle + slider for an effect
   void _showBeautyBottomSheet({required bool isFaceClean}) {
+    // Hide the quick settings menu while the sheet is open
+    if (_showSettingsMenu) {
+      setState(() => _showSettingsMenu = false);
+    }
+
     final title = isFaceClean ? 'Face Clean' : 'Brighten';
-    final currentEnabled = isFaceClean ? _faceCleanEnabled : _brightenEnabled;
-    final currentLevel = isFaceClean ? _faceCleanLevel : _brightenLevel;
+    // Use the current values as the initial values
+    final int currentLevel = isFaceClean ? _faceCleanLevel : _brightenLevel;
+    final bool currentEnabled = isFaceClean
+        ? _faceCleanEnabled
+        : _brightenEnabled;
 
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true, // allow sheet to size above keyboard and expand
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        int tempLevel = currentLevel;
-        bool tempEnabled = currentEnabled;
+        // use StatefulBuilder to manage local sheet state (Slider + Switch)
         return DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.28,
-          minChildSize: 0.18,
-          maxChildSize: 0.6,
+          // open larger so Apply button is visible immediately
+          initialChildSize: 0.40,
+          minChildSize: 0.28,
+          maxChildSize: 0.80,
           builder: (context, scrollCtrl) {
-            return _Glass(
-              radius: 18,
-              padding: const EdgeInsets.all(12),
-              child: ListView(
-                controller: scrollCtrl,
-                shrinkWrap: true,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Switch(
-                        value: tempEnabled,
-                        onChanged: (v) {
-                          tempEnabled = v;
-                          // Force rebuild of sheet
-                          (ctx as Element).markNeedsBuild();
-                        },
-                        activeColor: const Color(0xFFFF6A00),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Intensity: \$tempLevel%',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  Slider(
-                    min: 0,
-                    max: 100,
-                    divisions: 100,
-                    value: tempLevel.toDouble(),
-                    onChanged: (v) {
-                      tempLevel = v.round();
-                      (ctx as Element).markNeedsBuild();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            // Apply and close
-                            setState(() {
-                              if (isFaceClean) {
-                                _faceCleanEnabled = tempEnabled;
-                                _faceCleanLevel = tempLevel;
-                              } else {
-                                _brightenEnabled = tempEnabled;
-                                _brightenLevel = tempLevel;
-                              }
-                            });
-                            Navigator.of(ctx).pop();
-                            _applyEffects();
-                          },
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFF6A00),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Center(
+            return StatefulBuilder(
+              builder: (sheetCtx, sheetSetState) {
+                // local mutable copies for the sheet UI
+                int tempLevel = currentLevel;
+                bool tempEnabled = currentEnabled;
+
+                // To preserve values while rebuilding (StatefulBuilder closure created each time),
+                // we keep them in outer variables by capturing them via a List. But simpler:
+                // we set them in closure params only on first build. However StatefulBuilder is enough
+                // if we declare them outside; so modify to store re-usable locals:
+                // We'll instead lift temp variables to closures using closure fields:
+                // (Implementation below re-assigns correctly inside sheet using sheetSetState)
+
+                // Actually: we want tempLevel/tempEnabled to persist across rebuilds of this StatefulBuilder.
+                // We'll store them on the surrounding sheetState via a captured Map:
+                final mapKey =
+                    'beauty_sheet_${isFaceClean ? "face" : "bright"}';
+                final storage = <String, dynamic>{};
+                if (!storage.containsKey('init')) {
+                  storage['level'] = currentLevel;
+                  storage['enabled'] = currentEnabled;
+                  storage['init'] = true;
+                }
+
+                // BUT simpler approach: use closure variables outside StatefulBuilder — declare here:
+                // We'll re-implement with local variables preserved using an outer local.
+                // So return another builder using a StatefulBuilder that uses variables declared above.
+                // (Below is a corrected simpler implementation.)
+
+                // ---- CORRECTED: use local variables declared outside and mutate via sheetSetState ----
+                // (Rebuild this widget to use persistent values)
+                int innerLevel = currentLevel;
+                bool innerEnabled = currentEnabled;
+
+                return _Glass(
+                  radius: 18,
+                  padding: const EdgeInsets.all(12),
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+                    ),
+                    child: ListView(
+                      controller: scrollCtrl,
+                      shrinkWrap: true,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
                               child: Text(
-                                'Apply',
-                                style: TextStyle(
+                                title,
+                                style: const TextStyle(
                                   color: Colors.white,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
-                          ),
+                            // Local switch uses sheetSetState so it updates visually
+                            StatefulBuilder(
+                              builder: (c, s) {
+                                return Switch(
+                                  value: innerEnabled,
+                                  onChanged: (v) {
+                                    s(() => innerEnabled = v);
+                                  },
+                                  activeColor: const Color(0xFFFF6A00),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        // Intensity label — show current innerLevel
+                        StatefulBuilder(
+                          builder: (c, s) {
+                            return Text(
+                              'Intensity: ${innerLevel}%',
+                              style: const TextStyle(color: Colors.white70),
+                            );
+                          },
+                        ),
+                        // Slider — use a StatefulBuilder to update innerLevel
+                        StatefulBuilder(
+                          builder: (c, s) {
+                            return Slider(
+                              min: 0,
+                              max: 100,
+                              divisions: 100,
+                              value: innerLevel.toDouble(),
+                              onChanged: (v) {
+                                s(() => innerLevel = v.round());
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  // Apply: update page-level state, dispatch to Bloc so persistence happens,
+                                  // and close the sheet.
+                                  setState(() {
+                                    if (isFaceClean) {
+                                      _faceCleanEnabled = innerEnabled;
+                                      _faceCleanLevel = innerLevel;
+                                    } else {
+                                      _brightenEnabled = innerEnabled;
+                                      _brightenLevel = innerLevel;
+                                    }
+                                  });
+
+                                  // Dispatch to Bloc to persist + apply via bloc
+                                  try {
+                                    context.read<LiveHostBloc>().add(
+                                      BeautyPreferencesUpdated(
+                                        faceCleanEnabled: _faceCleanEnabled,
+                                        faceCleanLevel: _faceCleanLevel,
+                                        brightenEnabled: _brightenEnabled,
+                                        brightenLevel: _brightenLevel,
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    debugPrint(
+                                      '⚠️ Failed to dispatch beauty update: $e',
+                                    );
+                                    // fallback: apply immediately (best-effort)
+                                    _applyEffects();
+                                  }
+
+                                  Navigator.of(ctx).pop();
+                                },
+                                child: Container(
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF6A00),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      'Apply',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
