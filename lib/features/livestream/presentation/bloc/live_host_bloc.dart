@@ -1,11 +1,24 @@
+// FILE: lib/features/livestream/presentation/bloc/live_host_bloc.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/services/agora_service.dart';
+import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
+import 'package:moonlight/features/livestream/data/models/premium_status_model.dart';
+import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart';
+import 'package:uuid/uuid.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
+import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
+
+/// Live host bloc (complete file)
+/// - Consolidated premium subscription (single)
+/// - Guarded PremiumStatusUpdated handler (apply only for current livestream)
+/// - PremiumActionFailed does not force-clear isPremium/premiumStatus (server is source-of-truth)
 
 // ===== State =====
 class LiveHostState {
@@ -24,6 +37,12 @@ class LiveHostState {
   final GiftEvent? gift;
   final bool showGiftToast;
 
+  // NEW premium fields
+  final bool isPremium;
+  final PremiumStatusModel? premiumStatus;
+  final bool premiumActionLoading;
+  final String? premiumError;
+
   const LiveHostState({
     required this.isLive,
     required this.isPaused,
@@ -37,6 +56,10 @@ class LiveHostState {
     this.showGiftToast = false,
     this.endAnalytics,
     this.activeGuestUuid,
+    this.isPremium = false,
+    this.premiumStatus,
+    this.premiumActionLoading = false,
+    this.premiumError,
   });
 
   LiveHostState copyWith({
@@ -54,6 +77,10 @@ class LiveHostState {
     LiveEndAnalytics? endAnalytics,
     bool clearEndAnalytics = false,
     String? activeGuestUuid,
+    bool? isPremium,
+    PremiumStatusModel? premiumStatus,
+    bool? premiumActionLoading,
+    String? premiumError,
   }) {
     return LiveHostState(
       isLive: isLive ?? this.isLive,
@@ -72,6 +99,10 @@ class LiveHostState {
           ? null
           : (endAnalytics ?? this.endAnalytics),
       activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
+      isPremium: isPremium ?? this.isPremium,
+      premiumStatus: premiumStatus ?? this.premiumStatus,
+      premiumActionLoading: premiumActionLoading ?? this.premiumActionLoading,
+      premiumError: premiumError ?? this.premiumError,
     );
   }
 
@@ -92,6 +123,10 @@ class LiveHostState {
     showGiftToast: false,
     endAnalytics: null,
     activeGuestUuid: null,
+    isPremium: false,
+    premiumStatus: null,
+    premiumActionLoading: false,
+    premiumError: null,
   );
 }
 
@@ -173,6 +208,24 @@ class _ActiveGuestChanged extends LiveHostEvent {
   _ActiveGuestChanged(this.uuid);
 }
 
+// Premium events
+class ActivatePremium extends LiveHostEvent {
+  final PremiumPackageModel package;
+  ActivatePremium(this.package);
+}
+
+class CancelPremium extends LiveHostEvent {}
+
+class PremiumStatusUpdated extends LiveHostEvent {
+  final PremiumStatusModel payload;
+  PremiumStatusUpdated(this.payload);
+}
+
+class PremiumActionFailed extends LiveHostEvent {
+  final String message;
+  PremiumActionFailed(this.message);
+}
+
 // ===== Bloc =====
 class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   final LiveSessionRepository repo;
@@ -188,9 +241,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   StreamSubscription<void>? _eSub;
   StreamSubscription<JoinHandled>? _jhSub;
   StreamSubscription<String?>? _guestSub;
-
-  // FIXED: Remove StreamSubscription for ValueNotifier since we use addListener
-  // ValueNotifier uses addListener/removeListener instead of StreamSubscription
+  StreamSubscription<PremiumStatusModel>? _premiumSub;
 
   LiveHostBloc(this.repo, this.agoraService)
     : super(LiveHostState.initial('')) {
@@ -239,10 +290,54 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     });
     on<_HideGiftToast>((e, emit) => emit(state.copyWith(showGiftToast: false)));
 
-    // FIXED: Only one handler for _ActiveGuestChanged (removed duplicate)
+    // Only one handler for _ActiveGuestChanged
     on<_ActiveGuestChanged>((e, emit) {
       emit(state.copyWith(activeGuestUuid: e.uuid));
     });
+
+    // Premium handlers
+    on<ActivatePremium>(_onActivatePremium);
+    on<CancelPremium>(_onCancelPremium);
+
+    // Guarded PremiumStatusUpdated: only apply if it matches current livestream (when possible)
+    on<PremiumStatusUpdated>((e, emit) {
+      try {
+        final currentId = sl<LiveSessionTracker>().current?.livestreamId;
+        final payloadId = e.payload.livestreamId;
+        if (payloadId != null && currentId != null && payloadId != currentId) {
+          debugPrint(
+            '🔕 premium event ignored (payload for other livestream): payload=$payloadId current=$currentId',
+          );
+          return;
+        }
+      } catch (ex) {
+        // If tracker lookup fails, continue and apply update; log for debugging.
+        debugPrint('⚠️ premium handler validation error: $ex');
+      }
+
+      debugPrint(
+        '🔔 Applying premium status update: isPremium=${e.payload.isPremium} livestreamId=${e.payload.livestreamId ?? "?"}',
+      );
+      emit(
+        state.copyWith(
+          isPremium: e.payload.isPremium,
+          premiumStatus: e.payload,
+          premiumActionLoading: false,
+          premiumError: null,
+        ),
+      );
+    });
+
+    // PremiumActionFailed: don't aggressively clear server state here; show error and stop loading.
+    on<PremiumActionFailed>(
+      (e, emit) => emit(
+        state.copyWith(
+          premiumActionLoading: false,
+          premiumError: e.message,
+          // keep isPremium/premiumStatus as-is (server push will correct if needed)
+        ),
+      ),
+    );
   }
 
   Future<void> _onStart(LiveStarted e, Emitter<LiveHostState> emit) async {
@@ -281,6 +376,107 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _setupStreamSubscriptions();
   }
 
+  Future<void> _onActivatePremium(
+    ActivatePremium e,
+    Emitter<LiveHostState> emit,
+  ) async {
+    final pkg = e.package;
+
+    // Optimistically show a pending premium badge and loading state
+    final tracker = sl<LiveSessionTracker>();
+    final current = tracker.current;
+    final livestreamId = current?.livestreamId ?? -1;
+
+    emit(
+      state.copyWith(
+        premiumActionLoading: true,
+        isPremium: true,
+        premiumStatus: PremiumStatusModel(
+          type: 'pending',
+          livestreamId: livestreamId,
+          isPremium: true,
+          package: PremiumPackageSummary(
+            id: pkg.id,
+            name: pkg.title,
+            coins: pkg.coins,
+          ),
+        ),
+        premiumError: null,
+      ),
+    );
+
+    try {
+      final idemp = const Uuid().v4();
+      final res = await repo.activatePremium(
+        livestreamId: livestreamId,
+        packageId: pkg.id,
+        idempotencyKey: idemp,
+      );
+
+      // server responded — update with true server value (may also be 'pending')
+      emit(
+        state.copyWith(
+          premiumActionLoading: false,
+          isPremium: res.isPremium,
+          premiumStatus: res,
+          premiumError: null,
+        ),
+      );
+    } catch (err) {
+      debugPrint('❌ activate premium failed: $err');
+      emit(
+        state.copyWith(
+          premiumActionLoading: false,
+          premiumError: 'Failed to activate premium',
+          // keep isPremium/premiumStatus as-is (optimistic pending will be overridden by pusher if server later pushes)
+        ),
+      );
+    }
+  }
+
+  Future<void> _onCancelPremium(
+    CancelPremium e,
+    Emitter<LiveHostState> emit,
+  ) async {
+    // show loading
+    emit(state.copyWith(premiumActionLoading: true, premiumError: null));
+    try {
+      final idemp = const Uuid().v4();
+      final livestreamId = _resolveTrackerIdFromRepo();
+      final res = await repo.cancelPremium(
+        livestreamId: livestreamId,
+        idempotencyKey: idemp,
+      );
+
+      emit(
+        state.copyWith(
+          premiumActionLoading: false,
+          isPremium: res.isPremium,
+          premiumStatus: res,
+          premiumError: null,
+        ),
+      );
+    } catch (err) {
+      debugPrint('❌ cancel premium failed: $err');
+      emit(
+        state.copyWith(
+          premiumActionLoading: false,
+          premiumError: 'Failed to cancel premium',
+        ),
+      );
+    }
+  }
+
+  /// Resolve livestream id from repo/tracker. Throws helpful StateError if missing.
+  int _resolveTrackerIdFromRepo() {
+    final tracker = sl<LiveSessionTracker>();
+    final current = tracker.current;
+    if (current == null) {
+      throw StateError('No active live session (tracker.current == null).');
+    }
+    return current.livestreamId;
+  }
+
   Future<void> _setupStreamSubscriptions() async {
     // Cancel existing subscriptions first
     await _vSub?.cancel();
@@ -291,8 +487,9 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _eSub?.cancel();
     await _jhSub?.cancel();
     await _guestSub?.cancel();
+    await _premiumSub?.cancel();
 
-    // FIXED: Remove Agora listener
+    // FIXED: Remove Agora listener (if attached)
     _removeAgoraListener();
 
     // Setup new subscriptions
@@ -337,6 +534,25 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       add(_ActiveGuestChanged(uuid));
     });
 
+    // ---- premium subscription (single) ----
+    try {
+      await _premiumSub?.cancel();
+      _premiumSub = repo.premiumStatusStream().listen(
+        (p) {
+          debugPrint(
+            '🔔 premium event in bloc (stream): isPremium=${p.isPremium} livestreamId=${p.livestreamId ?? "?"}',
+          );
+          add(PremiumStatusUpdated(p));
+        },
+        onError: (e) {
+          debugPrint('⚠️ premium stream error: $e');
+        },
+      );
+      debugPrint('✅ premiumStatusStream subscribed');
+    } catch (e) {
+      debugPrint('⚠️ premium subscription failed: $e');
+    }
+
     // FIXED: Use addListener for ValueNotifier instead of stream.listen
     _setupAgoraListener();
 
@@ -345,11 +561,19 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
 
   // FIXED: Add methods for ValueNotifier listener management
   void _setupAgoraListener() {
-    agoraService.primaryRemoteUid.addListener(_onAgoraRemoteUidChanged);
+    try {
+      agoraService.primaryRemoteUid.addListener(_onAgoraRemoteUidChanged);
+    } catch (_) {
+      // ignore if not attachable
+    }
   }
 
   void _removeAgoraListener() {
-    agoraService.primaryRemoteUid.removeListener(_onAgoraRemoteUidChanged);
+    try {
+      agoraService.primaryRemoteUid.removeListener(_onAgoraRemoteUidChanged);
+    } catch (_) {
+      // ignore if listener wasn't attached
+    }
   }
 
   void _onAgoraRemoteUidChanged() {
@@ -420,6 +644,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _eSub?.cancel();
     await _jhSub?.cancel();
     await _guestSub?.cancel();
+    await _premiumSub?.cancel();
 
     // FIXED: Remove Agora listener
     _removeAgoraListener();
@@ -438,6 +663,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _eSub?.cancel();
     await _jhSub?.cancel();
     await _guestSub?.cancel();
+    await _premiumSub?.cancel();
 
     // FIXED: Remove Agora listener
     _removeAgoraListener();
@@ -447,7 +673,9 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       try {
         await repo.endSession();
       } catch (_) {}
-      repo.dispose();
+      try {
+        repo.dispose();
+      } catch (_) {}
     });
   }
 }

@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 class ProfileViewPage extends StatefulWidget {
   const ProfileViewPage({super.key});
@@ -92,6 +95,7 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           const SizedBox(height: 6),
+                          // REPLACE the old avatar Container with this widget
                           Container(
                             padding: const EdgeInsets.all(3),
                             decoration: const BoxDecoration(
@@ -102,15 +106,12 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                                 end: Alignment.bottomRight,
                               ),
                             ),
-                            child: CircleAvatar(
+                            child: _ProfileAvatar(
+                              avatarUrl: user?.avatarUrl,
                               radius: 33,
-                              backgroundImage:
-                                  (user?.avatarUrl.isNotEmpty == true)
-                                  ? CachedNetworkImageProvider(user!.avatarUrl)
-                                  : null,
-                              backgroundColor: Colors.black12,
                             ),
                           ),
+
                           const SizedBox(height: 14),
                           Text(
                             user?.handle ?? '@user',
@@ -214,6 +215,75 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                 ],
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  final String? avatarUrl;
+  final double radius;
+
+  const _ProfileAvatar({this.avatarUrl, this.radius = 33, Key? key})
+    : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = (avatarUrl != null && avatarUrl!.trim().isNotEmpty);
+
+    // size of outer widget (diameter)
+    final size = radius * 2;
+
+    // circle background color used when no avatar is present
+    const placeholderBg = Colors.black12;
+
+    if (!hasUrl) {
+      // No URL at all — show placeholder icon immediately
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: placeholderBg,
+        child: Icon(Icons.person_outline, color: Colors.white70, size: radius),
+      );
+    }
+
+    // When we have a URL, use CachedNetworkImage so we can show an error widget
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: avatarUrl!,
+          fit: BoxFit.cover,
+          width: size,
+          height: size,
+          // When the image successfully loads, this builder uses it as the avatar.
+          imageBuilder: (context, imageProvider) => Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+            ),
+          ),
+          // while loading show a subtle background
+          placeholder: (context, url) => Container(
+            color: placeholderBg,
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.person_outline,
+              color: Colors.white54,
+              size: radius * 0.9,
+            ),
+          ),
+          // on error (e.g., network/auth failure) show the icon placeholder
+          errorWidget: (context, url, error) => Container(
+            color: placeholderBg,
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.person_outline,
+              color: Colors.white70,
+              size: radius,
+            ),
           ),
         ),
       ),
@@ -444,15 +514,147 @@ class _PostsGrid extends StatelessWidget {
             tag: 'post_${p.id}',
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: CachedNetworkImage(
-                imageUrl: p.mediaUrl,
-                fit: BoxFit.cover,
-                placeholder: (c, _) => Container(color: Colors.white12),
-              ),
+              child: PostTile(post: p),
             ),
           ),
         );
       }, childCount: posts.length),
+    );
+  }
+}
+
+class PostTile extends StatefulWidget {
+  const PostTile({required this.post, Key? key}) : super(key: key);
+  final dynamic post; // expect Post domain entity
+
+  @override
+  State<PostTile> createState() => _PostTileState();
+}
+
+class _PostTileState extends State<PostTile> {
+  // simple in-memory cache across all PostTile instances
+  static final Map<String, Uint8List?> _thumbCache = {};
+  Uint8List? _thumb;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureThumb();
+  }
+
+  Future<void> _ensureThumb() async {
+    final p = widget.post;
+    // resolve id & media url defensively
+    final id = (p is dynamic)
+        ? (p.id?.toString() ??
+              p.uuid?.toString() ??
+              p.mediaUrl.hashCode.toString())
+        : p.toString();
+    final mediaUrl = (p is dynamic)
+        ? (p.mediaUrl?.toString() ?? '')
+        : p.toString();
+    final thumbUrl = (p is dynamic) ? (p.thumbUrl?.toString() ?? '') : '';
+
+    // if not a video, nothing to generate
+    final isVideo = (p is dynamic) ? (p.isVideo == true) : false;
+    if (!isVideo) return;
+
+    // if backend provided a thumbnail URL, don't generate — UI will load network image
+    if (thumbUrl.isNotEmpty) return;
+
+    // if already cached, use it
+    if (_thumbCache.containsKey(id)) {
+      setState(() {
+        _thumb = _thumbCache[id];
+      });
+      return;
+    }
+
+    // generate thumbnail asynchronously
+    setState(() => _loading = true);
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+        video: mediaUrl,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 1024,
+        quality: 75,
+      );
+      _thumbCache[id] = bytes;
+      if (mounted) {
+        setState(() {
+          _thumb = bytes;
+        });
+      }
+    } catch (_) {
+      _thumbCache[id] = null;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.post;
+    final isVideo = (p is dynamic) ? (p.isVideo == true) : false;
+    final mediaUrl = (p is dynamic)
+        ? (p.mediaUrl?.toString() ?? '')
+        : p.toString();
+    final thumbUrl = (p is dynamic) ? (p.thumbUrl?.toString() ?? '') : '';
+
+    if (isVideo) {
+      // if we have generated bytes, show them; otherwise use provided thumbUrl or fallback to mediaUrl
+      if (_thumb != null) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.memory(_thumb!, fit: BoxFit.cover),
+            const Center(
+              child: Icon(
+                Icons.play_circle_fill,
+                size: 40,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        );
+      } else {
+        final fallback = (thumbUrl.isNotEmpty) ? thumbUrl : mediaUrl;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            CachedNetworkImage(
+              imageUrl: fallback,
+              fit: BoxFit.cover,
+              placeholder: (c, _) => Container(color: Colors.white12),
+              errorWidget: (c, _, __) => Container(color: Colors.white12),
+            ),
+            if (_loading)
+              const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            const Center(
+              child: Icon(
+                Icons.play_circle_fill,
+                size: 40,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        );
+      }
+    }
+
+    // non-video: regular network image
+    return CachedNetworkImage(
+      imageUrl: mediaUrl,
+      fit: BoxFit.cover,
+      placeholder: (c, _) => Container(color: Colors.white12),
+      errorWidget: (c, _, __) => Container(color: Colors.white12),
     );
   }
 }

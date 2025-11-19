@@ -1,4 +1,5 @@
 // lib/features/home/presentation/widgets/live_tile_grid.dart
+// ... (file header and imports remain unchanged)
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -41,25 +42,24 @@ class LiveTileGrid extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () {
-        // CORRECT: item.isPremium is an int now
-        if (item.isPremium == 1) {
-          _showPremiumConfirmBottomSheet(context, item);
-        } else {
-          Navigator.of(context).pushNamed(
-            RouteNames.liveViewer,
-            arguments: {
-              'id': item.id, // REQUIRED numeric for Pusher
-              'uuid': item.uuid, // REST path (uuid or numeric ok)
-              'channel': item.channel, // e.g. "live_zNt4yMaaQwhf"
-              'hostUuid': item.hostUuid,
-              'hostName': item.handle.replaceFirst('@', ''),
-              'hostAvatar': item.coverUrl,
-              'title': item.title,
-              'startedAt': item.startedAt,
-              'role': item.role,
-            },
-          );
-        }
+        // NEW: always navigate to viewer. Viewer will handle premium overlay / payment.
+        Navigator.of(context).pushNamed(
+          RouteNames.liveViewer,
+          arguments: {
+            'id': item.id, // REQUIRED numeric for Pusher
+            'uuid': item.uuid, // REST path (uuid or numeric ok)
+            'channel': item.channel, // e.g. "live_zNt4yMaaQwhf"
+            'hostUuid': item.hostUuid,
+            'hostName': item.handle.replaceFirst('@', ''),
+            'hostAvatar': item.coverUrl,
+            'title': item.title,
+            'startedAt': item.startedAt,
+            'role': item.role,
+            // premium metadata so viewer can show overlay and payment CTA
+            'isPremium': item.isPremium, // note: int (1 or 0)
+            'premiumFee': item.premiumFee,
+          },
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -413,7 +413,7 @@ class LiveTileGrid extends StatelessWidget {
               setLoading(false);
             } // payWithAutoNewIdempotency
 
-            // UI
+            // UI (unchanged)
             return SingleChildScrollView(
               padding: EdgeInsets.only(
                 left: 12,
@@ -549,30 +549,6 @@ class LiveTileGrid extends StatelessWidget {
                                 height: 1.5,
                               ),
                             ),
-                            // const SizedBox(height: 14),
-                            // Row(
-                            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            //   children: [
-                            //     const Text(
-                            //       'Your wallet balance',
-                            //       style: TextStyle(
-                            //         color: Colors.white70,
-                            //         fontSize: 13.5,
-                            //         fontWeight: FontWeight.w500,
-                            //       ),
-                            //     ),
-                            //     Text(
-                            //       newBalance != null
-                            //           ? '$newBalance coins'
-                            //           : '— coins',
-                            //       style: const TextStyle(
-                            //         color: Colors.white,
-                            //         fontWeight: FontWeight.w800,
-                            //         fontSize: 14.5,
-                            //       ),
-                            //     ),
-                            //   ],
-                            // ),
                             if (statusMessage != null) ...[
                               const SizedBox(height: 10),
                               Text(

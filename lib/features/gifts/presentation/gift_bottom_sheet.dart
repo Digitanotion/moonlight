@@ -31,136 +31,140 @@ class _GiftBottomSheetState extends State<GiftBottomSheet> {
     final mq = MediaQuery.of(context);
     final maxSheetHeight = mq.size.height * 0.75;
 
-    return SafeArea(
-      child: BlocConsumer<ViewerBloc, ViewerState>(
-        listenWhen: (p, n) =>
-            p.sendErrorMessage != n.sendErrorMessage ||
-            p.isSendingGift != n.isSendingGift,
-        listener: (ctx, s) {
-          if (s.sendErrorMessage != null && s.sendErrorMessage!.isNotEmpty) {
-            TopSnack.error(ctx, s.sendErrorMessage!);
-          }
+    return FractionallySizedBox(
+      heightFactor: 0.5,
+      child: SafeArea(
+        child: BlocConsumer<ViewerBloc, ViewerState>(
+          listenWhen: (p, n) =>
+              p.sendErrorMessage != n.sendErrorMessage ||
+              p.isSendingGift != n.isSendingGift,
+          listener: (ctx, s) {
+            if (s.sendErrorMessage != null && s.sendErrorMessage!.isNotEmpty) {
+              TopSnack.error(ctx, s.sendErrorMessage!);
+            }
 
-          // On success we close via bloc (showGiftSheet=false), but if this sheet is still open, pop it.
-          if (!s.isSendingGift &&
-              !s.showGiftSheet &&
-              Navigator.of(ctx).canPop()) {
-            TopSnack.success(ctx, "Thank! Your Gift is sent successfully");
-            Navigator.of(ctx).pop();
-          }
-        },
-        buildWhen: (p, n) =>
-            p.giftCatalog != n.giftCatalog ||
-            p.walletBalanceCoins != n.walletBalanceCoins ||
-            p.isSendingGift != n.isSendingGift,
-        builder: (context, s) {
-          final items = s.giftCatalog;
-          // estimate grid height: 4 columns, ~110px per row (icon + text + spacing)
-          final rows = (items.isEmpty ? 1 : (items.length / 4).ceil());
-          final estimatedGridHeight = (rows * 110).toDouble();
-          // total sheet estimate (header + qty selector + spacing) ~ 220
-          final estimatedTotalHeight = min(
-            maxSheetHeight,
-            estimatedGridHeight + 220,
-          );
+            // On success we close via bloc (showGiftSheet=false), but if this sheet is still open, pop it.
+            if (!s.isSendingGift &&
+                !s.showGiftSheet &&
+                Navigator.of(ctx).canPop()) {
+              TopSnack.success(ctx, "Thank! Your Gift is sent successfully");
+              Navigator.of(ctx).pop();
+            }
+          },
+          buildWhen: (p, n) =>
+              p.giftCatalog != n.giftCatalog ||
+              p.walletBalanceCoins != n.walletBalanceCoins ||
+              p.isSendingGift != n.isSendingGift,
+          builder: (context, s) {
+            final items = s.giftCatalog;
+            // estimate grid height: 4 columns, ~110px per row (icon + text + spacing)
+            final rows = (items.isEmpty ? 1 : (items.length / 4).ceil());
+            final estimatedGridHeight = (rows * 110).toDouble();
+            // total sheet estimate (header + qty selector + spacing) ~ 220
+            final estimatedTotalHeight = min(
+              maxSheetHeight,
+              estimatedGridHeight + 220,
+            );
 
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Text(
-                      'Send a gift',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    const Spacer(),
-                    if (s.walletBalanceCoins != null)
-                      _pill(
-                        text: '${s.walletBalanceCoins} coins',
-                        icon: Icons.account_balance_wallet_rounded,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _qtySelector(),
-                const SizedBox(height: 8),
-
-                // Constrain the grid's height explicitly to avoid tiny overflow
-                SizedBox(
-                  height: estimatedTotalHeight,
-                  child: GridView.builder(
-                    padding: const EdgeInsets.only(top: 6),
-                    shrinkWrap: true,
-                    itemCount: items.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 0.86,
-                        ),
-                    itemBuilder: (ctx, i) {
-                      final g = items[i];
-                      final need = g.coins * _qty;
-                      final bal = s.walletBalanceCoins ?? 0;
-                      final canAfford = bal >= need;
-                      return _GiftTile(
-                        item: g,
-                        quantity: _qty,
-                        disabled: !canAfford || s.isSendingGift,
-                        onTap: () {
-                          if (!canAfford) {
-                            TopSnack.error(
-                              ctx,
-                              'Not enough coins for ${g.title}. Need $need',
-                              onAction: () {
-                                // optional quick nav
-                                Navigator.of(ctx).pushNamed(RouteNames.wallet);
-                              },
-                            );
-                            return;
-                          }
-
-                          context.read<ViewerBloc>().add(
-                            GiftSendRequested(
-                              g.code,
-                              _qty,
-                              widget.toUserUuid,
-                              widget.livestreamId,
-                            ),
-                          );
-                        },
-                      );
-                    },
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text(
+                        'Send a gift',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (s.walletBalanceCoins != null)
+                        _pill(
+                          text: '${s.walletBalanceCoins} coins',
+                          icon: Icons.account_balance_wallet_rounded,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _qtySelector(),
+                  const SizedBox(height: 8),
 
-                const SizedBox(height: 6),
-                if (s.isSendingGift)
-                  const LinearProgressIndicator(minHeight: 2),
-              ],
-            ),
-          );
-        },
+                  // Let the grid expand to fill the remaining half-screen and scroll inside it
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.only(top: 6),
+                      shrinkWrap: false,
+                      itemCount: items.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 0.86,
+                          ),
+                      itemBuilder: (ctx, i) {
+                        final g = items[i];
+                        final need = g.coins * _qty;
+                        final bal = s.walletBalanceCoins ?? 0;
+                        final canAfford = bal >= need;
+                        return _GiftTile(
+                          item: g,
+                          quantity: _qty,
+                          disabled: !canAfford || s.isSendingGift,
+                          onTap: () {
+                            if (!canAfford) {
+                              TopSnack.error(
+                                ctx,
+                                'Not enough coins for ${g.title}. Need $need',
+                                onAction: () {
+                                  // optional quick nav
+                                  Navigator.of(
+                                    ctx,
+                                  ).pushNamed(RouteNames.wallet);
+                                },
+                              );
+                              return;
+                            }
+
+                            context.read<ViewerBloc>().add(
+                              GiftSendRequested(
+                                g.code,
+                                _qty,
+                                widget.toUserUuid,
+                                widget.livestreamId,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+                  if (s.isSendingGift)
+                    const LinearProgressIndicator(minHeight: 2),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -329,16 +333,16 @@ class _GiftTile extends StatelessWidget {
                     },
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                // const SizedBox(height: 8),
+                // Text(
+                //   item.title,
+                //   maxLines: 1,
+                //   overflow: TextOverflow.ellipsis,
+                //   style: const TextStyle(
+                //     color: Colors.white,
+                //     fontWeight: FontWeight.w600,
+                //   ),
+                // ),
                 const SizedBox(height: 2),
                 Text(
                   '$need',

@@ -1,4 +1,7 @@
 import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
+import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
+import 'package:moonlight/features/livestream/data/models/premium_status_model.dart';
+import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_entities.dart';
@@ -30,6 +33,21 @@ abstract class LiveSessionRepository {
   Future<void> declineJoinRequest(String requestId);
   Future<void> sendChatMessage(String text);
   Future<List<HostGiftBroadcast>> fetchCollectedGifts();
+
+  Future<List<PremiumPackageModel>> fetchCoinPackages();
+  Future<WalletModel> fetchWallet();
+  Future<PremiumStatusModel> activatePremium({
+    required int livestreamId,
+    required String packageId,
+    String? idempotencyKey,
+  });
+  Future<PremiumStatusModel> cancelPremium({
+    required int livestreamId,
+    String? idempotencyKey,
+  });
+  Stream<PremiumStatusModel>
+  premiumStatusStream(); // emits when server pushes premium_status_changed via pusher
+
   void dispose();
 }
 

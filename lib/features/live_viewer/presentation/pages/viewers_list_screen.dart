@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 
 class ViewersListScreen extends StatefulWidget {
@@ -134,12 +135,24 @@ class _ViewersListScreenState extends State<ViewersListScreen> {
     return ListTile(
       leading: Stack(
         children: [
-          CircleAvatar(
-            backgroundImage: NetworkImage(participant.avatar),
-            radius: 24,
-            onBackgroundImageError: (exception, stackTrace) {
-              // Handle image loading errors
+          GestureDetector(
+            onTap: () {
+              Navigator.pushNamed(
+                context,
+                RouteNames.profileView,
+                arguments: {
+                  'userUuid': participant.userUuid,
+                  'user_slug': participant.userSlug,
+                }, // id isn’t used; router takes uuid via args (see patch below)
+              );
             },
+            child: CircleAvatar(
+              backgroundImage: NetworkImage(participant.avatar),
+              radius: 24,
+              onBackgroundImageError: (exception, stackTrace) {
+                // Handle image loading errors
+              },
+            ),
           ),
           // Show online status for all participants in live stream
           Positioned(

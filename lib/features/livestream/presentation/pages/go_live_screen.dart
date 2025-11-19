@@ -120,17 +120,17 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
                             _CameraCard(),
                             const SizedBox(height: 18),
                             sectionTitle('Stream Settings'),
-                            const SizedBox(height: 6),
-                            _SettingTile(
-                              icon: Icons.workspace_premium_outlined,
-                              title: 'Premium Stream',
-                              subtitle: 'Viewers pay coins to join',
-                              value: state.premium,
-                              onChanged: context
-                                  .read<GoLiveCubit>()
-                                  .togglePremium,
-                            ),
 
+                            // const SizedBox(height: 6),
+                            // _SettingTile(
+                            //   icon: Icons.workspace_premium_outlined,
+                            //   title: 'Premium Stream',
+                            //   subtitle: 'Viewers pay coins to join',
+                            //   value: state.premium,
+                            //   onChanged: context
+                            //       .read<GoLiveCubit>()
+                            //       .togglePremium,
+                            // ),
                             const SizedBox(height: 14),
                             if (state.eligibleBonus) _BonusCard(),
                             const SizedBox(height: 14),
@@ -262,7 +262,7 @@ class _CameraCard extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(10),
       child: AspectRatio(
-        aspectRatio: 16 / 12,
+        aspectRatio: 11 / 16,
         child: Stack(
           children: [
             // Camera area

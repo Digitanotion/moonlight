@@ -16,6 +16,8 @@ import 'package:moonlight/features/livestream/domain/session/live_session_tracke
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_gifts_page.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
+import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
 
 class LiveHostPage extends StatefulWidget {
   final String hostName;
@@ -63,6 +65,8 @@ class _LiveHostPageState extends State<LiveHostPage>
   bool _isAudioMuted = false;
   bool _isVideoMuted = false;
   bool _showSettingsMenu = false;
+  // When true we hide all non-video overlays so the viewer sees only the video.
+  bool _immersive = false;
   @override
   void initState() {
     super.initState();
@@ -385,425 +389,545 @@ class _LiveHostPageState extends State<LiveHostPage>
         ],
         child: BlocBuilder<LiveHostBloc, LiveHostState>(
           builder: (context, state) {
-            return Stack(
-              children: [
-                // Camera preview
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: agora,
-                    builder: (_, __) {
-                      return Builder(
-                        builder: (context) {
-                          if (!agora.joined) {
-                            return _buildLoadingState();
-                          }
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              // Horizontal swipe: primaryVelocity > 0 = swipe right (enable immersive),
+              // < 0 = swipe left (disable immersive).
+              onHorizontalDragEnd: (details) {
+                final v = details.primaryVelocity ?? 0;
+                // threshold tweakable (300)
+                if (v > 300) {
+                  setState(() => _immersive = true);
+                } else if (v < -300) {
+                  setState(() => _immersive = false);
+                }
+              },
+              child: Stack(
+                children: [
+                  // Camera preview
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: agora,
+                      builder: (_, __) {
+                        return Builder(
+                          builder: (context) {
+                            if (!agora.joined) {
+                              return _buildLoadingState();
+                            }
 
-                          final hasGuestInBloc = context
-                              .select<LiveHostBloc, bool>(
-                                (b) => b.state.activeGuestUuid != null,
+                            final hasGuestInBloc = context
+                                .select<LiveHostBloc, bool>(
+                                  (b) => b.state.activeGuestUuid != null,
+                                );
+
+                            final hasRemoteUid =
+                                agora.primaryRemoteUid.value != null;
+                            final remoteHasVideo = agora.remoteHasVideo;
+
+                            debugPrint(
+                              '🎥 Video State - Guest in BLoC: $hasGuestInBloc, '
+                              'Remote UID: $hasRemoteUid, '
+                              'Remote has video: $remoteHasVideo',
+                            );
+
+                            if (!hasGuestInBloc || !hasRemoteUid) {
+                              // Single host view - full screen with elegant overlay
+                              return Stack(
+                                children: [
+                                  // Full screen host video
+                                  Positioned.fill(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.zero,
+                                      child: agora.localPreview(),
+                                    ),
+                                  ),
+                                  // Elegant gradient overlay
+                                  Positioned.fill(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.transparent,
+                                            Colors.black.withOpacity(0.1),
+                                            Colors.black.withOpacity(0.3),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               );
+                            }
 
-                          final hasRemoteUid =
-                              agora.primaryRemoteUid.value != null;
-                          final remoteHasVideo = agora.remoteHasVideo;
-
-                          debugPrint(
-                            '🎥 Video State - Guest in BLoC: $hasGuestInBloc, '
-                            'Remote UID: $hasRemoteUid, '
-                            'Remote has video: $remoteHasVideo',
-                          );
-
-                          if (!hasGuestInBloc || !hasRemoteUid) {
-                            // Single host view - full screen with elegant overlay
+                            // Modern two-up layout with host and guest
                             return Stack(
                               children: [
-                                // Full screen host video
-                                Positioned.fill(
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.zero,
-                                    child: agora.localPreview(),
-                                  ),
+                                // Host video - main content (larger)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  // Host takes 65% of screen
+                                  child: _buildHostVideoWithOverlay(),
                                 ),
-                                // Elegant gradient overlay
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          Colors.black.withOpacity(0.1),
-                                          Colors.black.withOpacity(0.3),
+
+                                // Guest video - floating panel (smaller)
+                                Positioned(
+                                  right: 16,
+                                  bottom: 100, // Position above bottom actions
+                                  width:
+                                      MediaQuery.of(context).size.width *
+                                      0.40, // 35% of screen width
+                                  height:
+                                      MediaQuery.of(context).size.width *
+                                      0.40 *
+                                      1.77, // Maintain 16:9 aspect
+                                  child: _buildGuestVideoFloatingPanel(),
+                                ),
+
+                                // Connection status indicator
+                                if (!remoteHasVideo)
+                                  Positioned(
+                                    right: 16,
+                                    bottom:
+                                        100 +
+                                        MediaQuery.of(context).size.width *
+                                            0.35 *
+                                            1.77 +
+                                        8,
+                                    child: _buildConnectionStatus(),
+                                  ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+
+                  // ===== Top Bar (fixed alignment) =====
+                  // ===== Top header (single tight glass bar) =====
+                  if (!_immersive) ...[
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      top: MediaQuery.of(context).padding.top + 8,
+                      child: _HeaderBar(
+                        hostName: widget.hostName,
+                        hostBadge: widget.hostBadge,
+                        avatarUrl: widget.avatarUrl,
+                        timeText: _mmss(state.elapsedSeconds),
+                        viewersText: _formatViewers(state.viewers),
+                        onEnd: () =>
+                            context.read<LiveHostBloc>().add(EndPressed()),
+                      ),
+                    ),
+                    // Floating short Premium pill (top-right, above header) — add this right after the header Positioned
+                    if (state.isPremium)
+                      Positioned(
+                        top: MediaQuery.of(context).padding.top + 100,
+                        right: 20,
+                        child: GestureDetector(
+                          onTap: _showCancelPremiumBottomSheet,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.redAccent,
+                                width: 1.25,
+                              ),
+                            ),
+                            child: const Text(
+                              'PREMIUM',
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Dim layer when paused
+                    if (state.isPaused)
+                      Positioned.fill(
+                        child: Container(color: Colors.black.withOpacity(0.55)),
+                      ),
+
+                    // Topic chip
+                    Positioned(
+                      top: 92,
+                      left: 12,
+                      right: 12,
+                      child: _Glass(
+                        radius: 18,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        child: Text(
+                          widget.topic,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Host Gift Overlay (top-center)
+                    if (_currentGift != null && _giftAnimController != null)
+                      Positioned(
+                        top: MediaQuery.of(context).padding.top + 64,
+                        left: 18,
+                        right: 18,
+                        child: RepaintBoundary(
+                          child: AnimatedBuilder(
+                            animation: _giftAnimController!,
+                            builder: (context, _) {
+                              final t = _giftAnimController!.value;
+                              // entrance: 0..entranceMs/total, hold: middle, exit: last part
+                              // Normalize with simple mapping
+                              final entrancePortion =
+                                  350 /
+                                  (_giftAnimController!
+                                      .duration!
+                                      .inMilliseconds);
+                              final exitPortion =
+                                  250 /
+                                  (_giftAnimController!
+                                      .duration!
+                                      .inMilliseconds);
+                              double opacity = 1.0;
+                              double translateY = 0.0;
+                              if (t < entrancePortion) {
+                                final nt = t / entrancePortion;
+                                opacity = nt;
+                                translateY = 40 * (1 - _evalEntrance(nt));
+                              } else if (t > (1 - exitPortion)) {
+                                final nt =
+                                    (t - (1 - exitPortion)) / exitPortion;
+                                opacity = 1 - _evalExit(nt);
+                                translateY = 20 * nt;
+                              }
+
+                              return Opacity(
+                                opacity: opacity,
+                                child: Transform.translate(
+                                  offset: Offset(0, translateY),
+                                  child: Center(
+                                    child: _Glass(
+                                      radius: 18,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Avatar
+                                          Transform.scale(
+                                            scale:
+                                                0.9 +
+                                                0.1 *
+                                                    (t < 0.5 ? t * 2 : (1 - t)),
+                                            child: CircleAvatar(
+                                              radius: 22,
+                                              backgroundImage:
+                                                  _currentGift!.senderAvatar !=
+                                                      null
+                                                  ? NetworkImage(
+                                                      _currentGift!
+                                                          .senderAvatar!,
+                                                    )
+                                                  : const AssetImage(
+                                                          'assets/images/logo.png',
+                                                        )
+                                                        as ImageProvider,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          // Texts
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  '@${_currentGift!.senderDisplayName}',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        'sent ${_currentGift!.giftCode} to you',
+                                                        style: const TextStyle(
+                                                          color: Colors.white70,
+                                                          fontSize: 13.5,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    // coins pill (always present)
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 6,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(
+                                                          0xFFFF6A00,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                      child: Text(
+                                                        '+${_currentGift!.coinsSpent}',
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          // Gift art
+                                          Container(
+                                            width: 84,
+                                            height: 84,
+                                            padding: const EdgeInsets.all(6),
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(
+                                                    0xFFFF6A00,
+                                                  ).withOpacity(.12),
+                                                  blurRadius: 18,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ],
+                                            ),
+                                            child:
+                                                _currentGiftWidget ??
+                                                const SizedBox.shrink(),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // multiplier badge if quantity > 1
+                                          if ((_currentGift!.quantity) > 1)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 6,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white24,
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: Text(
+                                                'x${_currentGift!.quantity}',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
                                   ),
                                 ),
-                              ],
-                            );
-                          }
-
-                          // Modern two-up layout with host and guest
-                          return Stack(
-                            children: [
-                              // Host video - main content (larger)
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                // Host takes 65% of screen
-                                child: _buildHostVideoWithOverlay(),
-                              ),
-
-                              // Guest video - floating panel (smaller)
-                              Positioned(
-                                right: 16,
-                                bottom: 100, // Position above bottom actions
-                                width:
-                                    MediaQuery.of(context).size.width *
-                                    0.40, // 35% of screen width
-                                height:
-                                    MediaQuery.of(context).size.width *
-                                    0.40 *
-                                    1.77, // Maintain 16:9 aspect
-                                child: _buildGuestVideoFloatingPanel(),
-                              ),
-
-                              // Connection status indicator
-                              if (!remoteHasVideo)
-                                Positioned(
-                                  right: 16,
-                                  bottom:
-                                      100 +
-                                      MediaQuery.of(context).size.width *
-                                          0.35 *
-                                          1.77 +
-                                      8,
-                                  child: _buildConnectionStatus(),
-                                ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-
-                // ===== Top Bar (fixed alignment) =====
-                // ===== Top header (single tight glass bar) =====
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  top: MediaQuery.of(context).padding.top + 8,
-                  child: _HeaderBar(
-                    hostName: widget.hostName,
-                    hostBadge: widget.hostBadge,
-                    avatarUrl: widget.avatarUrl,
-                    timeText: _mmss(state.elapsedSeconds),
-                    viewersText: _formatViewers(state.viewers),
-                    onEnd: () => context.read<LiveHostBloc>().add(EndPressed()),
-                  ),
-                ),
-
-                // Dim layer when paused
-                if (state.isPaused)
-                  Positioned.fill(
-                    child: Container(color: Colors.black.withOpacity(0.55)),
-                  ),
-
-                // Topic chip
-                Positioned(
-                  top: 92,
-                  left: 12,
-                  right: 12,
-                  child: _Glass(
-                    radius: 18,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    child: Text(
-                      widget.topic,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13.5,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Host Gift Overlay (top-center)
-                if (_currentGift != null && _giftAnimController != null)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 64,
-                    left: 18,
-                    right: 18,
-                    child: RepaintBoundary(
-                      child: AnimatedBuilder(
-                        animation: _giftAnimController!,
-                        builder: (context, _) {
-                          final t = _giftAnimController!.value;
-                          // entrance: 0..entranceMs/total, hold: middle, exit: last part
-                          // Normalize with simple mapping
-                          final entrancePortion =
-                              350 /
-                              (_giftAnimController!.duration!.inMilliseconds);
-                          final exitPortion =
-                              250 /
-                              (_giftAnimController!.duration!.inMilliseconds);
-                          double opacity = 1.0;
-                          double translateY = 0.0;
-                          if (t < entrancePortion) {
-                            final nt = t / entrancePortion;
-                            opacity = nt;
-                            translateY = 40 * (1 - _evalEntrance(nt));
-                          } else if (t > (1 - exitPortion)) {
-                            final nt = (t - (1 - exitPortion)) / exitPortion;
-                            opacity = 1 - _evalExit(nt);
-                            translateY = 20 * nt;
-                          }
-
-                          return Opacity(
-                            opacity: opacity,
-                            child: Transform.translate(
-                              offset: Offset(0, translateY),
-                              child: Center(
-                                child: _Glass(
-                                  radius: 18,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Avatar
-                                      Transform.scale(
-                                        scale:
-                                            0.9 +
-                                            0.1 * (t < 0.5 ? t * 2 : (1 - t)),
-                                        child: CircleAvatar(
-                                          radius: 22,
-                                          backgroundImage:
-                                              _currentGift!.senderAvatar != null
-                                              ? NetworkImage(
-                                                  _currentGift!.senderAvatar!,
-                                                )
-                                              : const AssetImage(
-                                                      'assets/images/logo.png',
-                                                    )
-                                                    as ImageProvider,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // Texts
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              '@${_currentGift!.senderDisplayName}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    'sent ${_currentGift!.giftCode} to you',
-                                                    style: const TextStyle(
-                                                      color: Colors.white70,
-                                                      fontSize: 13.5,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                // coins pill (always present)
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 6,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFFFF6A00,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                  ),
-                                                  child: Text(
-                                                    '+${_currentGift!.coinsSpent}',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // Gift art
-                                      Container(
-                                        width: 84,
-                                        height: 84,
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(
-                                                0xFFFF6A00,
-                                              ).withOpacity(.12),
-                                              blurRadius: 18,
-                                              spreadRadius: 2,
-                                            ),
-                                          ],
-                                        ),
-                                        child:
-                                            _currentGiftWidget ??
-                                            const SizedBox.shrink(),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // multiplier badge if quantity > 1
-                                      if ((_currentGift!.quantity) > 1)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white24,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            'x${_currentGift!.quantity}',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                // Join Request card
-                if (state.pendingRequest != null && !state.isPaused)
-                  Positioned(
-                    top: 120,
-                    left: 16,
-                    right: 16,
-                    child: _JoinRequestCard(
-                      req: state.pendingRequest!,
-                      onAccept: () => context.read<LiveHostBloc>().add(
-                        AcceptJoinRequest(state.pendingRequest!.id),
-                      ),
-                      onDecline: () => context.read<LiveHostBloc>().add(
-                        DeclineJoinRequest(state.pendingRequest!.id),
-                      ),
-                    ),
-                  ),
-
-                // Chat overlay (stable wrapping + spacing)
-                // Enhanced Chat overlay with input
-                if (state.chatVisible && !state.isPaused)
-                  Positioned(
-                    left: 20,
-                    right: 20,
-                    bottom: 135,
-                    child: _HostChatWidget(
-                      messages: state.messages,
-                      onSendMessage: (text) {
-                        context.read<LiveHostBloc>().add(SendChatMessage(text));
-                      },
-                    ),
-                  ),
-                // Bottom actions
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 10,
-                  child: SafeArea(
-                    child: _BottomActions(
-                      isPaused: state.isPaused,
-                      onPause: () =>
-                          context.read<LiveHostBloc>().add(TogglePause()),
-                      onChatToggle: () => context.read<LiveHostBloc>().add(
-                        ToggleChatVisibility(),
-                      ),
-                      onGifts: () {
-                        final tracker = sl<LiveSessionTracker>();
-                        final numericId = tracker.current!.livestreamId;
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                LiveGiftsPage(livestreamId: numericId),
+                              );
+                            },
                           ),
-                        );
-                      },
-                      onViewers: () {
-                        final tracker = sl<LiveSessionTracker>();
-                        // Numeric for Pusher channels:
-                        final numericId = tracker.current!.livestreamId;
-                        // REST param — use uuid if you track it, else the same numeric id is fine:
-                        final restParam = '${tracker.current!.livestreamId}';
+                        ),
+                      ),
+                    // Join Request card
+                    if (state.pendingRequest != null && !state.isPaused)
+                      Positioned(
+                        top: 120,
+                        left: 16,
+                        right: 16,
+                        child: _JoinRequestCard(
+                          req: state.pendingRequest!,
+                          onAccept: () => context.read<LiveHostBloc>().add(
+                            AcceptJoinRequest(state.pendingRequest!.id),
+                          ),
+                          onDecline: () => context.read<LiveHostBloc>().add(
+                            DeclineJoinRequest(state.pendingRequest!.id),
+                          ),
+                        ),
+                      ),
 
-                        registerParticipantsScope(
-                          livestreamIdNumeric: numericId,
-                          livestreamParam: restParam,
-                        );
+                    // Chat overlay (stable wrapping + spacing)
+                    // Enhanced Chat overlay with input
+                    if (state.chatVisible && !state.isPaused)
+                      Positioned(
+                        left: 20,
+                        right: 20,
+                        bottom: 135,
+                        child: _HostChatWidget(
+                          messages: state.messages,
+                          onSendMessage: (text) {
+                            context.read<LiveHostBloc>().add(
+                              SendChatMessage(text),
+                            );
+                          },
+                        ),
+                      ),
+                    // Bottom actions
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 10,
+                      child: SafeArea(
+                        child: _BottomActions(
+                          isPaused: state.isPaused,
+                          onPause: () =>
+                              context.read<LiveHostBloc>().add(TogglePause()),
+                          onChatToggle: () => context.read<LiveHostBloc>().add(
+                            ToggleChatVisibility(),
+                          ),
+                          onGifts: () {
+                            final tracker = sl<LiveSessionTracker>();
+                            final numericId = tracker.current!.livestreamId;
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    LiveGiftsPage(livestreamId: numericId),
+                              ),
+                            );
+                          },
+                          onViewers: () {
+                            final tracker = sl<LiveSessionTracker>();
+                            // Numeric for Pusher channels:
+                            final numericId = tracker.current!.livestreamId;
+                            // REST param — use uuid if you track it, else the same numeric id is fine:
+                            final restParam =
+                                '${tracker.current!.livestreamId}';
 
-                        Navigator.pushNamed(context, RouteNames.listViewers);
-                      },
-                      onPremium: () =>
-                          Navigator.pushNamed(context, RouteNames.profileView),
-                      onSettings: _toggleSettingsMenu,
+                            registerParticipantsScope(
+                              livestreamIdNumeric: numericId,
+                              livestreamParam: restParam,
+                            );
+
+                            Navigator.pushNamed(
+                              context,
+                              RouteNames.listViewers,
+                            );
+                          },
+                          onPremium: _showPremiumBottomSheet,
+                          onSettings: _toggleSettingsMenu,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                // Settings Menu - NEW
-                _buildSettingsMenu(),
-                // Paused overlay
-                if (state.isPaused)
-                  _PausedOverlay(
-                    onResume: () =>
-                        context.read<LiveHostBloc>().add(TogglePause()),
-                  ),
-              ],
+                    // Settings Menu - NEW
+                    _buildSettingsMenu(),
+                    // Paused overlay
+                    if (state.isPaused)
+                      _PausedOverlay(
+                        onResume: () =>
+                            context.read<LiveHostBloc>().add(TogglePause()),
+                      ),
+                  ],
+                ],
+              ),
             );
           },
         ),
       ),
+    );
+  }
+
+  // ===== Premium BottomSheet (open when host taps "Premiums" button) =====
+  void _showPremiumBottomSheet() {
+    final liveHostBloc = context.read<LiveHostBloc>(); // capture here
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.55,
+          minChildSize: 0.35,
+          maxChildSize: 0.95,
+          builder: (context, scrollCtrl) {
+            return _PremiumBottomSheet(
+              scrollController: scrollCtrl,
+              repo: _repoImpl,
+              onActivate: (PremiumPackageModel pkg) {
+                // use captured bloc
+                liveHostBloc.add(ActivatePremium(pkg));
+                Navigator.of(context).pop();
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ===== Cancel Premium BottomSheet (open when host taps premium badge) =====
+  void _showCancelPremiumBottomSheet() {
+    final liveHostBloc = context.read<LiveHostBloc>();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.32,
+          minChildSize: 0.2,
+          maxChildSize: 0.6,
+          builder: (sheetCtx, scrollCtrl) {
+            // No need to provide BlocProvider.value here — we already captured the bloc
+            return _CancelPremiumSheet(
+              scrollController: scrollCtrl,
+              onConfirm: () {
+                liveHostBloc.add(CancelPremium());
+                Navigator.of(sheetCtx).pop();
+              },
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1538,7 +1662,7 @@ class _HeaderBar extends StatelessWidget {
   final String hostBadge;
   final String timeText;
   final String viewersText;
-  final String? avatarUrl; // NEW
+  final String? avatarUrl;
   final VoidCallback onEnd;
 
   const _HeaderBar({
@@ -1849,6 +1973,350 @@ class _EmojiGrid extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ===== Premium Bottom Sheet Widget =====
+class _PremiumBottomSheet extends StatefulWidget {
+  final ScrollController scrollController;
+  final LiveSessionRepositoryImpl repo;
+  final void Function(PremiumPackageModel) onActivate;
+
+  const _PremiumBottomSheet({
+    required this.scrollController,
+    required this.repo,
+    required this.onActivate,
+  });
+
+  @override
+  State<_PremiumBottomSheet> createState() => _PremiumBottomSheetState();
+}
+
+class _PremiumBottomSheetState extends State<_PremiumBottomSheet> {
+  bool _loading = true;
+  List<PremiumPackageModel> _packages = [];
+  WalletModel? _wallet;
+  PremiumPackageModel? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      setState(() => _loading = true);
+      final pkgs = await widget.repo.fetchCoinPackages();
+      final w = await widget.repo.fetchWallet();
+      setState(() {
+        _packages = pkgs;
+        _wallet = w;
+        _selected = pkgs.isNotEmpty ? pkgs.first : null;
+      });
+    } catch (e) {
+      debugPrint('❌ failed to fetch premium data: $e');
+      // keep empty state
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E14),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      padding: EdgeInsets.only(
+        top: 16,
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: _loading
+          ? SizedBox(
+              height: 220,
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    const Color(0xFFFF6A00),
+                  ),
+                ),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Go Premium — select a coin package',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (_wallet != null)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${_wallet!.balance} coins',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '\$${(_wallet!.usdEquivalentCents * 0.005).toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView.separated(
+                    controller: widget.scrollController,
+                    itemCount: _packages.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final p = _packages[i];
+                      final selected = p == _selected;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selected = p),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? Colors.white.withOpacity(0.06)
+                                : Colors.white.withOpacity(0.02),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selected
+                                  ? const Color(0xFFFF6A00)
+                                  : Colors.white12,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      p.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${p.coins} coins',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '\$${(p.priceUsdCents * 0.005).toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  if (selected)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF6A00),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'Selected',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _selected == null
+                            ? null
+                            : () {
+                                widget.onActivate(_selected!);
+                              },
+                        child: Container(
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6A00),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Text(
+                              _selected == null
+                                  ? 'Select a package'
+                                  : 'Activate with ${_selected!.title}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+// ===== Cancel Premium Sheet Widget =====
+class _CancelPremiumSheet extends StatelessWidget {
+  final ScrollController scrollController;
+  final VoidCallback onConfirm;
+
+  const _CancelPremiumSheet({
+    required this.scrollController,
+    required this.onConfirm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E14),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      padding: EdgeInsets.only(
+        top: 16,
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: ListView(
+        controller: scrollController,
+        shrinkWrap: true,
+        children: [
+          Center(
+            child: Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Cancel Premium',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Cancelling premium will remove the premium badge and revert your stream to regular status. '
+            'Viewers will be notified. You can re-activate premium anytime.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white12,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Keep Premium',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onConfirm,
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6A00),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Cancel Premium',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

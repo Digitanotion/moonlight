@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
+import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
+import 'package:moonlight/features/livestream/data/models/premium_status_model.dart';
+import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
 // import 'package:moonlight/features/livestream/data/models/go_live_models.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
@@ -50,6 +54,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
   final List<HostGiftBroadcast> _collectedGifts = [];
   // NEW: active guest UUID stream (null when no guest)
   final _activeGuestCtrl = StreamController<String?>.broadcast();
+  final _premiumCtrl = StreamController<PremiumStatusModel>.broadcast();
+
   String? _activeGuestUuid;
 
   bool _locallyPaused = false;
@@ -78,6 +84,124 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     _locallyPaused = paused;
     _agora.setMicEnabled(!paused);
     _agora.setCameraEnabled(!paused);
+  }
+
+  // Fetch coin packages
+  Future<List<PremiumPackageModel>> fetchCoinPackages() async {
+    try {
+      final res = await _client.dio.get('/api/v1/wallet/packages');
+      final map = (res.data as Map).cast<String, dynamic>();
+      final list = (map['data'] as List?) ?? [];
+      return List<PremiumPackageModel>.from(
+        list.map(
+          (e) =>
+              PremiumPackageModel.fromMap((e as Map).cast<String, dynamic>()),
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ fetchCoinPackages error: $e');
+      rethrow;
+    }
+  }
+
+  // Fetch wallet
+  Future<WalletModel> fetchWallet() async {
+    try {
+      final res = await _client.dio.get('/api/v1/wallet/');
+      final map = (res.data as Map).cast<String, dynamic>();
+      final data = (map['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      return WalletModel.fromMap(data);
+    } catch (e) {
+      debugPrint('❌ fetchWallet error: $e');
+      rethrow;
+    }
+  }
+
+  // Activate Premium
+  Future<PremiumStatusModel> activatePremium({
+    required int livestreamId,
+    required String packageId,
+    String? idempotencyKey,
+  }) async {
+    try {
+      final opts = idempotencyKey == null
+          ? null
+          : Options(headers: {'Idempotency-Key': idempotencyKey});
+      final res = await _client.dio.post(
+        '/api/v1/live/$livestreamId/premium/activate',
+        data: {'package_id': packageId},
+        options: opts,
+      );
+
+      // normalize response body
+      final map = (res.data is Map)
+          ? (res.data as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+
+      // Try to find the "premium" object in data
+      final premiumMap = (((map['data'] ?? {}) as Map?)?['premium']) as Map?;
+      if (premiumMap != null) {
+        final model = PremiumStatusModel.fromMap(
+          premiumMap.cast<String, dynamic>(),
+        );
+        _premiumCtrl.add(model);
+        return model;
+      }
+
+      // Handle "already processing" / 202 case: treat as pending
+      final status = (map['status'] ?? '').toString().toLowerCase();
+      final message = (map['message'] ?? '').toString().toLowerCase();
+      final isProcessing = status == 'error' && message.contains('processing');
+      final is202 = res.statusCode == 202;
+
+      if (isProcessing || is202) {
+        // Build a lightweight "pending" model so UI can show pending state.
+        // package name/coins may be unknown here; create a minimal summary.
+        final pending = PremiumStatusModel(
+          type: 'pending',
+          livestreamId: livestreamId,
+          isPremium: true,
+          package: PremiumPackageSummary(id: packageId, name: '', coins: 0),
+        );
+        _premiumCtrl.add(pending);
+        return pending;
+      }
+
+      throw Exception('Invalid server response: missing premium');
+    } catch (e) {
+      debugPrint('❌ activatePremium error: $e');
+      rethrow;
+    }
+  }
+
+  // Cancel premium
+  Future<PremiumStatusModel> cancelPremium({
+    required int livestreamId,
+    String? idempotencyKey,
+  }) async {
+    try {
+      final opts = idempotencyKey == null
+          ? null
+          : Options(headers: {'Idempotency-Key': idempotencyKey});
+      final res = await _client.dio.post(
+        '/api/v1/live/$livestreamId/premium/cancel',
+        data: {'reason': 'host_cancelled'},
+        options: opts,
+      );
+      final map = (res.data as Map).cast<String, dynamic>();
+      final premiumMap = ((map['data'] ?? {}) as Map)['premium'] as Map?;
+      if (premiumMap == null) {
+        throw Exception('Invalid server response: missing premium');
+      }
+      final model = PremiumStatusModel.fromMap(
+        premiumMap.cast<String, dynamic>(),
+      );
+      _premiumCtrl.add(model);
+      return model;
+    } catch (e) {
+      debugPrint('❌ cancelPremium error: $e');
+      rethrow;
+    }
   }
 
   @override
@@ -130,6 +254,28 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
         }
         await Future.delayed(Duration(seconds: attempt * 2));
       }
+    }
+  }
+
+  // Expose premium stream
+  Stream<PremiumStatusModel> premiumStatusStream() => _premiumCtrl.stream;
+
+  // Add Pusher binding inside _setupPusherEventBindings (near other binds):
+
+  // Bind premium_status_changed
+
+  // Implement handler method in class:
+  void _handlePremiumStatus(dynamic raw) {
+    try {
+      final m = _asMap(raw);
+      // server may nest under "premium" or send directly. try both.
+      final payload = (m['premium'] is Map) ? m['premium'] as Map : m;
+      final pmap = (payload as Map).cast<String, dynamic>();
+      final pm = PremiumStatusModel.fromMap(pmap);
+      _premiumCtrl.add(pm);
+      debugPrint('✅ Parsed premium status: isPremium=${pm.isPremium}');
+    } catch (e) {
+      debugPrint('❌ _handlePremiumStatus parse failed: $e');
     }
   }
 
@@ -242,6 +388,19 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       print('🎯 Gift event received');
       _handleGiftEvent(raw);
     });
+
+    try {
+      _pusher.bind(rootChannel, 'premium_status_changed', (raw) {
+        debugPrint('🎯 premium_status_changed received on root channel');
+        _handlePremiumStatus(raw);
+      });
+      _pusher.bind(metaChannel, 'premium_status_changed', (raw) {
+        debugPrint('🎯 premium_status_changed received on meta channel');
+        _handlePremiumStatus(raw);
+      });
+    } catch (e) {
+      debugPrint('⚠️ Failed to bind premium_status_changed: $e');
+    }
 
     debugPrint('✅ All event bindings setup complete');
     debugPrint('   - Meta channel: $metaChannel');
@@ -586,6 +745,7 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     _activeGuestCtrl.close();
     _giftBroadcastCtrl.close();
     _collectedGifts.clear();
+    _premiumCtrl.close();
     // Also drop any lingering channel bindings (safe even if none)
     // If you share PusherService elsewhere, this only affects the live.* channels we created.
     // We already call unsubscribeAll() at startSession; this is a “belt & suspenders” cleanup.

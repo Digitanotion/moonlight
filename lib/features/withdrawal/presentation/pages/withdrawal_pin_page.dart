@@ -87,7 +87,8 @@ class _WithdrawalPinPageState extends State<WithdrawalPinPage> {
 
   @override
   Widget build(BuildContext context) {
-    final amount = (widget.amountUsdCents / 100).toStringAsFixed(2);
+    final amount = (widget.amountUsdCents).toStringAsFixed(2);
+    final amount_usd = widget.amountUsdCents * 0.005;
 
     return Scaffold(
       backgroundColor: const Color(0xFF060522),
@@ -113,7 +114,7 @@ class _WithdrawalPinPageState extends State<WithdrawalPinPage> {
               ),
               const SizedBox(height: 24),
               Text(
-                '\$$amount',
+                '\$$amount_usd',
                 style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,

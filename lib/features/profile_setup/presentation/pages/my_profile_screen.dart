@@ -1,8 +1,15 @@
+import 'dart:typed_data';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/post_view/domain/entities/post.dart';
+import 'package:moonlight/features/post_view/domain/entities/user.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+
 // new import
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart'; // if you have one
@@ -16,6 +23,9 @@ class MyProfileScreen extends StatefulWidget {
 
 class _MyProfileScreenState extends State<MyProfileScreen> {
   bool _isShowingProgress = false;
+
+  // cache generated thumbnails for videos to avoid regenerating on scroll
+  final Map<int, Uint8List?> _videoThumbCache = {};
 
   @override
   void initState() {
@@ -172,10 +182,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                     ),
                               ),
                               const Spacer(),
-                              _iconButton(context, Icons.settings, () {
-                                HapticFeedback.selectionClick();
-                                // TODO: push settings route if you have one
-                              }),
+                              // settings icon removed as requested
                             ],
                           ),
                         ),
@@ -236,16 +243,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               _bioLines(user?.bio),
                               const SizedBox(height: 16),
 
-                              // Edit Profile button
+                              // Dashboard button (replaces Edit Profile)
                               SizedBox(
                                 width: 160,
                                 child: ElevatedButton(
                                   onPressed: () {
                                     HapticFeedback.selectionClick();
-                                    Navigator.pushNamed(
-                                      context,
-                                      RouteNames.editProfile,
-                                    );
+                                    _openDashboardSheet();
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: orange,
@@ -256,7 +260,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                     ),
                                   ),
                                   child: const Text(
-                                    'Edit Profile',
+                                    'Dashboard',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -265,15 +269,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               ),
                               const SizedBox(height: 16),
 
-                              // Stats card
-                              // _statsCard(
-                              //   orange: orange,
-                              //   fans: '12.5K',
-                              //   allies: '847',
-                              //   liveSessions: '150',
-                              //   coins: '2.8k',
-                              //   rankText: 'Ambassador Rank #124',
-                              // ),
+                              // Stats card (kept commented as before)
+                              // _statsCard(...),
                             ],
                           ),
                         ),
@@ -301,16 +298,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             sliver: _postsGrid(state.posts),
                           ),
+                          // temporarily disabled
                           ProfileTab.clubs => SliverToBoxAdapter(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
-                              child: Column(
-                                children: state.clubs
-                                    .map((c) => _clubTile(c))
-                                    .toList(),
-                              ),
+                              child: _placeholderNotAvailable(),
                             ),
                           ),
                           ProfileTab.livestreams => SliverToBoxAdapter(
@@ -318,42 +312,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
-                              child: Column(
-                                children: state.replays
-                                    .map((r) => _replayCard(r, orange))
-                                    .toList(),
-                              ),
+                              child: _placeholderNotAvailable(),
                             ),
                           ),
                         },
 
-                      // Bottom action cards
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-                          child: _actionsPanel(
-                            onEdit: () => Navigator.pushNamed(
-                              context,
-                              RouteNames.editProfile,
-                            ),
-                            onAccount: () {
-                              Navigator.pushNamed(
-                                context,
-                                RouteNames.accountSettings,
-                              );
-                            },
-                            onEarnings: () {
-                              HapticFeedback.selectionClick();
-                              Navigator.pushNamed(context, RouteNames.wallet);
-                            },
-                            onLogout: () {
-                              HapticFeedback.selectionClick();
-                              _confirmLogout();
-                            },
-                          ),
-                        ),
-                      ),
-
+                      // Previously there was an actions panel here (duplicate of dashboard actions).
+                      // Per request, removed the bottom panel that contained the Edit Profile duplicate.
                       const SliverToBoxAdapter(child: SizedBox(height: 12)),
                     ],
                   ),
@@ -362,6 +327,21 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _placeholderNotAvailable() {
+    return Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Text(
+        'Not available at the moment',
+        style: TextStyle(color: Colors.white70),
       ),
     );
   }
@@ -424,71 +404,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
   }
 
-  Widget _statsCard({
-    required Color orange,
-    required String rankText,
-    required String fans,
-    required String allies,
-    required String liveSessions,
-    required String coins,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.emoji_events,
-                color: Color(0xFFFFA726),
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                rankText,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _statItem(fans, 'Fans'),
-              _statItem(allies, 'Allies'),
-              _statItem(liveSessions, 'Live Sessions'),
-              _statItem(coins, 'Coins'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(String value, String label) => Column(
-    children: [
-      Text(
-        value,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      const SizedBox(height: 4),
-      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-    ],
-  );
-
   Widget _tabsBar({
     required ProfileTab selected,
     required ValueChanged<ProfileTab> onTap,
@@ -533,7 +448,150 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
   }
 
-  static SliverGrid _postsGrid(List<String> images) {
+  // NEW: posts grid that handles images and videos
+  // NEW: posts grid that handles typed Post objects and legacy Map shapes
+  SliverGrid _postsGrid(List<dynamic> posts) {
+    final List<Post> typed = posts
+        .map<Post?>((p) {
+          if (p == null) return null;
+          if (p is Post) return p;
+          if (p is Map<String, dynamic>) {
+            try {
+              final authorMap = p['author'] is Map
+                  ? (p['author'] as Map).cast<String, dynamic>()
+                  : <String, dynamic>{};
+              final au = AppUser(
+                id: (authorMap['id'] ?? authorMap['uuid'] ?? '0').toString(),
+                name: (authorMap['name'] ?? authorMap['fullName'] ?? '')
+                    .toString(),
+                avatarUrl:
+                    (authorMap['avatarUrl'] ?? authorMap['avatar_url'] ?? '')
+                        .toString(),
+                countryFlagEmoji:
+                    (authorMap['countryFlagEmoji'] ??
+                            authorMap['country_flag_emoji'] ??
+                            '')
+                        .toString(),
+                roleLabel:
+                    (authorMap['roleLabel'] ?? authorMap['role_label'] ?? '')
+                        .toString(),
+                roleColor:
+                    (authorMap['roleColor'] ?? authorMap['role_color'] ?? '')
+                        .toString(),
+              );
+
+              final id = (p['uuid'] ?? p['id'] ?? p['post_id'] ?? '')
+                  .toString();
+              final mediaUrl =
+                  (p['mediaUrl'] ?? p['media_url'] ?? p['url'] ?? '')
+                      .toString();
+              final thumb =
+                  (p['thumbUrl'] ??
+                          p['thumb'] ??
+                          p['thumbnail'] ??
+                          p['thumb_url'])
+                      ?.toString();
+              final mediaType =
+                  (p['mediaType'] ??
+                          p['media_type'] ??
+                          p['mime'] ??
+                          p['mimetype'])
+                      ?.toString();
+              final caption = (p['caption'] ?? '').toString();
+              final tags = (p['tags'] is List)
+                  ? (p['tags'] as List).map((e) => '$e').toList()
+                  : <String>[];
+              final created =
+                  DateTime.tryParse(
+                    (p['createdAt'] ?? p['created_at'] ?? '').toString(),
+                  ) ??
+                  DateTime.now();
+              final likes = (p['likes'] is num)
+                  ? (p['likes'] as num).toInt()
+                  : int.tryParse((p['likes'] ?? '0').toString()) ?? 0;
+              final comments =
+                  (p['commentsCount'] ?? p['comments_count'] ?? 0) is num
+                  ? ((p['commentsCount'] ?? p['comments_count'] ?? 0) as num)
+                        .toInt()
+                  : int.tryParse(
+                          (p['commentsCount'] ?? p['comments_count'] ?? '0')
+                              .toString(),
+                        ) ??
+                        0;
+              final shares = (p['shares'] is num)
+                  ? (p['shares'] as num).toInt()
+                  : int.tryParse((p['shares'] ?? '0').toString()) ?? 0;
+              final isLiked = (p['isLiked'] == true) || (p['is_liked'] == true);
+              final views = (p['views'] is num)
+                  ? (p['views'] as num).toInt()
+                  : int.tryParse((p['views'] ?? '0').toString()) ?? 0;
+
+              return Post(
+                id: id.isNotEmpty ? id : mediaUrl.hashCode.toString(),
+                author: au,
+                mediaUrl: mediaUrl,
+                thumbUrl: thumb,
+                mediaType: mediaType,
+                caption: caption,
+                tags: tags,
+                createdAt: created,
+                likes: likes,
+                commentsCount: comments,
+                shares: shares,
+                isLiked: isLiked,
+                views: views,
+              );
+            } catch (_) {
+              return null;
+            }
+          }
+
+          try {
+            final dyn = p as dynamic;
+            final id = (dyn.id ?? dyn.uuid ?? '').toString();
+            final url = (dyn.mediaUrl ?? dyn.url ?? '').toString();
+            final mt = (dyn.mediaType ?? dyn.mime ?? '').toString();
+            return Post(
+              id: id.isNotEmpty ? id : url.hashCode.toString(),
+              author: AppUser(
+                id: '0',
+                name: '',
+                avatarUrl: '',
+                countryFlagEmoji: '',
+                roleLabel: '',
+                roleColor: '',
+              ),
+              mediaUrl: url,
+              mediaType: mt.isNotEmpty ? mt : null,
+              caption: (dyn.caption ?? '').toString(),
+              tags: <String>[],
+              createdAt: DateTime.now(),
+            );
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<Post>()
+        .toList();
+
+    if (typed.isEmpty) {
+      return SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 1,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, idx) => ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(color: Colors.white10),
+          ),
+          childCount: 3,
+        ),
+      );
+    }
+
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
@@ -541,233 +599,275 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         crossAxisSpacing: 8,
         childAspectRatio: 1,
       ),
-      delegate: SliverChildBuilderDelegate(
-        (context, idx) => ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.network(images[idx], fit: BoxFit.cover),
-        ),
-        childCount: images.length,
-      ),
+      delegate: SliverChildBuilderDelegate((context, idx) {
+        final Post p = typed[idx];
+        final isVideo = p.isVideo;
+        final mediaUrl = p.mediaUrl;
+        final thumbUrl = p.thumbUrl;
+
+        return GestureDetector(
+          onTap: () {
+            try {
+              Navigator.pushNamed(
+                context,
+                RouteNames.postView,
+                arguments: {'postId': p.id, 'isOwner': true},
+              );
+            } catch (_) {}
+          },
+          child: Hero(
+            tag: 'post_${p.id}',
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: isVideo
+                  ? FutureBuilder<Uint8List?>(
+                      future: _getVideoThumbnailForPost(idx, p),
+                      builder: (c, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return Container(color: Colors.white12);
+                        }
+                        final bytes = snap.data;
+                        if (bytes != null) {
+                          return Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.memory(bytes, fit: BoxFit.cover),
+                              const Center(
+                                child: Icon(
+                                  Icons.play_circle_fill,
+                                  size: 40,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        final fallback =
+                            (thumbUrl != null && thumbUrl.isNotEmpty)
+                            ? thumbUrl
+                            : mediaUrl;
+                        return CachedNetworkImage(
+                          imageUrl: fallback,
+                          fit: BoxFit.cover,
+                          placeholder: (c, _) =>
+                              Container(color: Colors.white12),
+                          errorWidget: (c, _, __) =>
+                              Container(color: Colors.white12),
+                        );
+                      },
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: p.mediaUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (c, _) => Container(color: Colors.white12),
+                      errorWidget: (c, _, __) =>
+                          Container(color: Colors.white12),
+                    ),
+            ),
+          ),
+        );
+      }, childCount: typed.length),
     );
   }
 
-  Widget _clubTile(ClubItem c) {
-    final isPresident = c.role.toLowerCase() == 'president';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24),
-            ),
-            child: const Icon(Icons.camera_alt_outlined, color: Colors.white70),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      c.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Text(
-                        c.role,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '1.2K members · Active 2h ago',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<Uint8List?> _getVideoThumbnailForPost(int idx, Post p) async {
+    final key = idx;
+    if (_videoThumbCache.containsKey(key)) return _videoThumbCache[key];
+
+    if (p.thumbUrl != null && p.thumbUrl!.isNotEmpty) {
+      _videoThumbCache[key] = null;
+      return null;
+    }
+
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+        video: p.mediaUrl,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 1024,
+        quality: 75,
+      );
+      _videoThumbCache[key] = bytes;
+      return bytes;
+    } catch (_) {
+      _videoThumbCache[key] = null;
+      return null;
+    }
   }
 
-  Widget _replayCard(ReplayItem r, Color orange) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.network(
-                    r.thumbnailUrl,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                  ),
-                ),
-                Positioned(right: 8, bottom: 8, child: _pill(r.durationLabel)),
-                Positioned(
-                  left: 8,
-                  top: 8,
-                  child: _pill('LIVE REPLAY', color: const Color(0xFFE53935)),
-                ),
-              ],
-            ),
-          ),
+  Future<Uint8List?> _getVideoThumbnail(int index, String videoUrl) async {
+    if (_videoThumbCache.containsKey(index)) return _videoThumbCache[index];
+    try {
+      final bytes = await VideoThumbnail.thumbnailData(
+        video: videoUrl,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 1024,
+        quality: 75,
+      );
+      _videoThumbCache[index] = bytes;
+      return bytes;
+    } catch (_) {
+      _videoThumbCache[index] = null;
+      return null;
+    }
+  }
 
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+  String _extractMediaUrl(dynamic p) {
+    try {
+      if (p == null) return '';
+      if (p is String)
+        return p; // earlier implementations may have been a list of urls
+      if (p is Map) {
+        // common possible keys
+        return (p['mediaUrl'] ??
+                p['media_url'] ??
+                p['url'] ??
+                p['thumbnail'] ??
+                '')
+            .toString();
+      }
+      // fallback to using a mediaUrl property (Post entity)
+      final media = (p as dynamic).mediaUrl;
+      return media?.toString() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  bool _isVideoPost(dynamic p) {
+    try {
+      if (p == null) return false;
+      if (p is Map) {
+        final t = (p['type'] ?? p['media_type'] ?? p['mime'] ?? p['mimetype'])
+            ?.toString()
+            .toLowerCase();
+        if (t == null) return false;
+        return t.contains('video') || t.contains('mp4') || t.contains('mov');
+      }
+      final mim = (p as dynamic).mediaType;
+      if (mim != null) return mim.toString().toLowerCase().contains('video');
+      final url = _extractMediaUrl(p);
+      return url.endsWith('.mp4') ||
+          url.endsWith('.mov') ||
+          url.contains('video');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _extractPostId(dynamic p) {
+    try {
+      if (p == null) return '0';
+      if (p is Map)
+        return (p['uuid'] ?? p['id'] ?? p['post_id'] ?? '${p.hashCode}')
+            .toString();
+      return (p as dynamic).id?.toString() ?? '0';
+    } catch (_) {
+      return '0';
+    }
+  }
+
+  void _openDashboardSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF07121F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (c) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  r.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                Center(
+                  child: Container(
+                    width: 48,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${r.viewsLabel}  ·  ${r.whenLabel}',
-                  style: const TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text(
-                      'Watch Replay',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: orange,
-                      foregroundColor: AppColors.textWhite,
-                      shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
+                Text(
+                  'Dashboard',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(color: Colors.white),
                 ),
+                const SizedBox(height: 8),
+
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.edit, color: Colors.white),
+                  title: const Text(
+                    'Edit Profile',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, RouteNames.editProfile);
+                  },
+                ),
+
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.account_balance_wallet,
+                    color: Colors.white,
+                  ),
+                  title: const Text(
+                    'Wallet & Earnings',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, RouteNames.wallet);
+                  },
+                ),
+
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.settings_outlined,
+                    color: Colors.white,
+                  ),
+                  title: const Text(
+                    'Account Settings',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, RouteNames.accountSettings);
+                  },
+                ),
+
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.logout_rounded,
+                    color: Color(0xFFFF6F61),
+                  ),
+                  title: const Text(
+                    'Log out',
+                    style: TextStyle(color: Color(0xFFFF6F61)),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _confirmLogout();
+                  },
+                ),
+
+                const SizedBox(height: 8),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pill(String text, {Color color = const Color(0xFF1E88E5)}) =>
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-
-  Widget _actionsPanel({
-    required VoidCallback onEdit,
-    required VoidCallback onAccount,
-    required VoidCallback onEarnings,
-    required VoidCallback onLogout,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Column(
-        children: [
-          // _actionRow(Icons.person_outline_rounded, 'Edit Profile', onEdit),
-          // const Divider(color: Colors.white24, height: 1),
-          _actionRow(Icons.settings_outlined, 'Account Settings', onAccount),
-          const Divider(color: Colors.white24, height: 1),
-          _actionRow(Icons.bar_chart_rounded, 'Wallet & Earnings', onEarnings),
-          const Divider(color: Colors.white24, height: 1),
-          _actionRow(Icons.logout_rounded, 'Logout', onLogout, danger: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionRow(
-    IconData icon,
-    String label,
-    VoidCallback onTap, {
-    bool danger = false,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, color: danger ? const Color(0xFFFF6F61) : Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: danger ? const Color(0xFFFF6F61) : Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 }

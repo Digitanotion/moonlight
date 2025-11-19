@@ -304,7 +304,21 @@ Future<void> init() async {
 
   sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
   sl.registerFactory(() => UserInterestCubit(sl()));
-  sl.registerFactory(() => ProfilePageCubit(fetchMyProfile: sl()));
+  // Provide ProfilePageCubit with an inline fetchMyPosts adapter that uses the profile_view repo.
+  // The adapter resolves the repo only when invoked (lazy), so registration order is not an issue.
+  sl.registerFactory(
+    () => ProfilePageCubit(
+      fetchMyProfile: sl(),
+      fetchMyPosts:
+          ({required String userUuid, int page = 1, int perPage = 50}) async {
+            // Use the profile_view repository implementation to get Paginated<Post>
+            final paginated = await sl<view_repo.ProfileRepository>()
+                .getUserPosts(userUuid, page: page, perPage: perPage);
+            return paginated.data; // List<Post>
+          },
+    ),
+  );
+
   sl.registerFactory(
     () => EditProfileCubit(
       fetchMyProfile: sl(),

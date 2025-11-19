@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:moonlight/features/gifts/presentation/gift_bottom_sheet.dart';
 import 'package:moonlight/features/gifts/presentation/gift_overlay_layer.dart';
@@ -15,6 +16,11 @@ import '../../domain/entities.dart';
 import '../../domain/repositories/viewer_repository.dart';
 import '../bloc/viewer_bloc.dart';
 
+import 'package:uuid/uuid.dart';
+import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
+import 'package:moonlight/features/wallet/services/idempotency_helper.dart';
+import 'package:moonlight/widgets/top_snack.dart';
+
 class LiveViewerScreen extends StatefulWidget {
   final ViewerRepository repository; // injected
   const LiveViewerScreen({super.key, required this.repository});
@@ -25,6 +31,10 @@ class LiveViewerScreen extends StatefulWidget {
 
 class _LiveViewerScreenState extends State<LiveViewerScreen> {
   final _commentCtrl = TextEditingController();
+  bool _immersive = false;
+  bool _hasPaid = false;
+  bool _premiumSheetLoading = false;
+  String? _premiumStatusMessage;
 
   @override
   void dispose() {
@@ -32,124 +42,748 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
     super.dispose();
   }
 
+  Map<String, dynamic>? _routeArgs(BuildContext context) {
+    final settingsArgs = ModalRoute.of(context)?.settings.arguments;
+    if (settingsArgs is Map<String, dynamic>) return settingsArgs;
+    if (settingsArgs is Map) return Map<String, dynamic>.from(settingsArgs);
+    return null;
+  }
+
+  @override
   @override
   Widget build(BuildContext context) {
+    // Read route args so we can detect if this stream is premium
+    final a = _routeArgs(context);
+    final bool isPremium =
+        (a != null &&
+        (a['isPremium'] != null ? (a['isPremium'] as int) == 1 : false));
+    final int? premiumFee = a != null ? (a['premiumFee'] as int?) : null;
+    final int? numericLiveId = a != null ? (a['id'] as int?) : null;
+
     return Scaffold(
       body: _BackgroundVideo(
         repository: widget.repository,
-        child: SafeArea(
-          top: true,
-          bottom: false,
-          child: Stack(
-            children: [
-              // Live ended listener
-              BlocListener<ViewerBloc, ViewerState>(
-                listenWhen: (p, n) => p.isEnded != n.isEnded,
-                listener: (ctx, s) async {
-                  if (s.isEnded) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: Text('Live has ended.'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    await Future.delayed(const Duration(milliseconds: 600));
-                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-                  }
-                },
-                child: const SizedBox.shrink(),
-              ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Horizontal swipe: primaryVelocity > 0 = swipe right, < 0 = swipe left
+          onHorizontalDragEnd: (details) {
+            final v = details.primaryVelocity ?? 0;
+            // tweak threshold (300) if needed to change sensitivity
+            if (v > 300) {
+              setState(() => _immersive = true); // swipe right -> hide overlays
+            } else if (v < -300) {
+              setState(() => _immersive = false); // swipe left -> show overlays
+            }
+          },
+          child: SafeArea(
+            top: true,
+            bottom: false,
 
-              // Two-up layout overlay - MOVED UP in the stack for proper layering
-              Positioned.fill(
-                child: _TwoUpSwitch(repository: widget.repository),
-              ),
-
-              // All other overlays - these should be above the video layout
-              const _TopStatusBar(),
-              const _TopicPill(),
-              const GiftOverlayLayer(), // NEW: animated gifts over video for everyone
-              const _GiftToast(), // your existing sender/receiver toast
-              const _HostCard(),
-              const _GuestJoinedBanner(),
-              const _GiftToast(),
-              const _PauseOverlay(), // This will handle global pause state
-              const _WaitingOverlay(),
-              const _RoleChangeToast(),
-
-              // Removal overlay
-              const _RemovalOverlay(),
-
-              // Error messages
-              const _ErrorToast(),
-
-              // Chat panel (bottom-left)
-              Align(
-                alignment: Alignment.bottomLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    left: 12,
-                    right: 12,
-                    bottom: 80,
-                  ),
-                  child: BlocBuilder<ViewerBloc, ViewerState>(
-                    buildWhen: (p, n) =>
-                        p.showChatUI != n.showChatUI || p.chat != n.chat,
-                    builder: (_, s) => Visibility(
-                      visible: s.showChatUI,
-                      child: const _ChatPanel(),
-                    ),
-                  ),
+            child: Stack(
+              children: [
+                // Background & video are below; overlays above
+                // Live ended listener
+                BlocListener<ViewerBloc, ViewerState>(
+                  listenWhen: (p, n) => p.isEnded != n.isEnded,
+                  listener: (ctx, s) async {
+                    if (s.isEnded) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Live has ended.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      await Future.delayed(const Duration(milliseconds: 600));
+                      if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                    }
+                  },
+                  child: const SizedBox.shrink(),
                 ),
-              ),
 
-              // Request-to-join button (bottom-center)
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 90),
-                  child: BlocBuilder<ViewerBloc, ViewerState>(
-                    buildWhen: (p, n) =>
-                        p.showChatUI != n.showChatUI ||
-                        p.joinRequested != n.joinRequested ||
-                        p.awaitingApproval != n.awaitingApproval ||
-                        p.isPaused != n.isPaused,
-                    builder: (_, s) => Visibility(
-                      visible: !s.isPaused,
-                      child: const _RequestToJoinButton(),
-                    ),
-                  ),
+                // Two-up layout overlay - MOVED UP in the stack for proper layering
+                Positioned.fill(
+                  child: _TwoUpSwitch(repository: widget.repository),
                 ),
-              ),
 
-              // Comment bar (bottom)
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: BlocBuilder<ViewerBloc, ViewerState>(
-                  buildWhen: (p, n) => p.showChatUI != n.showChatUI,
-                  builder: (_, s) => Visibility(
-                    visible: s.showChatUI,
-                    child: _CommentBar(
-                      controller: _commentCtrl,
-                      onSend: (text) {
-                        final t = text.trim();
-                        if (t.isNotEmpty) {
-                          context.read<ViewerBloc>().add(CommentSent(t));
-                          _commentCtrl.clear();
+                // WHEN premium and payment not done, show premium overlay that blocks video.
+                if (isPremium && !_hasPaid)
+                  Positioned.fill(
+                    child: _PremiumBlockedOverlay(
+                      fee: premiumFee,
+                      isLoading: _premiumSheetLoading,
+                      statusMessage: _premiumStatusMessage,
+                      onOpenPayment: () async {
+                        // open bottom sheet built inside this screen
+                        if (numericLiveId == null) {
+                          TopSnack.error(
+                            context,
+                            'Missing live id for payment.',
+                          );
+                          return;
                         }
+                        await _showPremiumPaymentBottomSheet(
+                          context,
+                          liveId: numericLiveId,
+                          fee: premiumFee,
+                        );
+                      },
+                      onOpenWallet: () {
+                        Navigator.of(context).pushNamed('/wallet');
+                      },
+                      onGuestViewAllowed: () {
+                        // nothing; used if you want a trial view option (not implemented)
                       },
                     ),
                   ),
-                ),
-              ),
 
-              // Right rail
-              const Positioned(right: 10, bottom: 140, child: _RightRail()),
-            ],
+                // When not immersive, render the normal overlays. If _immersive is true,
+                // we intentionally render nothing here (so only video remains visible).
+                if (!_immersive) ...[
+                  if (isPremium)
+                    Positioned(
+                      top: 40,
+                      right: 5,
+                      child: _PremiumBadge(
+                        fee: premiumFee,
+                        onTap: () {
+                          // Show info sheet which on Unlock will trigger the payment sheet
+                          _showPremiumInfoBottomSheet(
+                            context,
+                            fee: premiumFee,
+                            onUnlock: () async {
+                              if (numericLiveId == null) {
+                                TopSnack.error(
+                                  context,
+                                  'Missing live id for payment.',
+                                );
+                                return;
+                              }
+                              // open the existing payment sheet you already wrote
+                              await _showPremiumPaymentBottomSheet(
+                                context,
+                                liveId: numericLiveId,
+                                fee: premiumFee,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+
+                  // All other overlays - these should be above the video layout
+                  const _TopStatusBar(),
+                  const _TopicPill(),
+                  const GiftOverlayLayer(), // animated gifts over video
+                  const _GiftToast(),
+                  const _HostCard(),
+                  const _GuestJoinedBanner(),
+                  const _GiftToast(),
+                  const _PauseOverlay(), // handles global pause state
+                  const _WaitingOverlay(),
+                  const _RoleChangeToast(),
+
+                  // Removal overlay
+                  const _RemovalOverlay(),
+
+                  // Error messages
+                  const _ErrorToast(),
+
+                  // Chat panel (bottom-left)
+                  Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 12,
+                        right: 12,
+                        bottom: 80,
+                      ),
+                      child: BlocBuilder<ViewerBloc, ViewerState>(
+                        buildWhen: (p, n) =>
+                            p.showChatUI != n.showChatUI || p.chat != n.chat,
+                        builder: (_, s) => Visibility(
+                          visible: s.showChatUI,
+                          child: const _ChatPanel(),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Request-to-join button (bottom-center)
+                  // Align(
+                  //   alignment: Alignment.bottomCenter,
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.only(bottom: 90),
+                  //     child: BlocBuilder<ViewerBloc, ViewerState>(
+                  //       buildWhen: (p, n) =>
+                  //           p.showChatUI != n.showChatUI ||
+                  //           p.joinRequested != n.joinRequested ||
+                  //           p.awaitingApproval != n.awaitingApproval ||
+                  //           p.isPaused != n.isPaused,
+                  //       builder: (_, s) => Visibility(
+                  //         visible: !s.isPaused,
+                  //         child: const _RequestToJoinButton(),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
+
+                  // Comment bar (bottom)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: BlocBuilder<ViewerBloc, ViewerState>(
+                      buildWhen: (p, n) => p.showChatUI != n.showChatUI,
+                      builder: (_, s) => Visibility(
+                        visible: s.showChatUI,
+                        child: _CommentBar(
+                          controller: _commentCtrl,
+                          onSend: (text) {
+                            final t = text.trim();
+                            if (t.isNotEmpty) {
+                              context.read<ViewerBloc>().add(CommentSent(t));
+                              _commentCtrl.clear();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Right rail
+                  const Positioned(right: 10, bottom: 140, child: _RightRail()),
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// Shows bottom-sheet for premium payment, reusing the idempotency+retry approach.
+  Future<void> _showPremiumPaymentBottomSheet(
+    BuildContext context, {
+    required int liveId,
+    int? fee,
+  }) async {
+    final repo = sl<LiveFeedRepository>();
+    final idempo = sl<IdempotencyHelper>();
+    final uuid = const Uuid();
+
+    bool isLoading = false;
+    String? statusMessage;
+    int? newBalance;
+
+    final paid = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            void setLoading(bool v) => setState(() => isLoading = v);
+            void setStatus(String? m) => setState(() => statusMessage = m);
+
+            Future<void> payWithAutoNewIdempotency() async {
+              const int maxAttempts = 5;
+              final List<int> backoffMs = [0, 600, 1200, 2400, 4800];
+
+              setLoading(true);
+              setStatus(null);
+
+              List<String> persistedKeys = [];
+              for (int attempt = 0; attempt < maxAttempts; attempt++) {
+                if (backoffMs.length > attempt && backoffMs[attempt] > 0) {
+                  await Future.delayed(
+                    Duration(milliseconds: backoffMs[attempt]),
+                  );
+                }
+
+                final idempotencyKey = uuid.v4();
+
+                try {
+                  await idempo.persist(idempotencyKey, {
+                    'liveId': liveId,
+                    'attempt': attempt,
+                  });
+                  persistedKeys.add(idempotencyKey);
+                } catch (e) {
+                  TopSnack.info(
+                    context,
+                    'Warning: local persist failed for attempt ${attempt + 1}.',
+                  );
+                }
+
+                try {
+                  final resp = await repo.payPremium(
+                    liveId: liveId,
+                    idempotencyKey: idempotencyKey,
+                  );
+
+                  final status = (resp['status'] ?? '') as String;
+                  final message = (resp['message'] as String?) ?? '';
+                  final data = resp['data'] as Map<String, dynamic>?;
+
+                  if (status.toLowerCase() == 'success') {
+                    try {
+                      await idempo.complete(idempotencyKey);
+                    } catch (_) {}
+
+                    for (final k in persistedKeys) {
+                      if (k != idempotencyKey) {
+                        try {
+                          await idempo.complete(k);
+                        } catch (_) {}
+                      }
+                    }
+
+                    if (data != null && data['new_balance_coins'] != null) {
+                      newBalance = (data['new_balance_coins'] as num).toInt();
+                    }
+
+                    TopSnack.success(
+                      context,
+                      data != null && data['message'] != null
+                          ? data['message'] as String
+                          : 'Premium paid successfully',
+                    );
+
+                    // Stop loading in sheet first
+                    setLoading(false);
+
+                    // Pop the sheet once and return a success result to caller
+                    Navigator.of(context).pop(true);
+                    return;
+                  } else {
+                    final lower = message.toLowerCase();
+                    if (lower.contains('already processing') ||
+                        lower.contains('processing')) {
+                      if (attempt == maxAttempts - 1) {
+                        setStatus(
+                          'Request still processing. Please try again later.',
+                        );
+                        TopSnack.error(
+                          context,
+                          'Request still processing — try again later.',
+                        );
+                        break;
+                      } else {
+                        final nextAttempt = attempt + 1;
+                        setStatus(
+                          'Request already processing — retrying (attempt ${nextAttempt}/${maxAttempts})...',
+                        );
+                        TopSnack.info(
+                          context,
+                          'Request already processing — retrying (${nextAttempt}/${maxAttempts})',
+                        );
+                        continue;
+                      }
+                    } else if (lower.contains('insufficient')) {
+                      setStatus(
+                        'Insufficient coins. Open wallet to buy coins.',
+                      );
+                      TopSnack.error(context, 'Insufficient coins.');
+                      break;
+                    } else if (lower.contains('unauthorized') ||
+                        lower.contains('unauth')) {
+                      setStatus('You are not allowed to view this stream.');
+                      TopSnack.error(context, 'This action is unauthorized.');
+                      try {
+                        await idempo.complete(idempotencyKey);
+                      } catch (_) {}
+                      break;
+                    } else {
+                      setStatus(
+                        message.isNotEmpty ? message : 'Payment failed.',
+                      );
+                      TopSnack.error(
+                        context,
+                        message.isNotEmpty ? message : 'Payment failed.',
+                      );
+                      break;
+                    }
+                  }
+                } catch (e) {
+                  final nextAttempt = attempt + 1;
+                  if (attempt == maxAttempts - 1) {
+                    setStatus('Network error. Please try again later.');
+                    TopSnack.error(
+                      context,
+                      'Network error. Please try again later.',
+                    );
+                    break;
+                  } else {
+                    setStatus(
+                      'Network error — retrying (${nextAttempt}/${maxAttempts})...',
+                    );
+                    TopSnack.info(
+                      context,
+                      'Network error — retry ${nextAttempt}/${maxAttempts}',
+                    );
+                    continue;
+                  }
+                }
+              } // for
+              setLoading(false);
+            } // payWithAutoNewIdempotency
+
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 12,
+                right: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+                top: 12,
+              ),
+              child: Material(
+                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFF0B0B0D),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 42,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.white12,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8.0,
+                        ),
+                        minLeadingWidth: 64,
+                        leading: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          'Premium Access',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Unlock this stream to join and support the creator.',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (fee != null)
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.stars_rounded,
+                                          color: Colors.amber,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '$fee coins',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            const SizedBox(height: 12),
+                            Divider(
+                              color: Colors.white.withOpacity(0.1),
+                              thickness: 1,
+                              height: 16,
+                            ),
+                            const SizedBox(height: 8),
+                            if (statusMessage != null) ...[
+                              Text(
+                                statusMessage!,
+                                style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: isLoading
+                                        ? null
+                                        : () async =>
+                                              await payWithAutoNewIdempotency(),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFF7A00),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 6,
+                                    ),
+                                    child: isLoading
+                                        ? const SizedBox(
+                                            height: 18,
+                                            width: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Unlock Stream',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    Navigator.of(context).pushNamed('/wallet');
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(
+                                      color: Colors.white.withOpacity(0.06),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                      horizontal: 18,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Open Wallet',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (paid == true && mounted) {
+      _onPremiumPaid();
+    }
+  }
+
+  /// Bottom sheet explaining premium stream details. Uses onUnlock to trigger payment.
+  Future<void> _showPremiumInfoBottomSheet(
+    BuildContext context, {
+    int? fee,
+    required VoidCallback onUnlock,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 12,
+              top: 12,
+            ),
+            child: Material(
+              borderRadius: BorderRadius.circular(14),
+              color: const Color(0xFF0B0B0D),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 16,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.white12,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            color: Colors.white.withOpacity(.04),
+                            width: 56,
+                            height: 56,
+                            child: const Icon(
+                              Icons.workspace_premium_rounded,
+                              color: Colors.orangeAccent,
+                              size: 34,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Premium Stream',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Exclusive access, direct support for the host, special badges and perks.',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (fee != null)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(.02),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(.04),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.stars_rounded,
+                                    color: Colors.amber,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'You paid $fee coins to unlock this stream',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.06),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Close',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Called by the sheet on success to mark session as paid
+  void _onPremiumPaid() {
+    if (!mounted) return;
+    setState(() {
+      _hasPaid = true;
+      _premiumSheetLoading = false;
+      _premiumStatusMessage = null;
+    });
+
+    // Optionally: if the viewer bloc needs a kick to re-check permissions or rejoin,
+    // you could dispatch an event here, e.g. context.read<ViewerBloc>().add(const RefreshPermissions());
+    // But I avoided changing bloc APIs to keep this non-breaking.
   }
 }
 
@@ -386,6 +1020,11 @@ class _HostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final repo = context.read<ViewerBloc>().repo;
+    final HostUuid = (repo is ViewerRepositoryImpl)
+        ? repo.hostUuid.toString()
+        : '0';
+
     return BlocBuilder<ViewerBloc, ViewerState>(
       buildWhen: (p, n) => p.host != n.host,
       builder: (_, s) {
@@ -402,9 +1041,21 @@ class _HostCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  CircleAvatar(
-                    backgroundImage: NetworkImage(host.avatarUrl),
-                    radius: 18,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        RouteNames.profileView,
+                        arguments: {
+                          'userUuid': HostUuid,
+                          'user_slug': "",
+                        }, // id isn’t used; router takes uuid via args (see patch below)
+                      );
+                    },
+                    child: CircleAvatar(
+                      backgroundImage: NetworkImage(host.avatarUrl),
+                      radius: 18,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -642,7 +1293,7 @@ class _ChatPanel extends StatelessWidget {
           child: Stack(
             children: [
               _glass(
-                color: Colors.black.withOpacity(.30),
+                color: Colors.black.withOpacity(.1),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
                     10,
@@ -934,7 +1585,7 @@ Widget _glass({required Widget child, double radius = 16, Color? color}) {
   return ClipRRect(
     borderRadius: BorderRadius.circular(radius),
     child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      filter: ImageFilter.blur(sigmaX: 3, sigmaY: 4),
       child: Container(
         decoration: BoxDecoration(
           color: (color ?? Colors.black.withOpacity(.30)),
@@ -945,6 +1596,80 @@ Widget _glass({required Widget child, double radius = 16, Color? color}) {
       ),
     ),
   );
+}
+
+/// Small modern premium badge (click to open info sheet)
+class _PremiumBadge extends StatelessWidget {
+  final int? fee;
+  final VoidCallback? onTap; // open info sheet
+  const _PremiumBadge({this.fee, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFFFFC37A).withOpacity(0.1),
+              const Color(0xFFFF7A00).withOpacity(0.1),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // const Icon(
+            //   Icons.workspace_premium_rounded,
+            //   size: 16,
+            //   color: Colors.white,
+            // ),
+            if (fee != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.stars_rounded,
+                      size: 12,
+                      color: Colors.amber,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$fee',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PauseOverlay extends StatelessWidget {
@@ -1502,6 +2227,189 @@ class _GuestControlsState extends State<_GuestControls> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Premium blocking overlay widget (modern UI)
+class _PremiumBlockedOverlay extends StatelessWidget {
+  final int? fee;
+  final VoidCallback onOpenPayment;
+  final VoidCallback onOpenWallet;
+  final VoidCallback onGuestViewAllowed;
+  final bool isLoading;
+  final String? statusMessage;
+
+  const _PremiumBlockedOverlay({
+    this.fee,
+    required this.onOpenPayment,
+    required this.onOpenWallet,
+    required this.onGuestViewAllowed,
+    this.isLoading = false,
+    this.statusMessage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      // ignore pointer only when showing overlay; the overlay covers the entire view
+      ignoring: false,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.black.withOpacity(.85),
+              Colors.black.withOpacity(.92),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // sleek modern card
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(.04),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withOpacity(.06)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(.5),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.lock_rounded,
+                          size: 48,
+                          color: Colors.orangeAccent,
+                        ),
+                        const SizedBox(height: 14),
+                        const Text(
+                          'Premium Stream',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'This live stream is premium. Unlock access to view and support the host.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70, height: 1.4),
+                        ),
+                        const SizedBox(height: 18),
+                        if (fee != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(.02),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.stars_rounded,
+                                  color: Colors.amber,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  '$fee coins',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 14),
+                        if (statusMessage != null)
+                          Text(
+                            statusMessage!,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: isLoading ? null : onOpenPayment,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF7A00),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: isLoading
+                                    ? const SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Unlock',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton(
+                              onPressed: onOpenWallet,
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: Colors.white.withOpacity(0.06),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                              child: const Text(
+                                'Wallet',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

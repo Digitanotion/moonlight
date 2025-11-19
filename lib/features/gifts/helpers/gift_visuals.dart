@@ -70,7 +70,16 @@ class GiftVisuals {
     final svgPath = '$_base$code.svg';
     final hasSvg = _assets!.contains(svgPath);
 
-    // If we have a bundled SVG asset for this code, use SvgPicture.asset
+    // Emoji first: if this code maps to a defined emoji, show the emoji widget (always preferred).
+    if (_emoji.containsKey(code)) {
+      return Text(
+        _emoji[code]!,
+        style: emojiStyle ?? TextStyle(fontSize: size * 0.9),
+        semanticsLabel: title ?? code,
+      );
+    }
+
+    // If we have a bundled SVG asset for this code, use SvgPicture.asset (only when no emoji defined).
     if (hasSvg) {
       return SvgPicture.asset(
         svgPath,
@@ -89,18 +98,9 @@ class GiftVisuals {
       );
     }
 
-    // Material icons fallback
+    // Material icons fallback (if code matches a material mapping)
     if (_material.containsKey(code)) {
       return Icon(_material[code], size: size, color: color ?? Colors.white);
-    }
-
-    // Emoji fallback
-    if (_emoji.containsKey(code)) {
-      return Text(
-        _emoji[code]!,
-        style: emojiStyle ?? TextStyle(fontSize: size * 0.9),
-        semanticsLabel: title ?? code,
-      );
     }
 
     // If we were given a remote image URL (raster or svg), show Image.network or SvgPicture.network

@@ -6,8 +6,9 @@ class ProfilePageState extends Equatable {
   final UserModel? user;
   final ProfileTab tab;
 
-  // content lists (mock for now)
-  final List<String> posts; // image urls
+  /// CHANGED: now holds real Post objects, not List<String>
+  final List<Post> posts;
+
   final List<ClubItem> clubs;
   final List<ReplayItem> replays;
 
@@ -26,7 +27,7 @@ class ProfilePageState extends Equatable {
     error: null,
     user: null,
     tab: ProfileTab.posts,
-    posts: [],
+    posts: [], // now List<Post>
     clubs: [],
     replays: [],
   );
@@ -36,19 +37,29 @@ class ProfilePageState extends Equatable {
     String? error,
     UserModel? user,
     ProfileTab? tab,
-    List<String>? posts,
+    List<Post>? posts, // CHANGED: now List<Post>
     List<ClubItem>? clubs,
     List<ReplayItem>? replays,
-  }) => ProfilePageState(
-    loading: loading ?? this.loading,
-    error: error,
-    user: user ?? this.user,
-    tab: tab ?? this.tab,
-    posts: posts ?? this.posts,
-    clubs: clubs ?? this.clubs,
-    replays: replays ?? this.replays,
-  );
+  }) {
+    return ProfilePageState(
+      loading: loading ?? this.loading,
+      error: error,
+      user: user ?? this.user,
+      tab: tab ?? this.tab,
+      posts: posts ?? this.posts,
+      clubs: clubs ?? this.clubs,
+      replays: replays ?? this.replays,
+    );
+  }
 
   @override
-  List<Object?> get props => [loading, error, user, tab, posts, clubs, replays];
+  List<Object?> get props => [
+    loading,
+    error,
+    user,
+    tab,
+    posts, // now List<Post>
+    clubs,
+    replays,
+  ];
 }

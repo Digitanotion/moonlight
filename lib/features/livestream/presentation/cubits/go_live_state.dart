@@ -44,7 +44,7 @@ class GoLiveState {
     this.allowGuestBox = false,
     this.comments = true,
     this.showCount = true,
-    this.micOn = true,
+    this.micOn = false,
     this.camOn = false,
     this.camReady = false,
     this.micReady = false,
