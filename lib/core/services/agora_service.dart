@@ -70,6 +70,15 @@ class AgoraService with ChangeNotifier {
   final Map<int, bool> _remoteVideoStates = {};
   final Map<int, bool> _remoteAudioStates = {};
 
+  // Beauty state (Face Clean + Brighten)
+  bool _faceCleanEnabled = false;
+  int _faceCleanLevel = 0;
+  bool _brightenEnabled = false;
+  int _brightenLevel = 0;
+
+  // Expose a notifier so UI can optionally react
+  final ValueNotifier<bool> beautyActive = ValueNotifier<bool>(false);
+
   @override
   void dispose() {
     remoteUsers.dispose();
@@ -90,6 +99,99 @@ class AgoraService with ChangeNotifier {
   ///   "rtc_role": "publisher",
   ///   "agora": { "app_id": "...", "rtc_token": "..." }
   /// }
+  ///
+  /// Apply beauty options (face clean = smoothing, brighten = lightening).
+  /// All percentages are 0..100. Safe no-op when engine is not initialized.
+  Future<void> applyBeauty({
+    required bool faceCleanEnabled,
+    required int faceCleanLevel,
+    required bool brightenEnabled,
+    required int brightenLevel,
+  }) async {
+    _faceCleanEnabled = faceCleanEnabled;
+    _faceCleanLevel = faceCleanLevel.clamp(0, 100);
+    _brightenEnabled = brightenEnabled;
+    _brightenLevel = brightenLevel.clamp(0, 100);
+
+    final e = _engine;
+    if (e == null) return;
+
+    try {
+      // Map 0..100 -> 0.0..1.0 for SDK
+      final smooth = (_faceCleanEnabled ? (_faceCleanLevel / 100.0) : 0.0)
+          .clamp(0.0, 1.0);
+      final lighten = (_brightenEnabled ? (_brightenLevel / 100.0) : 0.0).clamp(
+        0.0,
+        1.0,
+      );
+
+      // Choose lightening contrast level heuristically
+      LighteningContrastLevel contrast =
+          LighteningContrastLevel.lighteningContrastNormal;
+      if (lighten > 0.7) {
+        contrast = LighteningContrastLevel.lighteningContrastHigh;
+      } else if (lighten > 0.3) {
+        contrast = LighteningContrastLevel.lighteningContrastNormal;
+      } else if (lighten > 0.0) {
+        contrast = LighteningContrastLevel.lighteningContrastLow;
+      }
+
+      // small redness to keep skin tone natural when brightening
+      final redness = (lighten * 0.12).clamp(0.0, 0.15);
+
+      // slight sharpness tweak based on smoothness to avoid overly soft results
+      final sharpness = (0.25 + (smooth * 0.2)).clamp(0.0, 1.0);
+
+      final options = BeautyOptions(
+        smoothnessLevel: smooth,
+        lighteningLevel: lighten,
+        lighteningContrastLevel: contrast,
+        rednessLevel: redness,
+        sharpnessLevel: sharpness,
+      );
+
+      await e.setBeautyEffectOptions(
+        enabled: (smooth > 0.0 || lighten > 0.0),
+        options: options,
+      );
+
+      beautyActive.value = (smooth > 0.0 || lighten > 0.0);
+      notifyListeners();
+
+      if (kDebugMode) {
+        debugPrint(
+          '[Agora] setBeautyEffectOptions smooth=$smooth lighten=$lighten contrast=$contrast redness=$redness sharpness=$sharpness',
+        );
+      }
+    } catch (err) {
+      _lastError = 'Failed to set beauty options: $err';
+      debugPrint('❌ $_lastError');
+      // Do not rethrow; fail silently to avoid breaking live stream
+    }
+  }
+
+  /// Reset/disable any beauty options previously applied. Safe no-op if engine absent.
+  Future<void> resetBeauty() async {
+    final e = _engine;
+    _faceCleanEnabled = false;
+    _faceCleanLevel = 0;
+    _brightenEnabled = false;
+    _brightenLevel = 0;
+    beautyActive.value = false;
+
+    if (e == null) return;
+    try {
+      await e.setBeautyEffectOptions(
+        enabled: false,
+        options: const BeautyOptions(),
+      );
+      notifyListeners();
+      if (kDebugMode) debugPrint('[Agora] Beauty reset');
+    } catch (err) {
+      debugPrint('⚠️ Failed to reset beauty: $err');
+    }
+  }
+
   Future<void> startPublishingFromStartResponse(
     Map<String, dynamic> resp, {
     bool enablePreview = true,

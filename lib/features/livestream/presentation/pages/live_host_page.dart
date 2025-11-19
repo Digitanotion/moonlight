@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 // import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -67,6 +68,14 @@ class _LiveHostPageState extends State<LiveHostPage>
   bool _showSettingsMenu = false;
   // When true we hide all non-video overlays so the viewer sees only the video.
   bool _immersive = false;
+  // Beauty effect state (Face Clean + Brighten)
+  bool _faceCleanEnabled = false;
+  int _faceCleanLevel = 40; // 0..100
+  bool _brightenEnabled = false;
+  int _brightenLevel = 40; // 0..100
+
+  // internal: ensure we re-apply once after Agora join
+  bool _beautyAppliedOnJoin = false;
   @override
   void initState() {
     super.initState();
@@ -124,6 +133,11 @@ class _LiveHostPageState extends State<LiveHostPage>
     _giftBroadcastSub?.cancel();
     _giftAnimController?.stop();
     _giftAnimController?.dispose();
+    // Attempt to reset beauty options (fire-and-forget)
+    try {
+      agora.resetBeauty();
+    } catch (_) {}
+
     super.dispose();
   }
 
@@ -252,6 +266,152 @@ class _LiveHostPageState extends State<LiveHostPage>
     });
   }
 
+  Future<void> _applyEffects() async {
+    try {
+      // Use the instance-level agora (declared earlier in this state)
+      if (!agora.joined) {
+        // Not joined yet; mark for re-apply on join
+        _beautyAppliedOnJoin = false;
+        if (kDebugMode)
+          debugPrint('[Beauty] Engine not joined yet; pending apply');
+        return;
+      }
+
+      // Compose request
+      final faceOn = _faceCleanEnabled;
+      final faceLevel = _faceCleanLevel.clamp(0, 100);
+      final brightOn = _brightenEnabled;
+      final brightLevel = _brightenLevel.clamp(0, 100);
+
+      await agora.applyBeauty(
+        faceCleanEnabled: faceOn,
+        faceCleanLevel: faceLevel,
+        brightenEnabled: brightOn,
+        brightenLevel: brightLevel,
+      );
+
+      _beautyAppliedOnJoin = true;
+      if (kDebugMode) {
+        debugPrint(
+          '[Beauty] applied face:$faceOn($faceLevel) bright:$brightOn($brightLevel)',
+        );
+      }
+    } catch (e, st) {
+      debugPrint('❌ Failed to apply beauty effects: $e\n$st');
+    }
+  }
+
+  // Show a compact bottom sheet allowing toggle + slider for an effect
+  void _showBeautyBottomSheet({required bool isFaceClean}) {
+    final title = isFaceClean ? 'Face Clean' : 'Brighten';
+    final currentEnabled = isFaceClean ? _faceCleanEnabled : _brightenEnabled;
+    final currentLevel = isFaceClean ? _faceCleanLevel : _brightenLevel;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        int tempLevel = currentLevel;
+        bool tempEnabled = currentEnabled;
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.28,
+          minChildSize: 0.18,
+          maxChildSize: 0.6,
+          builder: (context, scrollCtrl) {
+            return _Glass(
+              radius: 18,
+              padding: const EdgeInsets.all(12),
+              child: ListView(
+                controller: scrollCtrl,
+                shrinkWrap: true,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Switch(
+                        value: tempEnabled,
+                        onChanged: (v) {
+                          tempEnabled = v;
+                          // Force rebuild of sheet
+                          (ctx as Element).markNeedsBuild();
+                        },
+                        activeColor: const Color(0xFFFF6A00),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Intensity: \$tempLevel%',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  Slider(
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    value: tempLevel.toDouble(),
+                    onChanged: (v) {
+                      tempLevel = v.round();
+                      (ctx as Element).markNeedsBuild();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            // Apply and close
+                            setState(() {
+                              if (isFaceClean) {
+                                _faceCleanEnabled = tempEnabled;
+                                _faceCleanLevel = tempLevel;
+                              } else {
+                                _brightenEnabled = tempEnabled;
+                                _brightenLevel = tempLevel;
+                              }
+                            });
+                            Navigator.of(ctx).pop();
+                            _applyEffects();
+                          },
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF6A00),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Apply',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // Add this widget method for settings menu
   Widget _buildSettingsMenu() {
     return Positioned(
@@ -285,6 +445,20 @@ class _LiveHostPageState extends State<LiveHostPage>
                   label: _isVideoMuted ? 'Show Video' : 'Hide Video',
                   isActive: _isVideoMuted,
                   onTap: _toggleVideoMute,
+                ),
+                const SizedBox(height: 12),
+                _SettingsMenuItem(
+                  icon: Icons.face_retouching_natural,
+                  label: 'Face Clean',
+                  isActive: _faceCleanEnabled,
+                  onTap: () => _showBeautyBottomSheet(isFaceClean: true),
+                ),
+                const SizedBox(height: 8),
+                _SettingsMenuItem(
+                  icon: Icons.wb_sunny,
+                  label: 'Brighten',
+                  isActive: _brightenEnabled,
+                  onTap: () => _showBeautyBottomSheet(isFaceClean: false),
                 ),
               ],
             ),
@@ -412,6 +586,14 @@ class _LiveHostPageState extends State<LiveHostPage>
                         return Builder(
                           builder: (context) {
                             if (!agora.joined) {
+                              if (!_beautyAppliedOnJoin) {
+                                // schedule microtask to avoid setState during build
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
+                                  _applyEffects();
+                                });
+                              }
                               return _buildLoadingState();
                             }
 
