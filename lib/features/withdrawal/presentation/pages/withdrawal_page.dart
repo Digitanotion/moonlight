@@ -147,7 +147,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       // print('Amount text: "$amountText"');
       // print('Amount: $amount');
       // print('Amount cents: $amountCents');
-
+      // please ignore this comment
       if (amountCents < 10000) {
         _showErrorDialog('Minimum withdrawal amount is \$100.00');
         return;
