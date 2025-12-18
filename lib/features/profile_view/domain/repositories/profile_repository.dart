@@ -10,6 +10,7 @@ class UserProfile {
   final String country;
   final int followers;
   final int following;
+  final bool isFollowing;
 
   UserProfile({
     required this.uuid,
@@ -20,10 +21,13 @@ class UserProfile {
     required this.country,
     required this.followers,
     required this.following,
+    this.isFollowing = false,
   });
 }
 
 abstract class ProfileRepository {
   Future<UserProfile> getUser(String uuid);
   Future<Paginated<Post>> getUserPosts(String uuid, {int page, int perPage});
+  Future<UserProfile> followUser(String uuid);
+  Future<UserProfile> unfollowUser(String uuid);
 }

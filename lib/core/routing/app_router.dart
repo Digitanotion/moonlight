@@ -11,6 +11,12 @@ import 'package:moonlight/features/auth/presentation/pages/email_verification.da
 import 'package:moonlight/features/auth/presentation/pages/forget_password.dart';
 import 'package:moonlight/features/auth/presentation/pages/login_screen.dart';
 import 'package:moonlight/features/auth/presentation/pages/register_screen.dart';
+import 'package:moonlight/features/chat/data/models/chat_models.dart';
+import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
+import 'package:moonlight/features/chat/presentation/pages/conversations_screen.dart';
+import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/pages/discover_clubs_screen.dart';
 import 'package:moonlight/features/create_post/presentation/cubit/create_post_cubit.dart';
 import 'package:moonlight/features/create_post/presentation/pages/create_post_screen.dart';
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
@@ -31,6 +37,8 @@ import 'package:moonlight/features/livestream/presentation/pages/go_live_screen.
 import 'package:moonlight/features/livestream/presentation/pages/list_viewers.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_host_page.dart';
 import 'package:moonlight/features/livestream/presentation/pages/livestream_ended.dart';
+import 'package:moonlight/features/notifications/presentation/bloc/notifications_bloc.dart';
+import 'package:moonlight/features/notifications/presentation/pages/notifications_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/onboarding_screen.dart';
 import 'package:moonlight/features/onboarding/presentation/pages/splash_screen.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -145,7 +153,6 @@ class AppRouter {
 
       case RouteNames.profileView:
         {
-          // robust handling: require userUuid; if missing show friendly screen.
           final a = (settings.arguments as Map?) ?? const {};
           final userUuid = (a['userUuid'] as String?) ?? '';
 
@@ -199,11 +206,15 @@ class AppRouter {
             );
           }
 
-          // Try to create ProfileCubit via GetIt, but catch and show helpful error
           try {
             return MaterialPageRoute(
-              builder: (context) => BlocProvider<ProfileCubit>(
-                create: (context) => sl<ProfileCubit>()..load(userUuid),
+              builder: (context) => MultiBlocProvider(
+                providers: [
+                  BlocProvider<ProfileCubit>(
+                    create: (context) => sl<ProfileCubit>()..load(userUuid),
+                  ),
+                  BlocProvider<ChatCubit>(create: (context) => sl<ChatCubit>()),
+                ],
                 child: const ProfileViewPage(),
               ),
               settings: settings,
@@ -259,7 +270,6 @@ class AppRouter {
             );
           }
         }
-
       case RouteNames.goLive:
         return MaterialPageRoute(
           builder: (context) => AuthGuard(child: const GoLiveScreen()),
@@ -405,6 +415,59 @@ class AppRouter {
           builder: (context) => BlocProvider<TransferCubit>(
             create: (context) => sl<TransferCubit>()..loadBalance(),
             child: const GiftCoinsPage(),
+          ),
+        );
+
+      case RouteNames.notifications:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => sl<NotificationsBloc>()..add(FetchNotifications()),
+            child: const NotificationsScreen(),
+          ),
+        );
+
+      case RouteNames.chat:
+        {
+          final args = settings.arguments as Map<String, dynamic>?;
+          if (args == null) {
+            return MaterialPageRoute(
+              builder: (context) =>
+                  Scaffold(body: Center(child: Text('Missing chat arguments'))),
+            );
+          }
+
+          final conversation = args['conversation'] as Conversation;
+          final isClub = args['isClub'] as bool? ?? false;
+          final targetUserUuid = args['targetUserUuid'] as String?;
+
+          return MaterialPageRoute(
+            builder: (context) => AuthGuard(
+              child: BlocProvider(
+                // Add BlocProvider here
+                create: (context) => GetIt.I<ChatCubit>(),
+                child: ChatScreen(conversation: conversation, isClub: isClub),
+              ),
+            ),
+          );
+        }
+      case RouteNames.conversations:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(
+            child: BlocProvider(
+              // ← Add this BlocProvider wrapper
+              create: (context) => sl<ChatCubit>(),
+              child: ConversationsScreen(),
+            ),
+          ),
+        );
+
+      case RouteNames.clubs:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(
+            child: BlocProvider(
+              create: (_) => sl<DiscoverClubsCubit>()..load(),
+              child: const DiscoverClubsScreen(),
+            ),
           ),
         );
 

@@ -6,7 +6,7 @@ class UserModel {
   final int followersCount;
   final bool isFollowing;
 
-  UserModel({
+  const UserModel({
     required this.id,
     required this.name,
     required this.username,
@@ -14,6 +14,20 @@ class UserModel {
     this.followersCount = 0,
     this.isFollowing = false,
   });
+
+  /// Works for:
+  /// - /search
+  /// - /search/suggested-users
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    return UserModel(
+      id: (map['uuid'] ?? '').toString(),
+      name: map['fullname'] ?? map['name'] ?? map['user_slug'] ?? 'Unknown',
+      username: map['user_slug'] ?? '',
+      avatarUrl: map['avatar_url'],
+      followersCount: (map['followers_count'] as num?)?.toInt() ?? 0,
+      isFollowing: map['followed_by_me'] == true,
+    );
+  }
 }
 
 class ClubModel {
@@ -24,7 +38,7 @@ class ClubModel {
   final String? coverImageUrl;
   final bool isMember;
 
-  ClubModel({
+  const ClubModel({
     required this.id,
     required this.name,
     required this.description,
@@ -32,6 +46,22 @@ class ClubModel {
     this.coverImageUrl,
     this.isMember = false,
   });
+
+  /// Works for:
+  /// - /search
+  /// - /search/popular-clubs
+  factory ClubModel.fromMap(Map<String, dynamic> map) {
+    return ClubModel(
+      id: (map['id'] ?? map['uuid'] ?? '').toString(),
+      name: map['name'] ?? '',
+      description: map['description'] ?? '',
+      membersCount: (map['membersCount'] ?? map['members_count'] ?? 0) is num
+          ? (map['membersCount'] ?? map['members_count'] ?? 0).toInt()
+          : 0,
+      coverImageUrl: map['coverImageUrl'] ?? map['cover_image_url'],
+      isMember: map['isMember'] == true,
+    );
+  }
 }
 
 class TagModel {
@@ -39,5 +69,19 @@ class TagModel {
   final String name;
   final int usageCount;
 
-  TagModel({required this.id, required this.name, this.usageCount = 0});
+  const TagModel({required this.id, required this.name, this.usageCount = 0});
+
+  /// Works for:
+  /// - /search
+  /// - /search/trending-tags
+  factory TagModel.fromMap(Map<String, dynamic> map) {
+    return TagModel(
+      id: (map['id'] ?? '').toString(),
+      name: map['name'] ?? '',
+      usageCount:
+          (map['usageCount'] as num?)?.toInt() ??
+          (map['usage_count'] as num?)?.toInt() ??
+          0,
+    );
+  }
 }

@@ -142,6 +142,29 @@ class PusherService {
     }
   }
 
+  // Add to PusherService class
+  Future<void> unsubscribe(String channelName) async {
+    _desired.remove(channelName);
+
+    if (_active.contains(channelName)) {
+      try {
+        await _pusher.unsubscribe(channelName: channelName);
+      } on PlatformException catch (e) {
+        if (!(e.message ?? '').contains('not subscribed')) {
+          rethrow;
+        }
+      }
+      _active.remove(channelName);
+    }
+
+    _subscribing.remove(channelName);
+    clearChannelHandlers(channelName);
+  }
+
+  void clearChannelHandlers(String channelName) {
+    _handlers.remove(channelName);
+  }
+
   /// Register a handler for a channel+event (similar to channel.bind).
   void bind(String channelName, String eventName, PusherCallback cb) {
     final events = _handlers.putIfAbsent(channelName, () => {});
@@ -155,6 +178,14 @@ class PusherService {
     if (evs == null) return;
     final list = evs[eventName];
     list?.remove(cb);
+  }
+
+  // Add this method to PusherService
+  void unbindAll(String channelName, String eventName) {
+    final events = _handlers[channelName];
+    if (events != null) {
+      events.remove(eventName);
+    }
   }
 
   Future<void> unsubscribeAll() async {

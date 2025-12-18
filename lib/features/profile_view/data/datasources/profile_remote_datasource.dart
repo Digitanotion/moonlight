@@ -26,4 +26,18 @@ class ProfileRemoteDataSource {
         ? res.data as Map<String, dynamic>
         : jsonDecode(res.data as String) as Map<String, dynamic>;
   }
+
+  Future<Map<String, dynamic>> followUser(String uuid) async {
+    final res = await http.dio.post('/api/v1/users/$uuid/follow');
+    return res.data is Map
+        ? res.data as Map<String, dynamic>
+        : jsonDecode(res.data as String) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> unfollowUser(String uuid) async {
+    final res = await http.dio.delete('/api/v1/users/$uuid/follow');
+    return res.data is Map
+        ? res.data as Map<String, dynamic>
+        : jsonDecode(res.data as String) as Map<String, dynamic>;
+  }
 }

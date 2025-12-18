@@ -123,4 +123,37 @@ class ProfileCubit extends Cubit<ProfileState> {
   }
 
   Future<void> refresh(String userUuid) => load(userUuid);
+
+  Future<void> toggleFollow() async {
+    final user = state.user;
+    if (user == null) return;
+
+    // optimistic update
+    emit(
+      state.copyWith(
+        user: UserProfile(
+          uuid: user.uuid,
+          handle: user.handle,
+          fullName: user.fullName,
+          avatarUrl: user.avatarUrl,
+          bio: user.bio,
+          country: user.country,
+          followers: user.isFollowing ? user.followers - 1 : user.followers + 1,
+          following: user.following,
+          isFollowing: !user.isFollowing,
+        ),
+      ),
+    );
+
+    try {
+      if (user.isFollowing) {
+        await repo.unfollowUser(user.uuid);
+      } else {
+        await repo.followUser(user.uuid);
+      }
+    } catch (_) {
+      // rollback on error
+      emit(state.copyWith(user: user));
+    }
+  }
 }

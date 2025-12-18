@@ -13,6 +13,16 @@ import 'package:moonlight/core/network/interceptors/retry_interceptor.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/core/services/like_memory.dart';
+import 'package:moonlight/features/chat/data/repositories/chat_repository_impl.dart';
+import 'package:moonlight/features/chat/data/services/chat_api_service.dart';
+import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
+import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/clubs/data/datasources/clubs_remote_data_source.dart';
+import 'package:moonlight/features/clubs/data/repositories/clubs_repository_impl.dart';
+import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart'
+    show MyClubsCubit;
 import 'package:moonlight/features/create_post/data/datasources/create_post_remote_datasource.dart';
 import 'package:moonlight/features/create_post/data/repositories/create_post_repository_impl.dart';
 import 'package:moonlight/features/create_post/domain/repositories/create_post_repository.dart';
@@ -33,6 +43,9 @@ import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bl
 import 'package:moonlight/features/livestream/data/repositories/participants_repository_impl.dart';
 import 'package:moonlight/features/livestream/domain/repositories/participants_repository.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/participants_bloc.dart';
+import 'package:moonlight/features/notifications/data/datasources/notifications_remote_data_source.dart';
+import 'package:moonlight/features/notifications/data/repositories/notifications_repository.dart';
+import 'package:moonlight/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:moonlight/features/post_view/data/datasources/post_remote_datasource.dart';
 import 'package:moonlight/features/post_view/data/repositories/post_repository_impl.dart';
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
@@ -229,7 +242,7 @@ Future<void> init() async {
     () => AccountRemoteDataSourceImpl(sl<Dio>()),
   );
   sl.registerLazySingleton<SearchRemoteDataSource>(
-    () => SearchRemoteDataSourceImpl(),
+    () => SearchRemoteDataSourceImpl(sl<DioClient>()),
   );
 
   // --------- Repositories ---------
@@ -289,6 +302,21 @@ Future<void> init() async {
       getPopularClubs: sl(),
     ),
   );
+
+  _registerPusher(); // needs RuntimeConfig
+  //NOTIFICATION
+  // ---- NOTIFICATIONS ----
+  sl.registerLazySingleton<NotificationsRemoteDataSource>(
+    () => NotificationsRemoteDataSource(sl<DioClient>()),
+  );
+
+  sl.registerLazySingleton<NotificationsRepository>(
+    () => NotificationsRepositoryImpl(sl<NotificationsRemoteDataSource>()),
+  );
+
+  sl.registerFactory<NotificationsBloc>(
+    () => NotificationsBloc(sl<NotificationsRepository>()),
+  );
   sl.registerFactory<AuthBloc>(
     () => AuthBloc(
       loginWithEmail: sl(),
@@ -336,6 +364,23 @@ Future<void> init() async {
       prefs: sl(),
     ),
   );
+  // Clubs data source
+  sl.registerLazySingleton<ClubsRemoteDataSource>(
+    () => ClubsRemoteDataSourceImpl(sl<Dio>()),
+  );
+
+  // Clubs repository
+  sl.registerLazySingleton<ClubsRepository>(
+    () => ClubsRepositoryImpl(sl<ClubsRemoteDataSource>()),
+  );
+
+  // Clubs cubits
+  sl.registerFactory<MyClubsCubit>(() => MyClubsCubit(sl<ClubsRepository>()));
+
+  sl.registerFactory<DiscoverClubsCubit>(
+    () => DiscoverClubsCubit(sl<ClubsRepository>()),
+  );
+
   sl.registerFactory<RequestIdInterceptor>(() => RequestIdInterceptor());
   sl.registerFactory<IdempotencyInterceptor>(
     () => IdempotencyInterceptor(sl<SharedPreferences>()),
@@ -372,12 +417,12 @@ Future<void> init() async {
   //Live Feeds for Homepage
   liveFeeds();
   // ======= Live stack (order matters) =======
-  _registerPusher(); // needs RuntimeConfig
   _registerAgora(); // agora engine
   _registerGoLive(); // camera/mic + go live repo
   _registerLiveHost(); // session repo (agora + pusher)
   _registerLiveViewer(); // viewer mock (until implemented)
   registerProfileView();
+  registerChat();
   wallet();
   setWalletPin();
   transfercoin();
@@ -547,6 +592,26 @@ void _registerPusher() {
   });
 
   debugPrint('✅ PusherService registered successfully');
+}
+
+// In registerChat() function:
+void registerChat() {
+  // Repository
+  sl.registerLazySingleton<ChatApiService>(
+    () => ChatApiService(sl<DioClient>()),
+  );
+
+  // Cubits
+  sl.registerFactory<ChatCubit>(() => ChatCubit(sl<ChatRepository>()));
+
+  // Repository - Add AuthLocalDataSource as parameter
+  sl.registerLazySingleton<ChatRepository>(
+    () => ChatRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(),
+      sl<AuthLocalDataSource>(), // Add this
+    ),
+  );
 }
 
 void _registerLiveHost() {

@@ -31,6 +31,10 @@ class RouteNames {
   static const String giftCoins = '/gift-coins';
   static const withdrawal = '/withdrawal';
   static const String setPin = '/set-pin';
+  static const String notifications = '/notifications';
+  static const clubs = '/clubs';
+  static const String chat = '/chat';
+  static const String conversations = '/conversations';
 
   // static const transactionReceipt = '/transactionReceipt';
 }

@@ -26,9 +26,15 @@ class HomeAppBar extends StatelessWidget {
                 onTap: () => _navigateToSearch(context),
               ),
               const SizedBox(width: 14),
-              const _TopIcon(icon: Icons.notifications_none),
+              _TopIcon(
+                icon: Icons.notifications_none,
+                onTap: () => _navigateToNotification(context),
+              ),
               const SizedBox(width: 14),
-              const _TopIcon(icon: Icons.chat_bubble_outline),
+              _TopIcon(
+                icon: Icons.chat_bubble_outline,
+                onTap: () => _navigateToConversations(context),
+              ),
             ],
           ),
         ],
@@ -38,6 +44,14 @@ class HomeAppBar extends StatelessWidget {
 
   void _navigateToSearch(BuildContext context) {
     Navigator.pushNamed(context, RouteNames.search);
+  }
+
+  void _navigateToNotification(BuildContext context) {
+    Navigator.pushNamed(context, RouteNames.notifications);
+  }
+
+  void _navigateToConversations(BuildContext context) {
+    Navigator.pushNamed(context, RouteNames.conversations);
   }
 }
 

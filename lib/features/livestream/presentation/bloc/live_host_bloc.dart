@@ -144,7 +144,7 @@ class LiveHostState {
     viewers: initialViewers,
     topic: topic,
     messages: const [],
-    chatVisible: true,
+    chatVisible: false,
     pendingRequest: null,
     gift: null,
     showGiftToast: false,

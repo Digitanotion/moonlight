@@ -26,66 +26,64 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     on<ClearSearch>(_onClearSearch);
   }
 
+  Future<void> _onLoadTrendingContent(
+    LoadTrendingContent event,
+    Emitter<SearchState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        isLoadingTrending: true,
+        isLoadingUsers: true,
+        isLoadingClubs: true,
+      ),
+    );
+
+    final trendingTagsResult = await getTrendingTags();
+    final suggestedUsersResult = await getSuggestedUsers();
+    final popularClubsResult = await getPopularClubs();
+
+    emit(
+      state.copyWith(
+        trendingTags: trendingTagsResult.getOrElse(() => []),
+        suggestedUsers: suggestedUsersResult.getOrElse(() => []),
+        popularClubs: popularClubsResult.getOrElse(() => []),
+        isLoadingTrending: false,
+        isLoadingUsers: false,
+        isLoadingClubs: false,
+      ),
+    );
+  }
+
   Future<void> _onSearchQueryChanged(
     SearchQueryChanged event,
     Emitter<SearchState> emit,
   ) async {
     if (event.query.isEmpty) {
-      emit(
-        state.copyWith(query: '', results: [], status: SearchStatus.initial),
-      );
+      emit(const SearchState());
       return;
     }
 
     emit(state.copyWith(query: event.query, status: SearchStatus.loading));
 
     final result = await searchContent(event.query);
+
     result.fold(
-      (failure) => emit(
+      (_) => emit(
         state.copyWith(
           status: SearchStatus.failure,
-          errorMessage: 'Search failed',
+          errorMessage: 'Something went wrong. Please try again.',
         ),
       ),
       (results) => emit(
         state.copyWith(
-          status: results.isEmpty ? SearchStatus.empty : SearchStatus.success,
           results: results,
+          status: results.isEmpty ? SearchStatus.empty : SearchStatus.success,
         ),
       ),
-    );
-  }
-
-  Future<void> _onLoadTrendingContent(
-    LoadTrendingContent event,
-    Emitter<SearchState> emit,
-  ) async {
-    final trendingTagsResult = await getTrendingTags();
-    final suggestedUsersResult = await getSuggestedUsers();
-    final popularClubsResult = await getPopularClubs();
-
-    trendingTagsResult.fold(
-      (failure) => emit(
-        state.copyWith(
-          status: SearchStatus.failure,
-          errorMessage: 'Failed to load content',
-        ),
-      ),
-      (trendingTags) => emit(state.copyWith(trendingTags: trendingTags)),
-    );
-
-    suggestedUsersResult.fold(
-      (failure) => null, // Don't fail the whole state for one failed request
-      (suggestedUsers) => emit(state.copyWith(suggestedUsers: suggestedUsers)),
-    );
-
-    popularClubsResult.fold(
-      (failure) => null,
-      (popularClubs) => emit(state.copyWith(popularClubs: popularClubs)),
     );
   }
 
   void _onClearSearch(ClearSearch event, Emitter<SearchState> emit) {
-    emit(state.copyWith(query: '', results: [], status: SearchStatus.initial));
+    emit(const SearchState());
   }
 }

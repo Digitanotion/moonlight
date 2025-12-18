@@ -4,15 +4,20 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/pages/my_clubs_tab.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/domain/entities/user.dart';
+import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
 // new import
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart'; // if you have one
+// if you have one
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -304,7 +309,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
-                              child: _placeholderNotAvailable(),
+                              child: RepositoryProvider<ClubsRepository>.value(
+                                value: sl<ClubsRepository>(),
+                                child: BlocProvider(
+                                  create: (_) => sl<MyClubsCubit>()..load(),
+                                  child: const MyClubsTab(),
+                                ),
+                              ),
                             ),
                           ),
                           ProfileTab.livestreams => SliverToBoxAdapter(

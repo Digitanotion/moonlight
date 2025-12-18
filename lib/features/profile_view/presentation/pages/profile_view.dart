@@ -1,9 +1,14 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
+import 'package:moonlight/features/chat/data/models/chat_models.dart';
+import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
+import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -143,16 +148,62 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                           Row(
                             children: [
                               Expanded(
-                                child: _PrimaryButton(
-                                  text: 'Follow',
-                                  onPressed: () {},
+                                child: BlocBuilder<ProfileCubit, ProfileState>(
+                                  builder: (context, s) {
+                                    final isFollowing =
+                                        s.user?.isFollowing == true;
+
+                                    return SizedBox(
+                                      height: 46,
+                                      child: ElevatedButton(
+                                        onPressed: () => context
+                                            .read<ProfileCubit>()
+                                            .toggleFollow(),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isFollowing
+                                              ? Colors.white10
+                                              : const Color(0xFFFF7A00),
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              26,
+                                            ),
+                                            side: isFollowing
+                                                ? BorderSide(
+                                                    color: Colors.white
+                                                        .withOpacity(0.25),
+                                                  )
+                                                : BorderSide.none,
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: Text(
+                                          isFollowing ? 'Following' : 'Follow',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
-                                child: _OutlineButton(
-                                  text: 'Message',
-                                  onPressed: () {},
+                                child: BlocBuilder<ProfileCubit, ProfileState>(
+                                  builder: (context, s) {
+                                    final targetUserUuid = s.user?.uuid ?? '';
+
+                                    return _OutlineButton(
+                                      text: 'Message',
+                                      targetUserUuid:
+                                          targetUserUuid, // Pass the UUID
+                                      onPressed: () => _startConversation(
+                                        context,
+                                        targetUserUuid,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ],
@@ -219,6 +270,112 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
         ),
       ),
     );
+  }
+
+  void _startConversation(BuildContext context, String targetUserUuid) async {
+    if (targetUserUuid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to start conversation'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black.withOpacity(0.8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.orange),
+              SizedBox(height: 16),
+              Text(
+                'Starting conversation...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Declare variables at the top level so they're accessible in all scopes
+    StreamSubscription? subscription;
+    ChatCubit? chatCubit;
+
+    try {
+      // Create a new ChatCubit instance directly
+      final chatRepository = GetIt.I<ChatRepository>();
+      chatCubit = ChatCubit(chatRepository);
+
+      // Listen for the conversation creation
+      subscription = chatCubit.stream.listen(
+        (state) {
+          if (state is ChatDirectConversationStarted) {
+            // Close loading dialog
+            Navigator.pop(context);
+
+            // Navigate to chat screen with the real conversation
+            Navigator.pushNamed(
+              context,
+              RouteNames.chat,
+              arguments: {'conversation': state.conversation, 'isClub': false},
+            );
+
+            // Clean up
+            subscription?.cancel();
+            chatCubit?.close();
+          } else if (state is ChatError) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error: ${state.message}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            subscription?.cancel();
+            chatCubit?.close();
+          }
+        },
+        onError: (error) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $error'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          subscription?.cancel();
+          chatCubit?.close();
+        },
+      );
+
+      // Start direct conversation
+      chatCubit.startDirectConversation(targetUserUuid);
+    } catch (e) {
+      // Clean up in case of exception
+      subscription?.cancel();
+      chatCubit?.close();
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to start conversation: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 
@@ -316,9 +473,16 @@ class _PrimaryButton extends StatelessWidget {
 }
 
 class _OutlineButton extends StatelessWidget {
-  const _OutlineButton({required this.text, required this.onPressed});
+  const _OutlineButton({
+    required this.text,
+    required this.onPressed,
+    required this.targetUserUuid, // Add this parameter
+  });
+
   final String text;
   final VoidCallback onPressed;
+  final String targetUserUuid; // Add this
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(

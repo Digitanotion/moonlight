@@ -87,14 +87,10 @@ class _HomeBottomNavState extends State<HomeBottomNav> {
                 active: widget.currentIndex == 3,
                 onTap: () {
                   widget.onTap(3);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const LivestreamEndedScreen(),
-                    ),
-                  );
+                  Navigator.pushNamed(context, RouteNames.clubs);
                 },
               ),
+
               _NavItem(
                 icon: Icons.person_outline,
                 label: 'Profile',

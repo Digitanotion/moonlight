@@ -13,6 +13,7 @@ class LiveItem {
   final String? hostUuid;
   final int? isPremium;
   final int? premiumFee;
+  final bool? isFollowed;
 
   const LiveItem({
     required this.id,
@@ -29,5 +30,6 @@ class LiveItem {
     required this.hostUuid,
     required this.isPremium,
     required this.premiumFee,
+    this.isFollowed,
   });
 }

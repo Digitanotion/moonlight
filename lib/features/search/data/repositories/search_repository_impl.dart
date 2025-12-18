@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/core/errors/failures.dart';
 import 'package:moonlight/features/search/data/datasources/search_remote_data_source.dart';
+import 'package:moonlight/features/search/data/models/search_models.dart';
 import 'package:moonlight/features/search/domain/entities/search_result.dart';
 import 'package:moonlight/features/search/domain/repositories/search_repository.dart';
 
@@ -13,11 +14,49 @@ class SearchRepositoryImpl implements SearchRepository {
   @override
   Future<Either<Failure, List<SearchResult>>> search(String query) async {
     try {
-      final results = await remoteDataSource.search(query);
-      // Convert models to entities
-      return Right([]);
-    } on ServerException {
-      return Left(ServerFailure("Server failed during searching"));
+      final rawResults = await remoteDataSource.search(query);
+
+      final List<SearchResult> results = [];
+
+      for (final item in rawResults) {
+        if (item is UserModel) {
+          results.add(
+            UserResult(
+              id: item.id,
+              name: item.name,
+              username: item.username,
+              avatarUrl: item.avatarUrl,
+              followersCount: item.followersCount,
+              isFollowing: item.isFollowing,
+            ),
+          );
+        } else if (item is ClubModel) {
+          results.add(
+            ClubResult(
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              membersCount: item.membersCount,
+              coverImageUrl: item.coverImageUrl,
+              isMember: item.isMember,
+            ),
+          );
+        } else if (item is TagModel) {
+          results.add(
+            TagResult(
+              id: item.id,
+              name: item.name,
+              usageCount: item.usageCount,
+            ),
+          );
+        }
+      }
+
+      return Right(results);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (_) {
+      return Left(ServerFailure('Unexpected search error'));
     }
   }
 
@@ -28,11 +67,8 @@ class SearchRepositoryImpl implements SearchRepository {
       return Right(
         tags
             .map(
-              (tag) => TagResult(
-                id: tag.id,
-                name: tag.name,
-                usageCount: tag.usageCount,
-              ),
+              (t) =>
+                  TagResult(id: t.id, name: t.name, usageCount: t.usageCount),
             )
             .toList(),
       );
@@ -48,13 +84,13 @@ class SearchRepositoryImpl implements SearchRepository {
       return Right(
         users
             .map(
-              (user) => UserResult(
-                id: user.id,
-                name: user.name,
-                username: user.username,
-                avatarUrl: user.avatarUrl,
-                followersCount: user.followersCount,
-                isFollowing: user.isFollowing,
+              (u) => UserResult(
+                id: u.id,
+                name: u.name,
+                username: u.username,
+                avatarUrl: u.avatarUrl,
+                followersCount: u.followersCount,
+                isFollowing: u.isFollowing,
               ),
             )
             .toList(),
@@ -71,13 +107,13 @@ class SearchRepositoryImpl implements SearchRepository {
       return Right(
         clubs
             .map(
-              (club) => ClubResult(
-                id: club.id,
-                name: club.name,
-                description: club.description,
-                membersCount: club.membersCount,
-                coverImageUrl: club.coverImageUrl,
-                isMember: club.isMember,
+              (c) => ClubResult(
+                id: c.id,
+                name: c.name,
+                description: c.description,
+                membersCount: c.membersCount,
+                coverImageUrl: c.coverImageUrl,
+                isMember: c.isMember,
               ),
             )
             .toList(),

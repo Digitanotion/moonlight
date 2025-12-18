@@ -113,7 +113,6 @@ class _LiveNowSectionState extends State<LiveNowSection> {
           }
 
           final items = state.items;
-
           return LayoutBuilder(
             builder: (_, box) {
               final cols = _calcColumns(box.maxWidth);
@@ -141,7 +140,8 @@ class _LiveNowSectionState extends State<LiveNowSection> {
                       );
                     }
                     final it = items[i];
-                    return LiveTileGrid(item: it);
+                    // PASS items + index so the tile can open the pager
+                    return LiveTileGrid(item: it, items: items, index: i);
                   },
                 ),
               );

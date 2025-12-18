@@ -1,6 +1,7 @@
 // lib/features/live_viewer/presentation/screens/live_viewer_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
@@ -9,18 +10,23 @@ import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.d
 import 'package:moonlight/features/gifts/presentation/gift_bottom_sheet.dart';
 import 'package:moonlight/features/gifts/presentation/gift_overlay_layer.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
-
 import 'package:moonlight/features/live_viewer/domain/video_surface_provider.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/viewers_list_screen.dart';
 import '../../domain/entities.dart';
 import '../../domain/repositories/viewer_repository.dart';
 import '../bloc/viewer_bloc.dart';
-
 import 'package:uuid/uuid.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/wallet/services/idempotency_helper.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+// NEW imports for pager / repo builder
+import 'package:moonlight/features/home/domain/entities/live_item.dart';
+import 'package:moonlight/core/services/pusher_service.dart';
+
+/// ===================================================================
+/// LIVE VIEWER SCREEN (unchanged behavior) - kept intact for drop-in
+/// ===================================================================
 class LiveViewerScreen extends StatefulWidget {
   final ViewerRepository repository; // injected
   const LiveViewerScreen({super.key, required this.repository});
@@ -36,6 +42,29 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
   bool _premiumSheetLoading = false;
   String? _premiumStatusMessage;
 
+  // Ensure we only auto-start the bloc once from the screen (defensive)
+  bool _didAutoStartBloc = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Post-frame: if there is a ViewerBloc above us and it hasn't been started,
+    // add ViewerStarted as a defensive fallback. The pager already adds it
+    // when created, but some call-sites might not — this prevents silent no-op.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final bloc = context.read<ViewerBloc>();
+        if (bloc != null && !_didAutoStartBloc) {
+          // Add the start event only once
+          bloc.add(const ViewerStarted());
+          _didAutoStartBloc = true;
+        }
+      } catch (_) {
+        // ignore: defensive; if no bloc is found just continue
+      }
+    });
+  }
+
   @override
   void dispose() {
     _commentCtrl.dispose();
@@ -49,7 +78,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
     return null;
   }
 
-  @override
+  // ... rest of your existing _LiveViewerScreenState code unchanged ...
+
   @override
   Widget build(BuildContext context) {
     // Read route args so we can detect if this stream is premium
@@ -78,7 +108,6 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
           child: SafeArea(
             top: true,
             bottom: false,
-
             child: Stack(
               children: [
                 // Background & video are below; overlays above
@@ -208,48 +237,19 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
                     ),
                   ),
 
-                  // Request-to-join button (bottom-center)
-                  // Align(
-                  //   alignment: Alignment.bottomCenter,
-                  //   child: Padding(
-                  //     padding: const EdgeInsets.only(bottom: 90),
-                  //     child: BlocBuilder<ViewerBloc, ViewerState>(
-                  //       buildWhen: (p, n) =>
-                  //           p.showChatUI != n.showChatUI ||
-                  //           p.joinRequested != n.joinRequested ||
-                  //           p.awaitingApproval != n.awaitingApproval ||
-                  //           p.isPaused != n.isPaused,
-                  //       builder: (_, s) => Visibility(
-                  //         visible: !s.isPaused,
-                  //         child: const _RequestToJoinButton(),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
-
-                  // Comment bar (bottom)
                   Align(
                     alignment: Alignment.bottomCenter,
-                    child: BlocBuilder<ViewerBloc, ViewerState>(
-                      buildWhen: (p, n) => p.showChatUI != n.showChatUI,
-                      builder: (_, s) => Visibility(
-                        visible: s.showChatUI,
-                        child: _CommentBar(
-                          controller: _commentCtrl,
-                          onSend: (text) {
-                            final t = text.trim();
-                            if (t.isNotEmpty) {
-                              context.read<ViewerBloc>().add(CommentSent(t));
-                              _commentCtrl.clear();
-                            }
-                          },
-                        ),
-                      ),
+                    child: _CommentBar(
+                      controller: _commentCtrl,
+                      onSend: (text) {
+                        final t = text.trim();
+                        if (t.isNotEmpty) {
+                          context.read<ViewerBloc>().add(CommentSent(t));
+                          _commentCtrl.clear();
+                        }
+                      },
                     ),
                   ),
-
-                  // Right rail
-                  const Positioned(right: 10, bottom: 140, child: _RightRail()),
                 ],
               ],
             ),
@@ -780,14 +780,13 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
       _premiumSheetLoading = false;
       _premiumStatusMessage = null;
     });
-
-    // Optionally: if the viewer bloc needs a kick to re-check permissions or rejoin,
-    // you could dispatch an event here, e.g. context.read<ViewerBloc>().add(const RefreshPermissions());
-    // But I avoided changing bloc APIs to keep this non-breaking.
   }
 }
 
 /// Background live video (or fallback image) + optional local preview bubble.
+/// Background live video (or fallback image) + optional local preview bubble.
+/// NOTE: prefer the repo instance from the ViewerBloc (if available) so UI uses
+/// the same repo that the bloc subscribed/initialized.
 class _BackgroundVideo extends StatelessWidget {
   final Widget child;
   final ViewerRepository repository;
@@ -795,8 +794,14 @@ class _BackgroundVideo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final videoProvider = repository is VideoSurfaceProvider
-        ? repository as VideoSurfaceProvider
+    // Prefer the repo used by the bloc (if present) — this avoids mismatch
+    // when pager/bloc creates a different repo instance than widget.repository.
+    final blocRepo = context.read<ViewerBloc>();
+
+    final repoToUse = (blocRepo != null) ? blocRepo : repository;
+
+    final videoProvider = repoToUse is VideoSurfaceProvider
+        ? repoToUse as VideoSurfaceProvider
         : null;
     final localPreview = videoProvider?.buildLocalPreview();
 
@@ -1046,10 +1051,7 @@ class _HostCard extends StatelessWidget {
                       Navigator.pushNamed(
                         context,
                         RouteNames.profileView,
-                        arguments: {
-                          'userUuid': HostUuid,
-                          'user_slug': "",
-                        }, // id isn’t used; router takes uuid via args (see patch below)
+                        arguments: {'userUuid': HostUuid, 'user_slug': ""},
                       );
                     },
                     child: CircleAvatar(
@@ -1225,7 +1227,7 @@ class _GiftToast extends StatelessWidget {
                         width: 30,
                         height: 30,
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(.15),
+                          color: Colors.orange.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
@@ -1279,8 +1281,38 @@ class _GiftToast extends StatelessWidget {
   }
 }
 
-class _ChatPanel extends StatelessWidget {
+/// Ultra-modern chat panel with TikTok-inspired transparent design
+class _ChatPanel extends StatefulWidget {
   const _ChatPanel();
+  @override
+  State<_ChatPanel> createState() => _ChatPanelState();
+}
+
+class _ChatPanelState extends State<_ChatPanel> {
+  final _scrollController = ScrollController();
+  bool _isAtTop = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    final isAtTop = _scrollController.position.pixels == 0;
+    if (isAtTop != _isAtTop) {
+      setState(() {
+        _isAtTop = isAtTop;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1289,75 +1321,531 @@ class _ChatPanel extends StatelessWidget {
       builder: (_, s) {
         final chat = s.chat.reversed.toList();
         return ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 220, minWidth: 220),
-          child: Stack(
-            children: [
-              _glass(
-                color: Colors.black.withOpacity(.1),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    10,
-                    10,
-                    34,
-                    10,
-                  ), // room for ✕
-                  child: ListView.separated(
+          constraints: const BoxConstraints(maxHeight: 280, minWidth: 280),
+          child: Container(
+            width: 320,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Stack(
+                children: [
+                  // Chat messages
+                  ListView.separated(
+                    controller: _scrollController,
                     reverse: true,
                     shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
                     itemCount: chat.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, i) {
                       final m = chat[i];
-                      return RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '${m.username}  ',
-                              style: const TextStyle(
-                                color: Colors.lightBlueAccent,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
+                      return _ModernChatBubble(
+                        username: m.username,
+                        text: m.text,
+                        isNew: i == 0,
+                      );
+                    },
+                  ),
+
+                  // Fade effect only at the top and only when not at top
+                  if (!_isAtTop)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 100, // Height of the fade effect
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.1),
+                              Colors.transparent,
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ModernChatBubble extends StatelessWidget {
+  final String username;
+  final String text;
+  final bool isHost;
+  final bool isNew;
+
+  const _ModernChatBubble({
+    required this.username,
+    required this.text,
+    this.isHost = false,
+    this.isNew = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      margin: EdgeInsets.only(left: isNew ? 0 : 8, right: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: isHost
+              ? const Color(0xFFFF7A00).withOpacity(0.25)
+              : Colors.black.withOpacity(0),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User indicator dot
+              Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 10, top: 8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isHost
+                      ? const Color(0xFFFF7A00)
+                      : const Color(0xFF29C3FF),
+                ),
+              ),
+
+              // Message content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Username
+                    Row(
+                      children: [
+                        Text(
+                          username,
+                          style: TextStyle(
+                            color: isHost
+                                ? const Color(0xFFFF7A00)
+                                : const Color(0xFF29C3FF),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        if (isHost) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF7A00).withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: const Color(0xFFFF7A00).withOpacity(0.6),
+                                width: 1,
                               ),
                             ),
-                            TextSpan(
-                              text: m.text,
-                              style: const TextStyle(
+                            child: const Text(
+                              'HOST',
+                              style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 13,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Message text
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        height: 1.3,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // New message indicator
+              if (isNew)
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.only(left: 8, top: 2),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFFFF7A00),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentBar extends StatefulWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onSend;
+  const _CommentBar({required this.controller, required this.onSend});
+
+  @override
+  State<_CommentBar> createState() => _CommentBarState();
+}
+
+class _CommentBarState extends State<_CommentBar> {
+  bool _showEmojiPicker = false;
+  final FocusNode _focusNode = FocusNode();
+
+  void _sendMessage() {
+    final text = widget.controller.text.trim();
+    if (text.isNotEmpty) {
+      widget.onSend(text);
+      widget.controller.clear();
+      _focusNode.unfocus();
+      setState(() => _showEmojiPicker = false);
+    }
+  }
+
+  void _toggleEmojiPicker() {
+    setState(() {
+      _showEmojiPicker = !_showEmojiPicker;
+      if (_showEmojiPicker) {
+        _focusNode.unfocus();
+      } else {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  void _insertEmoji(String emoji) {
+    final text = widget.controller.text;
+    final selection = widget.controller.selection;
+    final newText = text.replaceRange(selection.start, selection.end, emoji);
+    widget.controller.text = newText;
+    widget.controller.selection = selection.copyWith(
+      baseOffset: selection.start + emoji.length,
+      extentOffset: selection.start + emoji.length,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ViewerBloc, ViewerState>(
+      buildWhen: (p, n) => p.showChatUI != n.showChatUI,
+      builder: (context, s) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                Colors.black.withOpacity(0.3),
+                Colors.black.withOpacity(0.6),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Emoji picker (conditional)
+              if (_showEmojiPicker) ...[
+                _Glass(
+                  radius: 16,
+                  padding: const EdgeInsets.all(12),
+                  child: _EmojiGrid(onEmojiSelected: _insertEmoji),
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              // Input row
+              Row(
+                children: [
+                  // Expanded input field with transparent design
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        color: Colors.black.withOpacity(0.2),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.15),
+                          width: 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        child: Row(
+                          children: [
+                            // Emoji picker button
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 12),
+                                child: TextField(
+                                  controller: widget.controller,
+                                  focusNode: _focusNode,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Send a message...',
+                                    hintStyle: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                    isDense: true,
+                                  ),
+                                  textInputAction: TextInputAction.send,
+                                  onSubmitted: (_) => _sendMessage(),
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ),
+
+                            IconButton(
+                              icon: Icon(
+                                _showEmojiPicker
+                                    ? Icons.keyboard_rounded
+                                    : Icons.emoji_emotions_rounded,
+                                color: Colors.white.withOpacity(0.7),
+                                size: 20,
+                              ),
+                              onPressed: _toggleEmojiPicker,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 40,
                               ),
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 6,
-                top: 6,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () =>
-                      context.read<ViewerBloc>().add(const ChatHideRequested()),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(.35),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 16,
+                      ),
                     ),
                   ),
-                ),
+
+                  const SizedBox(width: 12),
+
+                  // Action buttons with clean outline icons
+                  Row(
+                    children: [
+                      // Chat toggle button
+                      _ModernActionButton(
+                        icon: s.showChatUI
+                            ? Icons.chat_bubble_rounded
+                            : Icons.chat_bubble_outline_rounded,
+                        onTap: () {
+                          context.read<ViewerBloc>().add(
+                            s.showChatUI
+                                ? const ChatHideRequested()
+                                : const ChatShowRequested(),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 3),
+
+                      // Gift button
+                      _ModernActionButton(
+                        icon: Icons.auto_awesome_rounded,
+                        onTap: () async {
+                          final bloc = context.read<ViewerBloc>();
+                          bloc.add(const GiftSheetRequested());
+                          final repo = context.read<ViewerBloc>().repo;
+                          final livestreamId = (repo is ViewerRepositoryImpl)
+                              ? repo.livestreamIdNumeric.toString()
+                              : '0';
+                          final toUserUuid = (repo is ViewerRepositoryImpl)
+                              ? repo.hostUuid.toString()
+                              : '0';
+                          if (context.mounted) {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => BlocProvider.value(
+                                value: context.read<ViewerBloc>(),
+                                child: GiftBottomSheet(
+                                  toUserUuid: toUserUuid,
+                                  livestreamId: livestreamId,
+                                ),
+                              ),
+                            ).whenComplete(() {
+                              if (context.mounted)
+                                bloc.add(const GiftSheetClosed());
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 3),
+
+                      // Send button
+                      GestureDetector(
+                        onTap: _sendMessage,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF7A00).withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _EmojiGrid extends StatelessWidget {
+  final Function(String) onEmojiSelected;
+
+  final List<String> emojis = [
+    '😂',
+    '😍',
+    '🥰',
+    '😭',
+    '😊',
+    '👍',
+    '❤️',
+    '🔥',
+    '🙏',
+    '😎',
+    '🎉',
+    '💯',
+    '🤔',
+    '😢',
+    '👏',
+    '🙌',
+    '😘',
+    '🤣',
+    '😅',
+    '😡',
+    '👀',
+    '✨',
+    '💕',
+    '🎶',
+  ];
+
+  _EmojiGrid({required this.onEmojiSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 6,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+      ),
+      itemCount: emojis.length,
+      itemBuilder: (context, index) {
+        return GestureDetector(
+          onTap: () => onEmojiSelected(emojis[index]),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: Colors.white.withOpacity(0.1),
+            ),
+            child: Center(
+              child: Text(emojis[index], style: const TextStyle(fontSize: 20)),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _Glass extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final Color? color;
+  const _Glass({
+    required this.child,
+    required this.padding,
+    this.radius = 24,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: (color ?? Colors.black.withOpacity(0.35)),
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _ModernActionButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ModernActionButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.5),
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
     );
   }
 }
@@ -1380,37 +1868,32 @@ class _RightRail extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // _railButton(
-            //   icon: Icons.favorite,
-            //   onTap: () => context.read<ViewerBloc>().add(const LikePressed()),
-            //   label: _fmtCount(s.likes),
-            // ),
             const SizedBox(height: 12),
-            _railButton(
-              icon: Icons.chat_bubble_outline,
-              onTap: () =>
-                  context.read<ViewerBloc>().add(const ChatShowRequested()),
-              label: "", //_fmtCount(s.chat.length + 1200),
+            _ModernRailButton(
+              icon: Icons.chat_bubble_outline_rounded,
+              onTap: () {
+                context.read<ViewerBloc>().add(
+                  s.showChatUI
+                      ? const ChatHideRequested()
+                      : const ChatShowRequested(),
+                );
+              },
+              label: "",
+              isActive: s.showChatUI,
             ),
-            _railButton(
-              icon: Icons.card_giftcard,
+            const SizedBox(height: 16),
+            _ModernRailButton(
+              icon: Icons.auto_awesome_rounded,
               onTap: () async {
                 final bloc = context.read<ViewerBloc>();
                 bloc.add(const GiftSheetRequested());
-                // Open bottom sheet with toUserUuid & livestreamId
                 final repo = context.read<ViewerBloc>().repo;
-                // Try to get host uuid; if not available, you can pass viewer's current target uuid via route args
                 final livestreamId = (repo is ViewerRepositoryImpl)
                     ? repo.livestreamIdNumeric.toString()
                     : '0';
-                // Pick a toUserUuid: if available from auth/current stream context.
-                // For now, try current user target from DI (you can wire actual host uuid here)
                 final toUserUuid = (repo is ViewerRepositoryImpl)
                     ? repo.hostUuid.toString()
                     : '0';
-                // Show sheet
-                // (If you already know host's uuid elsewhere, pass that instead of current user uuid)
-                // In most cases, toUserUuid should be the host's uuid (stream owner).
                 if (context.mounted) {
                   showModalBottomSheet(
                     context: context,
@@ -1428,52 +1911,74 @@ class _RightRail extends StatelessWidget {
                   });
                 }
               },
-              label: "", // optional label
+              label: "",
             ),
-            // const SizedBox(height: 12),
-            // _railButton(
-            //   icon: Icons.share_outlined,
-            //   onTap: () {
-            //     context.read<ViewerBloc>().add(const SharePressed());
-            //     ScaffoldMessenger.of(
-            //       context,
-            //     ).showSnackBar(const SnackBar(content: Text('Share tapped')));
-            //   },
-            //   label: 'Share',
-            // ),
+            const SizedBox(height: 16),
+            _ModernRailButton(
+              icon: Icons.favorite_outline_rounded,
+              onTap: () => context.read<ViewerBloc>().add(const LikePressed()),
+              label: _fmtCount(s.likes),
+            ),
           ],
         );
       },
     );
   }
+}
 
-  Widget _railButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    required String label,
-  }) {
+class _ModernRailButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final String label;
+  final bool isActive;
+
+  const _ModernRailButton({
+    required this.icon,
+    required this.onTap,
+    required this.label,
+    this.isActive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.all(10),
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(.35),
+              color: isActive
+                  ? const Color(0xFFFF7A00).withOpacity(0.2)
+                  : Colors.transparent,
               shape: BoxShape.circle,
+              border: Border.all(
+                color: isActive
+                    ? const Color(0xFFFF7A00).withOpacity(0.5)
+                    : Colors.white.withOpacity(0.2),
+                width: 1.5,
+              ),
             ),
-            child: Icon(icon, color: Colors.white),
+            child: Icon(
+              icon,
+              color: isActive ? const Color(0xFFFF7A00) : Colors.white,
+              size: 20,
+            ),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
+        if (label.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? const Color(0xFFFF7A00) : Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -1489,7 +1994,6 @@ class _RequestToJoinButton extends StatelessWidget {
           p.joinRequested != n.joinRequested ||
           p.awaitingApproval != n.awaitingApproval,
       builder: (_, s) {
-        // Hide button if already joined as audience
         if (s.joinRequested == true && s.awaitingApproval == false) {
           return const SizedBox.shrink();
         }
@@ -1527,60 +2031,6 @@ class _RequestToJoinButton extends StatelessWidget {
   }
 }
 
-class _CommentBar extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onSend;
-  const _CommentBar({required this.controller, required this.onSend});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black54],
-          stops: [0.0, 1.0],
-        ),
-      ),
-      child: _glass(
-        child: Row(
-          children: [
-            const SizedBox(width: 8),
-            const Icon(Icons.emoji_emotions_outlined, color: Colors.white70),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Add a comment...',
-                  hintStyle: TextStyle(color: Colors.white70),
-                  border: InputBorder.none,
-                ),
-                textInputAction: TextInputAction.send,
-                onSubmitted: (v) {
-                  final t = v.trim();
-                  if (t.isNotEmpty) onSend(t);
-                },
-              ),
-            ),
-            IconButton(
-              onPressed: () {
-                final t = controller.text.trim();
-                if (t.isNotEmpty) onSend(t);
-              },
-              icon: const Icon(Icons.send_rounded, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Glass card helper
 Widget _glass({required Widget child, double radius = 16, Color? color}) {
   return ClipRRect(
     borderRadius: BorderRadius.circular(radius),
@@ -1598,7 +2048,6 @@ Widget _glass({required Widget child, double radius = 16, Color? color}) {
   );
 }
 
-/// Small modern premium badge (click to open info sheet)
 class _PremiumBadge extends StatelessWidget {
   final int? fee;
   final VoidCallback? onTap; // open info sheet
@@ -1632,11 +2081,6 @@ class _PremiumBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // const Icon(
-            //   Icons.workspace_premium_rounded,
-            //   size: 16,
-            //   color: Colors.white,
-            // ),
             if (fee != null) ...[
               const SizedBox(width: 8),
               Container(
@@ -1823,7 +2267,6 @@ class _WaitingOverlay extends StatelessWidget {
     return BlocBuilder<ViewerBloc, ViewerState>(
       buildWhen: (p, n) => p.awaitingApproval != n.awaitingApproval,
       builder: (_, s) {
-        // Only show if there's an actual connection issue
         if (!s.awaitingApproval) return const SizedBox.shrink();
 
         return IgnorePointer(
@@ -1859,93 +2302,8 @@ class _WaitingOverlay extends StatelessWidget {
       },
     );
   }
-
-  // @override
-  // Widget build(BuildContext context) {
-  //   return BlocBuilder<ViewerBloc, ViewerState>(
-  //     buildWhen: (p, n) =>
-  //         p.awaitingApproval != n.awaitingApproval || p.host != n.host,
-  //     builder: (_, s) {
-  //       if (!s.awaitingApproval) return const SizedBox.shrink();
-  //       final host = s.host;
-  //       final handle = host == null
-  //           ? ''
-  //           : '@${host.name.replaceAll(' ', '_').toLowerCase()}';
-
-  //       return IgnorePointer(
-  //         child: Container(
-  //           alignment: Alignment.center,
-  //           decoration: BoxDecoration(
-  //             gradient: LinearGradient(
-  //               colors: [
-  //                 const Color(0xFF2B2E83).withOpacity(0.55),
-  //                 const Color(0xFF7B2F9B).withOpacity(0.55),
-  //               ],
-  //               begin: Alignment.topCenter,
-  //               end: Alignment.bottomCenter,
-  //             ),
-  //           ),
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               const SizedBox(height: 8),
-  //               const CircularProgressIndicator(color: Colors.white),
-  //               const SizedBox(height: 16),
-  //               const Text(
-  //                 'Waiting for host approval…',
-  //                 style: TextStyle(
-  //                   color: Colors.white,
-  //                   fontWeight: FontWeight.w800,
-  //                   fontSize: 22,
-  //                 ),
-  //               ),
-  //               const SizedBox(height: 8),
-  //               const Padding(
-  //                 padding: EdgeInsets.symmetric(horizontal: 28),
-  //                 child: Text(
-  //                   'You’ll join automatically once approved.',
-  //                   textAlign: TextAlign.center,
-  //                   style: TextStyle(color: Colors.white70, fontSize: 14),
-  //                 ),
-  //               ),
-  //               const SizedBox(height: 18),
-  //               if (host != null)
-  //                 _glass(
-  //                   radius: 22,
-  //                   child: Padding(
-  //                     padding: const EdgeInsets.symmetric(
-  //                       horizontal: 12,
-  //                       vertical: 8,
-  //                     ),
-  //                     child: Row(
-  //                       mainAxisSize: MainAxisSize.min,
-  //                       children: [
-  //                         CircleAvatar(
-  //                           backgroundImage: NetworkImage(host.avatarUrl),
-  //                           radius: 16,
-  //                         ),
-  //                         const SizedBox(width: 8),
-  //                         Text(
-  //                           handle,
-  //                           style: const TextStyle(
-  //                             color: Colors.white,
-  //                             fontWeight: FontWeight.w700,
-  //                           ),
-  //                         ),
-  //                       ],
-  //                     ),
-  //                   ),
-  //                 ),
-  //             ],
-  //           ),
-  //         ),
-  //       );
-  //     },
-  //   );
-  // }
 }
 
-/// Shows when user's role changes (promoted to guest, etc.)
 class _RoleChangeToast extends StatelessWidget {
   const _RoleChangeToast();
 
@@ -1997,7 +2355,6 @@ class _RoleChangeToast extends StatelessWidget {
   }
 }
 
-/// Shows when user is removed from the stream
 class _RemovalOverlay extends StatelessWidget {
   const _RemovalOverlay();
 
@@ -2042,7 +2399,6 @@ class _RemovalOverlay extends StatelessWidget {
   }
 }
 
-/// Shows error messages
 class _ErrorToast extends StatelessWidget {
   const _ErrorToast();
 
@@ -2090,7 +2446,6 @@ class _ErrorToast extends StatelessWidget {
   }
 }
 
-/// Renders the two-up tiles when either you are guest or there is an active guest.
 /// Renders the two-up tiles when either you are guest or there is an active guest.
 class _TwoUpSwitch extends StatelessWidget {
   final ViewerRepository repository;
@@ -2234,7 +2589,6 @@ class _GuestControlsState extends State<_GuestControls> {
   }
 }
 
-/// Premium blocking overlay widget (modern UI)
 class _PremiumBlockedOverlay extends StatelessWidget {
   final int? fee;
   final VoidCallback onOpenPayment;
@@ -2415,4 +2769,170 @@ class _PremiumBlockedOverlay extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FloatingInfoBubble extends StatelessWidget {
+  final String text;
+  const _FloatingInfoBubble({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(255, 8, 32, 248).withOpacity(.75),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(.55),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.location_on, color: Colors.white, size: 14),
+                const SizedBox(width: 8),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Transform.rotate(
+            angle: 0.4,
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(255, 255, 122, 21).withOpacity(.9),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ===================================================================
+/// NEW: LiveViewerPager - TikTok-style vertical pager hosting LiveViewerScreen
+/// ===================================================================
+
+/// A vertical PageView that builds a ViewerRepositoryImpl for each LiveItem
+/// on demand and hosts LiveViewerScreen pages.
+class LiveViewerPager extends StatefulWidget {
+  final List<LiveItem> items;
+  final int initialIndex;
+
+  const LiveViewerPager({
+    super.key,
+    required this.items,
+    this.initialIndex = 0,
+  });
+
+  @override
+  State<LiveViewerPager> createState() => _LiveViewerPagerState();
+}
+
+class _LiveViewerPagerState extends State<LiveViewerPager> {
+  late final PageController _pageController;
+  final Map<int, ViewerRepositoryImpl> _repoCache = {};
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex.clamp(0, widget.items.length - 1);
+    _pageController = PageController(initialPage: _currentIndex);
+    // pre-warm current repo
+    _ensureRepoForIndex(_currentIndex);
+  }
+
+  @override
+  void dispose() {
+    for (final r in _repoCache.values) {
+      try {
+        r.dispose();
+      } catch (_) {}
+    }
+    _repoCache.clear();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  ViewerRepositoryImpl _ensureRepoForIndex(int idx) {
+    if (_repoCache.containsKey(idx)) return _repoCache[idx]!;
+    final item = widget.items[idx];
+    final repo = _buildRepositoryFromLiveItem(item);
+    _repoCache[idx] = repo;
+    return repo;
+  }
+
+  void _onPageChanged(int idx) {
+    if (!mounted) return;
+    setState(() => _currentIndex = idx);
+    _ensureRepoForIndex(idx);
+    // optional: dispose far away repos to conserve memory
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.items.length,
+        scrollDirection: Axis.vertical,
+        onPageChanged: _onPageChanged,
+        itemBuilder: (context, index) {
+          final repo = _ensureRepoForIndex(index);
+          // Each page is a BlocProvider + LiveViewerScreen so blocs are local per page.
+          return BlocProvider(
+            create: (_) => ViewerBloc(repo)..add(const ViewerStarted()),
+            child: LiveViewerScreen(repository: repo),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Helper to construct ViewerRepositoryImpl from a LiveItem using DI (sl)
+ViewerRepositoryImpl _buildRepositoryFromLiveItem(LiveItem item) {
+  final DioClient http = sl<DioClient>();
+  final PusherService pusher = sl<PusherService>();
+  final AuthLocalDataSource authLocalDataSource = sl<AuthLocalDataSource>();
+
+  return ViewerRepositoryImpl(
+    http: http,
+    pusher: pusher,
+    authLocalDataSource: authLocalDataSource,
+    livestreamParam: item.uuid ?? item.id.toString(),
+    livestreamIdNumeric: item.id,
+    channelName: item.channel ?? '',
+    hostUserUuid: item.hostUuid,
+    initialHost: HostInfo(
+      name: item.handle ?? 'Host',
+      title: item.title ?? '',
+      subtitle: '',
+      badge: 'Superstar',
+      avatarUrl: item.coverUrl ?? '',
+      isFollowed: false,
+    ),
+    startedAt: item.startedAt != null
+        ? DateTime.tryParse(item.startedAt!)
+        : null,
+  );
 }

@@ -1056,13 +1056,12 @@ class _LiveHostPageState extends State<LiveHostPage>
                         ),
                       ),
 
-                    // Chat overlay (stable wrapping + spacing)
-                    // Enhanced Chat overlay with input
+                    // Chat overlay - only show when chatVisible is true
                     if (state.chatVisible && !state.isPaused)
                       Positioned(
-                        left: 20,
-                        right: 20,
-                        bottom: 135,
+                        left: 12,
+                        right: 12,
+                        bottom: 140,
                         child: _HostChatWidget(
                           messages: state.messages,
                           onSendMessage: (text) {
@@ -1072,49 +1071,52 @@ class _LiveHostPageState extends State<LiveHostPage>
                           },
                         ),
                       ),
-                    // Bottom actions
+
+                    // Bottom actions - with chat toggle button
                     Positioned(
                       left: 0,
                       right: 0,
-                      bottom: 10,
-                      child: SafeArea(
-                        child: _BottomActions(
-                          isPaused: state.isPaused,
-                          onPause: () =>
-                              context.read<LiveHostBloc>().add(TogglePause()),
-                          onChatToggle: () => context.read<LiveHostBloc>().add(
-                            ToggleChatVisibility(),
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SafeArea(
+                          top: false,
+                          child: _BottomActions(
+                            isPaused: state.isPaused,
+                            onPause: () =>
+                                context.read<LiveHostBloc>().add(TogglePause()),
+                            onChatToggle: () => context
+                                .read<LiveHostBloc>()
+                                .add(ToggleChatVisibility()),
+                            onGifts: () {
+                              final tracker = sl<LiveSessionTracker>();
+                              final numericId = tracker.current!.livestreamId;
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      LiveGiftsPage(livestreamId: numericId),
+                                ),
+                              );
+                            },
+                            onViewers: () {
+                              final tracker = sl<LiveSessionTracker>();
+                              final numericId = tracker.current!.livestreamId;
+                              final restParam =
+                                  '${tracker.current!.livestreamId}';
+
+                              registerParticipantsScope(
+                                livestreamIdNumeric: numericId,
+                                livestreamParam: restParam,
+                              );
+
+                              Navigator.pushNamed(
+                                context,
+                                RouteNames.listViewers,
+                              );
+                            },
+                            onPremium: _showPremiumBottomSheet,
+                            onSettings: _toggleSettingsMenu,
                           ),
-                          onGifts: () {
-                            final tracker = sl<LiveSessionTracker>();
-                            final numericId = tracker.current!.livestreamId;
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    LiveGiftsPage(livestreamId: numericId),
-                              ),
-                            );
-                          },
-                          onViewers: () {
-                            final tracker = sl<LiveSessionTracker>();
-                            // Numeric for Pusher channels:
-                            final numericId = tracker.current!.livestreamId;
-                            // REST param — use uuid if you track it, else the same numeric id is fine:
-                            final restParam =
-                                '${tracker.current!.livestreamId}';
-
-                            registerParticipantsScope(
-                              livestreamIdNumeric: numericId,
-                              livestreamParam: restParam,
-                            );
-
-                            Navigator.pushNamed(
-                              context,
-                              RouteNames.listViewers,
-                            );
-                          },
-                          onPremium: _showPremiumBottomSheet,
-                          onSettings: _toggleSettingsMenu,
                         ),
                       ),
                     ),
@@ -1561,7 +1563,7 @@ class _BottomActions extends StatelessWidget {
   final VoidCallback onViewers;
   final VoidCallback onGifts;
   final VoidCallback onPremium;
-  final VoidCallback onSettings; // NEW
+  final VoidCallback onSettings;
 
   const _BottomActions({
     required this.isPaused,
@@ -1570,7 +1572,7 @@ class _BottomActions extends StatelessWidget {
     required this.onViewers,
     required this.onGifts,
     required this.onPremium,
-    required this.onSettings, // NEW
+    required this.onSettings,
   });
 
   Widget _item(
@@ -1578,29 +1580,41 @@ class _BottomActions extends StatelessWidget {
     String label,
     VoidCallback onTap, {
     bool isSettings = false,
+    bool isActive = false, // NEW: to show active state for chat
   }) {
     return InkWell(
       onTap: onTap,
       child: Column(
         children: [
           Container(
-            width: isSettings ? 44 : 48, // Slightly smaller for settings
+            width: isSettings ? 44 : 48,
             height: isSettings ? 44 : 48,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
+              color: isActive
+                  ? const Color(0xFFFF6A00).withOpacity(
+                      0.3,
+                    ) // Active state for chat
+                  : Colors.white.withOpacity(0.08),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              border: Border.all(
+                color: isActive
+                    ? const Color(0xFFFF6A00).withOpacity(0.6)
+                    : Colors.white.withOpacity(0.12),
+              ),
             ),
             child: Icon(
               icon,
-              color: Colors.white,
-              size: isSettings ? 20 : 24, // Slightly smaller icon for settings
+              color: isActive ? const Color(0xFFFF6A00) : Colors.white,
+              size: isSettings ? 20 : 24,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(
+              color: isActive ? const Color(0xFFFF6A00) : Colors.white,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -1609,50 +1623,66 @@ class _BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _item(Icons.chat_bubble_rounded, 'Chat', onChatToggle),
-          _item(Icons.visibility_rounded, 'Viewers', onViewers),
+    return BlocBuilder<LiveHostBloc, LiveHostState>(
+      buildWhen: (previous, current) =>
+          previous.chatVisible != current.chatVisible,
+      builder: (context, state) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _item(
+                state.chatVisible
+                    ? Icons.chat_bubble_rounded
+                    : Icons.chat_bubble_outline_rounded,
+                'Chat',
+                onChatToggle,
+                isActive:
+                    state.chatVisible, // Show active state when chat is visible
+              ),
+              _item(Icons.visibility_rounded, 'Viewers', onViewers),
 
-          InkWell(
-            onTap: onPause,
-            child: Column(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                    color: Colors.white24,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                    color: Colors.white,
-                    size: 36,
-                  ),
+              InkWell(
+                onTap: onPause,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: const BoxDecoration(
+                        color: Colors.white24,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isPaused
+                            ? Icons.play_arrow_rounded
+                            : Icons.pause_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      isPaused ? 'Resume' : 'Pause',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  isPaused ? 'Resume' : 'Pause',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ],
-            ),
+              ),
+
+              _item(Icons.card_giftcard_rounded, 'Gifts', onGifts),
+              _item(Icons.card_giftcard_rounded, 'Premiums', onPremium),
+              _item(
+                Icons.settings_rounded,
+                'Settings',
+                onSettings,
+                isSettings: true,
+              ),
+            ],
           ),
-
-          _item(Icons.card_giftcard_rounded, 'Gifts', onGifts),
-          _item(Icons.card_giftcard_rounded, 'Premiums', onPremium),
-          _item(
-            Icons.settings_rounded,
-            'Settings',
-            onSettings,
-            isSettings: true,
-          ), // NEW
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -2036,7 +2066,8 @@ class _HeaderBar extends StatelessWidget {
   }
 }
 
-/// ===== Enhanced Host Chat Widget =====
+/// Modern TikTok-style Host Chat Widget with Emoji Picker
+/// Modern TikTok-style Host Chat Widget with Emoji Picker - FIXED
 class _HostChatWidget extends StatefulWidget {
   final List<LiveChatMessage> messages;
   final Function(String) onSendMessage;
@@ -2050,7 +2081,24 @@ class _HostChatWidget extends StatefulWidget {
 class _HostChatWidgetState extends State<_HostChatWidget> {
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  bool _isAtTop = true;
   bool _showEmojiPicker = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    final isAtTop = _scrollController.position.pixels == 0;
+    if (isAtTop != _isAtTop) {
+      setState(() {
+        _isAtTop = isAtTop;
+      });
+    }
+  }
 
   void _sendMessage() {
     final text = _textController.text.trim();
@@ -2059,18 +2107,38 @@ class _HostChatWidgetState extends State<_HostChatWidget> {
       _textController.clear();
       _focusNode.unfocus();
       setState(() => _showEmojiPicker = false);
+
+      // Auto-scroll to bottom when new message is sent
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
     }
   }
 
   void _toggleEmojiPicker() {
     setState(() {
       _showEmojiPicker = !_showEmojiPicker;
-      if (_showEmojiPicker) {
-        _focusNode.unfocus();
-      } else {
-        _focusNode.requestFocus();
-      }
     });
+
+    if (_showEmojiPicker) {
+      // Close keyboard and show emoji picker
+      _focusNode.unfocus();
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          // Ensure we're still showing emoji picker
+          setState(() {});
+        }
+      });
+    } else {
+      // Hide emoji picker and focus on text field
+      _focusNode.requestFocus();
+    }
   }
 
   void _insertEmoji(String emoji) {
@@ -2082,6 +2150,18 @@ class _HostChatWidgetState extends State<_HostChatWidget> {
       baseOffset: selection.start + emoji.length,
       extentOffset: selection.start + emoji.length,
     );
+
+    // Keep focus on text field after inserting emoji
+    _focusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -2089,93 +2169,327 @@ class _HostChatWidgetState extends State<_HostChatWidget> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Chat messages list
-        _Glass(
-          radius: 18,
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-          child: _ChatList(messages: widget.messages),
+        // Chat messages list with modern design - FIXED: removed reverse: true
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 200, minWidth: 280),
+          child: Container(
+            width: 320,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Stack(
+                children: [
+                  // Chat messages - FIXED: Normal order (newest at bottom)
+                  ListView.separated(
+                    controller: _scrollController,
+                    reverse: false, // CHANGED: false to show newest at bottom
+                    shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: widget.messages.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 0),
+                    itemBuilder: (_, i) {
+                      final m = widget.messages[i];
+                      final isHost =
+                          m.handle ==
+                          'host'; // Adjust this condition based on your data structure
+                      return _ModernChatBubble(
+                        username: m.handle,
+                        text: m.text,
+                        isHost: isHost,
+                        isNew:
+                            i ==
+                            widget.messages.length -
+                                1, // CHANGED: Last message is newest
+                      );
+                    },
+                  ),
+
+                  // Fade effect only at the top and only when not at top
+                  if (!_isAtTop)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 60,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.1),
+                              Colors.transparent,
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
 
         const SizedBox(height: 8),
 
-        // Chat input area
-        _Glass(
-          radius: 24,
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Row(
+        // Modern comment bar with emoji picker
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                Colors.black.withOpacity(0.3),
+                Colors.black.withOpacity(0.6),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+          child: Column(
             children: [
-              // Emoji picker button
-              IconButton(
-                icon: Icon(
-                  _showEmojiPicker
-                      ? Icons.keyboard_rounded
-                      : Icons.emoji_emotions_rounded,
-                  color: Colors.white.withOpacity(0.7),
-                  size: 20,
+              // Emoji picker (conditional) - FIXED: Better positioning
+              if (_showEmojiPicker) ...[
+                _Glass(
+                  radius: 16,
+                  padding: const EdgeInsets.all(12),
+                  child: _EmojiGrid(onEmojiSelected: _insertEmoji),
                 ),
-                onPressed: _toggleEmojiPicker,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              ),
+                const SizedBox(height: 8),
+              ],
 
-              const SizedBox(width: 8),
-
-              // Text field
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  focusNode: _focusNode,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Send a message...',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              // Input row
+              Row(
+                children: [
+                  // Emoji picker button
+                  IconButton(
+                    icon: Icon(
+                      _showEmojiPicker
+                          ? Icons.keyboard_rounded
+                          : Icons.emoji_emotions_rounded,
+                      color: _showEmojiPicker
+                          ? const Color(0xFFFF6A00)
+                          : Colors.white.withOpacity(0.7),
+                      size: 20,
+                    ),
+                    onPressed: _toggleEmojiPicker,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
                   ),
-                  onSubmitted: (_) => _sendMessage(),
-                  maxLines: 1,
+
+                  const SizedBox(width: 8),
+
+                  // Text field
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        color: Colors.black.withOpacity(0.2),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.15),
+                          width: 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _textController,
+                                focusNode: _focusNode,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: 'Send a message...',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  isDense: true,
+                                ),
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) => _sendMessage(),
+                                onTap: () {
+                                  // Hide emoji picker when tapping text field
+                                  if (_showEmojiPicker) {
+                                    setState(() => _showEmojiPicker = false);
+                                  }
+                                },
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Send button
+                  GestureDetector(
+                    onTap: _sendMessage,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF6A00).withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Icon(
+                        Icons.send_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Modern chat bubble matching the live viewer style - UPDATED for correct order
+class _ModernChatBubble extends StatelessWidget {
+  final String username;
+  final String text;
+  final bool isHost;
+  final bool isNew;
+
+  const _ModernChatBubble({
+    required this.username,
+    required this.text,
+    this.isHost = false,
+    this.isNew = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      margin: EdgeInsets.only(left: isNew ? 0 : 8, right: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: isHost
+              ? const Color(0xFFFF6A00).withOpacity(0.25)
+              : Colors.black.withOpacity(
+                  1,
+                ), // CHANGED: Added slight background for better readability
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User indicator dot
+              Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 10, top: 8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isHost
+                      ? const Color(0xFFFF6A00)
+                      : const Color(0xFF29C3FF),
                 ),
               ),
 
-              const SizedBox(width: 8),
-
-              // Send button
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF6A00),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  color: Colors.white,
-                  onPressed: _sendMessage,
-                  padding: EdgeInsets.zero,
+              // Message content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Username
+                    Row(
+                      children: [
+                        Text(
+                          username,
+                          style: TextStyle(
+                            color: isHost
+                                ? const Color(0xFFFF6A00)
+                                : const Color(0xFF29C3FF),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        if (isHost) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF6A00).withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: const Color(0xFFFF6A00).withOpacity(0.6),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Text(
+                              'HOST',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (isNew) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFFF6A00),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Message text
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        height: 1.3,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-
-        // Emoji picker (conditional)
-        if (_showEmojiPicker) ...[
-          const SizedBox(height: 8),
-          _Glass(
-            radius: 16,
-            padding: const EdgeInsets.all(12),
-            child: _EmojiGrid(onEmojiSelected: _insertEmoji),
-          ),
-        ],
-      ],
+      ),
     );
-  }
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    _focusNode.dispose();
-    super.dispose();
   }
 }
 

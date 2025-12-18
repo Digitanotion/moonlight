@@ -200,7 +200,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
   // NEW: GET /api/v1/me  -> returns { data: UserResource }
   @override
   Future<Map<String, dynamic>> getMe() async {
-    final res = await dio.get('/api/v1/me');
+    final res = await dio.get('/api/v1/profile/me');
     final body = (res.data is Map<String, dynamic>)
         ? res.data as Map<String, dynamic>
         : const {};
