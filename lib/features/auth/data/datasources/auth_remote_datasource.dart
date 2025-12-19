@@ -47,7 +47,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<UserModel> fetchMe() async {
     final res = await client.get(
-      '${BaseUrl}/v1/me',
+      '${BaseUrl}/v1/profile/me',
     ); // Sanctum token already on interceptor
     final data = (res.data is Map && res.data['data'] is Map)
         ? Map<String, dynamic>.from(res.data['data'] as Map)
