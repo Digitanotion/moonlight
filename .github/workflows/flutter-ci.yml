@@ -49,7 +49,7 @@ jobs:
 
       # 🔑 IMPORTANT: Split ABI APKs
       - name: Build Release APK (Split ABI)
-        run: flutter build apk --release --split-per-abi --no-daemon
+        run: flutter build apk --release --split-per-abi
 
       # Upload ALL APKs
       - uses: actions/upload-artifact@v4
