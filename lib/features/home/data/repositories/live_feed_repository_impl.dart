@@ -33,4 +33,9 @@ class LiveFeedRepositoryImpl implements LiveFeedRepository {
   }) {
     return remote.payPremium(liveId: liveId, idempotencyKey: idempotencyKey);
   }
+
+  @override
+  Future<Map<String, dynamic>> checkPremiumStatus({required int liveId}) {
+    return remote.checkPremiumStatus(liveId: liveId);
+  }
 }

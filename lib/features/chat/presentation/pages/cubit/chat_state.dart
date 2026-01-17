@@ -1,6 +1,9 @@
 part of 'chat_cubit.dart';
 
-abstract class ChatState {}
+@immutable
+abstract class ChatState {
+  const ChatState();
+}
 
 class ChatInitial extends ChatState {}
 
@@ -8,17 +11,18 @@ class ChatLoading extends ChatState {}
 
 class ChatError extends ChatState {
   final String message;
-  ChatError(this.message);
+  String? uuid;
+  ChatError(this.message, this.uuid);
 }
 
 // Conversation states
 class ChatConversationsLoaded extends ChatState {
-  final List<Conversation> conversations;
+  final List<ChatConversations> conversations;
   ChatConversationsLoaded(this.conversations);
 }
 
 class ChatDirectConversationStarted extends ChatState {
-  final Conversation conversation;
+  final ChatConversations conversation;
   ChatDirectConversationStarted(this.conversation);
 }
 
@@ -42,6 +46,19 @@ class ChatMessagesLoaded extends ChatState {
   });
 }
 
+// UPDATED: Add messages to loading more state
+class ChatMessagesLoadingMore extends ChatState {
+  final List<Message> messages;
+  final bool hasMore;
+  final String conversationUuid;
+
+  ChatMessagesLoadingMore({
+    required this.messages,
+    required this.hasMore,
+    required this.conversationUuid,
+  });
+}
+
 class ChatUploadingMedia extends ChatState {}
 
 class ChatMessageSent extends ChatState {
@@ -54,8 +71,13 @@ class ChatMessageSent extends ChatState {
 class ChatMessageReceived extends ChatState {
   final List<Message> messages;
   final String conversationUuid;
+  final bool isFromCurrentUser;
 
-  ChatMessageReceived({required this.messages, required this.conversationUuid});
+  ChatMessageReceived({
+    required this.messages,
+    required this.conversationUuid,
+    this.isFromCurrentUser = false,
+  });
 }
 
 class ChatMessageUpdated extends ChatState {

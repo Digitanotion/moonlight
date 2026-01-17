@@ -1,4 +1,5 @@
 import 'package:bloc/bloc.dart';
+import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 import 'package:moonlight/core/network/error_parser.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
@@ -154,6 +155,29 @@ class ProfileCubit extends Cubit<ProfileState> {
     } catch (_) {
       // rollback on error
       emit(state.copyWith(user: user));
+    }
+  }
+
+  Future<void> blockUser({String? reason}) async {
+    final user = state.user;
+    if (user == null) return;
+
+    try {
+      await repo.blockUser(user.uuid, reason: reason);
+
+      // Success - no need to do anything here, UI will handle it
+    } catch (e) {
+      // Check if it's a 409 error (already blocked)
+      if (e is DioException && e.response?.statusCode == 409) {
+        // User is already blocked - this is not an error for the user
+        // We'll handle this in the UI with a specific message
+        // Don't emit an error state, just rethrow with a custom message
+        throw Exception('User is already blocked');
+      } else {
+        // For other errors, emit error state
+        emit(state.copyWith(error: apiErrorMessage(e)));
+        rethrow;
+      }
     }
   }
 }

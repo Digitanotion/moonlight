@@ -43,15 +43,31 @@ class SectionHeader extends StatelessWidget {
                   onTap: () async {
                     final selected = await showModalBottomSheet<String>(
                       context: context,
-                      backgroundColor: const Color(0xFF161616),
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(16),
+                      enableDrag: true,
+                      isScrollControlled: true, // Keep this
+                      backgroundColor:
+                          Colors.transparent, // Change to transparent
+                      builder: (context) => Scaffold(
+                        backgroundColor: Colors.transparent,
+                        body: DraggableScrollableSheet(
+                          initialChildSize: 0.8,
+                          minChildSize: 0.3,
+                          maxChildSize: 0.95,
+                          snap: true,
+                          builder: (context, scrollController) => Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF161616),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                            ),
+                            child: CountryPickerSheet(),
+                          ),
                         ),
                       ),
-                      builder: (_) => const CountryPickerSheet(),
                     );
-                    if (selected == null) return; // dismissed
+
+                    if (selected == null) return;
                     final isoOrNull = selected == '__ALL__' ? null : selected;
                     context.read<LiveFeedBloc>().add(
                       LiveFeedCountryChanged(isoOrNull),

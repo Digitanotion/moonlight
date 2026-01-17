@@ -1,3 +1,9 @@
+import 'dart:io';
+
+import 'package:moonlight/features/clubs/domain/entities/suggested_club.dart';
+import 'package:moonlight/features/clubs/domain/entities/club_profile.dart';
+import 'package:moonlight/features/clubs/domain/entities/user_search_result.dart';
+
 import '../../domain/entities/club.dart';
 import '../../domain/entities/club_member.dart';
 import '../../domain/repositories/clubs_repository.dart'
@@ -144,15 +150,63 @@ class ClubsRepositoryImpl implements ClubsRepository {
     String? description,
     bool isPrivate = false,
     String? coverImageUrl,
+    String? motto,
+    String? location,
   }) {
     return remote.createClub(
       body: {
         'name': name,
         if (description != null) 'description': description,
         if (coverImageUrl != null) 'cover_image_url': coverImageUrl,
+        if (motto != null) 'motto': motto,
+        if (location != null) 'location': location,
         'is_private': isPrivate,
       },
     );
+  }
+
+  @override
+  Future<ClubProfile> createClubMultipart({
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
+  }) async {
+    final data = await remote.createClubMultipart(
+      name: name,
+      description: description,
+      motto: motto,
+      location: location,
+      isPrivate: isPrivate,
+      coverImage: coverImage,
+    );
+
+    return ClubProfile.fromJson(data);
+  }
+
+  @override
+  Future<ClubProfile> updateClubMultipart({
+    required String club,
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
+  }) async {
+    final data = await remote.updateClubMultipart(
+      club: club,
+      name: name,
+      description: description,
+      motto: motto,
+      location: location,
+      isPrivate: isPrivate,
+      coverImage: coverImage,
+    );
+
+    return ClubProfile.fromJson(data);
   }
 
   @override
@@ -193,5 +247,48 @@ class ClubsRepositoryImpl implements ClubsRepository {
   @override
   Future<void> leaveClub(String club) {
     return remote.leaveClub(club: club);
+  }
+
+  @override
+  Future<List<SuggestedClub>> getSuggestedClubs() async {
+    final data = await remote.getSuggestedClubs();
+    return data.map((e) => SuggestedClub.fromJson(e)).toList();
+  }
+
+  @override
+  Future<Club> getClub(String club) async {
+    final data = await remote.getClub(club);
+    return data;
+  }
+
+  @override
+  Future<ClubProfile> getClubProfile(String club) async {
+    final data = await remote.getClubProfile(club);
+    return ClubProfile.fromJson(data);
+  }
+
+  @override
+  Future<List<UserSearchResult>> searchUsers(String query) async {
+    final data = await remote.searchUsers(query);
+    return data.map(UserSearchResult.fromJson).toList();
+  }
+
+  @override
+  Future<void> donateToClub({
+    required String club,
+    required int coins,
+    String? reason,
+    required String idempotencyKey,
+  }) {
+    return remote.donateToClub(
+      club: club,
+      coins: coins,
+      reason: reason,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+
+  Future<int> getMyBalance() async {
+    return remote.getMyBalance();
   }
 }

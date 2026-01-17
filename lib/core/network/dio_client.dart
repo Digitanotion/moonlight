@@ -73,6 +73,15 @@ class DioClient {
       ),
     );
 
+    dio.interceptors.add(
+      LogInterceptor(
+        request: true,
+        requestBody: true,
+        responseBody: true,
+        error: true,
+      ),
+    );
+
     // Optional: verbose logs (disable for release)
     // dio.interceptors.add(LogInterceptor(
     //   requestHeader: true,

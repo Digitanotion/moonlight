@@ -40,4 +40,19 @@ class ProfileRemoteDataSource {
         ? res.data as Map<String, dynamic>
         : jsonDecode(res.data as String) as Map<String, dynamic>;
   }
+
+  Future<Map<String, dynamic>> blockUser(String uuid, {String? reason}) async {
+    final body = <String, dynamic>{};
+    if (reason != null && reason.isNotEmpty) {
+      body['reason'] = reason;
+    }
+
+    final res = await http.dio.post(
+      '/api/v1/settings/blocked-users/$uuid/block',
+      data: body,
+    );
+    return res.data is Map
+        ? res.data as Map<String, dynamic>
+        : jsonDecode(res.data as String) as Map<String, dynamic>;
+  }
 }

@@ -41,5 +41,8 @@ abstract class ViewerRepository {
   // Broadcast stream for gift.sent events
   Stream<GiftBroadcast> watchGiftBroadcasts();
   Future<int?> fetchWalletBalance();
+
+  // bool get isMicMuted;
+  // bool get isCamMuted;
   void dispose();
 }

@@ -1,8 +1,10 @@
+// lib/features/live_viewer/presentation/bloc/viewer_state.dart - ENHANCED
 part of 'viewer_bloc.dart';
 
-enum ViewerStatus { initial, loading, active }
+enum ViewerStatus { initial, loading, active, reconnecting, ended, error }
 
 class ViewerState extends Equatable {
+  // ============ EXISTING FIELDS ============
   final ViewerStatus status;
   final Duration elapsed;
   final int viewers;
@@ -22,12 +24,10 @@ class ViewerState extends Equatable {
   final bool showGiftSheet;
   final List<GiftItem> giftCatalog;
   final String? giftCatalogVersion;
-  final int? walletBalanceCoins; // updated on send success
+  final int? walletBalanceCoins;
   final bool isSendingGift;
   final String? sendErrorMessage;
   final List<GiftBroadcast> giftOverlayQueue;
-
-  // New properties
   final String? errorMessage;
   final String? currentRole;
   final bool isRemoved;
@@ -38,7 +38,18 @@ class ViewerState extends Equatable {
   final bool shouldNavigateBack;
   final String? activeGuestUuid;
 
+  // ============ NEW FIELDS FOR REQUIREMENTS ============
+  final ViewMode viewMode;
+  final NetworkStatus networkStatus;
+  final GuestControlsState guestControls;
+  final bool isReconnecting;
+  final int reconnectAttempts;
+  final String? reconnectMessage;
+  final bool showReconnectOverlay;
+  final bool showNetworkStatus;
+
   const ViewerState({
+    // Existing fields with defaults
     required this.status,
     required this.elapsed,
     required this.viewers,
@@ -55,7 +66,13 @@ class ViewerState extends Equatable {
     this.isEnded = false,
     this.joinRequested = false,
     this.awaitingApproval = false,
-    // New properties with defaults
+    this.showGiftSheet = false,
+    this.giftCatalog = const [],
+    this.giftCatalogVersion,
+    this.walletBalanceCoins,
+    this.isSendingGift = false,
+    this.sendErrorMessage,
+    this.giftOverlayQueue = const [],
     this.errorMessage,
     this.currentRole = 'audience',
     this.isRemoved = false,
@@ -65,17 +82,26 @@ class ViewerState extends Equatable {
     this.showRemovalOverlay = false,
     this.shouldNavigateBack = false,
     this.activeGuestUuid,
-    this.showGiftSheet = false,
-    this.giftCatalog = const [],
-    this.giftCatalogVersion,
-    this.walletBalanceCoins,
-    this.isSendingGift = false,
-    this.sendErrorMessage,
-    this.giftOverlayQueue = const [],
+
+    // New fields with defaults
+    this.viewMode = ViewMode.viewer,
+    this.networkStatus = const NetworkStatus(
+      selfQuality: NetworkQuality.unknown,
+      hostQuality: NetworkQuality.unknown,
+      guestQuality: null,
+      isReconnecting: false,
+      reconnectAttempts: 0,
+      lastDisconnection: null,
+    ),
+    this.guestControls = const GuestControlsState(),
+    this.isReconnecting = false,
+    this.reconnectAttempts = 0,
+    this.reconnectMessage,
+    this.showReconnectOverlay = false,
+    this.showNetworkStatus = true,
   });
 
-  // Fixed initial method
-  static ViewerState initial() => const ViewerState(
+  static ViewerState initial() => ViewerState(
     status: ViewerStatus.initial,
     elapsed: Duration.zero,
     viewers: 0,
@@ -83,26 +109,25 @@ class ViewerState extends Equatable {
     shares: 0,
     chat: [],
     showChatUI: true,
-    // All new properties are initialized
-    errorMessage: null,
-    currentRole: 'audience',
-    isRemoved: false,
-    removalReason: null,
-    showRoleChangeToast: false,
-    roleChangeMessage: null,
-    showRemovalOverlay: false,
-    shouldNavigateBack: false,
-    activeGuestUuid: null,
-    showGiftSheet: false,
-    giftCatalog: const [],
-    giftCatalogVersion: null,
-    walletBalanceCoins: null,
-    isSendingGift: false,
-    sendErrorMessage: null,
-    giftOverlayQueue: const [],
+    // Initialize new fields
+    viewMode: ViewMode.viewer,
+    networkStatus: const NetworkStatus(
+      selfQuality: NetworkQuality.unknown,
+      hostQuality: NetworkQuality.unknown,
+      guestQuality: null,
+      isReconnecting: false,
+      reconnectAttempts: 0,
+      lastDisconnection: null,
+    ),
+    guestControls: const GuestControlsState(),
+    isReconnecting: false,
+    reconnectAttempts: 0,
+    showReconnectOverlay: false,
+    showNetworkStatus: true,
   );
 
   ViewerState copyWith({
+    // Existing fields
     ViewerStatus? status,
     Duration? elapsed,
     int? viewers,
@@ -119,7 +144,13 @@ class ViewerState extends Equatable {
     bool? isEnded,
     bool? joinRequested,
     bool? awaitingApproval,
-    // New properties
+    bool? showGiftSheet,
+    List<GiftItem>? giftCatalog,
+    String? giftCatalogVersion,
+    int? walletBalanceCoins,
+    bool? isSendingGift,
+    String? sendErrorMessage,
+    List<GiftBroadcast>? giftOverlayQueue,
     String? errorMessage,
     String? currentRole,
     bool? isRemoved,
@@ -129,13 +160,16 @@ class ViewerState extends Equatable {
     bool? showRemovalOverlay,
     bool? shouldNavigateBack,
     String? activeGuestUuid,
-    bool? showGiftSheet,
-    List<GiftItem>? giftCatalog,
-    String? giftCatalogVersion,
-    int? walletBalanceCoins,
-    bool? isSendingGift,
-    String? sendErrorMessage,
-    List<GiftBroadcast>? giftOverlayQueue,
+
+    // New fields
+    ViewMode? viewMode,
+    NetworkStatus? networkStatus,
+    GuestControlsState? guestControls,
+    bool? isReconnecting,
+    int? reconnectAttempts,
+    String? reconnectMessage,
+    bool? showReconnectOverlay,
+    bool? showNetworkStatus,
   }) {
     return ViewerState(
       status: status ?? this.status,
@@ -154,7 +188,13 @@ class ViewerState extends Equatable {
       isEnded: isEnded ?? this.isEnded,
       joinRequested: joinRequested ?? this.joinRequested,
       awaitingApproval: awaitingApproval ?? this.awaitingApproval,
-      // New properties
+      showGiftSheet: showGiftSheet ?? this.showGiftSheet,
+      giftCatalog: giftCatalog ?? this.giftCatalog,
+      giftCatalogVersion: giftCatalogVersion ?? this.giftCatalogVersion,
+      walletBalanceCoins: walletBalanceCoins ?? this.walletBalanceCoins,
+      isSendingGift: isSendingGift ?? this.isSendingGift,
+      sendErrorMessage: sendErrorMessage ?? this.sendErrorMessage,
+      giftOverlayQueue: giftOverlayQueue ?? this.giftOverlayQueue,
       errorMessage: errorMessage ?? this.errorMessage,
       currentRole: currentRole ?? this.currentRole,
       isRemoved: isRemoved ?? this.isRemoved,
@@ -164,18 +204,22 @@ class ViewerState extends Equatable {
       showRemovalOverlay: showRemovalOverlay ?? this.showRemovalOverlay,
       shouldNavigateBack: shouldNavigateBack ?? this.shouldNavigateBack,
       activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
-      showGiftSheet: showGiftSheet ?? this.showGiftSheet,
-      giftCatalog: giftCatalog ?? this.giftCatalog,
-      giftCatalogVersion: giftCatalogVersion ?? this.giftCatalogVersion,
-      walletBalanceCoins: walletBalanceCoins ?? this.walletBalanceCoins,
-      isSendingGift: isSendingGift ?? this.isSendingGift,
-      sendErrorMessage: sendErrorMessage ?? this.sendErrorMessage,
-      giftOverlayQueue: giftOverlayQueue ?? this.giftOverlayQueue,
+
+      // New fields
+      viewMode: viewMode ?? this.viewMode,
+      networkStatus: networkStatus ?? this.networkStatus,
+      guestControls: guestControls ?? this.guestControls,
+      isReconnecting: isReconnecting ?? this.isReconnecting,
+      reconnectAttempts: reconnectAttempts ?? this.reconnectAttempts,
+      reconnectMessage: reconnectMessage ?? this.reconnectMessage,
+      showReconnectOverlay: showReconnectOverlay ?? this.showReconnectOverlay,
+      showNetworkStatus: showNetworkStatus ?? this.showNetworkStatus,
     );
   }
 
   @override
   List<Object?> get props => [
+    // Existing props
     status,
     elapsed,
     viewers,
@@ -192,7 +236,13 @@ class ViewerState extends Equatable {
     isEnded,
     joinRequested,
     awaitingApproval,
-    // New properties
+    showGiftSheet,
+    giftCatalog,
+    giftCatalogVersion,
+    walletBalanceCoins,
+    isSendingGift,
+    sendErrorMessage,
+    giftOverlayQueue,
     errorMessage,
     currentRole,
     isRemoved,
@@ -202,12 +252,15 @@ class ViewerState extends Equatable {
     showRemovalOverlay,
     shouldNavigateBack,
     activeGuestUuid,
-    showGiftSheet,
-    giftCatalog,
-    giftCatalogVersion,
-    walletBalanceCoins,
-    isSendingGift,
-    sendErrorMessage,
-    giftOverlayQueue,
+
+    // New props
+    viewMode,
+    networkStatus,
+    guestControls,
+    isReconnecting,
+    reconnectAttempts,
+    reconnectMessage,
+    showReconnectOverlay,
+    showNetworkStatus,
   ];
 }

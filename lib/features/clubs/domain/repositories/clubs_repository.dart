@@ -1,6 +1,11 @@
 // In clubs_repository.dart - update method signatures
+import 'dart:io';
+
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
 import 'package:moonlight/features/clubs/domain/entities/club_member.dart';
+import 'package:moonlight/features/clubs/domain/entities/suggested_club.dart';
+import 'package:moonlight/features/clubs/domain/entities/club_profile.dart';
+import 'package:moonlight/features/clubs/domain/entities/user_search_result.dart';
 
 abstract class ClubsRepository {
   /// Profile → My Clubs
@@ -42,6 +47,27 @@ abstract class ClubsRepository {
     String? description,
     bool isPrivate = false, // Add default value
     String? coverImageUrl,
+    String? motto,
+    String? location,
+  });
+
+  Future<ClubProfile> createClubMultipart({
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
+  });
+
+  Future<ClubProfile> updateClubMultipart({
+    required String club,
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
   });
 
   Future<void> updateClub({
@@ -59,5 +85,19 @@ abstract class ClubsRepository {
 
   /// Join / Leave
   Future<void> joinClub(String club);
+  Future<Club> getClub(String club);
   Future<void> leaveClub(String club);
+
+  /// Suggested
+  Future<List<SuggestedClub>> getSuggestedClubs();
+  Future<ClubProfile> getClubProfile(String club);
+  Future<List<UserSearchResult>> searchUsers(String query);
+  Future<void> donateToClub({
+    required String club,
+    required int coins,
+    String? reason,
+    required String idempotencyKey,
+  });
+
+  Future<int> getMyBalance();
 }

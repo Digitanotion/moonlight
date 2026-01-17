@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
-
+import 'package:moonlight/features/settings/presentation/widgets/delete_account_flow.dart';
 import 'package:moonlight/widgets/ml_confirm_dialog.dart';
+
+// Import new pages
+import 'package:moonlight/features/settings/presentation/pages/blocked_users_page.dart';
+import 'package:moonlight/features/settings/presentation/pages/change_email_page.dart';
+import 'package:moonlight/features/settings/presentation/pages/change_username_page.dart';
+import 'package:moonlight/features/wallet/presentation/pages/reset_pin_page.dart';
 
 class AccountSettingsPage extends StatelessWidget {
   const AccountSettingsPage({super.key});
@@ -19,21 +26,31 @@ class AccountSettingsPage extends StatelessWidget {
     return BlocConsumer<AccountSettingsCubit, AccountSettingsState>(
       listener: (context, state) {
         if (state.status == SettingsStatus.failure && state.error != null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.error!)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: Colors.redAccent,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        if (state.status == SettingsStatus.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Settings updated successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
         }
         if (state.status == SettingsStatus.deleted) {
-          // Wipe local and bounce to auth or onboarding as you already do in logout()
-          // Call your existing Logout usecase/Bloc if you prefer.
-          Navigator.of(context).pop(); // close page
+          Navigator.of(context).pop();
         }
       },
       builder: (context, state) {
         final cubit = context.read<AccountSettingsCubit>();
         return Scaffold(
-          backgroundColor: const Color.fromARGB(255, 8, 8, 67),
-          // your deep gradient bg already used
+          backgroundColor: const Color(0xFF060522),
           appBar: AppBar(
             elevation: 0,
             backgroundColor: AppColors.primary,
@@ -67,14 +84,22 @@ class AccountSettingsPage extends StatelessWidget {
                         icon: Icons.email_rounded,
                         title: 'Change Email',
                         onTap: () {
-                          /* TODO */
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const ChangeEmailPage(),
+                            ),
+                          );
                         },
                       ),
                       _NavTile(
-                        icon: Icons.lock_rounded,
-                        title: 'Change Password',
+                        icon: Icons.alternate_email_rounded,
+                        title: 'Change @Username',
                         onTap: () {
-                          /* TODO */
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const ChangeUsernamePage(),
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -83,26 +108,14 @@ class AccountSettingsPage extends StatelessWidget {
                     title: 'Privacy Settings',
                     children: [
                       _NavTile(
-                        icon: Icons.chat_bubble_rounded,
-                        title: 'Who Can Message You',
-                        trailingText: 'Everyone',
-                        onTap: () {
-                          /* TODO */
-                        },
-                      ),
-                      _NavTile(
-                        icon: Icons.visibility_rounded,
-                        title: 'Who Can See My Profile',
-                        trailingText: 'Everyone',
-                        onTap: () {
-                          /* TODO */
-                        },
-                      ),
-                      _NavTile(
                         icon: Icons.block_rounded,
                         title: 'Blocked Users',
                         onTap: () {
-                          /* TODO */
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const BlockedUsersPage(),
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -118,21 +131,9 @@ class AccountSettingsPage extends StatelessWidget {
                       ),
                       _SwitchTile(
                         icon: Icons.mark_email_read_rounded,
-                        title: 'Email Notifications',
+                        title: 'General Notifications',
                         value: state.emailEnabled,
                         onChanged: cubit.toggleEmail,
-                      ),
-                      _SwitchTile(
-                        icon: Icons.live_tv_rounded,
-                        title: 'Livestream Alerts',
-                        value: state.liveAlertsEnabled,
-                        onChanged: cubit.toggleLiveAlerts,
-                      ),
-                      _SwitchTile(
-                        icon: Icons.card_giftcard_rounded,
-                        title: 'Gift/Tip Received Alerts',
-                        value: state.giftAlertsEnabled,
-                        onChanged: cubit.toggleGiftAlerts,
                       ),
                     ],
                   ),
@@ -140,10 +141,21 @@ class AccountSettingsPage extends StatelessWidget {
                     title: 'Security',
                     children: [
                       _NavTile(
-                        icon: Icons.pin_rounded,
-                        title: 'Reset PIN',
+                        icon: Icons.lock_reset_rounded,
+                        title: 'Set New Wallet PIN',
                         onTap: () {
-                          /* TODO */
+                          Navigator.of(context).pushNamed(RouteNames.setNewPin);
+                        },
+                      ),
+                      _NavTile(
+                        icon: Icons.password_rounded,
+                        title: 'Reset Wallet PIN',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const ResetPinPage(),
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -151,66 +163,22 @@ class AccountSettingsPage extends StatelessWidget {
                   _Section(
                     title: 'Account Management',
                     children: [
-                      _SwitchTile(
-                        icon: Icons.pause_rounded,
-                        title: 'Deactivate Account',
-                        value: state.isDeactivated,
-                        onChanged: (v) {
-                          if (v) {
-                            showDialog(
-                              context: context,
-                              builder: (_) => MLConfirmDialog(
-                                icon: Icons.person_off_rounded,
-                                title: 'Deactivate account?',
-                                message:
-                                    "You can reactivate later by logging in again.",
-                                confirmText: 'Deactivate',
-                                confirmColor: const Color(0xFF6B7280),
-                                onConfirm: () => cubit.performDeactivate(),
-                              ),
-                            );
-                          } else {
-                            cubit.performReactivate();
-                          }
-                        },
-                      ),
-                      // Danger zone
                       Container(
-                        decoration: _tileBoxDecoration,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 6,
-                          ),
-                          leading: const Icon(
-                            Icons.delete_forever_rounded,
-                            color: Color(0xFFFF6B6B),
-                          ),
-                          title: const Text(
-                            'Delete My Account',
-                            style: TextStyle(
-                              color: Color(0xFFFF6B6B),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          trailing: const Icon(
-                            Icons.chevron_right_rounded,
-                            color: Color(0xFFFF6B6B),
-                          ),
+                        // decoration: _tileBoxDecoration,
+                        child: // In AccountSettingsPage widget, update the delete tile:
+                        _NavTile(
+                          icon: Icons.delete_forever_rounded,
+                          title: 'Delete My Account',
                           onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (_) => MLConfirmDialog(
-                                icon: Icons.person_rounded,
-                                title: 'Permanently delete account?',
-                                message:
-                                    "This action cannot be undone. You’ll lose all posts, coins, and club memberships.",
-                                confirmText: 'Delete account',
-                                confirmColor: const Color(0xFFE24D4D),
-                                onConfirm: () => cubit.performDelete(),
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => DeleteAccountFlow(),
                               ),
                             );
                           },
+                          trailingText: state.hasPendingDeletion
+                              ? 'Scheduled (${state.daysRemaining}d)'
+                              : null,
                         ),
                       ),
                     ],
@@ -230,7 +198,7 @@ class AccountSettingsPage extends StatelessWidget {
   }
 }
 
-// ----- Private UI helpers to match your visual style -----
+// ----- Private UI helpers -----
 
 final _cardDecoration = BoxDecoration(
   color: AppColors.textWhite.withOpacity(0.2),
@@ -238,7 +206,7 @@ final _cardDecoration = BoxDecoration(
 );
 
 final _tileBoxDecoration = BoxDecoration(
-  color: const Color.fromARGB(255, 195, 0, 0).withOpacity(0),
+  color: const Color(0xFF1A1A2E).withOpacity(0.6),
   borderRadius: BorderRadius.circular(14),
 );
 
@@ -299,7 +267,6 @@ class _NavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: _tileBoxDecoration,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: ListTile(
         leading: Icon(icon, color: Colors.white),
@@ -348,7 +315,7 @@ class _SwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: _tileBoxDecoration,
+      // decoration: _tileBoxDecoration,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: ListTile(
         leading: Icon(icon, color: Colors.white),

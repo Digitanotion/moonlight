@@ -8,6 +8,7 @@ import 'package:moonlight/features/home/presentation/widgets/bottom_nav.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_category.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/go_live_state.dart';
+import 'package:moonlight/features/livestream/presentation/widgets/searchable_category_dropdown.dart';
 import '../../../../core/ui/ui_kit.dart';
 
 class GoLiveScreen extends StatefulWidget {
@@ -19,32 +20,33 @@ class GoLiveScreen extends StatefulWidget {
 
 class _GoLiveScreenState extends State<GoLiveScreen> {
   late final GoLiveCubit cubit;
-  int _currentIndex = 0;
+  // int _currentIndex = 0;
+  // int get _navIndex => 1; // Go Live index (fixed)
 
-  void _onTabSelected(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+  // void _onTabSelected(int index) {
+  //   setState(() {
+  //     _currentIndex = index;
+  //   });
 
-    // Handle tab navigation logic here
-    switch (index) {
-      case 0:
-        // Navigate to Home tab content (already here)
-        break;
-      case 1:
-        // Navigate to Go Live page
-        break;
-      case 2:
-        // Navigate to Post creation page
-        break;
-      case 3:
-        // Navigate to Clubs page
-        break;
-      case 4:
-        // Navigate to Profile page
-        break;
-    }
-  }
+  //   // Handle tab navigation logic here
+  //   switch (index) {
+  //     case 0:
+  //       // Navigate to Home tab content (already here)
+  //       break;
+  //     case 1:
+  //       // Navigate to Go Live page
+  //       break;
+  //     case 2:
+  //       // Navigate to Post creation page
+  //       break;
+  //     case 3:
+  //       // Navigate to Clubs page
+  //       break;
+  //     case 4:
+  //       // Navigate to Profile page
+  //       break;
+  //   }
+  // }
 
   @override
   void initState() {
@@ -59,10 +61,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
       child: Scaffold(
         extendBody: true,
         backgroundColor: Colors.transparent,
-        bottomNavigationBar: HomeBottomNav(
-          currentIndex: _currentIndex,
-          onTap: _onTabSelected,
-        ),
+
         body: Container(
           decoration: gradientBg(),
           child: SafeArea(
@@ -230,20 +229,12 @@ class _CategoryDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.select((GoLiveCubit c) => c.state);
-    return DropdownButtonFormField<LiveCategory>(
+    return SearchableCategoryDropdown(
       value: state.category,
-      items: state.categories
-          .map(
-            (c) => DropdownMenuItem(
-              value: c,
-              child: Text(c.name, style: const TextStyle(color: Colors.white)),
-            ),
-          )
-          .toList(),
-      onChanged: context.read<GoLiveCubit>().setCategory,
-      dropdownColor: AppColors.cardDark,
-      iconEnabledColor: Colors.white,
-      decoration: inputDecoration('Select category'),
+      onChanged: (category) {
+        context.read<GoLiveCubit>().setCategory(category);
+      },
+      hintText: 'Select category',
     );
   }
 }

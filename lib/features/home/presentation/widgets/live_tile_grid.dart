@@ -49,14 +49,63 @@ class LiveTileGrid extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
+
+      // In LiveTileGrid onTap method:
       onTap: () {
+        // Create arguments with ALL required data including premium info
+        final args = {
+          'id': item.id,
+          'uuid': item.uuid,
+          'channel': item.channel ?? '',
+          'hostUuid': item.hostUuid,
+          'hostName': (item.handle ?? '').replaceFirst('@', ''),
+          'hostAvatar': item.coverUrl,
+          'title': item.title,
+          'startedAt': item.startedAt,
+          'role': item.role,
+          'isPremium': item.isPremium ?? 0,
+          'premiumFee': item.premiumFee ?? 0,
+          'livestreamId': item.uuid,
+          'livestreamIdNumeric': item.id,
+        };
+
+        debugPrint('=== LIVETILEGRID DEBUG ===');
+        debugPrint('Navigating with args: $args');
+        debugPrint('isPremium value: ${item.isPremium}');
+        debugPrint('premiumFee value: ${item.premiumFee}');
+        debugPrint('channel: ${item.channel}');
+        debugPrint('===========================');
+
         // If caller provided items + index, open the vertical pager.
         if (items != null && index != null) {
+          // Pass arguments for all items, not just the current one
+          final allArgs = List<Map<String, dynamic>>.generate(items!.length, (
+            i,
+          ) {
+            final currentItem = items![i];
+            return {
+              'id': currentItem.id,
+              'uuid': currentItem.uuid,
+              'channel': currentItem.channel ?? '',
+              'hostUuid': currentItem.hostUuid,
+              'hostName': (currentItem.handle ?? '').replaceFirst('@', ''),
+              'hostAvatar': currentItem.coverUrl,
+              'title': currentItem.title,
+              'startedAt': currentItem.startedAt,
+              'role': currentItem.role,
+              'isPremium': currentItem.isPremium ?? 0,
+              'premiumFee': currentItem.premiumFee ?? 0,
+              'livestreamId': currentItem.uuid,
+              'livestreamIdNumeric': currentItem.id,
+            };
+          });
+
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => pager_show.LiveViewerPager(
                 items: items!,
                 initialIndex: index!,
+                allArgs: allArgs, // Pass all arguments
               ),
               fullscreenDialog: true,
             ),
@@ -64,24 +113,8 @@ class LiveTileGrid extends StatelessWidget {
           return;
         }
 
-        // Fallback: navigate to single viewer route (legacy behaviour)
-        Navigator.of(context).pushNamed(
-          RouteNames.liveViewer,
-          arguments: {
-            'id': item.id, // REQUIRED numeric for Pusher
-            'uuid': item.uuid, // REST path (uuid or numeric ok)
-            'channel': item.channel ?? '',
-            'hostUuid': item.hostUuid,
-            'hostName': (item.handle ?? '').replaceFirst('@', ''),
-            'hostAvatar': item.coverUrl,
-            'title': item.title,
-            'startedAt': item.startedAt,
-            'role': item.role,
-            // premium metadata so viewer can show overlay and payment CTA
-            'isPremium': item.isPremium, // note: int (1 or 0)
-            'premiumFee': item.premiumFee,
-          },
-        );
+        // Make sure we're passing arguments correctly
+        Navigator.of(context).pushNamed(RouteNames.liveViewer, arguments: args);
       },
       child: Container(
         decoration: BoxDecoration(

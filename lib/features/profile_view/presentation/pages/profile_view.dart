@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -11,6 +12,7 @@ import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
 class ProfileViewPage extends StatefulWidget {
@@ -25,6 +27,10 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
   String? _userUuid;
 
   final _scroll = ScrollController();
+  // Add a GlobalKey for the navigator
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -49,6 +55,216 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
     final p = _scroll.position;
     if (p.pixels > p.maxScrollExtent * 0.75) {
       context.read<ProfileCubit>().loadMore(_userUuid!);
+    }
+  }
+
+  void _showBlockConfirmationDialog(BuildContext context) {
+    final cubit = context.read<ProfileCubit>();
+    final user = cubit.state.user;
+    if (user == null) return;
+
+    String? selectedReason;
+    final reasons = [
+      'Harassment or bullying',
+      'Inappropriate content',
+      'Spam',
+      'Impersonation',
+      'Other',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1B2153),
+            surfaceTintColor: Colors.transparent,
+            title: Text(
+              'Block User',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Are you sure you want to block ${user.fullName}?',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Select a reason (optional):',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                ...reasons.map((reason) {
+                  return RadioListTile<String>(
+                    title: Text(
+                      reason,
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    value: reason,
+                    groupValue: selectedReason,
+                    onChanged: (value) {
+                      setState(() => selectedReason = value);
+                    },
+                    activeColor: const Color(0xFFFF7A00),
+                    contentPadding: EdgeInsets.zero,
+                  );
+                }).toList(),
+                const SizedBox(height: 8),
+                TextFormField(
+                  style: TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Other reason...',
+                    hintStyle: TextStyle(color: Colors.white54),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.white30),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.white30),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    if (value.isNotEmpty) {
+                      selectedReason = value;
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel', style: TextStyle(color: Colors.white70)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await _performBlock(
+                    context,
+                    cubit,
+                    user.uuid,
+                    reason: selectedReason,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Block User'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _performBlock(
+    BuildContext context,
+    ProfileCubit cubit,
+    String userUuid, {
+    String? reason,
+  }) async {
+    // Get references BEFORE any async operation
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    // Show loading dialog
+    final dialogFuture = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: Dialog(
+          backgroundColor: Colors.black.withOpacity(0.8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Colors.orange),
+                SizedBox(height: 16),
+                Text('Blocking user...', style: TextStyle(color: Colors.white)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Track results
+    String? resultMessage;
+    Color? snackbarColor;
+    bool shouldNavigateBack = false;
+
+    try {
+      await cubit.blockUser(reason: reason);
+      resultMessage = 'User blocked successfully';
+      snackbarColor = Colors.green;
+      shouldNavigateBack = false;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        resultMessage = 'User is already blocked';
+        snackbarColor = Colors.orange;
+        shouldNavigateBack = false;
+      } else {
+        resultMessage = 'Failed to block user: ${e.message}';
+        snackbarColor = Colors.red;
+      }
+    } catch (e) {
+      final errorMessage = e.toString();
+      if (errorMessage.contains('already blocked')) {
+        resultMessage = 'User is already blocked';
+        snackbarColor = Colors.orange;
+        shouldNavigateBack = false;
+      } else {
+        resultMessage = 'Failed to block user: $errorMessage';
+        snackbarColor = Colors.red;
+      }
+    }
+
+    // Close the loading dialog
+    navigator.pop();
+
+    // Wait for dialog to close completely
+    await dialogFuture;
+
+    // Small delay to ensure everything is settled
+    await Future.delayed(Duration(milliseconds: 50));
+
+    // Show snackbar using the stored scaffoldMessenger
+    if (resultMessage != null) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(resultMessage!),
+          backgroundColor: snackbarColor,
+          duration: Duration(seconds: 2),
+          action: SnackBarAction(
+            label: 'OK',
+            onPressed: () {
+              scaffoldMessenger.hideCurrentSnackBar();
+            },
+          ),
+        ),
+      );
+
+      // Navigate back if needed
+      if (shouldNavigateBack) {
+        await Future.delayed(Duration(milliseconds: 1500));
+        if (mounted) {
+          navigator.pop();
+        }
+      }
     }
   }
 
@@ -87,9 +303,41 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                       onPressed: () => Navigator.maybePop(context),
                     ),
                     actions: [
-                      IconButton(
+                      PopupMenuButton<String>(
                         icon: const Icon(Icons.more_horiz, color: Colors.white),
-                        onPressed: () {},
+                        onSelected: (value) {
+                          if (value == 'block') {
+                            _showBlockConfirmationDialog(context);
+                          } else if (value == 'report') {
+                            // Handle report if needed
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem<String>(
+                            value: 'block',
+                            child: Row(
+                              children: [
+                                Icon(Icons.block, color: Colors.red, size: 20),
+                                SizedBox(width: 8),
+                                Text('Block User'),
+                              ],
+                            ),
+                          ),
+                          // const PopupMenuItem<String>(
+                          //   value: 'report',
+                          //   child: Row(
+                          //     children: [
+                          //       Icon(
+                          //         Icons.report,
+                          //         color: Colors.orange,
+                          //         size: 20,
+                          //       ),
+                          //       SizedBox(width: 8),
+                          //       Text('Report'),
+                          //     ],
+                          //   ),
+                          // ),
+                        ],
                       ),
                     ],
                   ),
@@ -274,12 +522,8 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
 
   void _startConversation(BuildContext context, String targetUserUuid) async {
     if (targetUserUuid.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to start conversation'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      TopSnack.error(context, 'Unable to start conversation');
+
       return;
     }
 

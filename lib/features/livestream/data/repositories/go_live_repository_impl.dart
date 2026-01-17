@@ -12,14 +12,20 @@ class GoLiveRepositoryImpl implements GoLiveRepository {
 
   GoLiveRepositoryImpl(this._client);
 
+  // @override
+  // Future<List<LiveCategory>> fetchCategories() async {
+  //   final res = await _client.dio.get('/api/v1/live/categories');
+  //   final data = (res.data as List).cast<dynamic>();
+  //   return data
+  //       .map((e) => CategoryDto.fromJson(Map<String, dynamic>.from(e)))
+  //       .map((d) => LiveCategory(id: d.id, name: d.name))
+  //       .toList();
+  // }
+
   @override
   Future<List<LiveCategory>> fetchCategories() async {
-    final res = await _client.dio.get('/api/v1/live/categories');
-    final data = (res.data as List).cast<dynamic>();
-    return data
-        .map((e) => CategoryDto.fromJson(Map<String, dynamic>.from(e)))
-        .map((d) => LiveCategory(id: d.id, name: d.name))
-        .toList();
+    // Return hardcoded categories instead of API call
+    return Future.value(kLiveCategories);
   }
 
   @override
@@ -36,11 +42,11 @@ class GoLiveRepositoryImpl implements GoLiveRepository {
       '/api/v1/live/preview',
       queryParameters: {
         if (title != null) 'title': title,
-        if (category != null) 'category_id': category.id,
-        'premium': premium,
-        'allow_guestbox': allowGuestBox,
-        'comments': comments,
-        'show_count': showCount,
+        if (category != null) 'category_id': category.id.toString(),
+        'premium': 0,
+        'allow_guestbox': 0,
+        'comments': 1,
+        'show_count': 1,
       },
     );
     final dto = PreviewDto.fromJson(Map<String, dynamic>.from(res.data));

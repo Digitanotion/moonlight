@@ -67,15 +67,29 @@ class _LiveNowSectionState extends State<LiveNowSection> {
                 // Reuse the same country sheet UX your SectionHeader uses:
                 final selected = await showModalBottomSheet<String>(
                   context: context,
-                  backgroundColor: const Color(0xFF161616),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(16),
+                  enableDrag: true,
+                  isScrollControlled: true, // Keep this
+                  backgroundColor: Colors.transparent, // Change to transparent
+                  builder: (context) => Scaffold(
+                    backgroundColor: Colors.transparent,
+                    body: DraggableScrollableSheet(
+                      initialChildSize: 0.8,
+                      minChildSize: 0.3,
+                      maxChildSize: 0.95,
+                      snap: true,
+                      builder: (context, scrollController) => Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161616),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        child: CountryPickerSheet(),
+                      ),
                     ),
                   ),
-                  builder: (_) =>
-                      const CountryPickerSheet(), // this is defined in section_header.dart
                 );
+
                 if (selected == null) return; // dismissed
                 final isoOrNull = selected == '__ALL__' ? null : selected;
                 context.read<LiveFeedBloc>().add(
@@ -121,6 +135,7 @@ class _LiveNowSectionState extends State<LiveNowSection> {
                 onRefresh: _onRefresh,
                 child: GridView.builder(
                   controller: _ctrl,
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: cols,

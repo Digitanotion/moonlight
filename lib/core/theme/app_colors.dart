@@ -5,6 +5,9 @@ class AppColors {
   static const Color primary_2 = Color.fromARGB(255, 17, 17, 165);
   static const Color secondary = Color(0xFFFF6A00);
   static const Color green = Color(0xFF55DCE35);
+  static const Color cardDark = Color(0xFF1E1E2E);
+  static const Color divider = Color(0xFF2D2D3D);
+  static const Color textSecondary = Color(0xFF94A3B8);
   static const Color background = Color(0xFFFFFFFF);
   static const Color textWhite = Color(0xFFFFFFFF);
   // static const Color textPrimary = Color.fromARGB(255, 214, 214, 214);
@@ -17,14 +20,12 @@ class AppColors {
   static const bgBottom = Color(0xFF060A1E); // near-black blue
 
   static const card = Color(0xFF0F1630);
-  static const cardDark = Color(0xFF0B1226);
 
   static const primary_ = Color(0xFFFF5B2E); // orange
   static const primary2 = Color(0xFFFF7A3D); // orange light
 
   static const accentGreen = Color(0xFF31D377);
   static const textPrimary = Colors.white;
-  static const textSecondary = Color(0xFFB7C0D9);
   // static const divider = Color(0xFF1D2646);
   static const Color navy = Color(
     0xFF07133A,
@@ -37,7 +38,6 @@ class AppColors {
   ); // dark card surface under photo
   static const Color onSurface = Color(0xFFE8ECF6);
   static const Color secondaryText = Color(0xFF98A2B3);
-  static const Color divider = Color(0xFF1E2438);
   static const Color success = Color(0xFF31D873); // green pill (Superstar)
   static const Color warning = Color(0xFFFFC107); // badge dot
   static const Color like = Color(0xFFFF5A5F);

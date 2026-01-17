@@ -35,6 +35,21 @@ class RouteNames {
   static const clubs = '/clubs';
   static const String chat = '/chat';
   static const String conversations = '/conversations';
-
+  static const clubProfile = '/club-profile';
+  static const createClub = '/create-club';
+  static const updateClub = '/edit-club';
+  static const clubMembers = '/clubs/members';
+  static const clubIncome = '/clubs/income';
+  static const suggestedClubs = '/suggested-clubs';
+  static const myClubs = '/my-clubs';
+  static const discoverClubs = '/discover-clubs';
+  static const editClub = '/edit-club';
+  static const supportClub = '/support-club';
+  static const String blockedUsers = '/blocked-users';
+  static const String changeEmail = '/change-email';
+  static const String changeUsername = '/change-username';
+  static const String setNewPin = '/set-new-pin';
+  static const String resetPin = '/reset-pin';
+  static const String liveViewerEnhanced = '/live-viewer-enhanced';
   // static const transactionReceipt = '/transactionReceipt';
 }

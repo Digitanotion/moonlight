@@ -15,7 +15,7 @@ abstract class LiveSessionRepository {
 
   // NEW
   Stream<GiftEvent> giftsStream();
-  Stream<void> endedStream();
+  Stream<bool> endedStream();
   Stream<JoinHandled> joinHandledStream();
   Stream<String?> activeGuestUuidStream();
 
@@ -39,14 +39,19 @@ abstract class LiveSessionRepository {
   Future<PremiumStatusModel> activatePremium({
     required int livestreamId,
     required String packageId,
+    required String packageName,
+    required String coins,
     String? idempotencyKey,
   });
   Future<PremiumStatusModel> cancelPremium({
     required int livestreamId,
     String? idempotencyKey,
   });
+
+  Future<void> restartStreams();
   Stream<PremiumStatusModel>
   premiumStatusStream(); // emits when server pushes premium_status_changed via pusher
+  Future<void> makeGuest(String userUuid);
 
   void dispose();
 }
@@ -62,5 +67,7 @@ class JoinHandled {
 class LiveChatMessage {
   final String handle;
   final String text;
-  LiveChatMessage(this.handle, this.text);
+  final String role;
+  final String? avatarUrl;
+  LiveChatMessage(this.handle, this.text, this.role, this.avatarUrl);
 }

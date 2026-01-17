@@ -74,12 +74,12 @@ class _SearchScreenState extends State<SearchScreen> {
           );
         },
       ),
-      bottomNavigationBar: HomeBottomNav(
-        currentIndex: 4, // Assuming search is at index 4
-        onTap: (index) {
-          // Handle navigation
-        },
-      ),
+      // bottomNavigationBar: HomeBottomNav(
+      //   currentIndex: 4, // Assuming search is at index 4
+      //   onTap: (index) {
+      //     // Handle navigation
+      //   },
+      // ),
     );
   }
 
@@ -162,11 +162,10 @@ class _SearchScreenState extends State<SearchScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // No title for trending tags in the screenshot
-            TrendingTagsSection(
-              tags: state.trendingTags,
-              isLoading: state.isLoadingTrending,
-            ),
-
+            // TrendingTagsSection(
+            //   tags: state.trendingTags,
+            //   isLoading: state.isLoadingTrending,
+            // ),
             const SizedBox(height: 24),
 
             // Suggested Users with proper styling from screenshot
@@ -226,16 +225,7 @@ class _SearchScreenState extends State<SearchScreen> {
           children: [
             GestureDetector(
               onTap: () => _openUserProfile(user),
-              child: CircleAvatar(
-                radius: 24,
-                backgroundColor: AppColors.dark.withOpacity(0.3),
-                backgroundImage: user.avatarUrl != null
-                    ? NetworkImage(user.avatarUrl!)
-                    : null,
-                child: user.avatarUrl == null
-                    ? const Icon(Icons.person, color: AppColors.textWhite)
-                    : null,
-              ),
+              child: _UserAvatar(url: user.avatarUrl),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -261,21 +251,21 @@ class _SearchScreenState extends State<SearchScreen> {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.secondary,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Text(
-                'Follow',
-                style: TextStyle(
-                  color: AppColors.textWhite,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
+            // Container(
+            //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            //   decoration: BoxDecoration(
+            //     color: AppColors.secondary,
+            //     borderRadius: BorderRadius.circular(16),
+            //   ),
+            //   child: const Text(
+            //     'Follow',
+            //     style: TextStyle(
+            //       color: AppColors.textWhite,
+            //       fontSize: 14,
+            //       fontWeight: FontWeight.w500,
+            //     ),
+            //   ),
+            // ),
           ],
         ),
       ),
@@ -296,6 +286,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildClubTile(ClubResult club) {
+    final url = club.coverImageUrl;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -303,57 +294,67 @@ class _SearchScreenState extends State<SearchScreen> {
         color: AppColors.dark.withOpacity(0.3),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.pushNamed(
+            context,
+            RouteNames.clubProfile,
+            arguments: {'clubUuid': club.id},
+          );
+        },
+        child: Row(
+          children: [
+            Text(club.id),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _ClubAvatar(url: url),
             ),
-            child: const Icon(Icons.groups, color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  club.name,
-                  style: const TextStyle(
-                    color: AppColors.textWhite,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    club.name,
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${club.membersCount.formatCount()} members',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
+                  const SizedBox(height: 4),
+                  Text(
+                    '${club.membersCount.formatCount()} members',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.secondary,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Text(
-              'Join',
-              style: TextStyle(
-                color: AppColors.textWhite,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+                ],
               ),
             ),
-          ),
-        ],
+            // Container(
+            //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            //   decoration: BoxDecoration(
+            //     color: AppColors.secondary,
+            //     borderRadius: BorderRadius.circular(16),
+            //   ),
+            //   child: const Text(
+            //     'Join',
+            //     style: TextStyle(
+            //       color: AppColors.textWhite,
+            //       fontSize: 14,
+            //       fontWeight: FontWeight.w500,
+            //     ),
+            //   ),
+            // ),
+          ],
+        ),
       ),
     );
   }
@@ -375,7 +376,7 @@ class _SearchScreenState extends State<SearchScreen> {
         }
 
         if (result is TagResult) {
-          return _buildSearchTagResult(result);
+          // return _buildSearchTagResult(result);
         }
 
         return const SizedBox.shrink();
@@ -428,26 +429,36 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchClubResult(ClubResult club) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.dark.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.groups, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              club.name,
-              style: const TextStyle(
-                color: AppColors.textWhite,
-                fontWeight: FontWeight.w600,
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(
+          context,
+          RouteNames.clubProfile,
+          arguments: {'clubUuid': club.id},
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.dark.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            _ClubAvatar(url: club.coverImageUrl),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                club.name,
+                style: const TextStyle(
+                  color: AppColors.textWhite,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
+            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+          ],
+        ),
       ),
     );
   }
@@ -476,16 +487,52 @@ class _UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 24,
-      backgroundColor: AppColors.dark.withOpacity(0.3),
-      backgroundImage: url != null && url!.isNotEmpty
-          ? NetworkImage(url!)
-          : null,
-      onBackgroundImageError: (_, __) {},
-      child: url == null || url!.isEmpty
-          ? const Icon(Icons.person, color: AppColors.textWhite)
-          : null,
-    );
+    if (url != null && url!.isNotEmpty) {
+      // Has image URL - use CircleAvatar with error handling
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.dark.withOpacity(0.3),
+        backgroundImage: NetworkImage(url!),
+        onBackgroundImageError: (_, __) {
+          // Image failed to load
+        },
+        child: const Icon(Icons.person, color: AppColors.textWhite),
+      );
+    } else {
+      // No image URL - use simple CircleAvatar without backgroundImage
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.dark.withOpacity(0.3),
+        child: const Icon(Icons.person, color: AppColors.textWhite),
+      );
+    }
+  }
+}
+
+class _ClubAvatar extends StatelessWidget {
+  final String? url;
+  const _ClubAvatar({this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    if (url != null && url!.isNotEmpty) {
+      // Has image URL - use CircleAvatar with error handling
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.dark.withOpacity(0.3),
+        backgroundImage: NetworkImage(url!),
+        onBackgroundImageError: (_, __) {
+          // Image failed to load
+        },
+        // child: const Icon(Icons.groups, color: AppColors.primary, size: 20),
+      );
+    } else {
+      // No image URL - use simple CircleAvatar without backgroundImage
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.dark.withOpacity(0.3),
+        child: const Icon(Icons.groups, color: AppColors.primary, size: 20),
+      );
+    }
   }
 }

@@ -59,8 +59,8 @@ class EmptyLiveState extends StatelessWidget {
       primaryAction: onChangeCountry == null
           ? null
           : _StateAction(
-              label: 'Change country',
-              onTap: onChangeCountry!,
+              label: 'Try again',
+              onTap: onRefresh ?? () {},
               kind: _ActionKind.filled,
             ),
       secondaryAction: onGoLive == null

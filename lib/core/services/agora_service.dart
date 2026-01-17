@@ -705,6 +705,14 @@ class AgoraService with ChangeNotifier {
   // Get all remote users for debugging
   List<int> get remoteUserIds => remoteUsers.value.keys.toList();
 
+  bool get primaryGuestHasAudio {
+    final uid = primaryRemoteUid.value;
+    if (uid == null) return false;
+
+    final state = remoteUsers.value[uid];
+    return state?.hasAudio ?? false;
+  }
+
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------

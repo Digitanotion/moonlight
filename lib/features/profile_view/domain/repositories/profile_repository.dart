@@ -30,4 +30,5 @@ abstract class ProfileRepository {
   Future<Paginated<Post>> getUserPosts(String uuid, {int page, int perPage});
   Future<UserProfile> followUser(String uuid);
   Future<UserProfile> unfollowUser(String uuid);
+  Future<void> blockUser(String uuid, {String? reason});
 }

@@ -19,9 +19,12 @@ class DiscoverClubsCubit extends Cubit<DiscoverClubsState> {
           clubs: clubs.where((c) => !c.isPrivate).toList(),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       emit(
-        state.copyWith(loading: false, errorMessage: 'Failed to load clubs'),
+        state.copyWith(
+          loading: false,
+          errorMessage: 'Failed to load clubs ${e}',
+        ),
       );
     }
   }

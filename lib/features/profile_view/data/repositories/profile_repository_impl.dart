@@ -101,4 +101,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
 
     return Paginated<Post>(data: posts, currentPage: current, lastPage: last);
   }
+
+  @override
+  Future<void> blockUser(String uuid, {String? reason}) async {
+    await remote.blockUser(uuid, reason: reason);
+  }
 }

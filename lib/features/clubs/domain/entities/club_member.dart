@@ -16,6 +16,7 @@ class ClubMember extends Equatable {
   final bool canDemote;
   final DateTime? joinedAt;
   final int joinedDaysAgo;
+  final bool isFollowing;
 
   ClubMember({
     required this.uuid,
@@ -32,6 +33,7 @@ class ClubMember extends Equatable {
     required this.canDemote,
     this.joinedAt,
     required this.joinedDaysAgo,
+    this.isFollowing = false,
   });
 
   // Add factory method for parsing JSON
@@ -53,6 +55,7 @@ class ClubMember extends Equatable {
           ? DateTime.tryParse(json['joined_at'].toString())
           : null,
       joinedDaysAgo: (json['joined_days_ago'] as num?)?.toInt() ?? 0,
+      isFollowing: json['is_following'] == true,
     );
   }
 

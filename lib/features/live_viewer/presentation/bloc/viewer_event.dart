@@ -1,3 +1,4 @@
+// lib/features/live_viewer/presentation/bloc/viewer_event.dart - ENHANCED
 part of 'viewer_bloc.dart';
 
 abstract class ViewerEvent extends Equatable {
@@ -6,11 +7,11 @@ abstract class ViewerEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+// ============ EXISTING EVENTS (PRESERVED) ============
 class ViewerStarted extends ViewerEvent {
   const ViewerStarted();
 }
 
-// internal stream events
 class _Ticked extends ViewerEvent {
   final Duration elapsed;
   const _Ticked(this.elapsed);
@@ -54,7 +55,6 @@ class GiftToastDismissed extends ViewerEvent {
   const GiftToastDismissed();
 }
 
-// user actions
 class FollowToggled extends ViewerEvent {
   const FollowToggled();
 }
@@ -101,7 +101,6 @@ class _LiveEnded extends ViewerEvent {
   const _LiveEnded();
 }
 
-/// 👇 NEW: repo reported my request was accepted/declined
 class _MyApprovalChanged extends ViewerEvent {
   final bool accepted;
   const _MyApprovalChanged(this.accepted);
@@ -130,7 +129,6 @@ class ParticipantRemoved extends ViewerEvent {
   List<Object?> get props => [reason];
 }
 
-// ✅ ADD THESE MISSING EVENT CLASSES
 class RoleChangeToastDismissed extends ViewerEvent {
   const RoleChangeToastDismissed();
 }
@@ -139,15 +137,12 @@ class NavigateBackRequested extends ViewerEvent {
   const NavigateBackRequested();
 }
 
-// ✅ ADD THIS CRITICAL MISSING EVENT CLASS
 class _ActiveGuestUpdated extends ViewerEvent {
   final String? uuid;
   const _ActiveGuestUpdated(this.uuid);
   @override
   List<Object?> get props => [uuid];
 }
-
-// === GIFTS: new events (additive) ===
 
 class GiftSheetRequested extends ViewerEvent {
   const GiftSheetRequested();
@@ -164,8 +159,8 @@ class GiftsFetchRequested extends ViewerEvent {
 class GiftSendRequested extends ViewerEvent {
   final String code;
   final int quantity;
-  final String toUserUuid; // host uuid
-  final String livestreamId; // numeric as string (e.g., "63")
+  final String toUserUuid;
+  final String livestreamId;
   const GiftSendRequested(
     this.code,
     this.quantity,
@@ -199,4 +194,96 @@ class GiftBroadcastReceived extends ViewerEvent {
 
 class GiftOverlayDequeued extends ViewerEvent {
   const GiftOverlayDequeued();
+}
+
+// ============ NEW EVENTS FOR REQUIREMENTS ============
+
+// Network monitoring events
+class NetworkQualityUpdated extends ViewerEvent {
+  final NetworkQuality selfQuality;
+  final NetworkQuality hostQuality;
+  final NetworkQuality? guestQuality;
+  const NetworkQualityUpdated({
+    required this.selfQuality,
+    required this.hostQuality,
+    this.guestQuality,
+  });
+  @override
+  List<Object?> get props => [selfQuality, hostQuality, guestQuality];
+}
+
+class ConnectionStatsUpdated extends ViewerEvent {
+  final ConnectionStats stats;
+  const ConnectionStatsUpdated(this.stats);
+  @override
+  List<Object?> get props => [stats];
+}
+
+// Reconnection events
+class ConnectionLost extends ViewerEvent {
+  final DateTime timestamp;
+  final String reason;
+  const ConnectionLost({required this.timestamp, required this.reason});
+  @override
+  List<Object?> get props => [timestamp, reason];
+}
+
+class ReconnectionStarted extends ViewerEvent {
+  const ReconnectionStarted();
+}
+
+class ReconnectionSucceeded extends ViewerEvent {
+  final int attempts;
+  const ReconnectionSucceeded(this.attempts);
+  @override
+  List<Object?> get props => [attempts];
+}
+
+class ReconnectionFailed extends ViewerEvent {
+  final String error;
+  final int attempts;
+  const ReconnectionFailed({required this.error, required this.attempts});
+  @override
+  List<Object?> get props => [error, attempts];
+}
+
+class ReconnectionOverlayDismissed extends ViewerEvent {
+  const ReconnectionOverlayDismissed();
+}
+
+// Guest controls events
+class GuestVideoToggled extends ViewerEvent {
+  final bool enabled;
+  const GuestVideoToggled(this.enabled);
+  @override
+  List<Object?> get props => [enabled];
+}
+
+class GuestAudioToggled extends ViewerEvent {
+  final bool enabled;
+  const GuestAudioToggled(this.enabled);
+  @override
+  List<Object?> get props => [enabled];
+}
+
+class GuestControlsUpdated extends ViewerEvent {
+  final GuestControlsState controls;
+  const GuestControlsUpdated(this.controls);
+  @override
+  List<Object?> get props => [controls];
+}
+
+// Mode switching events
+class ModeSwitched extends ViewerEvent {
+  final ViewMode mode;
+  const ModeSwitched(this.mode);
+  @override
+  List<Object?> get props => [mode];
+}
+
+class NetworkStatusVisibilityToggled extends ViewerEvent {
+  final bool visible;
+  const NetworkStatusVisibilityToggled(this.visible);
+  @override
+  List<Object?> get props => [visible];
 }

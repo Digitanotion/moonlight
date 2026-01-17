@@ -1,9 +1,15 @@
+// lib/features/chat/data/repositories/chat_repository_impl.dart
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
+import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/data/services/chat_api_service.dart';
 import 'package:moonlight/features/chat/domain/entities/chat_paginated.dart';
@@ -12,8 +18,10 @@ import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart
 class ChatRepositoryImpl implements ChatRepository {
   final DioClient _client;
   final PusherService _pusher;
-  final ChatApiService _apiService;
   final AuthLocalDataSource _authLocalDataSource;
+
+  String? _cachedUserUuid;
+  String? _cachedAuthToken;
 
   // Stream controllers for real-time events
   final _messageStreamCtrl = StreamController<Message>.broadcast();
@@ -22,31 +30,107 @@ class ChatRepositoryImpl implements ChatRepository {
   final _typingStartedStreamCtrl = StreamController<String>.broadcast();
   final _conversationReadStreamCtrl = StreamController<String>.broadcast();
 
-  // Track bound conversation channels
   final Set<String> _boundConversations = {};
   bool _globalEventsBound = false;
+  bool _pusherInitialized = false;
 
-  ChatRepositoryImpl(this._client, this._pusher, this._authLocalDataSource)
-    : _apiService = ChatApiService(_client);
+  ChatRepositoryImpl(this._client, this._pusher, this._authLocalDataSource);
 
-  // ========== CONVERSATIONS ==========
+  Future<void> initialize() async {
+    await _ensureUserUuidLoaded();
+    await _ensureAuthTokenLoaded();
+    debugPrint('✅ ChatRepository initialized');
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                               UUID HANDLING                                 */
+  /* -------------------------------------------------------------------------- */
+
+  Future<void> _ensureUserUuidLoaded() async {
+    if (_cachedUserUuid != null) return;
+    _cachedUserUuid = await _authLocalDataSource.getCurrentUserUuid();
+    debugPrint('🔑 Loaded user UUID: $_cachedUserUuid');
+  }
+
+  Future<void> _ensureAuthTokenLoaded() async {
+    if (_cachedAuthToken != null) return;
+    _cachedAuthToken = await _authLocalDataSource.readToken();
+    debugPrint(
+      '🔑 Loaded auth token: ${_cachedAuthToken?.substring(0, 20)}...',
+    );
+  }
+
+  String getCurrentUserUuidSync() {
+    return _cachedUserUuid ?? '';
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                               PUSHER SETUP                                  */
+  /* -------------------------------------------------------------------------- */
+
+  Future<void> _ensurePusherConnected() async {
+    // Check if Pusher is initialized
+    if (!_pusher.isInitialized) {
+      debugPrint(
+        '⚠️ Pusher not initialized - chat real-time features disabled',
+      );
+      return; // Exit gracefully - app works without real-time
+    }
+
+    // Only try to connect if Pusher is initialized
+    if (!_pusher.isConnected) {
+      debugPrint('🔗 Connecting Pusher for chat...');
+      try {
+        await _pusher.connect();
+        debugPrint('✅ Pusher connected for chat');
+      } catch (e) {
+        debugPrint('❌ Failed to connect Pusher: $e');
+        // Don't rethrow - chat should still work without Pusher
+      }
+    }
+  }
+
+  Future<bool> _isPusherReady() async {
+    if (!_pusher.isInitialized) {
+      debugPrint('⏳ Pusher not ready yet');
+      return false;
+    }
+    return true;
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                               API METHODS                                   */
+  /* -------------------------------------------------------------------------- */
 
   @override
-  Future<List<Conversation>> getConversations() async {
+  Future<List<ChatConversations>> getConversations() async {
     try {
-      return await _apiService.getConversations();
+      final response = await _client.dio.get('/api/v1/chat/conversations');
+      final data = (response.data as Map)['data'] as List;
+      return data
+          .map(
+            (json) => ChatConversations.fromJson(
+              Map<String, dynamic>.from(json as Map),
+            ),
+          )
+          .toList();
     } catch (e) {
-      _handleError('getConversations', e);
+      debugPrint('❌ Error getting conversations: $e');
       rethrow;
     }
   }
 
   @override
-  Future<Conversation> startDirectConversation(String userUuid) async {
+  Future<ChatConversations> startDirectConversation(String userUuid) async {
     try {
-      return await _apiService.startDirectConversation(userUuid);
+      final response = await _client.dio.post(
+        '/api/v1/chat/direct',
+        data: {'user_uuid': userUuid},
+      );
+      final data = (response.data as Map)['data'] as Map<String, dynamic>;
+      return ChatConversations.fromJson(data);
     } catch (e) {
-      _handleError('startDirectConversation', e);
+      debugPrint('❌ Error starting direct conversation: $e');
       rethrow;
     }
   }
@@ -54,9 +138,13 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<Conversation> getClubConversation(String clubSlugOrUuid) async {
     try {
-      return await _apiService.getClubConversation(clubSlugOrUuid);
+      final response = await _client.dio.post(
+        '/api/v1/chat/clubs/$clubSlugOrUuid/conversation',
+      );
+      final data = (response.data as Map)['data'] as Map<String, dynamic>;
+      return Conversation.fromJson(data);
     } catch (e) {
-      _handleError('getClubConversation', e);
+      debugPrint('❌ Error getting club conversation: $e');
       rethrow;
     }
   }
@@ -64,14 +152,22 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<List<Conversation>> searchConversations(String query) async {
     try {
-      return await _apiService.searchConversations(query);
+      final response = await _client.dio.get(
+        '/api/v1/chat/conversations/search',
+        queryParameters: {'q': query},
+      );
+      final data = (response.data as Map)['data'] as List;
+      return data
+          .map(
+            (json) =>
+                Conversation.fromJson(Map<String, dynamic>.from(json as Map)),
+          )
+          .toList();
     } catch (e) {
-      _handleError('searchConversations', e);
+      debugPrint('❌ Error searching conversations: $e');
       rethrow;
     }
   }
-
-  // ========== MESSAGES ==========
 
   @override
   Future<PaginatedMessages> getMessages(
@@ -80,17 +176,19 @@ class ChatRepositoryImpl implements ChatRepository {
     int perPage = 50,
   }) async {
     try {
-      return await _apiService.getMessages(
-        conversationUuid,
-        page: page,
-        perPage: perPage,
+      final response = await _client.dio.get(
+        '/api/v1/chat/conversations/$conversationUuid/messages',
+        queryParameters: {'page': page, 'per_page': perPage},
       );
+      return PaginatedMessages.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
-      _handleError('getMessages', e);
+      debugPrint('❌ Error getting messages: $e');
       rethrow;
     }
   }
 
+  // In ChatRepositoryImpl - make sure API call includes reply_to_uuid
+  // In ChatRepositoryImpl - update sendTextMessage to debug the response
   @override
   Future<Message> sendTextMessage(
     String conversationUuid, {
@@ -98,13 +196,32 @@ class ChatRepositoryImpl implements ChatRepository {
     String? replyToUuid,
   }) async {
     try {
-      return await _apiService.sendTextMessage(
-        conversationUuid,
-        body: body,
-        replyToUuid: replyToUuid,
+      final data = {'body': body};
+      if (replyToUuid != null && replyToUuid.isNotEmpty) {
+        data['reply_to_uuid'] = replyToUuid;
+      }
+
+      debugPrint('📤 Sending message with reply_to_uuid: $replyToUuid');
+
+      final response = await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/messages',
+        data: data,
       );
+
+      final responseData =
+          (response.data as Map)['data'] as Map<String, dynamic>;
+
+      debugPrint('✅ Message sent successfully');
+      debugPrint(
+        '📋 Response contains reply_to: ${responseData.containsKey('reply_to')}',
+      );
+      if (responseData.containsKey('reply_to')) {
+        debugPrint('📋 Reply to object: ${responseData['reply_to']}');
+      }
+
+      return Message.fromJson(responseData);
     } catch (e) {
-      _handleError('sendTextMessage', e);
+      debugPrint('❌ Error sending text message: $e');
       rethrow;
     }
   }
@@ -117,14 +234,24 @@ class ChatRepositoryImpl implements ChatRepository {
     String? replyToUuid,
   }) async {
     try {
-      return await _apiService.sendMediaMessage(
-        conversationUuid,
-        file: file,
-        body: body,
-        replyToUuid: replyToUuid,
+      final formData = FormData.fromMap({
+        if (body != null && body.isNotEmpty) 'body': body,
+        if (replyToUuid != null) 'reply_to_uuid': replyToUuid,
+        'media[]': await MultipartFile.fromFile(
+          file.path,
+          filename: file.path.split('/').last,
+        ),
+      });
+
+      final response = await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/messages',
+        data: formData,
       );
+      final responseData =
+          (response.data as Map)['data'] as Map<String, dynamic>;
+      return Message.fromJson(responseData);
     } catch (e) {
-      _handleError('sendMediaMessage', e);
+      debugPrint('❌ Error sending media message: $e');
       rethrow;
     }
   }
@@ -132,9 +259,15 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<Message> editMessage(String messageUuid, String newBody) async {
     try {
-      return await _apiService.editMessage(messageUuid, newBody);
+      final response = await _client.dio.patch(
+        '/api/v1/chat/messages/$messageUuid',
+        data: {'body': newBody},
+      );
+      final responseData =
+          (response.data as Map)['data'] as Map<String, dynamic>;
+      return Message.fromJson(responseData);
     } catch (e) {
-      _handleError('editMessage', e);
+      debugPrint('❌ Error editing message: $e');
       rethrow;
     }
   }
@@ -142,9 +275,9 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<void> deleteMessage(String messageUuid) async {
     try {
-      await _apiService.deleteMessage(messageUuid);
+      await _client.dio.delete('/api/v1/chat/messages/$messageUuid');
     } catch (e) {
-      _handleError('deleteMessage', e);
+      debugPrint('❌ Error deleting message: $e');
       rethrow;
     }
   }
@@ -152,9 +285,12 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<void> reactToMessage(String messageUuid, String emoji) async {
     try {
-      await _apiService.reactToMessage(messageUuid, emoji);
+      await _client.dio.post(
+        '/api/v1/chat/messages/$messageUuid/reactions',
+        data: {'emoji': emoji},
+      );
     } catch (e) {
-      _handleError('reactToMessage', e);
+      debugPrint('❌ Error reacting to message: $e');
       rethrow;
     }
   }
@@ -162,51 +298,39 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<void> markConversationAsRead(String conversationUuid) async {
     try {
-      await _apiService.markConversationAsRead(conversationUuid);
-    } catch (e) {
-      _handleError('markConversationAsRead', e);
-      rethrow;
-    }
-  }
-
-  @override
-  Future<SearchMessagesResult> searchMessages(
-    String conversationUuid,
-    String query, {
-    int page = 1,
-  }) async {
-    try {
-      return await _apiService.searchMessages(
-        conversationUuid,
-        query,
-        page: page,
+      await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/read',
       );
     } catch (e) {
-      _handleError('searchMessages', e);
+      debugPrint('❌ Error marking conversation as read: $e');
       rethrow;
     }
   }
-
-  // ========== TYPING ==========
 
   @override
   Future<void> sendTypingIndicator(String conversationUuid) async {
     try {
-      await _apiService.sendTypingIndicator(conversationUuid);
+      await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/typing',
+        data: {'typing': true},
+      );
     } catch (e) {
-      _handleError('sendTypingIndicator', e);
-      rethrow;
+      debugPrint('❌ Error sending typing indicator: $e');
     }
   }
 
-  // ========== CONVERSATION STATE ==========
+  /* -------------------------------------------------------------------------- */
+  /*                         CONVERSATION STATE ACTIONS                          */
+  /* -------------------------------------------------------------------------- */
 
   @override
   Future<void> pinConversation(String conversationUuid) async {
     try {
-      await _apiService.pinConversation(conversationUuid);
+      await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/pin',
+      );
     } catch (e) {
-      _handleError('pinConversation', e);
+      debugPrint('❌ Error pinning conversation: $e');
       rethrow;
     }
   }
@@ -214,9 +338,11 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<void> muteConversation(String conversationUuid) async {
     try {
-      await _apiService.muteConversation(conversationUuid);
+      await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/mute',
+      );
     } catch (e) {
-      _handleError('muteConversation', e);
+      debugPrint('❌ Error muting conversation: $e');
       rethrow;
     }
   }
@@ -224,37 +350,34 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Future<void> archiveConversation(String conversationUuid) async {
     try {
-      await _apiService.archiveConversation(conversationUuid);
+      await _client.dio.post(
+        '/api/v1/chat/conversations/$conversationUuid/archive',
+      );
     } catch (e) {
-      _handleError('archiveConversation', e);
+      debugPrint('❌ Error archiving conversation: $e');
       rethrow;
     }
   }
-
-  // ========== UNREAD COUNTS ==========
 
   @override
   Future<Map<String, dynamic>> getUnreadCounts() async {
     try {
-      return await _apiService.getUnreadCounts();
+      final response = await _client.dio.get('/api/v1/chat/unread-count');
+      return response.data as Map<String, dynamic>;
     } catch (e) {
-      _handleError('getUnreadCounts', e);
+      debugPrint('❌ Error getting unread counts: $e');
       rethrow;
     }
   }
 
-  // ========== REAL-TIME STREAMS ==========
+  /* -------------------------------------------------------------------------- */
+  /*                             REALTIME STREAMS                                */
+  /* -------------------------------------------------------------------------- */
 
   @override
   Stream<Message> messageStream() {
     _bindGlobalEventsIfNeeded();
     return _messageStreamCtrl.stream;
-  }
-
-  @override
-  Stream<Map<String, dynamic>> conversationUpdateStream() {
-    _bindGlobalEventsIfNeeded();
-    return _conversationUpdateStreamCtrl.stream;
   }
 
   @override
@@ -264,180 +387,243 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
+  Stream<Map<String, dynamic>> conversationUpdateStream() {
+    _bindGlobalEventsIfNeeded();
+    return _conversationUpdateStreamCtrl.stream;
+  }
+
+  @override
   Stream<String> conversationReadStream() {
     _bindGlobalEventsIfNeeded();
     return _conversationReadStreamCtrl.stream;
   }
 
-  // ========== PUSHER EVENT BINDING ==========
+  /* -------------------------------------------------------------------------- */
+  /*                           PUSHER BINDINGS                                   */
+  /* -------------------------------------------------------------------------- */
 
-  void _bindGlobalEventsIfNeeded() {
+  Future<void> _bindGlobalEventsIfNeeded() async {
     if (_globalEventsBound) return;
+
+    await _ensureUserUuidLoaded();
+    final userUuid = getCurrentUserUuidSync();
+    if (userUuid.isEmpty) {
+      debugPrint('⚠️ Cannot bind global events: No user UUID');
+      return;
+    }
+
+    // Check Pusher first
+    if (!_pusher.isInitialized) {
+      debugPrint('⏭️ Skipping global events binding - Pusher not available');
+      return;
+    }
+
     _globalEventsBound = true;
 
-    final currentUserUuid = _getCurrentUserUuid();
-    if (currentUserUuid.isEmpty) return;
+    // Use the user.{uuid} channel that matches your Laravel definition
+    final userChannel =
+        'private-conversations.$userUuid'; // <-- This now matches user.{uuid} in channels.php
+    debugPrint('🔗 Binding to user channel with UUID: $userChannel');
 
-    final userChannel = 'user.$currentUserUuid';
-    _pusher.subscribe(userChannel);
+    try {
+      await _ensurePusherConnected();
+      // Use subscribe (not subscribePrivate) for regular user channel
+      await _pusher.subscribe(userChannel);
 
-    // Bind conversation updates
-    _pusher.bind(userChannel, 'conversation.updated', (data) {
-      final normalizedData = _normalizeData(data);
-      _conversationUpdateStreamCtrl.add(normalizedData);
-    });
+      _pusher.bind(userChannel, 'conversation.updated', (data) {
+        debugPrint('🔄 Conversation updated event: $data');
+        _conversationUpdateStreamCtrl.add(_normalizeData(data));
+      });
+
+      debugPrint('✅ Global events bound successfully');
+    } catch (e) {
+      debugPrint('❌ Error binding global events: $e');
+      _globalEventsBound = false;
+    }
+  }
+
+  Future<void> _bindConversationInternal(String conversationUuid) async {
+    final channel = 'private-conversations.$conversationUuid';
+    debugPrint('🔗 Binding to conversation channel: $channel');
+
+    try {
+      await _ensurePusherConnected();
+      await _pusher.subscribePrivate(channel);
+
+      // Bind to message.sent event
+      // In ChatRepositoryImpl, modify the Pusher binding:
+      _pusher.bind(channel, 'message.sent', (data) async {
+        debugPrint('📨 Received message.sent event');
+
+        final map = _normalizeData(data);
+        final payload = map['message'] ?? map;
+
+        try {
+          final message = Message.fromJson(payload);
+
+          // Get current user UUID
+          await _ensureUserUuidLoaded();
+          final currentUserUuid = getCurrentUserUuidSync();
+
+          // Skip if this message is from current user
+          if (message.sender?.uuid == currentUserUuid) {
+            debugPrint('👤 Skipping own message from Pusher: ${message.uuid}');
+            return;
+          }
+
+          debugPrint('👤 Message from other user: ${message.sender?.uuid}');
+          _messageStreamCtrl.add(message);
+        } catch (e) {
+          debugPrint('❌ Error parsing message: $e');
+        }
+      });
+
+      // Bind to typing.started event
+      _pusher.bind(channel, 'typing.started', (data) {
+        debugPrint('⌨️ Received typing.started event: $data');
+        final map = _normalizeData(data);
+        final uuid = map['user_uuid'];
+        if (uuid is String) {
+          _typingStartedStreamCtrl.add(uuid);
+        }
+      });
+
+      // Bind to conversation.read event
+      _pusher.bind(channel, 'conversation.read', (data) {
+        debugPrint('👁️ Received conversation.read event: $data');
+        final map = _normalizeData(data);
+        final readerUuid = map['user_uuid'];
+        if (readerUuid is String) {
+          _conversationReadStreamCtrl.add(readerUuid);
+        }
+      });
+
+      debugPrint('✅ Successfully bound to conversation: $conversationUuid');
+    } catch (e) {
+      debugPrint('❌ Error binding to conversation $conversationUuid: $e');
+      rethrow;
+    }
   }
 
   @override
-  void bindConversationEvents(String conversationUuid) {
-    if (_boundConversations.contains(conversationUuid)) return;
+  void bindConversationEvents(String conversationUuid) async {
+    if (_boundConversations.contains(conversationUuid)) {
+      debugPrint('ℹ️ Already bound to conversation: $conversationUuid');
+      return;
+    }
+
+    await _ensureUserUuidLoaded();
+
+    // Quick check - if Pusher isn't initialized, skip binding
+    if (!_pusher.isInitialized) {
+      debugPrint('⏭️ Skipping conversation binding - Pusher not available');
+      debugPrint('ℹ️ Chat will work without real-time updates');
+      return;
+    }
+
+    debugPrint('🎯 Binding to conversation: $conversationUuid');
     _boundConversations.add(conversationUuid);
 
-    final channel = 'conversation.$conversationUuid';
-    _pusher.subscribe(channel);
-
-    _bindMessageEvents(channel);
-    _bindTypingEvents(channel);
-    _bindConversationReadEvents(channel);
+    try {
+      await _bindConversationInternal(conversationUuid);
+    } catch (e) {
+      _boundConversations.remove(conversationUuid);
+      debugPrint('❌ Failed to bind conversation events: $e');
+      // Don't rethrow - continue without real-time
+    }
   }
 
-  void _bindMessageEvents(String channel) {
-    // message.sent
-    _pusher.bind(channel, 'message.sent', (data) {
-      final normalized = _normalizeData(data);
-      try {
-        final messageData =
-            normalized['message'] as Map<String, dynamic>? ?? normalized;
-        final message = Message.fromJson(messageData);
-        _messageStreamCtrl.add(message);
-      } catch (e) {
-        print('Error parsing message.sent: $e');
-      }
-    });
+  @override
+  Future<bool> isReady() async {
+    try {
+      await _ensureUserUuidLoaded();
+      await _ensureAuthTokenLoaded();
 
-    // message.updated
-    _pusher.bind(channel, 'message.updated', (data) {
-      final normalized = _normalizeData(data);
-      try {
-        final messageData =
-            normalized['message'] as Map<String, dynamic>? ?? normalized;
-        final message = Message.fromJson(messageData);
-        _messageStreamCtrl.add(message);
-      } catch (e) {
-        print('Error parsing message.updated: $e');
+      if (!_pusher.isInitialized) {
+        debugPrint('⚠️ ChatRepository not ready: Pusher not initialized');
+        return false;
       }
-    });
 
-    // message.deleted
-    _pusher.bind(channel, 'message.deleted', (data) {
-      final normalized = _normalizeData(data);
-      try {
-        final messageUuid = normalized['message_uuid'] as String? ?? '';
-        if (messageUuid.isNotEmpty) {
-          final deletedMessage = Message(
-            uuid: messageUuid,
-            body: 'This message was deleted',
-            type: MessageType.text,
-            sender: ChatUser(
-              uuid: '',
-              userSlug: '',
-              fullName: 'System',
-              avatarUrl: null,
-            ),
-            media: [],
-            reactions: [],
-            isEdited: false,
-            createdAt: DateTime.now(),
-          );
-          _messageStreamCtrl.add(deletedMessage);
-        }
-      } catch (e) {
-        print('Error handling message.deleted: $e');
+      if (getCurrentUserUuidSync().isEmpty) {
+        debugPrint('⚠️ ChatRepository not ready: No user UUID');
+        return false;
       }
-    });
-  }
 
-  void _bindTypingEvents(String channel) {
-    // typing.started
-    _pusher.bind(channel, 'typing.started', (data) {
-      final normalized = _normalizeData(data);
-      final userUuid = normalized['user_uuid'] as String? ?? '';
-      if (userUuid.isNotEmpty) {
-        _typingStartedStreamCtrl.add(userUuid);
-      }
-    });
-  }
-
-  void _bindConversationReadEvents(String channel) {
-    // conversation.read
-    _pusher.bind(channel, 'conversation.read', (data) {
-      final normalized = _normalizeData(data);
-      final userUuid = normalized['user_uuid'] as String? ?? '';
-      if (userUuid.isNotEmpty) {
-        _conversationReadStreamCtrl.add(userUuid);
-      }
-    });
+      return true;
+    } catch (e) {
+      debugPrint('❌ ChatRepository readiness check failed: $e');
+      return false;
+    }
   }
 
   @override
   Future<void> unbindConversationEvents(String conversationUuid) async {
     if (!_boundConversations.contains(conversationUuid)) return;
 
-    final channel = 'conversation.$conversationUuid';
+    debugPrint('👋 Unbinding from conversation: $conversationUuid');
+    final channel = 'private-conversations.$conversationUuid';
 
-    // Just unsubscribe and clear handlers
-    await _pusher.unsubscribe(channel);
-
-    _boundConversations.remove(conversationUuid);
+    try {
+      await _pusher.unsubscribe(channel);
+      _pusher.clearChannelHandlers(channel);
+      _boundConversations.remove(conversationUuid);
+      debugPrint('✅ Successfully unbound from conversation: $conversationUuid');
+    } catch (e) {
+      debugPrint('❌ Error unbinding conversation: $e');
+    }
   }
 
-  // ========== UTILITY METHODS ==========
+  /* -------------------------------------------------------------------------- */
+  /*                                UTIL METHODS                                 */
+  /* -------------------------------------------------------------------------- */
 
   Map<String, dynamic> _normalizeData(dynamic raw) {
     if (raw is Map<String, dynamic>) return raw;
     if (raw is Map) return raw.cast<String, dynamic>();
+    if (raw is String) {
+      try {
+        return json.decode(raw) as Map<String, dynamic>;
+      } catch (e) {
+        debugPrint('❌ Error normalizing string data: $e');
+      }
+    }
     return {};
   }
 
-  String _getCurrentUserUuid() {
-    try {
-      // First try to get from AuthLocalDataSource
-      final userUuid = _authLocalDataSource.getCurrentUserUuid();
-      return userUuid.toString();
-    } catch (e) {
-      print('Error getting current user UUID: $e');
-      return '';
-    }
+  /* -------------------------------------------------------------------------- */
+  /*                                DEBUG METHODS                                */
+  /* -------------------------------------------------------------------------- */
+
+  void debugPusherState() {
+    debugPrint('🔍 ChatRepository Debug:');
+    debugPrint('   User UUID: $_cachedUserUuid');
+    debugPrint('   Bound conversations: ${_boundConversations.toList()}');
+    debugPrint('   Global events bound: $_globalEventsBound');
+    _pusher.debugSubscriptions();
   }
 
-  void _handleError(String method, dynamic error) {
-    print('ChatRepositoryImpl.$method error: $error');
-    // Add your existing error handling logic here
-  }
-
-  // ========== LIFECYCLE ==========
+  /* -------------------------------------------------------------------------- */
+  /*                                CLEANUP                                      */
+  /* -------------------------------------------------------------------------- */
 
   @override
   Future<void> dispose() async {
-    // Unbind all conversation events
-    for (final conversationUuid in _boundConversations.toList()) {
-      await unbindConversationEvents(conversationUuid);
-    }
-    _boundConversations.clear();
+    debugPrint('🧹 Cleaning up ChatRepository...');
 
-    // Close stream controllers
+    for (final c in _boundConversations.toList()) {
+      await unbindConversationEvents(c);
+    }
+
     await _messageStreamCtrl.close();
-    await _conversationUpdateStreamCtrl.close();
     await _typingStartedStreamCtrl.close();
+    await _conversationUpdateStreamCtrl.close();
     await _conversationReadStreamCtrl.close();
 
-    // Unbind global events
-    final currentUserUuid = _getCurrentUserUuid();
-    if (currentUserUuid.isNotEmpty) {
-      final userChannel = 'user.$currentUserUuid';
-      await _pusher.unsubscribe(userChannel);
-    }
-
+    _boundConversations.clear();
     _globalEventsBound = false;
+    _cachedUserUuid = null;
+    _cachedAuthToken = null;
+
+    debugPrint('✅ ChatRepository disposed');
   }
 }

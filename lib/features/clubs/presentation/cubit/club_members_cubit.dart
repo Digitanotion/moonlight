@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:bloc/bloc.dart';
-import 'package:moonlight/features/clubs/domain/entities/club_member.dart';
+import '../../domain/entities/club_member.dart';
 import 'club_members_state.dart';
 import '../../domain/repositories/clubs_repository.dart';
+
+enum MembersFilter { all, recentlyJoined }
 
 class ClubMembersCubit extends Cubit<ClubMembersState> {
   final ClubsRepository repo;
@@ -12,44 +15,67 @@ class ClubMembersCubit extends Cubit<ClubMembersState> {
 
   int _page = 1;
   bool _hasMore = true;
+  String _search = '';
+  MembersFilter _filter = MembersFilter.all;
+  Timer? _debounce;
+
+  /// ✅ ADDITIVE: expose current filter to UI
+  MembersFilter get currentFilter => _filter;
+
+  // ───────────────── LOAD ─────────────────
 
   Future<void> load({bool refresh = false}) async {
+    if (refresh) {
+      _page = 1;
+      _hasMore = true;
+    }
+
+    emit(state.copyWith(loading: true, error: null));
+
     try {
-      print('🔄 Cubit: Loading members for club: $club');
+      final result = await repo.getClubMembersUI(
+        club: club,
+        page: _page,
+        search: _search.isEmpty ? null : _search,
+        sort: _filter == MembersFilter.recentlyJoined ? 'joined_at' : null,
+        order: _filter == MembersFilter.recentlyJoined ? 'desc' : null,
+      );
 
-      if (!refresh) {
-        emit(state.copyWith(loading: true, error: null));
-      }
-
-      final result = await repo.getClubMembersUI(club: club);
-
-      print('✅ Cubit: Successfully loaded ${result.members.length} members');
-      print('✅ Cubit: Club name: ${result.club.name}');
+      _hasMore = result.pagination.hasMore;
 
       emit(
         state.copyWith(
           loading: false,
           club: result.club,
-          members: result.members,
+          members: refresh
+              ? result.members
+              : (_page == 1
+                    ? result.members
+                    : [...state.members, ...result.members]),
           pagination: result.pagination,
-          error: null,
         ),
       );
     } catch (e) {
-      print('❌ Cubit: Error loading members: $e');
       emit(state.copyWith(loading: false, error: e.toString()));
     }
   }
 
+  // ───────────────── PAGINATION ─────────────────
+
   Future<void> loadMore() async {
-    if (!_hasMore || state.loadingMore) return;
+    if (!_hasMore || state.loadingMore || _search.isNotEmpty) return;
 
     emit(state.copyWith(loadingMore: true));
 
     try {
       _page += 1;
 
-      final result = await repo.getClubMembersUI(club: club, page: _page);
+      final result = await repo.getClubMembersUI(
+        club: club,
+        page: _page,
+        sort: _filter == MembersFilter.recentlyJoined ? 'joined_at' : null,
+        order: _filter == MembersFilter.recentlyJoined ? 'desc' : null,
+      );
 
       _hasMore = result.pagination.hasMore;
 
@@ -66,7 +92,37 @@ class ClubMembersCubit extends Cubit<ClubMembersState> {
     }
   }
 
-  // 🔧 Mutations
+  // ───────────────── SEARCH ─────────────────
+
+  void search(String query) {
+    _search = query.trim();
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _page = 1;
+      _hasMore = false; // search does not paginate
+      load(refresh: true);
+    });
+  }
+
+  void clearSearch() {
+    _search = '';
+    _page = 1;
+    _hasMore = true;
+    load(refresh: true);
+  }
+
+  // ───────────────── FILTER ─────────────────
+
+  void setFilter(MembersFilter filter) {
+    if (_filter == filter) return;
+    _filter = filter;
+    _page = 1;
+    _hasMore = true;
+    load(refresh: true);
+  }
+
+  // ───────────────── MUTATIONS ─────────────────
 
   Future<void> promote(String member) async {
     await repo.changeMemberRole(club: club, member: member, role: 'admin');
@@ -81,5 +137,11 @@ class ClubMembersCubit extends Cubit<ClubMembersState> {
   Future<void> remove(String member) async {
     await repo.removeMember(club: club, member: member);
     await load(refresh: true);
+  }
+
+  @override
+  Future<void> close() {
+    _debounce?.cancel();
+    return super.close();
   }
 }

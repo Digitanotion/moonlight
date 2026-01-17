@@ -6,6 +6,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import '../../domain/entities/participant.dart';
 import '../bloc/participants_bloc.dart';
 import '../../domain/repositories/participants_repository.dart';
+import 'package:moonlight/widgets/top_snack.dart'; // Import TopSnack
+import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart'; // Import to get active guest info
 
 class ViewersListPage extends StatefulWidget {
   const ViewersListPage({Key? key}) : super(key: key);
@@ -42,85 +44,86 @@ class _ViewersListPageState extends State<ViewersListPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Viewers List',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: () => _bloc.add(const ParticipantsRefreshed()),
-          ),
-        ],
-      ),
-      body: BlocConsumer<ParticipantsBloc, ParticipantsState>(
-        bloc: _bloc,
-        listenWhen: (p, c) => p.error != c.error && c.error != null,
-        listener: (context, state) {
-          if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.error!),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        },
-        builder: (context, state) {
-          if (state.loading && state.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
+  // Helper method to check if there's already an active guest
+  Future<Map<String, dynamic>> _checkActiveGuest() async {
+    try {
+      final repoImpl = GetIt.I<LiveSessionRepositoryImpl>();
+      // Get the active guest UUID from the repository
+      final activeGuestUuid = repoImpl.activeGuestUuid;
 
-          if (!state.loading && state.items.isEmpty) {
-            return const Center(
-              child: Text(
-                'No participants yet.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            );
-          }
+      if (activeGuestUuid == null) {
+        return {'hasGuest': false};
+      }
 
-          return RefreshIndicator(
-            onRefresh: () async => _bloc.add(const ParticipantsRefreshed()),
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              itemCount: state.items.length + (state.paging ? 1 : 0),
-              itemBuilder: (ctx, i) {
-                if (i >= state.items.length) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final p = state.items[i];
-                return _buildViewerItem(p);
-              },
-            ),
-          );
-        },
-      ),
-    );
+      // Try to find the guest in the current participants list
+      final state = _bloc.state;
+
+      // Find the guest participant
+      Participant? guest;
+      for (final participant in state.items) {
+        if (participant.userUuid == activeGuestUuid) {
+          guest = participant;
+          break;
+        }
+      }
+
+      if (guest == null) {
+        return {'hasGuest': false};
+      }
+
+      return {
+        'hasGuest': true,
+        'guestName': guest.userSlug.isNotEmpty
+            ? guest.userSlug
+            : 'Guest', // Use displayName if you have it, otherwise use 'Guest'
+        'guestUuid': guest.userUuid,
+      };
+    } catch (e) {
+      debugPrint('Error checking active guest: $e');
+      return {'hasGuest': false};
+    }
+  }
+
+  // Updated handleMenuAction method
+  void _handleMenuAction(String action, Participant p) async {
+    switch (action) {
+      case 'guest':
+        final isGuest = p.role.toLowerCase() == 'guest';
+        final targetRole = isGuest ? 'viewer' : 'guest';
+        final display = p.userSlug.isNotEmpty ? p.userSlug : 'Guest';
+
+        // Check if there's already a guest (only when trying to make someone a guest)
+        if (!isGuest) {
+          final guestCheck = await _checkActiveGuest();
+          if (guestCheck['hasGuest'] == true) {
+            // Show toast message using TopSnack
+            TopSnack.error(
+              context,
+              '${guestCheck['guestName']} is already a guest. You cannot have more than one guest.',
+              duration: const Duration(seconds: 4),
+            );
+            return; // Don't proceed with making guest
+          }
+        }
+
+        _confirm(
+          isGuest ? 'Return to Viewer' : 'Make Guest',
+          isGuest
+              ? 'Return $display to the audience?'
+              : 'Invite $display as a guest?',
+          onConfirm: () =>
+              _bloc.add(ParticipantActionRole(p.userUuid, targetRole)),
+        );
+        break;
+
+      case 'remove':
+        _confirm(
+          'Remove Viewer',
+          'Remove ${p.userSlug.isNotEmpty ? p.userSlug : 'User'} from the stream?',
+          onConfirm: () => _bloc.add(ParticipantActionRemove(p.userUuid)),
+        );
+        break;
+    }
   }
 
   Widget _buildViewerItem(Participant p) {
@@ -154,7 +157,7 @@ class _ViewersListPageState extends State<ViewersListPage> {
                     BoxShadow(
                       color: const Color(0xFF6C40FF).withOpacity(0.3),
                       blurRadius: 6,
-                      offset: Offset(0, 2),
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
@@ -195,13 +198,13 @@ class _ViewersListPageState extends State<ViewersListPage> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
+                        color: _getRoleColor(p.role),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         p.role,
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: _getRoleTextColor(p.role),
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
@@ -286,33 +289,6 @@ class _ViewersListPageState extends State<ViewersListPage> {
     );
   }
 
-  void _handleMenuAction(String action, Participant p) {
-    switch (action) {
-      case 'guest':
-        final isGuest = p.role.toLowerCase() == 'guest';
-        final targetRole = isGuest ? 'viewer' : 'guest';
-        final display = p.userSlug.isEmpty ? p.userUuid : p.userSlug;
-
-        _confirm(
-          isGuest ? 'Return to Viewer' : 'Make Guest',
-          isGuest
-              ? 'Return $display to the audience?'
-              : 'Invite $display as a guest?',
-          onConfirm: () =>
-              _bloc.add(ParticipantActionRole(p.userUuid, targetRole)),
-        );
-        break;
-
-      case 'remove':
-        _confirm(
-          'Remove Viewer',
-          'Remove ${p.userSlug.isEmpty ? p.userUuid : p.userSlug} from the stream?',
-          onConfirm: () => _bloc.add(ParticipantActionRemove(p.userUuid)),
-        );
-        break;
-    }
-  }
-
   void _confirm(
     String title,
     String message, {
@@ -363,5 +339,112 @@ class _ViewersListPageState extends State<ViewersListPage> {
     if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
     if (difference.inHours < 24) return '${difference.inHours}h ago';
     return '${difference.inDays}d ago';
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role.toLowerCase()) {
+      case 'guest':
+        return const Color(0xFFFF6A00).withOpacity(0.2);
+      case 'host':
+        return const Color(0xFFFF3D00).withOpacity(0.2);
+      case 'moderator':
+        return const Color(0xFF4CAF50).withOpacity(0.2);
+      default:
+        return Colors.white.withOpacity(0.08);
+    }
+  }
+
+  Color _getRoleTextColor(String role) {
+    switch (role.toLowerCase()) {
+      case 'guest':
+        return const Color(0xFFFF6A00);
+      case 'host':
+        return const Color(0xFFFF3D00);
+      case 'moderator':
+        return const Color(0xFF4CAF50);
+      default:
+        return Colors.white70;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F0F1A),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Viewers List',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+            onPressed: () => _bloc.add(const ParticipantsRefreshed()),
+          ),
+        ],
+      ),
+      body: BlocConsumer<ParticipantsBloc, ParticipantsState>(
+        bloc: _bloc,
+        listenWhen: (p, c) => p.error != c.error && c.error != null,
+        listener: (context, state) {
+          if (state.error != null) {
+            // Use TopSnack for errors too
+            TopSnack.error(
+              context,
+              state.error!,
+              duration: const Duration(seconds: 3),
+            );
+          }
+        },
+        builder: (context, state) {
+          if (state.loading && state.items.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!state.loading && state.items.isEmpty) {
+            return const Center(
+              child: Text(
+                'No participants yet.',
+                style: TextStyle(color: Colors.white70),
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async => _bloc.add(const ParticipantsRefreshed()),
+            child: ListView.builder(
+              controller: _scroll,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              itemCount: state.items.length + (state.paging ? 1 : 0),
+              itemBuilder: (ctx, i) {
+                if (i >= state.items.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final p = state.items[i];
+                return _buildViewerItem(p);
+              },
+            ),
+          );
+        },
+      ),
+    );
   }
 }

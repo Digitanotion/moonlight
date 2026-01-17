@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 
 class ConversationItem extends StatelessWidget {
-  final Conversation conversation;
+  final ChatConversations conversation;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
@@ -139,6 +140,13 @@ class ConversationItem extends StatelessWidget {
                         ), // Remove bang operator
                         style: TextStyle(
                           color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        memberCount.toString(),
+                        style: TextStyle(
+                          color: AppColors.secondary,
                           fontSize: 12,
                         ),
                       ),

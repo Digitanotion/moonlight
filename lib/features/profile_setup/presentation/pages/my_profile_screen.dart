@@ -168,15 +168,10 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
-                            vertical: 8,
+                            vertical: 12,
                           ),
                           child: Row(
                             children: [
-                              _iconButton(
-                                context,
-                                Icons.arrow_back,
-                                () => Navigator.pop(context),
-                              ),
                               const Spacer(),
                               Text(
                                 'My Profile',

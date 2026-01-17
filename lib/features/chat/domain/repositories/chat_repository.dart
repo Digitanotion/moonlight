@@ -1,12 +1,13 @@
 import 'dart:io';
 
+import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/entities/chat_paginated.dart';
 
 abstract class ChatRepository {
   // ========== CONVERSATIONS ==========
-  Future<List<Conversation>> getConversations();
-  Future<Conversation> startDirectConversation(String userUuid);
+  Future<List<ChatConversations>> getConversations();
+  Future<ChatConversations> startDirectConversation(String userUuid);
   Future<Conversation> getClubConversation(String clubSlugOrUuid);
   Future<List<Conversation>> searchConversations(String query);
 
@@ -31,11 +32,11 @@ abstract class ChatRepository {
   Future<void> deleteMessage(String messageUuid);
   Future<void> reactToMessage(String messageUuid, String emoji);
   Future<void> markConversationAsRead(String conversationUuid);
-  Future<ChatPaginated<Message>> searchMessages(
-    String conversationUuid,
-    String query, {
-    int page,
-  });
+  // Future<ChatPaginated<Message>> searchMessages(
+  //   String conversationUuid,
+  //   String query, {
+  //   int page,
+  // });
 
   // ========== TYPING ==========
   Future<void> sendTypingIndicator(String conversationUuid);

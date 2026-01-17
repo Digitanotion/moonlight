@@ -1,10 +1,132 @@
+// lib/features/live_viewer/domain/entities.dart - ENHANCED VERSION
 import 'package:equatable/equatable.dart';
 
+// ============ NETWORK & CONNECTION ENTITIES ============
+enum NetworkQuality { unknown, excellent, good, poor, disconnected }
+
+class NetworkStatus extends Equatable {
+  final NetworkQuality selfQuality;
+  final NetworkQuality hostQuality;
+  final NetworkQuality? guestQuality;
+  final bool isReconnecting;
+  final int reconnectAttempts;
+  final DateTime? lastDisconnection;
+
+  const NetworkStatus({
+    required this.selfQuality,
+    required this.hostQuality,
+    this.guestQuality,
+    this.isReconnecting = false,
+    this.reconnectAttempts = 0,
+    this.lastDisconnection,
+  });
+
+  NetworkStatus copyWith({
+    NetworkQuality? selfQuality,
+    NetworkQuality? hostQuality,
+    NetworkQuality? guestQuality,
+    bool? isReconnecting,
+    int? reconnectAttempts,
+    DateTime? lastDisconnection,
+  }) {
+    return NetworkStatus(
+      selfQuality: selfQuality ?? this.selfQuality,
+      hostQuality: hostQuality ?? this.hostQuality,
+      guestQuality: guestQuality ?? this.guestQuality,
+      isReconnecting: isReconnecting ?? this.isReconnecting,
+      reconnectAttempts: reconnectAttempts ?? this.reconnectAttempts,
+      lastDisconnection: lastDisconnection ?? this.lastDisconnection,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    selfQuality,
+    hostQuality,
+    guestQuality,
+    isReconnecting,
+    reconnectAttempts,
+    lastDisconnection,
+  ];
+}
+
+// ============ CONNECTION ENTITIES ============
+
+enum ConnectionState {
+  connecting,
+  connected,
+  reconnecting,
+  disconnected,
+  failed,
+}
+
+class ConnectionStats extends Equatable {
+  final double bitrate; // kbps
+  final double packetLoss; // percentage
+  final double latency; // ms
+  final double jitter; // ms
+  final DateTime timestamp;
+
+  const ConnectionStats({
+    required this.bitrate,
+    required this.packetLoss,
+    required this.latency,
+    required this.jitter,
+    required this.timestamp,
+  });
+
+  @override
+  List<Object?> get props => [bitrate, packetLoss, latency, jitter, timestamp];
+}
+
+// ============ GUEST CONTROLS ============
+
+class GuestControlsState extends Equatable {
+  final bool isMicEnabled;
+  final bool isCamEnabled;
+  final bool isAudioMuted;
+  final bool isVideoMuted;
+
+  const GuestControlsState({
+    this.isMicEnabled = false,
+    this.isCamEnabled = false,
+    this.isAudioMuted = true,
+    this.isVideoMuted = true,
+  });
+
+  GuestControlsState copyWith({
+    bool? isMicEnabled,
+    bool? isCamEnabled,
+    bool? isAudioMuted,
+    bool? isVideoMuted,
+  }) {
+    return GuestControlsState(
+      isMicEnabled: isMicEnabled ?? this.isMicEnabled,
+      isCamEnabled: isCamEnabled ?? this.isCamEnabled,
+      isAudioMuted: isAudioMuted ?? this.isAudioMuted,
+      isVideoMuted: isVideoMuted ?? this.isVideoMuted,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    isMicEnabled,
+    isCamEnabled,
+    isAudioMuted,
+    isVideoMuted,
+  ];
+}
+
+// ============ VIEW MODES ============
+
+enum ViewMode { viewer, guest, cohost }
+
+// ============ EXISTING ENTITIES (PRESERVED) ============
 class HostInfo extends Equatable {
   final String name;
-  final String title; // "Talking about Mental Health"
-  final String subtitle; // "Mental health Coach. 1.2M Fans"
-  final String badge; // "Superstar"
+  final String title;
+  final String subtitle;
+  final String badge;
   final String avatarUrl;
   final bool isFollowed;
 
@@ -41,29 +163,31 @@ class ChatMessage extends Equatable {
   final String id;
   final String username;
   final String text;
+  final bool isHost;
 
   const ChatMessage({
     required this.id,
     required this.username,
     required this.text,
+    this.isHost = false,
   });
 
   @override
-  List<Object?> get props => [id, username, text];
+  List<Object?> get props => [id, username, text, isHost];
 }
 
 class GuestJoinNotice extends Equatable {
-  final String username; // "Jane_Star"
-  final String message; // "has joined the stream as a guest!"
+  final String username;
+  final String message;
   const GuestJoinNotice({required this.username, required this.message});
   @override
   List<Object?> get props => [username, message];
 }
 
 class GiftNotice extends Equatable {
-  final String from; // "Sarah"
-  final String giftName; // "Golden Crown"
-  final int coins; // 500
+  final String from;
+  final String giftName;
+  final int coins;
   const GiftNotice({
     required this.from,
     required this.giftName,
@@ -73,8 +197,7 @@ class GiftNotice extends Equatable {
   List<Object?> get props => [from, giftName, coins];
 }
 
-// === GIFTS: domain models (additive) ===
-
+// ============ GIFTS DOMAIN MODELS ============
 class GiftItem {
   final String id;
   final String code;
@@ -120,7 +243,7 @@ class GiftItem {
 }
 
 class GiftBroadcast {
-  final String type; // "gift.sent"
+  final String type;
   final String livestreamId;
   final String serverTxnId;
   final int seqNo;
@@ -157,7 +280,6 @@ class GiftBroadcast {
       if (v is String) {
         final parsed = int.tryParse(v);
         if (parsed != null) return parsed;
-        // try parse double then toInt
         final dbl = double.tryParse(v.replaceAll('%', ''));
         if (dbl != null) return dbl.toInt();
       }
@@ -178,8 +300,6 @@ class GiftBroadcast {
       serverTxnId: '${m['server_txn_id'] ?? ''}',
       seqNo: _intFrom(m['seq_no'], fallback: 0),
       giftCode: '${m['gift_code'] ?? ''}',
-      // gift_id can be uuid string in your catalog; keep as nullable String? But your model expects int.
-      // If backend uses uuid string for gift_id, you'll want String? type. For now parse numeric if possible.
       giftId: '${m['gift_id'] ?? ''}',
       quantity: _intFrom(m['quantity'], fallback: 1),
       coinsSpent: _intFrom(m['coins_spent'], fallback: 0),

@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/core/errors/failures.dart';
+import 'package:moonlight/features/settings/domain/entities/notification_settings.dart';
 import '../../domain/repositories/account_repository.dart';
 import '../datasources/account_remote_data_source.dart';
 
@@ -47,6 +48,81 @@ class AccountRepositoryImpl implements AccountRepository {
   }) async {
     try {
       await remote.deleteAccount(confirm: confirm, password: password);
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, NotificationSettings>>
+  getNotificationSettings() async {
+    try {
+      final settings = await remote.getNotificationSettings();
+      return Right(settings);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateNotificationSettings(
+    NotificationSettings settings,
+  ) async {
+    try {
+      await remote.updateNotificationSettings(settings);
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> getDeletionStatus() async {
+    try {
+      final status = await remote.getDeletionStatus();
+      return Right(status);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> requestDeletion({
+    required String confirm,
+    String? password,
+    required String reason,
+    String? feedback,
+  }) async {
+    try {
+      await remote.requestDeletion(
+        confirm: confirm,
+        password: password,
+        reason: reason,
+        feedback: feedback,
+      );
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> cancelDeletion({
+    required String confirm,
+  }) async {
+    try {
+      await remote.cancelDeletion(confirm: confirm);
       return const Right(null);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

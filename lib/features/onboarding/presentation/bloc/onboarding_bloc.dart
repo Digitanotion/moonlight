@@ -16,21 +16,55 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     : super(OnboardingState.initial()) {
     // Event handlers
     on<LoadOnboardingStatus>(_onLoadStatus);
+    on<CheckFirstLaunchStatus>(_onCheckFirstLaunchStatus); // ✅ NEW
     on<OnboardingPageChanged>(_onPageChanged);
     on<OnboardingSkip>(_onSkip);
     on<OnboardingComplete>(_onComplete);
 
-    // Trigger the loading of first-launch status
-    add(LoadOnboardingStatus());
+    // ✅ MODIFIED: Use a delayed trigger to prevent splash conflicts
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (!isClosed) {
+        add(LoadOnboardingStatus());
+      }
+    });
   }
 
-  // Load first-launch flag from repository
+  // Load first-launch flag from repository (for BLoC initialization)
   Future<void> _onLoadStatus(
     LoadOnboardingStatus event,
     Emitter<OnboardingState> emit,
   ) async {
-    final firstLaunch = await repository.isFirstLaunch();
-    emit(state.copyWith(isFirstLaunch: firstLaunch));
+    try {
+      final firstLaunch = await repository.isFirstLaunch();
+      emit(state.copyWith(isFirstLaunch: firstLaunch));
+      debugPrint('✅ OnboardingBloc loaded: isFirstLaunch=$firstLaunch');
+    } catch (e) {
+      debugPrint('❌ Error loading onboarding status: $e');
+      emit(
+        state.copyWith(isFirstLaunch: true),
+      ); // Default to first launch on error
+    }
+  }
+
+  // ✅ NEW: Simple status check for splash screen
+  Future<void> _onCheckFirstLaunchStatus(
+    CheckFirstLaunchStatus event,
+    Emitter<OnboardingState> emit,
+  ) async {
+    try {
+      // Just read current state without emitting changes
+      debugPrint('🔍 Splash checking: isFirstLaunch=${state.isFirstLaunch}');
+
+      // If state is still null (BLoC not initialized), fetch it
+      if (state.isFirstLaunch == null) {
+        final firstLaunch = await repository.isFirstLaunch();
+        emit(state.copyWith(isFirstLaunch: firstLaunch));
+        debugPrint('✅ Splash fetched: isFirstLaunch=$firstLaunch');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Splash onboarding check error: $e');
+      // Don't emit error state - keep current state
+    }
   }
 
   // Handle page change

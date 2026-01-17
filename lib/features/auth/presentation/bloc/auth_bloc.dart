@@ -1,7 +1,10 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/errors/failures.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
+import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/features/auth/domain/entities/user_entity.dart';
 import 'package:moonlight/features/auth/domain/repositories/auth_repository.dart';
 import 'package:moonlight/features/auth/domain/usecases/check_auth_status.dart'
@@ -146,12 +149,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
 
-    final result = await logout();
+    try {
+      // 1. Clean up unread service first
+      try {
+        final unreadService = GetIt.instance<UnreadBadgeService>();
+        await unreadService.disconnect();
+        debugPrint('✅ UnreadBadgeService cleaned up on logout');
+      } catch (e) {
+        debugPrint('⚠️ Error cleaning up unread service: $e');
+        // Continue with logout even if cleanup fails
+      }
 
-    result.fold((failure) => emit(AuthFailure(failure.message)), (_) {
-      currentUserService.clearUser(); // Clear service
-      emit(AuthUnauthenticated());
-    });
+      // 2. Perform the actual logout
+      final result = await logout();
+
+      result.fold((failure) => emit(AuthFailure(failure.message)), (_) {
+        // 3. Clear services and emit unauthenticated state
+        currentUserService.clearUser();
+        emit(AuthUnauthenticated());
+      });
+    } catch (e) {
+      debugPrint('❌ Unexpected error during logout: $e');
+      emit(AuthFailure('Logout failed: ${e.toString()}'));
+    }
   }
 
   Future<void> _onGoogleSignInRequested(

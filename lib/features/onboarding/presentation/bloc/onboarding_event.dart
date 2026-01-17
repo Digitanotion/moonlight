@@ -7,7 +7,13 @@ abstract class OnboardingEvent extends Equatable {
   List<Object> get props => [];
 }
 
+// ✅ KEEP EXISTING: For OnboardingBloc's automatic loading
 class LoadOnboardingStatus extends OnboardingEvent {}
+
+// ✅ NEW: Specifically for Splash Screen to check status
+class CheckFirstLaunchStatus extends OnboardingEvent {
+  const CheckFirstLaunchStatus();
+}
 
 class OnboardingPageChanged extends OnboardingEvent {
   final int pageIndex;

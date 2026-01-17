@@ -17,11 +17,10 @@ import 'package:moonlight/features/livestream/domain/entities/live_entities.dart
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
 import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
 
-/// Live host bloc (complete file)
-/// - Consolidated premium subscription (single)
-/// - Guarded PremiumStatusUpdated handler (apply only for current livestream)
-/// - PremiumActionFailed does not force-clear isPremium/premiumStatus (server is source-of-truth)
-/// - NEW: Beauty preference persistence & apply (Face Clean + Brighten)
+/// Live host bloc with proper subscription lifecycle management
+/// - Fixed stream controller state management
+/// - Proper cleanup sequencing
+/// - Robust error handling
 
 const _kPrefFaceEnabled = 'beauty_face_enabled';
 const _kPrefFaceLevel = 'beauty_face_level';
@@ -40,6 +39,7 @@ class LiveHostState {
   final LiveJoinRequest? pendingRequest;
   final LiveEndAnalytics? endAnalytics;
   final String? activeGuestUuid;
+  final String? activeGuestName;
 
   // NEW (gift toast)
   final GiftEvent? gift;
@@ -70,6 +70,7 @@ class LiveHostState {
     this.showGiftToast = false,
     this.endAnalytics,
     this.activeGuestUuid,
+    this.activeGuestName,
     this.isPremium = false,
     this.premiumStatus,
     this.premiumActionLoading = false,
@@ -95,6 +96,7 @@ class LiveHostState {
     LiveEndAnalytics? endAnalytics,
     bool clearEndAnalytics = false,
     String? activeGuestUuid,
+    String? activeGuestName,
     bool? isPremium,
     PremiumStatusModel? premiumStatus,
     bool? premiumActionLoading,
@@ -122,6 +124,7 @@ class LiveHostState {
           ? null
           : (endAnalytics ?? this.endAnalytics),
       activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
+      activeGuestName: activeGuestName ?? this.activeGuestName,
       isPremium: isPremium ?? this.isPremium,
       premiumStatus: premiumStatus ?? this.premiumStatus,
       premiumActionLoading: premiumActionLoading ?? this.premiumActionLoading,
@@ -150,6 +153,7 @@ class LiveHostState {
     showGiftToast: false,
     endAnalytics: null,
     activeGuestUuid: null,
+    activeGuestName: null,
     isPremium: false,
     premiumStatus: null,
     premiumActionLoading: false,
@@ -233,11 +237,12 @@ class SendChatMessage extends LiveHostEvent {
 }
 
 // private events
-class _HideGiftToast extends LiveHostEvent {}
+class HideGiftToast extends LiveHostEvent {}
 
 class _ActiveGuestChanged extends LiveHostEvent {
   final String? uuid;
-  _ActiveGuestChanged(this.uuid);
+  final String? name;
+  _ActiveGuestChanged(this.uuid, this.name);
 }
 
 // Premium events
@@ -279,6 +284,7 @@ class BeautyPreferencesUpdated extends LiveHostEvent {
 class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   final LiveSessionRepository repo;
   final AgoraService agoraService;
+
   Timer? _timer;
   StreamSubscription<int>? _vSub;
   StreamSubscription<LiveChatMessage>? _cSub;
@@ -294,19 +300,27 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
 
   // Internal: whether we've applied beauty prefs after join
   bool _beautyAppliedAfterJoin = false;
+  bool _isDisposed = false;
 
   LiveHostBloc(this.repo, this.agoraService)
     : super(LiveHostState.initial('')) {
     on<LiveStarted>(_onStart);
     on<LiveTick>(_onTick);
 
-    on<ViewerCountUpdated>(
-      (e, emit) => emit(state.copyWith(viewers: e.viewers)),
-    );
-    on<IncomingMessage>(
-      (e, emit) =>
-          emit(state.copyWith(messages: [...state.messages, e.message])),
-    );
+    on<ViewerCountUpdated>((e, emit) {
+      debugPrint('🎯 [BLOC] ViewerCountUpdated event received: ${e.viewers}');
+      debugPrint('🎯 [BLOC] Previous viewers: ${state.viewers}');
+      emit(state.copyWith(viewers: e.viewers));
+      debugPrint('✅ [BLOC] Viewers updated in state');
+    });
+    on<IncomingMessage>((e, emit) {
+      debugPrint(
+        '🎯 [BLOC] IncomingMessage event received: ${e.message.handle}: ${e.message.text}',
+      );
+      debugPrint('🎯 [BLOC] Current messages count: ${state.messages.length}');
+      emit(state.copyWith(messages: [...state.messages, e.message]));
+      debugPrint('✅ [BLOC] Message added to state');
+    });
 
     on<TogglePause>(_onTogglePause);
     on<ToggleChatVisibility>(
@@ -325,10 +339,14 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
 
     // NEW handlers
     on<GiftArrived>((e, emit) {
+      debugPrint('🎁 [BLOC] Processing GiftArrived event');
+      debugPrint('🎁 [BLOC] Gift: ${e.gift.giftName} from ${e.gift.from}');
       emit(state.copyWith(gift: e.gift, showGiftToast: true));
-      _autoHide(() => add(_HideGiftToast()));
+      _autoHide(() => add(HideGiftToast()));
     });
+
     on<LiveEndedReceived>((e, emit) async {
+      if (_isDisposed) return;
       await _cleanDown();
       emit(state.copyWith(isLive: false));
     });
@@ -340,11 +358,11 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       await repo.sendChatMessage(event.text);
       // Message will appear via the existing chat stream - no state change needed
     });
-    on<_HideGiftToast>((e, emit) => emit(state.copyWith(showGiftToast: false)));
+    on<HideGiftToast>((e, emit) => emit(state.copyWith(showGiftToast: false)));
 
     // Only one handler for _ActiveGuestChanged
     on<_ActiveGuestChanged>((e, emit) {
-      emit(state.copyWith(activeGuestUuid: e.uuid));
+      emit(state.copyWith(activeGuestUuid: e.uuid, activeGuestName: e.name));
     });
 
     // Premium handlers
@@ -418,19 +436,22 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => add(LiveTick()));
 
     try {
+      // Restart streams before starting the session
+      await repo.restartStreams();
+
       // Then start the session
       await repo.startSession(topic: e.topic);
       debugPrint('✅ Live session started successfully');
     } catch (error) {
       debugPrint('❌ Failed to start live session: $error');
-      // Don't rethrow - keep the UI functional but show error state
       emit(state.copyWith(isLive: false));
       return;
     }
 
     // Load persisted beauty preferences and setup subscriptions
     add(LoadBeautyPreferences());
-
+    // IMPORTANT: Clean up old subscriptions first
+    // await _cleanupSubscriptions();
     // Then setup stream subscriptions
     await _setupStreamSubscriptions();
   }
@@ -457,7 +478,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
           package: PremiumPackageSummary(
             id: pkg.id,
             name: pkg.title,
-            coins: pkg.coins,
+            coins: pkg.coins as int,
           ),
         ),
         premiumError: null,
@@ -469,6 +490,8 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       final res = await repo.activatePremium(
         livestreamId: livestreamId,
         packageId: pkg.id,
+        packageName: pkg.title,
+        coins: pkg.coins.toString(),
         idempotencyKey: idemp,
       );
 
@@ -598,6 +621,8 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   }
 
   Future<void> _applyBeautyFromStateIfReady() async {
+    if (_isDisposed) return;
+
     // If Agora is joined, apply immediately. Otherwise wait for join.
     try {
       if (agoraService.joined) {
@@ -620,7 +645,137 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   }
 
   Future<void> _setupStreamSubscriptions() async {
+    if (_isDisposed) return;
+
     // Cancel existing subscriptions first
+    await _cleanupSubscriptions();
+
+    // Setup new subscriptions with error handling
+    try {
+      _vSub = repo.viewersStream().listen(
+        (v) {
+          if (!_isDisposed) {
+            debugPrint('👥 Viewer count update: $v');
+            add(ViewerCountUpdated(v));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ Viewer stream error: $e');
+        },
+      );
+
+      _cSub = repo.chatStream().listen(
+        (m) {
+          if (!_isDisposed) {
+            debugPrint('💬 Chat message received');
+            add(IncomingMessage(m));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ Chat stream error: $e');
+        },
+      );
+
+      _rSub = repo.joinRequestStream().listen(
+        (r) {
+          if (!_isDisposed) {
+            debugPrint('🙋 Join request received');
+            add(IncomingJoinRequest(r));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ Join request stream error: $e');
+        },
+      );
+
+      _pSub = repo.pauseStream().listen(
+        (p) {
+          if (!_isDisposed) {
+            debugPrint('⏸️ Pause status: $p');
+            add(PauseStatusChanged(p));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ Pause stream error: $e');
+        },
+      );
+
+      _gSub = repo.giftsStream().listen(
+        (g) {
+          if (!_isDisposed) {
+            debugPrint('🎁 [BLOC] Gift received: ${g.giftName} from ${g.from}');
+            debugPrint('🎁 [BLOC] Gift details: id=${g.id}, coins=${g.coins}');
+            add(GiftArrived(g));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ [BLOC] Gift stream error: $e');
+        },
+        onDone: () {
+          debugPrint('✅ [BLOC] Gift stream completed');
+        },
+        cancelOnError: false,
+      );
+
+      _eSub = repo.endedStream().listen(
+        (_) {
+          debugPrint('🔴 Live ended event received');
+          // add(LiveEndedReceived());
+        },
+        onError: (e) {
+          debugPrint('❌ Ended stream error: $e');
+        },
+      );
+
+      _jhSub = repo.joinHandledStream().listen(
+        (j) {
+          if (!_isDisposed) {
+            debugPrint('✅ Join handled: ${j.accepted}');
+            add(JoinHandledReceived(j));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ Join handled stream error: $e');
+        },
+      );
+
+      _guestSub = repo.activeGuestUuidStream().listen(
+        (uuid) {
+          if (!_isDisposed) {
+            debugPrint('🎥 Active guest UUID (host view): $uuid');
+            add(_ActiveGuestChanged(uuid, 'Guest'));
+          }
+        },
+        onError: (e) {
+          debugPrint('❌ Active guest stream error: $e');
+        },
+      );
+
+      // Premium subscription
+      _premiumSub = repo.premiumStatusStream().listen(
+        (p) {
+          if (!_isDisposed) {
+            debugPrint(
+              '🔔 premium event in bloc (stream): isPremium=${p.isPremium} livestreamId=${p.livestreamId ?? "?"}',
+            );
+            add(PremiumStatusUpdated(p));
+          }
+        },
+        onError: (e) {
+          debugPrint('⚠️ premium stream error: $e');
+        },
+      );
+
+      debugPrint('✅ All stream subscriptions setup');
+    } catch (e) {
+      debugPrint('❌ Failed to setup stream subscriptions: $e');
+    }
+
+    // Add Agora listener for join changes
+    _setupAgoraListener();
+  }
+
+  Future<void> _cleanupSubscriptions() async {
     await _vSub?.cancel();
     await _cSub?.cancel();
     await _rSub?.cancel();
@@ -631,85 +786,26 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await _guestSub?.cancel();
     await _premiumSub?.cancel();
 
-    // FIXED: Remove Agora listener (if attached)
+    _vSub = null;
+    _cSub = null;
+    _rSub = null;
+    _pSub = null;
+    _gSub = null;
+    _eSub = null;
+    _jhSub = null;
+    _guestSub = null;
+    _premiumSub = null;
+
     _removeAgoraListener();
-
-    // Setup new subscriptions
-    _vSub = repo.viewersStream().listen((v) {
-      debugPrint('👥 Viewer count update: $v');
-      add(ViewerCountUpdated(v));
-    });
-
-    _cSub = repo.chatStream().listen((m) {
-      debugPrint('💬 Chat message received');
-      add(IncomingMessage(m));
-    });
-
-    _rSub = repo.joinRequestStream().listen((r) {
-      debugPrint('🙋 Join request received');
-      add(IncomingJoinRequest(r));
-    });
-
-    _pSub = repo.pauseStream().listen((p) {
-      debugPrint('⏸️ Pause status: $p');
-      add(PauseStatusChanged(p));
-    });
-
-    _gSub = repo.giftsStream().listen((g) {
-      debugPrint('🎁 Gift received');
-      add(GiftArrived(g));
-    });
-
-    _eSub = repo.endedStream().listen((_) {
-      debugPrint('🔴 Live ended event received');
-      add(LiveEndedReceived());
-    });
-
-    _jhSub = repo.joinHandledStream().listen((j) {
-      debugPrint('✅ Join handled: ${j.accepted}');
-      add(JoinHandledReceived(j));
-    });
-
-    // Enhanced guest subscription
-    _guestSub = repo.activeGuestUuidStream().listen((uuid) {
-      debugPrint('🎥 Active guest UUID (host view): $uuid');
-      add(_ActiveGuestChanged(uuid));
-    });
-
-    // ---- premium subscription (single) ----
-    try {
-      await _premiumSub?.cancel();
-      _premiumSub = repo.premiumStatusStream().listen(
-        (p) {
-          debugPrint(
-            '🔔 premium event in bloc (stream): isPremium=${p.isPremium} livestreamId=${p.livestreamId ?? "?"}',
-          );
-          add(PremiumStatusUpdated(p));
-        },
-        onError: (e) {
-          debugPrint('⚠️ premium stream error: $e');
-        },
-      );
-      debugPrint('✅ premiumStatusStream subscribed');
-    } catch (e) {
-      debugPrint('⚠️ premium subscription failed: $e');
-    }
-
-    // Add Agora listener for join changes (and keep existing remote uid listener)
-    _setupAgoraListener();
-
-    debugPrint('✅ All stream subscriptions setup');
   }
 
-  // FIXED: Add methods for ValueNotifier listener management
   void _setupAgoraListener() {
     try {
-      // existing: remote uid listener
       agoraService.primaryRemoteUid.addListener(_onAgoraRemoteUidChanged);
-      // new: general service listener to detect join state changes
       agoraService.addListener(_onAgoraChanged);
-    } catch (_) {
-      // ignore if not attachable
+      debugPrint('✅ Agora listeners added');
+    } catch (e) {
+      debugPrint('⚠️ Failed to add Agora listeners: $e');
     }
   }
 
@@ -717,21 +813,22 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     try {
       agoraService.primaryRemoteUid.removeListener(_onAgoraRemoteUidChanged);
       agoraService.removeListener(_onAgoraChanged);
-    } catch (_) {
-      // ignore if listener wasn't attached
+      debugPrint('✅ Agora listeners removed');
+    } catch (e) {
+      debugPrint('⚠️ Failed to remove Agora listeners: $e');
     }
   }
 
   void _onAgoraRemoteUidChanged() {
+    if (_isDisposed) return;
     final remoteUid = agoraService.primaryRemoteUid.value;
     debugPrint('🎥 Agora primary remote UID changed: $remoteUid');
   }
 
-  // Called when AgoraService notifies (join state may have changed)
   void _onAgoraChanged() {
+    if (_isDisposed) return;
     try {
       if (agoraService.joined && !_beautyAppliedAfterJoin) {
-        // apply saved prefs now that engine is ready
         _applyBeautyFromStateIfReady();
       }
     } catch (e) {
@@ -740,7 +837,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   }
 
   void _onTick(LiveTick e, Emitter<LiveHostState> emit) {
-    if (!state.isPaused) {
+    if (!state.isPaused && !_isDisposed) {
       emit(state.copyWith(elapsedSeconds: state.elapsedSeconds + 1));
     }
   }
@@ -749,6 +846,8 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     TogglePause e,
     Emitter<LiveHostState> emit,
   ) async {
+    if (_isDisposed) return;
+
     final next = !state.isPaused;
     emit(state.copyWith(isPaused: next)); // optimistic
     repo.setLocalPause(next); // instant local mute
@@ -756,19 +855,52 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
   }
 
   Future<void> _onEnd(EndPressed e, Emitter<LiveHostState> emit) async {
+    if (_isDisposed) return;
+
     try {
+      debugPrint('🔄 Ending live session...');
+
       // 1) Call server to end + get analytics
       final analytics = await repo.endAndFetchAnalytics();
 
-      // 2) Local cleanup (mute/leave etc.)
-      await _cleanDown();
+      debugPrint('✅ Analytics received: ${analytics.status}');
 
-      // 3) Put analytics in state and flip off isLive (UI will navigate)
+      // 2) Clean up bloc subscriptions but DON'T dispose the repo
+      await _cleanupSubscriptions();
+
+      // Cancel timer
+      _timer?.cancel();
+      _timer = null;
+
+      // 3) Update state
       emit(state.copyWith(isLive: false, endAnalytics: analytics));
-    } catch (_) {
-      // Still attempt to cleanup locally, but keep UX consistent
-      await _cleanDown();
-      emit(state.copyWith(isLive: false));
+
+      debugPrint('✅ Live session ended successfully');
+    } catch (error, stack) {
+      debugPrint('❌ Error ending live stream: $error');
+      debugPrint('Stack trace: $stack');
+
+      // Still attempt to cleanup
+      await _cleanupSubscriptions();
+      _timer?.cancel();
+      _timer = null;
+
+      // Update state to show ended even on error
+      emit(
+        state.copyWith(
+          isLive: false,
+          endAnalytics: LiveEndAnalytics(
+            status: 'error',
+            endedAtIso: DateTime.now().toUtc().toIso8601String(),
+            durationFormatted: '00:00:00',
+            durationSeconds: 0.0,
+            totalViewers: 0,
+            totalChats: 0,
+            coinsAmount: 0,
+            coinsCurrency: 'coins',
+          ),
+        ),
+      );
     }
   }
 
@@ -776,6 +908,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     AcceptJoinRequest e,
     Emitter<LiveHostState> emit,
   ) async {
+    if (_isDisposed) return;
     await repo.acceptJoinRequest(e.id);
     // Do not clear immediately; wait for server echo (join.handled)
   }
@@ -784,47 +917,32 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     DeclineJoinRequest e,
     Emitter<LiveHostState> emit,
   ) async {
+    if (_isDisposed) return;
     await repo.declineJoinRequest(e.id);
     // Also wait for echo to clear
   }
 
   void _autoHide(void Function() cb) {
+    if (_isDisposed) return;
     Future.delayed(const Duration(seconds: 4), cb);
   }
 
   Future<void> _cleanDown() async {
     _timer?.cancel();
-    await _vSub?.cancel();
-    await _cSub?.cancel();
-    await _rSub?.cancel();
-    await _pSub?.cancel();
-    await _gSub?.cancel();
-    await _eSub?.cancel();
-    await _jhSub?.cancel();
-    await _guestSub?.cancel();
-    await _premiumSub?.cancel();
+    _timer = null;
 
-    // FIXED: Remove Agora listener
-    _removeAgoraListener();
-
+    await _cleanupSubscriptions();
     await repo.endSession(); // idempotent
   }
 
   @override
   Future<void> close() async {
-    _timer?.cancel();
-    await _vSub?.cancel();
-    await _cSub?.cancel();
-    await _rSub?.cancel();
-    await _pSub?.cancel();
-    await _gSub?.cancel();
-    await _eSub?.cancel();
-    await _jhSub?.cancel();
-    await _guestSub?.cancel();
-    await _premiumSub?.cancel();
+    _isDisposed = true;
 
-    // FIXED: Remove Agora listener
-    _removeAgoraListener();
+    _timer?.cancel();
+    _timer = null;
+
+    await _cleanupSubscriptions();
 
     // End session idempotently; server ignores if already ended
     return super.close().whenComplete(() async {

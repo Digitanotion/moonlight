@@ -1,3 +1,4 @@
+// lib/features/chat/data/models/chat_models.dart
 import 'package:equatable/equatable.dart';
 
 class ChatUser extends Equatable {
@@ -34,32 +35,38 @@ class ChatUser extends Equatable {
 }
 
 class MediaAttachment extends Equatable {
-  final String uuid;
+  final String? uuid; // Make this nullable
   final String url;
   final String mimeType;
   final int size;
+  final int? duration;
 
-  const MediaAttachment({
-    required this.uuid,
+  MediaAttachment({
+    this.uuid, // Nullable
     required this.url,
     required this.mimeType,
     required this.size,
+    this.duration,
   });
 
   factory MediaAttachment.fromJson(Map<String, dynamic> json) {
     return MediaAttachment(
-      uuid: json['uuid'] as String,
+      uuid: json['uuid'] as String?, // Handle null
       url: json['url'] as String,
       mimeType: json['mime_type'] as String,
-      size: json['size'] as int,
+      size: json['size'] is String
+          ? int.parse(json['size'] as String) // Handle string size
+          : json['size'] as int, // Handle int size
+      duration: json['duration'] as int?,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'uuid': uuid,
+    if (uuid != null) 'uuid': uuid,
     'url': url,
     'mime_type': mimeType,
     'size': size,
+    if (duration != null) 'duration': duration,
   };
 
   bool get isImage => mimeType.startsWith('image/');
@@ -67,7 +74,7 @@ class MediaAttachment extends Equatable {
   bool get isAudio => mimeType.startsWith('audio/');
 
   @override
-  List<Object?> get props => [uuid, url];
+  List<Object?> get props => [uuid, url]; // uuid can be null
 }
 
 class Message extends Equatable {
@@ -81,6 +88,7 @@ class Message extends Equatable {
   final DateTime createdAt;
   final DateTime? editedAt;
   final String? replyToUuid;
+  final Message? replyTo; // This is the full reply message object
 
   const Message({
     required this.uuid,
@@ -93,12 +101,13 @@ class Message extends Equatable {
     required this.createdAt,
     this.editedAt,
     this.replyToUuid,
+    this.replyTo, // Initialize
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
       uuid: json['uuid'] as String,
-      body: json['body'] as String,
+      body: json['body']?.toString() ?? '',
       type: MessageType.fromString(json['type'] as String),
       sender: ChatUser.fromJson(
         Map<String, dynamic>.from(json['sender'] as Map),
@@ -116,6 +125,32 @@ class Message extends Equatable {
           ? DateTime.parse(json['edited_at'] as String).toLocal()
           : null,
       replyToUuid: json['reply_to_uuid'] as String?,
+      replyTo: json['reply_to'] != null
+          ? Message.fromReplyToJson(
+              Map<String, dynamic>.from(json['reply_to'] as Map),
+            )
+          : null,
+    );
+  }
+
+  // Special constructor for reply_to objects (they have less fields)
+  factory Message.fromReplyToJson(Map<String, dynamic> json) {
+    return Message(
+      uuid: json['uuid'] as String,
+      body: json['body']?.toString() ?? '',
+      type: MessageType.fromString(json['type'] as String),
+      sender: ChatUser.fromJson(
+        Map<String, dynamic>.from(json['sender'] as Map),
+      ),
+      media: const [],
+      reactions: const [],
+      isEdited: false,
+      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
+      editedAt: json['edited_at'] != null
+          ? DateTime.parse(json['edited_at'] as String).toLocal()
+          : null,
+      replyToUuid: null, // Reply-to messages don't have their own reply_to
+      replyTo: null,
     );
   }
 
@@ -130,6 +165,7 @@ class Message extends Equatable {
     'created_at': createdAt.toUtc().toIso8601String(),
     'edited_at': editedAt?.toUtc().toIso8601String(),
     'reply_to_uuid': replyToUuid,
+    'reply_to': replyTo?.toJson(),
   };
 
   @override
@@ -144,6 +180,7 @@ class Message extends Equatable {
     createdAt,
     editedAt,
     replyToUuid,
+    replyTo,
   ];
 }
 
@@ -175,7 +212,7 @@ class Conversation extends Equatable {
       uuid: json['uuid'] as String,
       type: json['type'] as String,
       title: json['title'] as String,
-      imageUrl: json['image_url'] as String?, // Cast to nullable
+      imageUrl: json['image_url'] as String?,
       isPinned: json['is_pinned'] as bool? ?? false,
       unreadCount: json['unread_count'] as int? ?? 0,
       lastMessage: json['last_message'] != null
@@ -218,33 +255,6 @@ class Conversation extends Equatable {
     updatedAt,
   ];
 }
-
-// For paginated responses (following your existing pattern)
-// class PaginatedMessages extends Paginated<Message> {
-//   const PaginatedMessages({
-//     required super.data,
-//     required super.currentPage,
-//     required super.lastPage,
-//     required super.perPage,
-//     required super.total,
-//     required super.nextPageUrl,
-//   });
-
-//   factory PaginatedMessages.fromJson(Map<String, dynamic> json) {
-//     final data = (json['data'] as List)
-//         .map((m) => Message.fromJson(Map<String, dynamic>.from(m as Map)))
-//         .toList();
-
-//     return PaginatedMessages(
-//       data: data,
-//       currentPage: json['meta']['current_page'] as int,
-//       lastPage: json['meta']['last_page'] as int,
-//       perPage: json['meta']['per_page'] as int,
-//       total: json['meta']['total'] as int,
-//       nextPageUrl: json['links']['next'] as String?,
-//     );
-//   }
-// }
 
 enum MessageType {
   text('text'),

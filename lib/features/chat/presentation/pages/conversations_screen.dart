@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
@@ -27,7 +28,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     });
   }
 
-  void _navigateToChat(Conversation conversation) {
+  void _navigateToChat(ChatConversations conversation) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -44,7 +45,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   void _showContextMenu(
     BuildContext context,
-    Conversation conversation,
+    ChatConversations conversation,
     Offset tapPosition,
   ) {
     final RenderBox overlay =
@@ -95,16 +96,19 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     );
   }
 
-  void _togglePin(BuildContext context, Conversation conversation) {
+  void _togglePin(BuildContext context, ChatConversations conversation) {
     context.read<ChatCubit>().pinConversation(conversation.uuid);
     // Note: The conversation list will update via real-time events
   }
 
-  void _muteConversation(BuildContext context, Conversation conversation) {
+  void _muteConversation(BuildContext context, ChatConversations conversation) {
     context.read<ChatCubit>().muteConversation(conversation.uuid);
   }
 
-  void _archiveConversation(BuildContext context, Conversation conversation) {
+  void _archiveConversation(
+    BuildContext context,
+    ChatConversations conversation,
+  ) {
     context.read<ChatCubit>().archiveConversation(conversation.uuid);
   }
 
@@ -180,6 +184,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              Text(''),
               Icon(
                 _selectedTab == 0 ? Icons.chat_bubble_outline : Icons.group,
                 size: 64,

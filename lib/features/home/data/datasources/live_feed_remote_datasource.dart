@@ -1,27 +1,29 @@
 import 'package:dio/dio.dart';
+import 'package:moonlight/core/network/dio_client.dart'; // ✅ Add import
 import 'package:moonlight/core/config/api_toggles.dart';
 import 'package:moonlight/core/utils/countries.dart';
 import '../models/live_item_model.dart';
 
 abstract class LiveFeedRemoteDataSource {
   Future<({List<LiveItemModel> items, int page, int perPage, int total})>
-  getActive({
-    String? countryIso, // we receive ISO2 (or null) from the UI/Bloc
-    String order,
-    int page,
-    int perPage,
-  });
+  getActive({String? countryIso, String order, int page, int perPage});
   Future<int> getViewers({required int liveId});
-
-  // New: pay premium endpoint
   Future<Map<String, dynamic>> payPremium({
     required int liveId,
     required String idempotencyKey,
   });
+  Future<Map<String, dynamic>> checkPremiumStatus({required int liveId});
 }
 
 class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
-  final Dio dio;
+  final Dio dio; // Keep this as Dio
+
+  // ✅ Add a factory constructor that accepts DioClient
+  factory LiveFeedRemoteDataSourceImpl.fromDioClient(DioClient dioClient) {
+    return LiveFeedRemoteDataSourceImpl(dioClient.dio);
+  }
+
+  // Original constructor
   LiveFeedRemoteDataSourceImpl(this.dio);
 
   @override
@@ -32,15 +34,12 @@ class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
     int page = 1,
     int perPage = 20,
   }) async {
-    // Encode the country filter the way the backend expects.
     String? countryParam;
     if (countryIso != null) {
       if (kUseCountryNameFilter) {
-        // Convert ISO2 -> canonical name (uppercased) e.g. "KE" -> "KENYA"
         final name = countryDisplayName(countryIso);
         countryParam = name.toUpperCase();
       } else {
-        // Use ISO2, uppercased e.g. "KE"
         countryParam = countryIso.toUpperCase();
       }
     }
@@ -51,7 +50,7 @@ class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
         if (countryParam != null) 'country': countryParam,
         'order': order,
         'page': page,
-        'per_page': perPage,
+        'perPage': perPage,
       },
     );
 
@@ -82,7 +81,26 @@ class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
       '/api/v1/live/$liveId/pay-premium',
       data: {'idempotency_key': idempotencyKey},
     );
-    // Return the parsed JSON map directly to the repository for handling
     return (resp.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<Map<String, dynamic>> checkPremiumStatus({required int liveId}) async {
+    try {
+      final response = await dio.get('/api/v1/live/$liveId/premium/status');
+
+      final data = response.data as Map<String, dynamic>;
+      return data;
+    } on DioException catch (e) {
+      if (e.response != null) {
+        final errorData = e.response!.data as Map<String, dynamic>;
+        throw Exception(
+          errorData['message'] ?? 'Failed to check premium status',
+        );
+      }
+      throw Exception('Network error while checking premium status');
+    } catch (e) {
+      throw Exception('Failed to check premium status: $e');
+    }
   }
 }

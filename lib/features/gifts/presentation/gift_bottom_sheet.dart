@@ -6,7 +6,8 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/gifts/helpers/gift_visuals.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 // import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_state.dart';
-import 'package:moonlight/features/live_viewer/domain/entities.dart';
+import 'package:moonlight/features/live_viewer/domain/entities.dart'
+    hide ConnectionState;
 import 'package:moonlight/widgets/top_snack.dart';
 
 class GiftBottomSheet extends StatefulWidget {

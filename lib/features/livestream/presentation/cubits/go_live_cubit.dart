@@ -24,6 +24,7 @@ class GoLiveCubit extends Cubit<GoLiveState> {
     emit(state.copyWith(loading: true, clearError: true));
     try {
       final cats = await repo.fetchCategories();
+
       final eligible = await repo.isFirstStreamBonusEligible();
 
       // Initialize devices according to default toggles

@@ -30,11 +30,21 @@ class Club extends Equatable {
       slug: json['slug']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       description: json['description']?.toString(),
-      membersCount: (json['membersCount'] as num?)?.toInt() ?? 0,
-      coverImageUrl: json['avatar_url']?.toString(),
-      isCreator: json['isCreator'] == true,
-      isPrivate: json['isPrivate'] == true,
-      isMember: json['isMember'] == true,
+
+      membersCount:
+          (json['membersCount'] as num?)?.toInt() ??
+          (json['members_count'] as num?)?.toInt() ??
+          0,
+
+      coverImageUrl:
+          json['avatar_url']?.toString() ?? json['coverImageUrl']?.toString(),
+
+      // ✅ admin object OR explicit isCreator flag
+      isCreator: json['isCreator'] ?? false,
+
+      isPrivate: json['isPrivate'] ?? false,
+
+      isMember: json['isMember'] ?? false,
     );
   }
 

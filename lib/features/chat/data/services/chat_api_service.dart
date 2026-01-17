@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/entities/chat_paginated.dart';
 
@@ -11,13 +12,14 @@ class ChatApiService {
 
   // ========== CONVERSATIONS ==========
 
-  Future<List<Conversation>> getConversations() async {
+  Future<List<ChatConversations>> getConversations() async {
     final response = await _dioClient.dio.get('/api/v1/chat/conversations');
     final data = (response.data as Map)['data'] as List;
     return data
         .map(
-          (json) =>
-              Conversation.fromJson(Map<String, dynamic>.from(json as Map)),
+          (json) => ChatConversations.fromJson(
+            Map<String, dynamic>.from(json as Map),
+          ),
         )
         .toList();
   }
@@ -118,7 +120,7 @@ class ChatApiService {
   }
 
   Future<void> deleteMessage(String messageUuid) async {
-    await _dioClient.dio.delete('/chat/messages/$messageUuid');
+    await _dioClient.dio.delete('/api/v1/chat/messages/$messageUuid');
   }
 
   Future<void> reactToMessage(String messageUuid, String emoji) async {

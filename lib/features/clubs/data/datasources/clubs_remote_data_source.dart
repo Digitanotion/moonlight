@@ -1,7 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:moonlight/features/clubs/domain/entities/club.dart';
 
 abstract class ClubsRemoteDataSource {
   Future<List<Map<String, dynamic>>> getMyClubs();
+
   Future<Map<String, dynamic>> getMembersUI({
     required String club,
     Map<String, dynamic>? query,
@@ -37,6 +43,37 @@ abstract class ClubsRemoteDataSource {
 
   Future<void> joinClub({required String club});
   Future<void> leaveClub({required String club});
+  Future<Club> getClub(String club);
+  Future<List<Map<String, dynamic>>> getSuggestedClubs();
+  Future<Map<String, dynamic>> getClubProfile(String club);
+  Future<Map<String, dynamic>> createClubMultipart({
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
+  });
+
+  Future<Map<String, dynamic>> updateClubMultipart({
+    required String club,
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
+  });
+
+  Future<List<Map<String, dynamic>>> searchUsers(String query);
+  Future<void> donateToClub({
+    required String club,
+    required int coins,
+    String? reason,
+    required String idempotencyKey,
+  });
+
+  Future<int> getMyBalance();
 }
 
 class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
@@ -104,6 +141,72 @@ class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
   }
 
   @override
+  Future<Map<String, dynamic>> createClubMultipart({
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool isPrivate = false,
+    File? coverImage,
+  }) async {
+    final form = FormData.fromMap({
+      'name': name,
+      if (description != null) 'description': description,
+      if (motto != null) 'motto': motto,
+      if (location != null) 'location': location,
+
+      // 🔥 IMPORTANT FIX
+      'is_private': isPrivate ? 1 : 0,
+
+      if (coverImage != null)
+        'cover_image': await MultipartFile.fromFile(
+          coverImage.path,
+          filename: coverImage.path.split('/').last,
+        ),
+    });
+
+    final res = await dio.post(
+      '/api/v1/clubs',
+      data: form,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+
+    return res.data['data'];
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateClubMultipart({
+    required String club,
+    required String name,
+    String? description,
+    String? motto,
+    String? location,
+    bool? isPrivate,
+    File? coverImage,
+  }) async {
+    final form = FormData.fromMap({
+      '_method': 'PUT', // 🔥 CRITICAL: Add this for Laravel
+      'name': name,
+      if (description != null) 'description': description,
+      if (motto != null) 'motto': motto,
+      if (location != null) 'location': location,
+      'is_private': isPrivate != null ? (isPrivate ? 1 : 0) : 0,
+      if (coverImage != null)
+        'cover_image': await MultipartFile.fromFile(
+          coverImage.path,
+          filename: coverImage.path.split('/').last,
+        ),
+    });
+
+    debugPrint('📤 Sending with _method=PUT');
+
+    // 🔥 Use POST instead of PUT when using _method
+    final res = await dio.post('/api/v1/clubs/$club', data: form);
+
+    return res.data['data'];
+  }
+
+  @override
   Future<void> updateClub({
     required String club,
     required Map<String, dynamic> body,
@@ -137,5 +240,61 @@ class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
   @override
   Future<void> leaveClub({required String club}) {
     return dio.delete('/api/v1/clubs/$club/join');
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getSuggestedClubs() async {
+    final res = await dio.get('/api/v1/clubs/suggested');
+    return List<Map<String, dynamic>>.from(res.data['data'] ?? []);
+  }
+
+  Future<Club> getClub(String club) async {
+    final res = await dio.get('/api/v1/clubs/$club');
+    return Club.fromJson(res.data['data']);
+  }
+
+  Future<Map<String, dynamic>> getClubProfile(String club) async {
+    final res = await dio.get('/api/v1/clubs/$club/profile');
+    return Map<String, dynamic>.from(res.data['data']);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final res = await dio.get(
+      '/api/v1/users/search',
+      queryParameters: {'q': query},
+    );
+
+    return List<Map<String, dynamic>>.from(res.data['data'] ?? []);
+  }
+
+  @override
+  Future<void> donateToClub({
+    required String club,
+    required int coins,
+    String? reason,
+    required String idempotencyKey,
+  }) async {
+    await dio.post(
+      '/api/v1/clubs/$club/donate',
+      data: {
+        'coins': coins,
+        'reason': reason ?? '',
+        // 'idempotency_key': idempotencyKey,
+      },
+    );
+  }
+
+  Future<int> getMyBalance() async {
+    final res = await dio.get(
+      '/api/v1/wallet',
+      options: Options(responseType: ResponseType.json),
+    );
+
+    final data = res.data is Map
+        ? res.data as Map<String, dynamic>
+        : jsonDecode(res.data as String) as Map<String, dynamic>;
+
+    return data['data']['balance'] as int;
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/services/agora_service.dart';
+import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/widgets/auth_guard.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -11,12 +13,23 @@ import 'package:moonlight/features/auth/presentation/pages/email_verification.da
 import 'package:moonlight/features/auth/presentation/pages/forget_password.dart';
 import 'package:moonlight/features/auth/presentation/pages/login_screen.dart';
 import 'package:moonlight/features/auth/presentation/pages/register_screen.dart';
+import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
 import 'package:moonlight/features/chat/presentation/pages/conversations_screen.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/club_members_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/club_profile_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/donate_club_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/edit_club_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_members_page.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/create_club_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/discover_clubs_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/edit_club_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/support_club_page.dart';
 import 'package:moonlight/features/create_post/presentation/cubit/create_post_cubit.dart';
 import 'package:moonlight/features/create_post/presentation/pages/create_post_screen.dart';
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
@@ -25,12 +38,18 @@ import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/feed_screen.dart';
 import 'package:moonlight/features/gift_coins/presentation/cubit/transfer_cubit.dart';
 import 'package:moonlight/features/gift_coins/presentation/pages/gift_coins_page.dart';
+import 'package:moonlight/features/home/presentation/pages/app_shell.dart';
 import 'package:moonlight/features/home/presentation/pages/home_screen.dart';
 import 'package:moonlight/features/home/presentation/pages/posts_screen.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
+import 'package:moonlight/features/live_viewer/presentation/screens/live_viewer_orchestrator.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/live_stream_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/reconnection_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/role_change_service.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_end_analytics.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/pages/go_live_screen.dart';
@@ -56,10 +75,15 @@ import 'package:moonlight/features/search/presentation/bloc/search_bloc.dart';
 import 'package:moonlight/features/search/presentation/pages/search_screen.dart';
 import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
 import 'package:moonlight/features/settings/presentation/pages/account_settings_page.dart';
+import 'package:moonlight/features/settings/presentation/pages/blocked_users_page.dart';
+import 'package:moonlight/features/settings/presentation/pages/change_email_page.dart';
+import 'package:moonlight/features/settings/presentation/pages/change_username_page.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/pages/user_interest_screen.dart';
 import 'package:moonlight/features/wallet/presentation/cubit/wallet_cubit.dart';
 import 'package:moonlight/features/wallet/presentation/pages/buy_coins_screen.dart';
+import 'package:moonlight/features/wallet/presentation/pages/reset_pin_page.dart';
+import 'package:moonlight/features/wallet/presentation/pages/set_new_pin_page.dart';
 import 'package:moonlight/features/wallet/presentation/pages/set_pin_page.dart';
 import 'package:moonlight/features/wallet/presentation/pages/transaction_receipt_screen.dart';
 import 'package:moonlight/features/wallet/presentation/pages/wallet_screen.dart';
@@ -95,7 +119,7 @@ class AppRouter {
         );
 
       case RouteNames.home:
-        return MaterialPageRoute(builder: (context) => const HomeScreen());
+        return MaterialPageRoute(builder: (context) => const AppShell());
 
       case RouteNames.email_verify:
         return MaterialPageRoute(
@@ -295,16 +319,31 @@ class AppRouter {
           ),
         );
 
+      // In the RouteNames.liveViewer case in AppRouter:
+
       case RouteNames.liveViewer:
         {
-          final a = (settings.arguments as Map?) ?? {};
+          // Cast arguments properly with null safety
+          final a = (settings.arguments as Map<String, dynamic>?) ?? {};
+
+          // Add debug logging
+          debugPrint('=== ROUTER DEBUG ===');
+          debugPrint('Arguments received: $a');
+          debugPrint('isPremium: ${a['isPremium']}');
+          debugPrint('premiumFee: ${a['premiumFee']}');
+          debugPrint('channel: ${a['channel']}');
+          debugPrint('=====================');
+
           final id = a['id'] as int?;
           final uuid = a['uuid'] as String?;
           final channel = a['channel'] as String?;
           final hostUuid = a['hostUuid'] as String?;
+          final isPremium = a['isPremium'] as int? ?? 0;
+          final premiumFee = a['premiumFee'] as int? ?? 0;
+
           if (id == null || uuid == null || channel == null) {
             return MaterialPageRoute(
-              builder: (context) => const Scaffold(
+              builder: (context) => Scaffold(
                 body: Center(
                   child: Text('Unable to open live (missing id/uuid/channel).'),
                 ),
@@ -327,26 +366,80 @@ class AppRouter {
               ? null
               : DateTime.tryParse(startedAtIso);
 
-          final repo = ViewerRepositoryImpl(
-            http: GetIt.I<DioClient>(),
-            pusher: GetIt.I<PusherService>(),
-            authLocalDataSource: GetIt.I<AuthLocalDataSource>(),
-            livestreamParam: id.toString(),
-            livestreamIdNumeric: id,
-            channelName: channel,
-            hostUserUuid: hostUuid,
-            initialHost: host,
-            startedAt: startedAt,
-          );
+          // Pass ALL arguments including premium info
+          final routeArgs = {
+            ...a,
+            'id': id,
+            'uuid': uuid,
+            'channel': channel,
+            'isPremium': isPremium,
+            'premiumFee': premiumFee,
+          };
 
           return MaterialPageRoute(
-            builder: (context) => BlocProvider(
-              create: (context) => ViewerBloc(repo)..add(const ViewerStarted()),
-              child: LiveViewerScreen(repository: repo),
+            builder: (context) => LiveViewerScreen.create(
+              livestreamId: uuid,
+              channelName: channel,
+              hostUuid: hostUuid,
+              hostInfo: host,
+              startedAt: startedAt,
+              routeArgs: routeArgs, // Pass all arguments
             ),
             settings: settings,
           );
         }
+      // Optionally, add a new route for direct access to orchestrator
+      // case RouteNames.liveViewerEnhanced:
+      //   {
+      //     final a = (settings.arguments as Map?) ?? {};
+      //     final id = a['id'] as int?;
+      //     final uuid = a['uuid'] as String?;
+      //     final channel = a['channel'] as String?;
+      //     final hostUuid = a['hostUuid'] as String?;
+
+      //     if (id == null || uuid == null || channel == null) {
+      //       return MaterialPageRoute(
+      //         builder: (context) => Scaffold(
+      //           body: Center(
+      //             child: Text('Unable to open live (missing id/uuid/channel).'),
+      //           ),
+      //         ),
+      //       );
+      //     }
+
+      //     final host = HostInfo(
+      //       name: (a['hostName'] as String?) ?? 'Host',
+      //       title: (a['title'] as String?) ?? 'Live',
+      //       subtitle: '',
+      //       badge: (a['role'] as String?) ?? 'Host',
+      //       avatarUrl:
+      //           (a['hostAvatar'] as String?) ??
+      //           'https://via.placeholder.com/120x120.png?text=LIVE',
+      //     );
+
+      //     final startedAtIso = (a['startedAt'] as String?);
+      //     final startedAt = startedAtIso == null
+      //         ? null
+      //         : DateTime.tryParse(startedAtIso);
+
+      //     final repo = ViewerRepositoryImpl(
+      //       http: GetIt.I<DioClient>(),
+      //       pusher: GetIt.I<PusherService>(),
+      //       authLocalDataSource: GetIt.I<AuthLocalDataSource>(),
+      //       agoraViewerService: GetIt.I<AgoraViewerService>(),
+      //       livestreamParam: uuid,
+      //       livestreamIdNumeric: id,
+      //       channelName: channel,
+      //       hostUserUuid: hostUuid,
+      //       initialHost: host,
+      //       startedAt: startedAt,
+      //     );
+
+      //     return MaterialPageRoute(
+      //       builder: (context) => LiveViewerOrchestrator(repository: repo),
+      //       settings: settings,
+      //     );
+      //   }
 
       case RouteNames.createPost:
         return MaterialPageRoute(
@@ -436,7 +529,7 @@ class AppRouter {
             );
           }
 
-          final conversation = args['conversation'] as Conversation;
+          final conversation = args['conversation'] as ChatConversations;
           final isClub = args['isClub'] as bool? ?? false;
           final targetUserUuid = args['targetUserUuid'] as String?;
 
@@ -471,11 +564,113 @@ class AppRouter {
           ),
         );
 
+      case RouteNames.clubProfile:
+        final args = (settings.arguments as Map?) ?? {};
+        final clubUuid = args['clubUuid'] as String?;
+
+        if (clubUuid == null || clubUuid.isEmpty) {
+          return MaterialPageRoute(
+            builder: (context) => const Scaffold(
+              body: Center(
+                child: Text(
+                  'Missing club identifier',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider<ClubProfileCubit>(
+            create: (_) => sl<ClubProfileCubit>()..load(clubUuid),
+            child: const ClubProfileScreen(),
+          ),
+          settings: settings,
+        );
+
       case RouteNames.wallet:
         return MaterialPageRoute(
           builder: (context) => BlocProvider<WalletCubit>(
             create: (context) => sl<WalletCubit>()..loadAll(),
             child: const WalletScreen(),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.createClub:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(
+            child: BlocProvider(
+              create: (_) => sl<MyClubsCubit>(),
+              child: const CreateClubScreen(),
+            ),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.updateClub:
+        final args = (settings.arguments as Map?) ?? {};
+        final clubUuid = args['clubUuid'] as String?;
+
+        if (clubUuid == null || clubUuid.isEmpty) {
+          return MaterialPageRoute(
+            builder: (_) => const Scaffold(
+              body: Center(child: Text('Missing club identifier')),
+            ),
+          );
+        }
+
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider(
+            create: (_) => sl<EditClubCubit>(param1: clubUuid)..load(),
+            child: EditClubScreen(clubUuid: clubUuid),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.clubMembers:
+        final args = (settings.arguments as Map?) ?? {};
+        final clubSlug = args['club'] as String?;
+
+        if (clubSlug == null || clubSlug.isEmpty) {
+          return MaterialPageRoute(
+            builder: (_) => const Scaffold(
+              body: Center(child: Text('Missing club identifier')),
+            ),
+          );
+        }
+
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(
+            child: BlocProvider(
+              create: (_) => sl<ClubMembersCubit>(param1: clubSlug)..load(),
+              child: ClubMembersPage(club: clubSlug),
+            ),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.supportClub:
+        final args = settings.arguments as Map<String, dynamic>;
+
+        final clubUuid = args['clubUuid'] as String?;
+        if (clubUuid == null || clubUuid.isEmpty) {
+          return MaterialPageRoute(
+            builder: (_) => const Scaffold(
+              body: Center(child: Text('Missing club identifier')),
+            ),
+          );
+        }
+
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider<DonateClubCubit>(
+            create: (_) => sl<DonateClubCubit>(param1: clubUuid),
+            child: SupportClubPage(
+              clubName: args['clubName'],
+              clubDescription: args['clubDescription'],
+              clubAvatar: args['clubAvatar'],
+            ),
           ),
           settings: settings,
         );
@@ -527,8 +722,27 @@ class AppRouter {
           ),
         );
 
-      case RouteNames.setPin:
-        return MaterialPageRoute(builder: (context) => const SetPinPage());
+      // case RouteNames.setPin:
+      //   return MaterialPageRoute(builder: (context) => const SetPinPage());
+
+      case RouteNames.blockedUsers:
+        return MaterialPageRoute(
+          builder: (context) => const BlockedUsersPage(),
+        );
+
+      case RouteNames.changeEmail:
+        return MaterialPageRoute(builder: (context) => const ChangeEmailPage());
+
+      case RouteNames.changeUsername:
+        return MaterialPageRoute(
+          builder: (context) => const ChangeUsernamePage(),
+        );
+
+      case RouteNames.setNewPin:
+        return MaterialPageRoute(builder: (context) => const SetNewPinPage());
+
+      case RouteNames.resetPin:
+        return MaterialPageRoute(builder: (context) => const ResetPinPage());
 
       default:
         return MaterialPageRoute(

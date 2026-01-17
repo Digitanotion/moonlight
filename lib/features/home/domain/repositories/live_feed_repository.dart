@@ -16,4 +16,6 @@ abstract class LiveFeedRepository {
     required int liveId,
     required String idempotencyKey,
   });
+
+  Future<Map<String, dynamic>> checkPremiumStatus({required int liveId});
 }
