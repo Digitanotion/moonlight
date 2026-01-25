@@ -81,6 +81,9 @@ class UserModel extends Equatable {
   @JsonKey(name: 'phone')
   final String? phone;
 
+  @JsonKey(name: 'roleLabel')
+  final String? roleLabel;
+
   @JsonKey(name: 'referral_code')
   final String? referralCode;
 
@@ -119,6 +122,7 @@ class UserModel extends Equatable {
     this.bio,
     this.userInterests,
     this.phone,
+    this.roleLabel,
     this.referralCode,
     this.referredBy,
     this.emailVerifiedAt,

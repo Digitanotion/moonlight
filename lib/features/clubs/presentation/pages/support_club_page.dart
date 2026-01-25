@@ -48,9 +48,7 @@ class _SupportClubPageState extends State<SupportClubPage> {
 
         if (state.error != null) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.error!)));
+          TopSnack.error(context, state.error!);
         }
       },
       child: Scaffold(
@@ -296,7 +294,7 @@ class _SupportClubPageState extends State<SupportClubPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Describe Donation',
+            'Describe Donation (*)',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),

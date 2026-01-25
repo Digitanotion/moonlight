@@ -11,6 +11,7 @@ class UserProfile {
   final int followers;
   final int following;
   final bool isFollowing;
+  final String? roleLabel;
 
   UserProfile({
     required this.uuid,
@@ -22,6 +23,7 @@ class UserProfile {
     required this.followers,
     required this.following,
     this.isFollowing = false,
+    this.roleLabel = "Nominal Member",
   });
 }
 

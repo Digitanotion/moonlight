@@ -27,10 +27,8 @@ class RemoteWalletDataSource {
     final res = await client.get('/api/v1/wallet');
     final data = await _extractData(res);
     final payload = data['data'] as Map<String, dynamic>;
-    final earnedcents =
-        payload['earnings_cents'] * 0.01 / 1; //Convert to Dollar
-    final bonusCentsEarned =
-        payload['bonus_cents'] * 0.01 / 1; //Convert to Dollar
+    final earnedcents = payload['earnings_cents'] * 0.005; //Convert to Dollar
+    final bonusCentsEarned = payload['bonus_cents'] * 0.005; //Convert to Dollar
     final earnedDollar = earnedcents + bonusCentsEarned;
     return earnedDollar;
   }

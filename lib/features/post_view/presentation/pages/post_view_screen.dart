@@ -2,6 +2,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/core/widgets/sign_in_prompt.dart';
@@ -632,7 +633,8 @@ class _Meta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentUserService = Provider.of<CurrentUserService>(context);
+    // Use GetIt instead of Provider
+    final currentUserService = GetIt.I<CurrentUserService>();
     final isPostOwner = UserHelper.isPostOwner(context, post);
 
     return Padding(
@@ -1666,7 +1668,7 @@ class _CommentInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentUserService = Provider.of<CurrentUserService>(context);
+    final currentUserService = GetIt.I<CurrentUserService>();
     final hasAction = replyingToCommentId != null || editingCommentId != null;
 
     return Container(

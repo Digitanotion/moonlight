@@ -371,37 +371,37 @@ class _DeleteAccountFlowState extends State<DeleteAccountFlow> {
           const SizedBox(height: 16),
 
           // Alternative: Immediate delete
-          TextButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => MLConfirmDialog(
-                  icon: Icons.delete_forever_rounded,
-                  title: 'Immediate Deletion',
-                  message:
-                      'This will delete your account immediately '
-                      'without grace period. Are you sure?',
-                  confirmText: 'Delete Now',
-                  confirmColor: Colors.red,
-                  onConfirm: () {
-                    // ✅ Use stored cubit
-                    _cubit.performDelete(
-                      password: _passwordController.text.isNotEmpty
-                          ? _passwordController.text
-                          : null,
-                    );
-                  },
-                ),
-              );
-            },
-            child: Text(
-              'Delete immediately (without grace period)',
-              style: AppTextStyles.body.copyWith(
-                color: Colors.red,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
+          // TextButton(
+          //   onPressed: () {
+          //     showDialog(
+          //       context: context,
+          //       builder: (_) => MLConfirmDialog(
+          //         icon: Icons.delete_forever_rounded,
+          //         title: 'Immediate Deletion',
+          //         message:
+          //             'This will delete your account immediately '
+          //             'without grace period. Are you sure?',
+          //         confirmText: 'Delete Now',
+          //         confirmColor: Colors.red,
+          //         onConfirm: () {
+          //           // ✅ Use stored cubit
+          //           _cubit.performDelete(
+          //             password: _passwordController.text.isNotEmpty
+          //                 ? _passwordController.text
+          //                 : null,
+          //           );
+          //         },
+          //       ),
+          //     );
+          //   },
+          //   child: Text(
+          //     'Delete immediately (without grace period)',
+          //     style: AppTextStyles.body.copyWith(
+          //       color: Colors.red,
+          //       decoration: TextDecoration.underline,
+          //     ),
+          //   ),
+          // ),
         ],
       ),
     );

@@ -9,6 +9,7 @@ class Club extends Equatable {
   final int membersCount;
   final String? coverImageUrl;
   final bool isCreator;
+  final bool isAdmin;
   final bool isPrivate;
   final bool isMember;
 
@@ -20,6 +21,7 @@ class Club extends Equatable {
     required this.membersCount,
     this.coverImageUrl,
     required this.isCreator,
+    required this.isAdmin,
     required this.isPrivate,
     required this.isMember,
   });
@@ -41,6 +43,7 @@ class Club extends Equatable {
 
       // ✅ admin object OR explicit isCreator flag
       isCreator: json['isCreator'] ?? false,
+      isAdmin: json['isAdmin'] ?? false,
 
       isPrivate: json['isPrivate'] ?? false,
 
@@ -57,6 +60,7 @@ class Club extends Equatable {
     int? membersCount,
     String? coverImageUrl,
     bool? isCreator,
+    bool? isAdmin,
     bool? isPrivate,
     bool? isMember,
   }) {
@@ -68,6 +72,8 @@ class Club extends Equatable {
       membersCount: membersCount ?? this.membersCount,
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       isCreator: isCreator ?? this.isCreator,
+      isAdmin: isAdmin ?? this.isAdmin,
+
       isPrivate: isPrivate ?? this.isPrivate,
       isMember: isMember ?? this.isMember,
     );
@@ -82,6 +88,7 @@ class Club extends Equatable {
     membersCount,
     coverImageUrl,
     isCreator,
+    isAdmin,
     isPrivate,
     isMember,
   ];

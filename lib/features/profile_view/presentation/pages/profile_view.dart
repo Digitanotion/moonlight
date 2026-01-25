@@ -381,7 +381,9 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          _BadgePill(label: 'Member'),
+                          _BadgePill(
+                            label: user?.roleLabel ?? "Nominal Member",
+                          ),
                           const SizedBox(height: 14),
                           if ((user?.bio ?? '').isNotEmpty)
                             Text(
@@ -759,7 +761,7 @@ class _BadgePill extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           CircleAvatar(
             radius: 9,
             backgroundColor: Colors.white,
@@ -767,7 +769,7 @@ class _BadgePill extends StatelessWidget {
           ),
           SizedBox(width: 8),
           Text(
-            'Member',
+            label,
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ],

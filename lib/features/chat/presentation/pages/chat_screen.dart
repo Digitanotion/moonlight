@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -13,6 +14,8 @@ import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/chat/presentation/widgets/message_bubble.dart';
+import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/chat/presentation/widgets/upload_progress_widget.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -45,9 +48,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   bool _hasUnreadBelowView = false;
   final ValueNotifier<bool> _indicatorVisibility = ValueNotifier<bool>(false);
 
-  // Scroll detection
-  double _lastScrollPosition = 0;
+  // Scroll to bottom indicator
+  bool _showScrollToBottomIndicator = false;
   Timer? _scrollDebounceTimer;
+  double _lastScrollPosition = 0;
 
   AnimationController? _indicatorAnimationController;
 
@@ -56,24 +60,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.initState();
     _indicatorAnimationController = AnimationController(
       duration: Duration(milliseconds: 300),
-      vsync: this, // Need SingleTickerProviderStateMixin
-    );
-    // Create focus node that doesn't automatically show keyboard
-    _messageFocusNode = FocusNode(
-      skipTraversal: true, // Prevents automatic keyboard
+      vsync: this,
     );
 
-    // Load initial messages when screen initializes
+    _messageFocusNode = FocusNode(skipTraversal: true);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatCubit>().loadMessages(widget.conversation.uuid);
       context.read<ChatCubit>().markAsRead(widget.conversation.uuid);
-
-      // Set focus but hide keyboard
       _setFocusWithoutKeyboard();
     });
-    _setupPusherListener();
 
-    // Track user scroll position
+    _setupPusherListener();
     _scrollController.addListener(_onScroll);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -82,7 +80,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     _messageController.addListener(() {
       if (mounted) {
-        setState(() {}); // This forces UI to rebuild when text changes
+        setState(() {});
       }
     });
   }
@@ -106,6 +104,60 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (distanceFromBottom > 300) {
       _hasUnreadBelowView = true;
     }
+  }
+
+  // Add scroll-to-bottom indicator logic
+  void _checkScrollToBottomIndicator() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+
+    // Check if there's any scrollable content
+    if (position.maxScrollExtent <= 0) return;
+
+    final currentPosition = position.pixels;
+    final maxScroll = position.maxScrollExtent;
+    final distanceFromBottom = maxScroll - currentPosition;
+
+    // Show indicator if user is not near bottom (more than 100px away)
+    final shouldShowIndicator = distanceFromBottom > 100;
+
+    // Use a threshold to prevent flickering
+    if ((shouldShowIndicator && !_showScrollToBottomIndicator) ||
+        (!shouldShowIndicator && _showScrollToBottomIndicator)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _showScrollToBottomIndicator = shouldShowIndicator;
+          });
+        }
+      });
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    final currentPosition = position.pixels;
+    final maxScroll = position.maxScrollExtent;
+    final distanceFromBottom = maxScroll - currentPosition;
+
+    // Handle new message indicator
+    if (distanceFromBottom < 100 && _showNewMessageIndicator) {
+      _hideNewMessageIndicator();
+    }
+
+    _shouldAutoScroll = distanceFromBottom < 150;
+    _handleScrollForIndicator();
+
+    // Check for scroll-to-bottom indicator
+    _checkScrollToBottomIndicator();
+
+    _scrollDebounceTimer?.cancel();
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+      _lastScrollPosition = currentPosition;
+    });
   }
 
   void _setFocusWithoutKeyboard() {
@@ -217,7 +269,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  _newMessageCount == 1 ? 'New Message' : 'New Nessage',
+                  _newMessageCount == 1
+                      ? 'New Message'
+                      : 'New Messages', // Fixed typo here
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -293,7 +347,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     */
 
       // Option 2: Fallback - use image picker for now
-      final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? file = await _picker.pickImage(
+        source: ImageSource.gallery,
+      ); // pickImage(source: ImageSource.gallery);
       if (file != null) {
         setState(() {
           _selectedMedia.add(File(file.path));
@@ -388,41 +444,85 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // Scroll to bottom function
   void _scrollToBottom() {
-    if (!_scrollController.hasClients) {
-      debugPrint('⚠️ Scroll controller has no clients');
-      return;
-    }
+    if (!_scrollController.hasClients) return;
 
-    final position = _scrollController.position;
-    final maxScroll = position.maxScrollExtent;
+    // Wait for the next frame to ensure layout is updated
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
 
-    // Check if we're already at the bottom
-    if (position.pixels >= maxScroll - 50) {
-      debugPrint('📜 Already at bottom, skipping scroll');
-      return;
-    }
+      final position = _scrollController.position;
+      final maxScroll = position.maxScrollExtent;
 
-    debugPrint(
-      '📜 Scrolling to bottom: max=$maxScroll, current=${position.pixels}',
-    );
+      // Check if we're already near bottom (within 50 pixels)
+      if (position.pixels >= maxScroll) {
+        _shouldAutoScroll = true;
+        _hideNewMessageIndicator();
+        return;
+      }
 
-    // Use a slight delay to ensure UI is updated
-    Future.delayed(Duration(milliseconds: 50), () {
-      if (!_scrollController.hasClients || !mounted) return;
-
+      // Use ensureVisible for more reliable scrolling
       _scrollController
           .animateTo(
-            _scrollController.position.maxScrollExtent,
+            maxScroll,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOut,
           )
           .then((_) {
-            debugPrint('✅ Scroll completed');
-            _shouldAutoScroll = true;
-            _hideNewMessageIndicator();
+            // After animation completes, check if we need to scroll further
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients) {
+                final newMaxScroll = _scrollController.position.maxScrollExtent;
+                if (_scrollController.position.pixels < newMaxScroll - 10) {
+                  // Still not at bottom, scroll again
+                  _scrollController.jumpTo(newMaxScroll);
+                }
+                _shouldAutoScroll = true;
+                _hideNewMessageIndicator();
+
+                // Hide the scroll-to-bottom indicator after scrolling
+                setState(() {
+                  _showScrollToBottomIndicator = false;
+                });
+              }
+            });
           });
     });
+  }
+
+  // Build scroll-to-bottom indicator (WhatsApp style down arrow)
+  Widget _buildScrollToBottomIndicator() {
+    return AnimatedPositioned(
+      duration: Duration(milliseconds: 300),
+      bottom: _showScrollToBottomIndicator ? 90 : -60,
+      right: 16,
+      child: GestureDetector(
+        onTap: () {
+          // Show loading state while scrolling
+          setState(() {
+            // You could add a loading state here if needed
+          });
+          _scrollToBottom();
+        },
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.primary_,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Icon(Icons.arrow_downward, color: Colors.white, size: 20),
+        ),
+      ),
+    );
   }
 
   void _loadMoreMessages() {
@@ -445,28 +545,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             });
           });
     }
-  }
-
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-
-    final position = _scrollController.position;
-    final maxScroll = position.maxScrollExtent;
-    final currentPosition = position.pixels;
-
-    // Calculate distance from bottom
-    final distanceFromBottom = maxScroll - currentPosition;
-
-    // If user manually scrolls near bottom, hide indicator
-    if (distanceFromBottom < 100 && _showNewMessageIndicator) {
-      _hideNewMessageIndicator();
-    }
-
-    // Update auto-scroll flag
-    _shouldAutoScroll = distanceFromBottom < 150;
-
-    // Check for indicator
-    _handleScrollForIndicator();
   }
 
   Widget _buildContent(BuildContext context, ChatState state) {
@@ -541,29 +619,50 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       );
     } else if (state is ChatUploadingMedia) {
-      // Show loading indicator while uploading
       return Column(
         children: [
-          Expanded(
-            child: _buildMessagesList(
-              messages,
-              hasMore,
-              currentConversationUuid,
-              isLoadingMore,
+          // Upload progress section
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: AppColors.surface.withOpacity(0.9),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Uploading ${state.uploads.length} file${state.uploads.length > 1 ? 's' : ''}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...state.uploads.values.map((upload) {
+                  return UploadProgressWidget(
+                    key: ValueKey(upload.fileId),
+                    fileName: upload.fileName,
+                    fileType: upload.fileType,
+                    initialProgress: upload.progress,
+                    initialStatus: upload.status,
+                    progressStream: upload.progressController?.stream,
+                    statusStream: upload.statusController?.stream,
+                    onRetry: () =>
+                        context.read<ChatCubit>().retryUpload(upload.fileId),
+                    onCancel: () =>
+                        context.read<ChatCubit>().cancelUpload(upload.fileId),
+                  );
+                }).toList(),
+              ],
             ),
           ),
-          Container(
-            padding: EdgeInsets.all(8),
-            color: AppColors.surface.withOpacity(0.8),
-            child: Row(
-              children: [
-                CircularProgressIndicator(color: AppColors.primary_),
-                SizedBox(width: 8),
-                Text(
-                  'Uploading media...',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ],
+
+          // Messages list
+          Expanded(
+            child: _buildMessagesList(
+              state.messages,
+              false,
+              state.conversationUuid,
+              false,
             ),
           ),
         ],
@@ -578,73 +677,169 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  // Add this method to handle media display safely
+  Widget _buildSafeMedia(String url, {bool isVideo = false}) {
+    if (url.isEmpty) {
+      return Container(
+        width: 200,
+        height: 150,
+        color: Colors.grey[800],
+        child: Center(
+          child: Icon(
+            isVideo ? Icons.videocam_off : Icons.broken_image,
+            color: Colors.white54,
+          ),
+        ),
+      );
+    }
+
+    // Check if URL is valid
+    try {
+      Uri.parse(url);
+    } catch (e) {
+      return Container(
+        width: 200,
+        height: 150,
+        color: Colors.grey[800],
+        child: Center(child: Icon(Icons.error, color: Colors.white54)),
+      );
+    }
+
+    if (isVideo) {
+      return Container(
+        width: 200,
+        height: 150,
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Video thumbnail
+            Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey[800],
+                  child: Center(
+                    child: Icon(Icons.videocam_off, color: Colors.white54),
+                  ),
+                );
+              },
+            ),
+            Center(
+              child: Icon(
+                Icons.play_circle_fill,
+                color: Colors.white.withOpacity(0.8),
+                size: 50,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          width: 200,
+          height: 150,
+          color: Colors.grey[800],
+          child: Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                  : null,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          width: 200,
+          height: 150,
+          color: Colors.grey[800],
+          child: Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+        );
+      },
+    );
+  }
+
   Widget _buildMessagesList(
     List<Message> messages,
     bool hasMore,
     String? conversationUuid,
     bool isLoadingMore,
   ) {
-    return Column(
+    return Stack(
       children: [
-        // Load More Button at TOP (for older messages)
-        if (hasMore || isLoadingMore)
-          _buildLoadMoreSection(hasMore, isLoadingMore),
-
         // Messages List
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            reverse: false, // Newest at bottom
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: messages.length,
-            itemBuilder: (context, index) {
-              final message = messages[index];
-              final isMe = message.sender?.uuid == _getCurrentUserUuid(context);
-              final repliedMessage = _findRepliedMessage(
-                message.replyToUuid,
-                messages,
-              );
+        ListView.builder(
+          controller: _scrollController,
+          reverse: false,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: messages.length + (hasMore || isLoadingMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            // Check if this is the load more item
+            if (hasMore || isLoadingMore) {
+              if (index == 0) {
+                return _buildLoadMoreSection(hasMore, isLoadingMore);
+              }
+              // Adjust index for messages
+              index = index - 1;
+            }
 
-              // Group messages from same sender within 5 minutes
-              final bool showAvatar = _shouldShowAvatar(messages, index, isMe);
-              final bool showTime = _shouldShowTime(messages, index);
-              final bool showTail = _shouldShowTail(messages, index, isMe);
+            if (index >= messages.length) return SizedBox.shrink();
 
-              return Column(
-                children: [
-                  // Time separator if needed
-                  if (showTime) _buildTimeSeparator(message.createdAt),
+            final message = messages[index];
+            final isMe = message.sender?.uuid == _getCurrentUserUuid(context);
+            final repliedMessage = _findRepliedMessage(
+              message.replyToUuid,
+              messages,
+            );
 
-                  // In ChatScreen's _buildMessagesList method:
-                  MessageBubble(
-                    message: message,
-                    isMe: isMe,
-                    showAvatar: showAvatar && !isMe && !widget.isClub,
-                    avatarUrl: isMe
-                        ? null
-                        : widget.conversation.imageUrl ??
-                              message.sender?.avatarUrl,
-                    repliedMessage: null,
-                    onDelete: () => _deleteMessage(message),
-                    onDeleteMessage: (messageUuid) {
-                      // Make sure this calls the cubit
-                      context.read<ChatCubit>().deleteMessage(messageUuid);
-                    },
-                    onReact: () => _reactToMessage(message),
-                    onReply: () => _startReply(message),
-                    onCancelReply: _cancelReply,
-                    isTyping: false,
-                    showTail: showTail,
-                    chatCubit: context
-                        .read<
-                          ChatCubit
-                        >(), // Optional, if you want to pass the cubit too
-                  ),
-                ],
-              );
-            },
-          ),
+            // Group messages from same sender within 5 minutes
+            final bool showAvatar = _shouldShowAvatar(messages, index, isMe);
+            final bool showTime = _shouldShowTime(messages, index);
+            final bool showTail = _shouldShowTail(messages, index, isMe);
+
+            return Column(
+              children: [
+                // Time separator if needed
+                if (showTime) _buildTimeSeparator(message.createdAt),
+
+                MessageBubble(
+                  message: message,
+                  isMe: isMe,
+                  showAvatar: showAvatar && !isMe && !widget.isClub,
+                  avatarUrl: isMe
+                      ? null
+                      : widget.conversation.imageUrl ??
+                            message.sender?.avatarUrl,
+                  repliedMessage: null,
+                  onDelete: () => _deleteMessage(message),
+                  onDeleteMessage: (messageUuid) {
+                    context.read<ChatCubit>().deleteMessage(messageUuid);
+                  },
+                  onReact: () => _reactToMessage(message),
+                  onReply: () => _startReply(message),
+                  onCancelReply: _cancelReply,
+                  isTyping: false,
+                  showTail: showTail,
+                  chatCubit: context.read<ChatCubit>(),
+                  isClub: widget.isClub,
+                ),
+              ],
+            );
+          },
         ),
+
+        // Indicators
+        if (_showScrollToBottomIndicator) _buildScrollToBottomIndicator(),
+        if (_showNewMessageIndicator) _buildNewMessageIndicator(),
       ],
     );
   }
@@ -929,11 +1124,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _sendMessage() {
     final text = _messageController.text.trim();
 
-    // Allow sending empty messages if there's media
     if (text.isEmpty && _selectedMedia.isEmpty) {
       return;
     }
 
+    // Send text message if any
     if (text.isNotEmpty) {
       context.read<ChatCubit>().sendTextMessage(
         conversationUuid: widget.conversation.uuid,
@@ -1229,7 +1424,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
       padding: EdgeInsets.zero,
       constraints: BoxConstraints(),
-      // visualDensity: VisualDensity.compact,
       color: AppColors.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 8,
@@ -1237,20 +1431,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: AppColors.divider.withOpacity(0.5), width: 1),
       ),
-      offset: Offset(-100, -180), // Adjusted offset for fewer items
+      offset: Offset(-100, -180),
       onSelected: (value) => _handleMediaSelection(value),
       itemBuilder: (context) => [
-        // Simplified options - only 3 items
+        // Photo from gallery
         _buildWhatsAppMenuItem(
-          icon: Icons.photo_library,
-          label: 'Photo & Video',
-          value: 'gallery',
+          icon: Icons.photo,
+          label: 'Photo',
+          value: 'photo',
         ),
+        // Video from gallery
+        _buildWhatsAppMenuItem(
+          icon: Icons.video_library,
+          label: 'Video',
+          value: 'video',
+        ),
+        // Camera (photos and videos)
         _buildWhatsAppMenuItem(
           icon: Icons.camera_alt,
           label: 'Camera',
           value: 'camera',
         ),
+        // Document
         _buildWhatsAppMenuItem(
           icon: Icons.description,
           label: 'Document',
@@ -1262,16 +1464,249 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   void _handleMediaSelection(String value) {
     switch (value) {
-      case 'gallery':
-        _pickImage();
+      case 'photo':
+        _pickImageFromGallery();
+        break;
+      case 'video':
+        _pickVideoFromGallery();
         break;
       case 'camera':
-        _takePhoto();
+        _openCamera();
         break;
       case 'document':
         _pickDocument();
         break;
-      // Remove audio, location, contact cases
+    }
+  }
+
+  // Pick only images from gallery
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85, // Reduce quality for faster upload
+        maxWidth: 1920, // Limit resolution
+      );
+
+      if (image != null) {
+        setState(() {
+          _selectedMedia.add(File(image.path));
+        });
+        _messageFocusNode.requestFocus();
+
+        // Show success feedback
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo added'),
+            duration: Duration(seconds: 1),
+            backgroundColor: AppColors.primary_,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to select photo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Pick only videos from gallery
+  Future<void> _pickVideoFromGallery() async {
+    try {
+      final XFile? video = await _picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: Duration(minutes: 10), // Limit to 10 minutes
+      );
+
+      if (video != null) {
+        // Check file size (limit to 100MB)
+        final file = File(video.path);
+        final size = await file.length();
+        final maxSize = 100 * 1024 * 1024; // 100MB
+
+        if (size > maxSize) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Video too large (max 100MB)'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        setState(() {
+          _selectedMedia.add(file);
+        });
+        _messageFocusNode.requestFocus();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Video added'),
+            duration: Duration(seconds: 1),
+            backgroundColor: AppColors.primary_,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error picking video: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to select video'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Open camera for both photos and videos
+  Future<void> _openCamera() async {
+    // Show bottom sheet to choose between photo or video mode
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          margin: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Camera Mode Selection
+                ListTile(
+                  leading: Icon(Icons.camera_alt, color: Colors.white),
+                  title: Text(
+                    'Take Photo',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _takePhotoWithCamera();
+                  },
+                ),
+                Divider(color: AppColors.divider, height: 1),
+                ListTile(
+                  leading: Icon(Icons.videocam, color: Colors.white),
+                  title: Text(
+                    'Record Video',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _recordVideoWithCamera();
+                  },
+                ),
+                Divider(color: AppColors.divider, height: 1),
+                // Cancel button
+                Container(
+                  margin: EdgeInsets.all(16),
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.card.withOpacity(0.3),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text('Cancel'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Take photo with camera
+  Future<void> _takePhotoWithCamera() async {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+
+      if (photo != null) {
+        setState(() {
+          _selectedMedia.add(File(photo.path));
+        });
+        _messageFocusNode.requestFocus();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo taken'),
+            duration: Duration(seconds: 1),
+            backgroundColor: AppColors.primary_,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error taking photo: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to take photo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Record video with camera
+  Future<void> _recordVideoWithCamera() async {
+    try {
+      final XFile? video = await _picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: Duration(minutes: 5), // Limit to 5 minutes for camera
+      );
+
+      if (video != null) {
+        final file = File(video.path);
+        final size = await file.length();
+        final maxSize = 50 * 1024 * 1024; // 50MB for camera videos
+
+        if (size > maxSize) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Video too large (max 50MB)'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        setState(() {
+          _selectedMedia.add(file);
+        });
+        _messageFocusNode.requestFocus();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Video recorded'),
+            duration: Duration(seconds: 1),
+            backgroundColor: AppColors.primary_,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error recording video: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to record video'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -1334,6 +1769,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMediaThumbnail(File file, int index) {
+    // Check if file is a video (you may need a better detection method)
+    final isVideo =
+        file.path.toLowerCase().endsWith('.mp4') ||
+        file.path.toLowerCase().endsWith('.mov') ||
+        file.path.toLowerCase().endsWith('.avi');
+
     return Stack(
       children: [
         // Thumbnail
@@ -1343,9 +1784,42 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             color: AppColors.card.withOpacity(0.5),
-            image: DecorationImage(image: FileImage(file), fit: BoxFit.cover),
+            image: isVideo
+                ? null
+                : DecorationImage(image: FileImage(file), fit: BoxFit.cover),
           ),
+          child: isVideo
+              ? Center(
+                  child: Icon(
+                    Icons.videocam,
+                    color: Colors.white.withOpacity(0.7),
+                    size: 24,
+                  ),
+                )
+              : null,
         ),
+
+        // Video duration indicator (optional)
+        if (isVideo)
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'VID',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
 
         // Remove button
         Positioned(
@@ -1959,90 +2433,140 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (context, state) {
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: Stack(
-            children: [
-              // Background Pattern
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.bluePrimaryDark, AppColors.navyDark],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: Opacity(
-                  opacity: 0.1,
-                  child: widget.conversation.imageUrl != null
-                      ? Container(
-                          decoration: BoxDecoration(
-                            image: DecorationImage(
-                              image: NetworkImage(
-                                widget.conversation.imageUrl!,
-                              ),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        )
-                      : SizedBox(),
-                ),
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.bluePrimaryDark, AppColors.navyDark],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
+            ),
+            child: Column(
+              children: [
+                // Custom App Bar
+                _buildAppBar(context),
 
-              Column(
-                children: [
-                  // Custom App Bar
-                  _buildAppBar(context),
-
-                  // Messages Area
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.transparent,
-                            AppColors.surface.withOpacity(0.3),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
+                // Messages Area
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          AppColors.surface.withOpacity(0.3),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
-                      child: Stack(
-                        children: [
-                          // Messages List
-                          _buildContent(context, state),
+                    ),
+                    child: Stack(
+                      children: [
+                        // Messages List
+                        _buildContent(context, state),
 
-                          // New Message Indicator (WhatsApp-style)
-                          // Position it above the message input
+                        // WhatsApp-style scroll to bottom indicator
+                        if (_showScrollToBottomIndicator)
+                          _buildScrollToBottomIndicator(),
+
+                        // New Message Indicator
+                        if (_showNewMessageIndicator)
                           Positioned(
-                            bottom:
-                                80, // Adjust this based on your input height
+                            bottom: 80,
                             left: 0,
                             right: 0,
                             child: _buildNewMessageIndicator(),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
+                ),
 
-                  // Reply Preview
-                  if (_showReplyPreview && _replyingToMessage != null)
-                    _buildReplyPreview(),
+                // Reply Preview
+                if (_showReplyPreview && _replyingToMessage != null)
+                  _buildReplyPreview(),
 
-                  // Selected Media Preview
-                  if (_selectedMedia.isNotEmpty) _buildMediaPreview(),
+                // Selected Media Preview
+                if (_selectedMedia.isNotEmpty) _buildMediaPreview(),
 
-                  // Message Input
-                  _buildMessageInput(),
+                // Message Input
+                _buildMessageInput(),
 
-                  // Emoji Picker
-                  if (_isEmojiVisible) _buildEmojiPicker(),
-                ],
-              ),
-            ],
+                // Emoji Picker
+                if (_isEmojiVisible) _buildEmojiPicker(),
+              ],
+            ),
           ),
         );
       },
     );
+  }
+
+  // Helper to get the other user's UUID in direct conversations
+  String? _getOtherUserUuid() {
+    // Use the new field from the conversation model
+    return widget.conversation.otherUserUuid;
+  }
+
+  void _handleAvatarTap(BuildContext context) {
+    if (widget.isClub) {
+      // Navigate to club profile using CLUB UUID (not conversation UUID)
+      final clubUuid = widget.conversation.clubUuid;
+      if (clubUuid != null && clubUuid.isNotEmpty) {
+        Navigator.pushNamed(
+          context,
+          RouteNames.clubProfile,
+          arguments: {'clubUuid': clubUuid},
+        );
+      } else {
+        // Fallback to conversation UUID if club UUID is not available
+        Navigator.pushNamed(
+          context,
+          RouteNames.clubProfile,
+          arguments: {'clubUuid': widget.conversation.uuid},
+        );
+      }
+    } else {
+      // Navigate to user profile
+      final otherUserUuid = _getOtherUserUuid();
+      if (otherUserUuid != null) {
+        Navigator.pushNamed(
+          context,
+          RouteNames.profileView,
+          arguments: {'userUuid': otherUserUuid},
+        );
+      }
+    }
+  }
+
+  void _handleTitleTap(BuildContext context) {
+    if (widget.isClub) {
+      // For clubs, tapping title navigates to club members using CLUB UUID
+      final clubUuid = widget.conversation.clubUuid;
+      if (clubUuid != null && clubUuid.isNotEmpty) {
+        Navigator.pushNamed(
+          context,
+          RouteNames.clubMembers,
+          arguments: {'club': clubUuid}, // Using clubUuid as identifier
+        );
+      } else {
+        // Fallback to conversation UUID
+        Navigator.pushNamed(
+          context,
+          RouteNames.clubMembers,
+          arguments: {'club': widget.conversation.uuid},
+        );
+      }
+    } else {
+      // For direct messages, tapping title navigates to user profile
+      final otherUserUuid = _getOtherUserUuid();
+      if (otherUserUuid != null) {
+        Navigator.pushNamed(
+          context,
+          RouteNames.profileView,
+          arguments: {'userUuid': otherUserUuid},
+        );
+      }
+    }
   }
 
   Widget _buildAppBar(BuildContext context) {
@@ -2077,89 +2601,74 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             icon: Icon(Icons.arrow_back_ios_new, color: Colors.white),
           ),
           SizedBox(width: 8),
-          CircleAvatar(
-            backgroundImage: widget.conversation.imageUrl != null
-                ? NetworkImage(widget.conversation.imageUrl!)
-                : null,
-            radius: 20,
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.conversation.title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  widget.isClub
-                      ? '${widget.conversation.memberCount ?? 0} members'
-                      : 'Conversations',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+
+          // Avatar with navigation and fallback icon
+          GestureDetector(
+            onTap: () => _handleAvatarTap(context),
+            child: CircleAvatar(
+              radius: 20,
+              backgroundColor: AppColors.card.withOpacity(0.3),
+              child:
+                  widget.conversation.imageUrl != null &&
+                      widget.conversation.imageUrl!.isNotEmpty
+                  ? ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: widget.conversation.imageUrl!,
+                        fit: BoxFit.cover,
+                        width: 40,
+                        height: 40,
+                        placeholder: (context, url) => Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary_,
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Icon(
+                          widget.isClub ? Icons.groups : Icons.person,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      widget.isClub ? Icons.groups : Icons.person,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
             ),
           ),
 
-          // PopupMenuButton<String>(
-          //   icon: Icon(Icons.more_vert, color: Colors.white, size: 24),
-          //   color: AppColors.surface,
-          //   shape: RoundedRectangleBorder(
-          //     borderRadius: BorderRadius.circular(12),
-          //   ),
-          //   onSelected: (value) {
-          //     if (value == 'mute') {
-          //       context.read<ChatCubit>().muteConversation(
-          //         widget.conversation.uuid,
-          //       );
-          //       ScaffoldMessenger.of(
-          //         context,
-          //       ).showSnackBar(SnackBar(content: Text('Conversation muted')));
-          //     } else if (value == 'pin') {
-          //       context.read<ChatCubit>().pinConversation(
-          //         widget.conversation.uuid,
-          //       );
-          //       ScaffoldMessenger.of(
-          //         context,
-          //       ).showSnackBar(SnackBar(content: Text('Conversation pinned')));
-          //     }
-          //   },
-          //   itemBuilder: (context) => [
-          //     PopupMenuItem(
-          //       value: 'mute',
-          //       child: Row(
-          //         children: [
-          //           Icon(
-          //             Icons.notifications_off,
-          //             size: 18,
-          //             color: AppColors.textSecondary,
-          //           ),
-          //           SizedBox(width: 8),
-          //           Text('Mute', style: TextStyle(color: Colors.white)),
-          //         ],
-          //       ),
-          //     ),
-          //     PopupMenuItem(
-          //       value: 'pin',
-          //       child: Row(
-          //         children: [
-          //           Icon(Icons.push_pin, size: 18, color: AppColors.primary_),
-          //           SizedBox(width: 8),
-          //           Text('Pin', style: TextStyle(color: Colors.white)),
-          //         ],
-          //       ),
-          //     ),
-          //   ],
-          // ),
+          SizedBox(width: 12),
+
+          // Title area with navigation
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _handleTitleTap(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.conversation.title,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    widget.isClub
+                        ? '${widget.conversation.memberCount ?? 0} members'
+                        : 'Tap to view profile',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

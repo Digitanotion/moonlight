@@ -40,6 +40,7 @@ class _ClubMembersPageState extends State<ClubMembersPage> {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
+
       floatingActionButton: const _FloatingInviteButton(),
       body: SafeArea(
         child: Column(children: const [_SearchBar(), _Tabs(), _MembersList()]),

@@ -76,6 +76,10 @@ class AgoraService with ChangeNotifier {
   bool _brightenEnabled = false;
   int _brightenLevel = 0;
 
+  bool _isApplyingBeauty = false;
+  DateTime? _lastBeautyApplyTime;
+  static const Duration _beautyApplyCooldown = Duration(milliseconds: 500);
+
   // Expose a notifier so UI can optionally react
   final ValueNotifier<bool> beautyActive = ValueNotifier<bool>(false);
 
@@ -108,65 +112,119 @@ class AgoraService with ChangeNotifier {
     required bool brightenEnabled,
     required int brightenLevel,
   }) async {
-    _faceCleanEnabled = faceCleanEnabled;
-    _faceCleanLevel = faceCleanLevel.clamp(0, 100);
-    _brightenEnabled = brightenEnabled;
-    _brightenLevel = brightenLevel.clamp(0, 100);
+    // Prevent rapid consecutive calls
+    final now = DateTime.now();
+    if (_lastBeautyApplyTime != null &&
+        now.difference(_lastBeautyApplyTime!) < _beautyApplyCooldown) {
+      debugPrint('[Beauty] Skipping rapid apply (debounced)');
+      return;
+    }
 
-    final e = _engine;
-    if (e == null) return;
+    // Prevent concurrent applications
+    if (_isApplyingBeauty) {
+      debugPrint('[Beauty] Already applying effects, skipping');
+      return;
+    }
+
+    _isApplyingBeauty = true;
+    _lastBeautyApplyTime = now;
 
     try {
-      // Map 0..100 -> 0.0..1.0 for SDK
-      final smooth = (_faceCleanEnabled ? (_faceCleanLevel / 100.0) : 0.0)
-          .clamp(0.0, 1.0);
-      final lighten = (_brightenEnabled ? (_brightenLevel / 100.0) : 0.0).clamp(
+      // First, always ensure camera is working
+      if (!_isCameraEnabled) {
+        await setCameraEnabled(true);
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      // Apply beauty effects
+      final smooth = (faceCleanEnabled ? (faceCleanLevel / 100.0) : 0.0).clamp(
+        0.0,
+        1.0,
+      );
+      final lighten = (brightenEnabled ? (brightenLevel / 100.0) : 0.0).clamp(
         0.0,
         1.0,
       );
 
-      // Choose lightening contrast level heuristically
-      LighteningContrastLevel contrast =
-          LighteningContrastLevel.lighteningContrastNormal;
-      if (lighten > 0.7) {
-        contrast = LighteningContrastLevel.lighteningContrastHigh;
-      } else if (lighten > 0.3) {
-        contrast = LighteningContrastLevel.lighteningContrastNormal;
-      } else if (lighten > 0.0) {
-        contrast = LighteningContrastLevel.lighteningContrastLow;
+      // If both effects are disabled, use reset instead
+      if (smooth == 0.0 && lighten == 0.0) {
+        await _engine?.setBeautyEffectOptions(
+          enabled: false,
+          options: const BeautyOptions(),
+        );
+        beautyActive.value = false;
+      } else {
+        final options = BeautyOptions(
+          smoothnessLevel: smooth,
+          lighteningLevel: lighten,
+          lighteningContrastLevel:
+              LighteningContrastLevel.lighteningContrastNormal,
+          rednessLevel: (lighten * 0.12).clamp(0.0, 0.15),
+          sharpnessLevel: 0.25 + (smooth * 0.2),
+        );
+
+        await _engine?.setBeautyEffectOptions(enabled: true, options: options);
+        beautyActive.value = true;
       }
 
-      // small redness to keep skin tone natural when brightening
-      final redness = (lighten * 0.12).clamp(0.0, 0.15);
-
-      // slight sharpness tweak based on smoothness to avoid overly soft results
-      final sharpness = (0.25 + (smooth * 0.2)).clamp(0.0, 1.0);
-
-      final options = BeautyOptions(
-        smoothnessLevel: smooth,
-        lighteningLevel: lighten,
-        lighteningContrastLevel: contrast,
-        rednessLevel: redness,
-        sharpnessLevel: sharpness,
-      );
-
-      await e.setBeautyEffectOptions(
-        enabled: (smooth > 0.0 || lighten > 0.0),
-        options: options,
-      );
-
-      beautyActive.value = (smooth > 0.0 || lighten > 0.0);
       notifyListeners();
 
-      if (kDebugMode) {
-        debugPrint(
-          '[Agora] setBeautyEffectOptions smooth=$smooth lighten=$lighten contrast=$contrast redness=$redness sharpness=$sharpness',
+      // Small delay to let effects stabilize
+      await Future.delayed(const Duration(milliseconds: 100));
+    } catch (e, stack) {
+      debugPrint('❌ Failed to apply beauty effects: $e');
+      debugPrint('Stack trace: $stack');
+
+      // Recovery: Reset to default and show error
+      try {
+        await _engine?.setBeautyEffectOptions(
+          enabled: false,
+          options: const BeautyOptions(),
         );
+
+        // Force camera restart if needed
+        if (!_isCameraEnabled || !_previewing) {
+          await setCameraEnabled(true);
+        }
+      } catch (recoveryError) {
+        debugPrint('❌ Recovery also failed: $recoveryError');
       }
-    } catch (err) {
-      _lastError = 'Failed to set beauty options: $err';
-      debugPrint('❌ $_lastError');
-      // Do not rethrow; fail silently to avoid breaking live stream
+
+      // Notify UI about the error
+      _lastError = 'Beauty effects failed: $e';
+      notifyListeners();
+    } finally {
+      _isApplyingBeauty = false;
+    }
+  }
+
+  // Add a new method to safely reset everything
+  Future<void> safeReset() async {
+    try {
+      // Reset beauty first
+      await _engine?.setBeautyEffectOptions(
+        enabled: false,
+        options: const BeautyOptions(),
+      );
+
+      // Ensure camera is enabled
+      if (!_isCameraEnabled) {
+        await setCameraEnabled(true);
+      }
+
+      // Small stabilization delay
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      beautyActive.value = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Safe reset failed: $e');
+      // Try emergency recovery
+      try {
+        await _engine?.muteLocalVideoStream(false);
+        await _engine?.startPreview();
+        _previewing = true;
+      } catch (_) {}
     }
   }
 

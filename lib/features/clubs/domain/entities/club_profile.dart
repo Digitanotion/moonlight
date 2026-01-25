@@ -11,6 +11,7 @@ class ClubProfile extends Equatable {
   final String? coverImageUrl;
   final bool isMember;
   final bool isCreator;
+  final bool isAdmin;
   final bool isPrivate;
 
   // income / stats
@@ -32,6 +33,7 @@ class ClubProfile extends Equatable {
     this.coverImageUrl,
     required this.isMember,
     required this.isCreator,
+    required this.isAdmin,
     required this.isPrivate,
     required this.totalIncomeCoins,
     required this.basicStats,
@@ -47,9 +49,10 @@ class ClubProfile extends Equatable {
       description: json['description'],
       membersCount: json['membersCount'] ?? 0,
       coverImageUrl: json['coverImageUrl'],
-      isMember: json['isMember'] == true,
-      isCreator: json['isCreator'] == true,
-      isPrivate: json['isPrivate'] == true,
+      isMember: json['isMember'] ?? true,
+      isCreator: json['isCreator'] ?? true,
+      isAdmin: json['isAdmin'] ?? true,
+      isPrivate: json['isPrivate'] ?? true,
       location: json['location'],
       motto: json['motto'],
       totalIncomeCoins: json['totalIncomeCoins'] ?? 0,
@@ -71,6 +74,7 @@ class ClubProfile extends Equatable {
     coverImageUrl,
     isMember,
     isCreator,
+    isAdmin,
     isPrivate,
     location,
     motto,

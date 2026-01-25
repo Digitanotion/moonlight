@@ -159,6 +159,7 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
 }
 
 // Modern TikTok-style settings content
+// Modern TikTok-style settings content
 class _SettingsMenuContent extends StatelessWidget {
   final AgoraService agora;
   final VoidCallback onFXPressed;
@@ -169,6 +170,213 @@ class _SettingsMenuContent extends StatelessWidget {
     required this.onFXPressed,
     required this.onClose,
   });
+
+  Future<void> _performEmergencyReset(BuildContext context) async {
+    // Close the settings menu first
+    onClose();
+
+    // Show loading overlay
+    final overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 100,
+        right: 16,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 40,
+                spreadRadius: -10,
+                offset: const Offset(0, 20),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Resetting camera...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(overlayEntry);
+
+    try {
+      // Step 1: Reset beauty effects
+      await agora.resetBeauty();
+
+      // Step 2: Reset BLoC state
+      BlocProvider.of<LiveHostBloc>(context).add(
+        BeautyPreferencesUpdated(
+          faceCleanEnabled: false,
+          faceCleanLevel: 40,
+          brightenEnabled: false,
+          brightenLevel: 40,
+        ),
+      );
+
+      // Step 3: Force camera restart
+      agora.setCameraEnabled(false);
+      await Future.delayed(const Duration(milliseconds: 500));
+      agora.setCameraEnabled(true);
+
+      // Step 4: Small delay for stabilization
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Remove overlay and show success
+      overlayEntry.remove();
+
+      // Show success toast
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Camera successfully reset'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      overlayEntry.remove();
+
+      // Show error
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reset failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showEmergencyResetDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.6),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          width: 300,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.red.withOpacity(0.3), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.red, width: 2),
+                ),
+                child: const Icon(Icons.emergency, color: Colors.red, size: 32),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Title
+              const Text(
+                'Emergency Reset',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Description
+              Text(
+                'Resets all beauty effects and restarts the camera. '
+                'Use if screen is blinking or black.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _performEmergencyReset(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Reset Now'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +521,32 @@ class _SettingsMenuContent extends StatelessWidget {
                                 )
                               : null,
                         ),
+
+                        if (beautyActive || hasBeautySettings) ...[
+                          const SizedBox(height: 8),
+                          _ModernSettingsItem(
+                            icon: Icons.emergency,
+                            label: 'Emergency Reset',
+                            isActive: false,
+                            color: Colors.red,
+                            onTap: () => _showEmergencyResetDialog(context),
+                            badge: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withOpacity(0.5),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -440,6 +674,8 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
   late bool _brightenEnabled;
   late int _brightenLevel;
   Timer? _applyTimer;
+  Timer? _applyDebounceTimer;
+  static const Duration _applyDebounceDuration = Duration(milliseconds: 400);
 
   @override
   void initState() {
@@ -452,8 +688,35 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
     _brightenLevel = widget.currentState.brightenLevel ?? 40;
   }
 
+  void _applyChangesWithDebounce() {
+    // Cancel any pending timer
+    _applyDebounceTimer?.cancel();
+
+    // Start new timer
+    _applyDebounceTimer = Timer(_applyDebounceDuration, () {
+      widget.onApply(
+        _faceCleanEnabled,
+        _faceCleanLevel,
+        _brightenEnabled,
+        _brightenLevel,
+      );
+    });
+  }
+
+  // Update slider handlers:
+  void _updateFaceCleanLevel(double value) {
+    setState(() => _faceCleanLevel = value.round());
+    _applyChangesWithDebounce();
+  }
+
+  void _updateBrightenLevel(double value) {
+    setState(() => _brightenLevel = value.round());
+    _applyChangesWithDebounce();
+  }
+
   @override
   void dispose() {
+    _applyDebounceTimer?.cancel();
     _applyTimer?.cancel();
     super.dispose();
   }
@@ -498,21 +761,21 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
     _applyTimer = Timer(const Duration(milliseconds: 150), _applyImmediately);
   }
 
-  void _updateFaceCleanLevel(double value) {
-    setState(() {
-      _faceCleanLevel = value.round();
-    });
-    // Debounce the apply to avoid too many calls
-    _debouncedApply();
-  }
+  // void _updateFaceCleanLevel(double value) {
+  //   setState(() {
+  //     _faceCleanLevel = value.round();
+  //   });
+  //   // Debounce the apply to avoid too many calls
+  //   _debouncedApply();
+  // }
 
-  void _updateBrightenLevel(double value) {
-    setState(() {
-      _brightenLevel = value.round();
-    });
-    // Debounce the apply to avoid too many calls
-    _debouncedApply();
-  }
+  // void _updateBrightenLevel(double value) {
+  //   setState(() {
+  //     _brightenLevel = value.round();
+  //   });
+  //   // Debounce the apply to avoid too many calls
+  //   _debouncedApply();
+  // }
 
   @override
   Widget build(BuildContext context) {

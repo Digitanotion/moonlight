@@ -89,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
       _updateProgress(0.85);
 
       // Step 4: Final delay for smooth transition
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 1000));
       _updateProgress(1.0);
 
       // Mark as initialized

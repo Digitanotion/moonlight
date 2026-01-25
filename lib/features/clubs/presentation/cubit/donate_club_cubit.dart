@@ -28,6 +28,12 @@ class DonateClubCubit extends Cubit<DonateClubState> {
     emit(state.copyWith(loading: true, error: null));
 
     try {
+      if (message == null || message.isEmpty) {
+        emit(
+          state.copyWith(loading: false, error: 'Please describe the Donation'),
+        );
+        return;
+      }
       await repository.donateToClub(
         club: club,
         coins: coins,

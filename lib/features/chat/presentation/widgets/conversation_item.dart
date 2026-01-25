@@ -17,8 +17,10 @@ class ConversationItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get last message text - handle null safely
-    final lastMessageText = conversation.lastMessage?.body ?? '';
+    // Get last message and type
+    final lastMessage = conversation.lastMessage;
+    final isMediaMessage = lastMessage?.type == MessageType.media;
+    final hasMedia = isMediaMessage && lastMessage!.media.isNotEmpty;
 
     // Get unread count
     final unreadCount = conversation.unreadCount;
@@ -135,18 +137,9 @@ class ConversationItem extends StatelessWidget {
                         ),
                       SizedBox(width: 4),
                       Text(
-                        _formatTime(
-                          conversation.updatedAt,
-                        ), // Remove bang operator
+                        _formatTime(conversation.updatedAt),
                         style: TextStyle(
                           color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        memberCount.toString(),
-                        style: TextStyle(
-                          color: AppColors.secondary,
                           fontSize: 12,
                         ),
                       ),
@@ -155,20 +148,50 @@ class ConversationItem extends StatelessWidget {
                   SizedBox(height: 4),
                   Row(
                     children: [
-                      Expanded(
-                        child: Text(
-                          lastMessageText,
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                            fontWeight: unreadCount > 0
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      // Media icon or text
+                      if (hasMedia) ...[
+                        _buildMediaIcon(lastMessage!.media.first),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMediaText(lastMessage.media.first),
                         ),
-                      ),
+                      ] else if (lastMessage != null &&
+                          lastMessage.body.isNotEmpty) ...[
+                        // Check if message is from current user
+                        Expanded(
+                          child: Text(
+                            _formatLastMessageText(lastMessage),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 14,
+                              fontWeight: unreadCount > 0
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ] else if (lastMessage == null) ...[
+                        Expanded(
+                          child: Text(
+                            'Start a conversation',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ] else ...[
+                        // Empty message case
+                        Text(_formatLastMessageMedia(lastMessage)),
+                        Icon(Icons.image, size: 16, color: AppColors.primary_),
+                      ],
+
+                      // Unread count badge
                       if (unreadCount > 0)
                         Container(
                           padding: EdgeInsets.symmetric(
@@ -199,6 +222,72 @@ class ConversationItem extends StatelessWidget {
     );
   }
 
+  Widget _buildMediaIcon(MediaAttachment media) {
+    if (media.isImage) {
+      return Icon(Icons.image, size: 16, color: AppColors.primary_);
+    } else if (media.isVideo) {
+      return Icon(Icons.videocam, size: 16, color: AppColors.textRed);
+    } else if (media.isAudio) {
+      return Icon(Icons.audiotrack, size: 16, color: AppColors.success);
+    } else {
+      return Icon(
+        Icons.insert_drive_file,
+        size: 16,
+        color: AppColors.textSecondary,
+      );
+    }
+  }
+
+  Widget _buildMediaText(MediaAttachment media) {
+    String text;
+    Color color;
+
+    if (media.isImage) {
+      text = 'Photo';
+      color = AppColors.primary_;
+    } else if (media.isVideo) {
+      text = media.duration != null
+          ? 'Video • ${_formatDuration(media.duration!)}'
+          : 'Video';
+      color = AppColors.textRed;
+    } else if (media.isAudio) {
+      text = media.duration != null
+          ? 'Audio • ${_formatDuration(media.duration!)}'
+          : 'Audio';
+      color = AppColors.success;
+    } else {
+      text = 'File';
+      color = AppColors.textSecondary;
+    }
+
+    return Text(
+      text,
+      style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w500),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  String _formatLastMessageText(Message message) {
+    final senderName = message.sender?.fullName ?? 'Unknown';
+    final maxNameLength = 10;
+    final trimmedName = senderName.length > maxNameLength
+        ? '${senderName.substring(0, maxNameLength)}...'
+        : senderName;
+
+    return '$trimmedName: ${message.body}';
+  }
+
+  String _formatLastMessageMedia(Message message) {
+    final senderName = message.sender?.fullName ?? 'Unknown';
+    final maxNameLength = 10;
+    final trimmedName = senderName.length > maxNameLength
+        ? '${senderName.substring(0, maxNameLength)}...'
+        : senderName;
+
+    return '$trimmedName: ';
+  }
+
   String _formatTime(DateTime? time) {
     if (time == null) return 'Just now';
 
@@ -215,6 +304,19 @@ class ConversationItem extends StatelessWidget {
       return '${difference.inMinutes}m';
     } else {
       return 'Now';
+    }
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds < 60) {
+      return '${seconds}s';
+    } else if (seconds < 3600) {
+      final minutes = seconds ~/ 60;
+      return '${minutes}m';
+    } else {
+      final hours = seconds ~/ 3600;
+      final minutes = (seconds % 3600) ~/ 60;
+      return minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
     }
   }
 }

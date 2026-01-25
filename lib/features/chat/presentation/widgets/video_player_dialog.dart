@@ -1,22 +1,24 @@
+// features/chat/presentation/widgets/video_player_dialog.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
-import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:chewie/chewie.dart'; // Add this dependency if not already
 
 class VideoPlayerDialog extends StatefulWidget {
-  final File videoFile;
+  final File? videoFile;
+  final String? videoUrl;
 
-  const VideoPlayerDialog({Key? key, required this.videoFile})
-    : super(key: key);
+  const VideoPlayerDialog({super.key, this.videoFile, this.videoUrl})
+    : assert(videoFile != null || videoUrl != null);
 
   @override
-  _VideoPlayerDialogState createState() => _VideoPlayerDialogState();
+  State<VideoPlayerDialog> createState() => _VideoPlayerDialogState();
 }
 
 class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
   late VideoPlayerController _videoPlayerController;
   ChewieController? _chewieController;
+  bool _isInitializing = true;
 
   @override
   void initState() {
@@ -25,39 +27,81 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
   }
 
   Future<void> _initializeVideoPlayer() async {
-    _videoPlayerController = VideoPlayerController.file(widget.videoFile);
-    await _videoPlayerController.initialize();
+    try {
+      if (widget.videoFile != null) {
+        _videoPlayerController = VideoPlayerController.file(widget.videoFile!);
+      } else if (widget.videoUrl != null) {
+        _videoPlayerController = VideoPlayerController.network(
+          widget.videoUrl!,
+        );
+      }
 
-    _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController,
-      autoPlay: true,
-      looping: false,
-      allowFullScreen: true,
-      allowMuting: true,
-      showControls: true,
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppColors.primary_,
-        handleColor: AppColors.primary_,
-        backgroundColor: AppColors.textSecondary,
-        bufferedColor: AppColors.surface,
-      ),
-      placeholder: Container(
-        color: Colors.black,
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.primary_),
+      await _videoPlayerController.initialize();
+
+      _chewieController = ChewieController(
+        videoPlayerController: _videoPlayerController,
+        autoPlay: true,
+        looping: false,
+        showControls: true,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Colors.blue,
+          handleColor: Colors.blue,
+          backgroundColor: Colors.grey,
+          bufferedColor: Colors.grey.shade400,
         ),
-      ),
-      errorBuilder: (context, errorMessage) {
-        return Center(
-          child: Text(
-            'Error loading video',
-            style: TextStyle(color: Colors.white),
+        placeholder: Container(color: Colors.black),
+        autoInitialize: true,
+      );
+
+      setState(() {
+        _isInitializing = false;
+      });
+    } catch (e) {
+      debugPrint('Error initializing video player: $e');
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load video: $e'),
+            backgroundColor: Colors.red,
           ),
         );
-      },
-    );
+        Navigator.pop(context);
+      }
+    }
+  }
 
-    setState(() {});
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(20),
+      child: Container(
+        width: double.infinity,
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Stack(
+          children: [
+            if (_isInitializing)
+              const Center(child: CircularProgressIndicator(color: Colors.blue))
+            else if (_chewieController != null)
+              Chewie(controller: _chewieController!),
+
+            Positioned(
+              top: 16,
+              right: 16,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -65,43 +109,5 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
     _videoPlayerController.dispose();
     _chewieController?.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.black,
-      insetPadding: EdgeInsets.all(0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
-      child: Container(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height,
-        child: Stack(
-          children: [
-            if (_chewieController != null)
-              Chewie(controller: _chewieController!)
-            else
-              Center(
-                child: CircularProgressIndicator(color: AppColors.primary_),
-              ),
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 10,
-              right: 20,
-              child: IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.close, color: Colors.white, size: 24),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

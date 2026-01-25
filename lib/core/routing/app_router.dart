@@ -25,6 +25,7 @@ import 'package:moonlight/features/clubs/presentation/cubit/donate_club_cubit.da
 import 'package:moonlight/features/clubs/presentation/cubit/edit_club_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_members_page.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_members_page_user.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/create_club_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/discover_clubs_screen.dart';
@@ -632,6 +633,7 @@ class AppRouter {
       case RouteNames.clubMembers:
         final args = (settings.arguments as Map?) ?? {};
         final clubSlug = args['club'] as String?;
+        final isAdmin = args['isAdmin'] as bool? ?? false;
 
         if (clubSlug == null || clubSlug.isEmpty) {
           return MaterialPageRoute(
@@ -641,11 +643,14 @@ class AppRouter {
           );
         }
 
+        // Conditionally show admin or user version
         return MaterialPageRoute(
           builder: (context) => AuthGuard(
             child: BlocProvider(
               create: (_) => sl<ClubMembersCubit>(param1: clubSlug)..load(),
-              child: ClubMembersPage(club: clubSlug),
+              child: isAdmin
+                  ? ClubMembersPage(club: clubSlug) // Admin version
+                  : ClubMembersPageUser(club: clubSlug), // User version
             ),
           ),
           settings: settings,

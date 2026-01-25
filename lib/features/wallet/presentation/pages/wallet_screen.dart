@@ -115,7 +115,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   HapticFeedback.selectionClick();
-                  Navigator.of(context).pushNamed(RouteNames.setPin);
+                  Navigator.of(context).pushNamed(RouteNames.setNewPin);
                 },
               ),
               const SizedBox(height: 18),
@@ -476,7 +476,7 @@ class _BalanceCard extends StatelessWidget {
                   Text(
                     hideBalance
                         ? '••••••'
-                        : '~ \$${(balance / 100).toStringAsFixed(0)}',
+                        : '~ \$${(balance * 0.005).toStringAsFixed(0)}',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
                       fontSize: 15,

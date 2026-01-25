@@ -1,30 +1,29 @@
-export 'viewers_list_sheet.dart';
+// Add this new file: lib/features/livestream/presentation/pages/viewers_list_sheet.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-
 import 'package:moonlight/core/theme/app_colors.dart';
-import '../../domain/entities/participant.dart';
-import '../bloc/participants_bloc.dart';
-import '../../domain/repositories/participants_repository.dart';
-import 'package:moonlight/widgets/top_snack.dart'; // Import TopSnack
-import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart'; // Import to get active guest info
+import 'package:moonlight/features/livestream/domain/entities/participant.dart';
+import 'package:moonlight/features/livestream/presentation/bloc/participants_bloc.dart';
+import 'package:moonlight/features/livestream/domain/repositories/participants_repository.dart';
+import 'package:moonlight/widgets/top_snack.dart';
+import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart';
 
-class ViewersListPage extends StatefulWidget {
-  const ViewersListPage({Key? key}) : super(key: key);
+class ViewersListSheet extends StatefulWidget {
+  const ViewersListSheet({super.key});
 
   @override
-  State<ViewersListPage> createState() => _ViewersListPageState();
+  State<ViewersListSheet> createState() => _ViewersListSheetState();
 }
 
-class _ViewersListPageState extends State<ViewersListPage> {
+class _ViewersListSheetState extends State<ViewersListSheet> {
   late final ParticipantsBloc _bloc;
-  final _scroll = ScrollController();
+  final ScrollController _scroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    final repo = GetIt.I<ParticipantsRepository>(); // provided by DI
+    final repo = GetIt.I<ParticipantsRepository>();
     _bloc = ParticipantsBloc(repo)..add(const ParticipantsStarted());
     _scroll.addListener(_onScroll);
   }
@@ -45,21 +44,16 @@ class _ViewersListPageState extends State<ViewersListPage> {
     super.dispose();
   }
 
-  // Helper method to check if there's already an active guest
   Future<Map<String, dynamic>> _checkActiveGuest() async {
     try {
       final repoImpl = GetIt.I<LiveSessionRepositoryImpl>();
-      // Get the active guest UUID from the repository
       final activeGuestUuid = repoImpl.activeGuestUuid;
 
       if (activeGuestUuid == null) {
         return {'hasGuest': false};
       }
 
-      // Try to find the guest in the current participants list
       final state = _bloc.state;
-
-      // Find the guest participant
       Participant? guest;
       for (final participant in state.items) {
         if (participant.userUuid == activeGuestUuid) {
@@ -74,9 +68,7 @@ class _ViewersListPageState extends State<ViewersListPage> {
 
       return {
         'hasGuest': true,
-        'guestName': guest.userSlug.isNotEmpty
-            ? guest.userSlug
-            : 'Guest', // Use displayName if you have it, otherwise use 'Guest'
+        'guestName': guest.userSlug.isNotEmpty ? guest.userSlug : 'Guest',
         'guestUuid': guest.userUuid,
       };
     } catch (e) {
@@ -85,7 +77,6 @@ class _ViewersListPageState extends State<ViewersListPage> {
     }
   }
 
-  // Updated handleMenuAction method
   void _handleMenuAction(String action, Participant p) async {
     switch (action) {
       case 'guest':
@@ -93,17 +84,15 @@ class _ViewersListPageState extends State<ViewersListPage> {
         final targetRole = isGuest ? 'viewer' : 'guest';
         final display = p.userSlug.isNotEmpty ? p.userSlug : 'Guest';
 
-        // Check if there's already a guest (only when trying to make someone a guest)
         if (!isGuest) {
           final guestCheck = await _checkActiveGuest();
           if (guestCheck['hasGuest'] == true) {
-            // Show toast message using TopSnack
             TopSnack.error(
               context,
               '${guestCheck['guestName']} is already a guest. You cannot have more than one guest.',
               duration: const Duration(seconds: 4),
             );
-            return; // Don't proceed with making guest
+            return;
           }
         }
 
@@ -368,84 +357,130 @@ class _ViewersListPageState extends State<ViewersListPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Viewers List',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: () => _bloc.add(const ParticipantsRefreshed()),
-          ),
-        ],
-      ),
-      body: BlocConsumer<ParticipantsBloc, ParticipantsState>(
-        bloc: _bloc,
-        listenWhen: (p, c) => p.error != c.error && c.error != null,
-        listener: (context, state) {
-          if (state.error != null) {
-            // Use TopSnack for errors too
-            TopSnack.error(
-              context,
-              state.error!,
-              duration: const Duration(seconds: 3),
-            );
-          }
-        },
-        builder: (context, state) {
-          if (state.loading && state.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
+  void _refreshParticipants() {
+    _bloc.add(const ParticipantsRefreshed());
+  }
 
-          if (!state.loading && state.items.isEmpty) {
-            return const Center(
-              child: Text(
-                'No participants yet.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            );
-          }
+  Widget _buildParticipantsList() {
+    return BlocConsumer<ParticipantsBloc, ParticipantsState>(
+      bloc: _bloc,
+      listenWhen: (p, c) => p.error != c.error && c.error != null,
+      listener: (context, state) {
+        if (state.error != null) {
+          TopSnack.error(
+            context,
+            state.error!,
+            duration: const Duration(seconds: 3),
+          );
+        }
+      },
+      builder: (context, state) {
+        if (state.loading && state.items.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-          return RefreshIndicator(
-            onRefresh: () async => _bloc.add(const ParticipantsRefreshed()),
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              itemCount: state.items.length + (state.paging ? 1 : 0),
-              itemBuilder: (ctx, i) {
-                if (i >= state.items.length) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final p = state.items[i];
-                return _buildViewerItem(p);
-              },
+        if (!state.loading && state.items.isEmpty) {
+          return const Center(
+            child: Text(
+              'No participants yet.',
+              style: TextStyle(color: Colors.white70),
             ),
           );
-        },
-      ),
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async => _bloc.add(const ParticipantsRefreshed()),
+          child: ListView.builder(
+            controller: _scroll,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            itemCount: state.items.length + (state.paging ? 1 : 0),
+            itemBuilder: (ctx, i) {
+              if (i >= state.items.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final p = state.items[i];
+              return _buildViewerItem(p);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65, // Little more than half (65%)
+      minChildSize: 0.5, // Can be pulled down to half
+      maxChildSize: 0.9, // Can be pulled up to 90%
+      expand: false,
+      snap: true,
+      snapSizes: const [0.5, 0.65, 0.9],
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F0F1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 8, bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Viewers List',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.white70,
+                        size: 24,
+                      ),
+                      onPressed: _refreshParticipants,
+                    ),
+                  ],
+                ),
+              ),
+
+              const Divider(height: 1, color: Colors.white12, thickness: 1),
+
+              // Participants List
+              Expanded(child: _buildParticipantsList()),
+            ],
+          ),
+        );
+      },
     );
   }
 }

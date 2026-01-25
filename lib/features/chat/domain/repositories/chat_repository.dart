@@ -27,6 +27,7 @@ abstract class ChatRepository {
     required File file,
     String? body,
     String? replyToUuid,
+    void Function(int sent, int total)? onSendProgress, // Add this
   });
   Future<Message> editMessage(String messageUuid, String newBody);
   Future<void> deleteMessage(String messageUuid);

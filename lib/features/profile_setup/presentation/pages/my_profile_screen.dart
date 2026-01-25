@@ -238,7 +238,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              _vipChip(),
+                              _vipChip(user?.roleLabel ?? "Nominal Member"),
                               const SizedBox(height: 12),
                               _bioLines(user?.bio),
                               const SizedBox(height: 16),
@@ -364,7 +364,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
   }
 
-  Widget _vipChip() => Container(
+  Widget _vipChip(String label) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
       color: const Color(0xFF1E2035),
@@ -373,11 +373,11 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
-      children: const [
+      children: [
         Icon(Icons.workspace_premium, color: Color(0xFFFFD54F), size: 16),
         SizedBox(width: 6),
         Text(
-          'VIP',
+          label,
           style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
         ),
       ],

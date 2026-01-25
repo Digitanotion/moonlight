@@ -232,6 +232,7 @@ class ChatRepositoryImpl implements ChatRepository {
     required File file,
     String? body,
     String? replyToUuid,
+    void Function(int sent, int total)? onSendProgress, // Add this parameter
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -246,7 +247,9 @@ class ChatRepositoryImpl implements ChatRepository {
       final response = await _client.dio.post(
         '/api/v1/chat/conversations/$conversationUuid/messages',
         data: formData,
+        onSendProgress: onSendProgress, // Pass to Dio
       );
+
       final responseData =
           (response.data as Map)['data'] as Map<String, dynamic>;
       return Message.fromJson(responseData);

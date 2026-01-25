@@ -22,7 +22,8 @@ class ProfileRepositoryImpl implements ProfileRepository {
       country: '${d['country'] ?? ''}',
       followers: (d['followers_count'] as num?)?.toInt() ?? 0,
       following: (d['following_count'] as num?)?.toInt() ?? 0,
-      isFollowing: d['is_following'] == true,
+      isFollowing: d['followed_by_me'],
+      roleLabel: d['role_label'],
     );
   }
 

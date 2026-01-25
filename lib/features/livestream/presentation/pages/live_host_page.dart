@@ -26,6 +26,7 @@ import 'package:moonlight/features/livestream/domain/session/live_session_tracke
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/participants_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/pages/live_gifts_page.dart';
+import 'package:moonlight/features/livestream/presentation/pages/viewers_list_sheet.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/confirm_end_stream.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/gift_toast.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/live_settings_menu.dart';
@@ -96,14 +97,19 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   GiftToast? _giftToast;
 
+  bool _isApplyingEffects = false;
+  DateTime? _lastEffectApplyTime;
+  static const Duration _minEffectApplyInterval = Duration(milliseconds: 500);
+
   @override
   void initState() {
     super.initState();
     _giftToast = GiftToast();
     WidgetsBinding.instance.addObserver(this);
 
-    // Add listener for Agora state changes
+    // Setup Agora listener BEFORE applying effects
     agora.addListener(_onAgoraStateChanged);
+
     // Prevent screen from sleeping during live stream
     WakelockPlus.enable();
 
@@ -111,13 +117,32 @@ class _LiveHostPageState extends State<LiveHostPage>
     _initializePusher();
   }
 
+  // UPDATED: Better Agora state change handler
   void _onAgoraStateChanged() {
     if (mounted) {
       setState(() {
-        // Trigger rebuild when audio/video state changes
+        // Update UI state
       });
+
+      // Apply beauty effects when Agora is joined and ready
+      if (agora.joined && !_beautyAppliedOnJoin) {
+        // Small delay to ensure engine is fully ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && agora.joined) {
+            _applyEffects(force: true);
+          }
+        });
+      }
     }
   }
+
+  // void _onAgoraStateChanged() {
+  //   if (mounted) {
+  //     setState(() {
+  //       // Trigger rebuild when audio/video state changes
+  //     });
+  //   }
+  // }
 
   Future<void> _initializePusher() async {
     if (_isPusherInitialized || _isPusherInitializing) {
@@ -239,7 +264,11 @@ class _LiveHostPageState extends State<LiveHostPage>
   @override
   void dispose() {
     debugPrint('🧹 Disposing LiveHostPage...');
+
+    _isApplyingEffects = false; // Reset flag
+
     agora.removeListener(_onAgoraStateChanged);
+
     // Remove Pusher listener if it exists
     if (_connectionListener != null) {
       final pusher = GetIt.I<PusherService>();
@@ -396,44 +425,108 @@ class _LiveHostPageState extends State<LiveHostPage>
     });
   }
 
-  Future<void> _applyEffects() async {
-    try {
-      // Use the instance-level agora (declared earlier in this state)
-      if (!agora.joined) {
-        // Not joined yet; mark for re-apply on join
-        _beautyAppliedOnJoin = false;
-        if (kDebugMode)
-          debugPrint('[Beauty] Engine not joined yet; pending apply');
-        return;
-      }
+  // UPDATED: Robust beauty effects application
+  Future<void> _applyEffects({bool force = false}) async {
+    // Prevent rapid consecutive calls
+    final now = DateTime.now();
+    if (_lastEffectApplyTime != null &&
+        now.difference(_lastEffectApplyTime!) < _minEffectApplyInterval &&
+        !force) {
+      debugPrint('[Beauty] Skipping rapid apply (debounced)');
+      return;
+    }
 
-      // Compose request
+    // Prevent concurrent applications
+    if (_isApplyingEffects) {
+      debugPrint('[Beauty] Already applying effects, skipping');
+      return;
+    }
+
+    // Validate Agora state
+    if (!agora.joined) {
+      _beautyAppliedOnJoin = false;
+      debugPrint('[Beauty] Engine not joined yet; will apply on join');
+      return;
+    }
+
+    _isApplyingEffects = true;
+    _lastEffectApplyTime = now;
+
+    try {
+      // Get current values (clamped to safe ranges)
       final faceOn = _faceCleanEnabled;
       final faceLevel = _faceCleanLevel.clamp(0, 100);
       final brightOn = _brightenEnabled;
       final brightLevel = _brightenLevel.clamp(0, 100);
 
-      await agora.applyBeauty(
-        faceCleanEnabled: faceOn,
-        faceCleanLevel: faceLevel,
-        brightenEnabled: brightOn,
-        brightenLevel: brightLevel,
+      debugPrint(
+        '[Beauty] Applying - Face: $faceOn($faceLevel), Brighten: $brightOn($brightLevel)',
       );
 
-      _beautyAppliedOnJoin = true;
-      if (kDebugMode) {
-        debugPrint(
-          '[Beauty] applied face:$faceOn($faceLevel) bright:$brightOn($brightLevel)',
+      // IMPORTANT: Reset to defaults first to avoid weird states
+      if (!faceOn && !brightOn) {
+        // Both disabled - fully reset
+        await agora.resetBeauty();
+        debugPrint('[Beauty] Reset to default (both effects disabled)');
+      } else {
+        // Apply new effects with progressive approach
+        await agora.applyBeauty(
+          faceCleanEnabled: faceOn,
+          faceCleanLevel: faceLevel,
+          brightenEnabled: brightOn,
+          brightenLevel: brightLevel,
         );
       }
+
+      _beautyAppliedOnJoin = true;
+
+      // Small delay to ensure effects stabilize
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      debugPrint('[Beauty] Successfully applied');
     } catch (e, st) {
-      debugPrint('❌ Failed to apply beauty effects: $e\n$st');
+      debugPrint('❌ Failed to apply beauty effects: $e');
+      debugPrint('Stack trace: $st');
+
+      // Try recovery: Reset and retry once
+      try {
+        debugPrint('[Beauty] Attempting recovery...');
+        await agora.resetBeauty();
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        if (_faceCleanEnabled || _brightenEnabled) {
+          await agora.applyBeauty(
+            faceCleanEnabled: _faceCleanEnabled,
+            faceCleanLevel: _faceCleanLevel.clamp(0, 100),
+            brightenEnabled: _brightenEnabled,
+            brightenLevel: _brightenLevel.clamp(0, 100),
+          );
+        }
+        debugPrint('[Beauty] Recovery successful');
+      } catch (recoveryError) {
+        debugPrint('❌ Recovery failed: $recoveryError');
+
+        // Last resort: Disable all effects and show error
+        _faceCleanEnabled = false;
+        _faceCleanLevel = 40;
+        _brightenEnabled = false;
+        _brightenLevel = 40;
+
+        if (mounted) {
+          TopSnack.error(
+            context,
+            'Beauty effects temporarily unavailable. Please restart if issue persists.',
+            duration: const Duration(seconds: 3),
+          );
+        }
+      }
+    } finally {
+      _isApplyingEffects = false;
     }
   }
 
   // Show a compact bottom sheet allowing toggle + slider for an effect
   void _showBeautyBottomSheet({required bool isFaceClean}) {
-    // Hide the quick settings menu while the sheet is open
     if (_showSettingsMenu) {
       setState(() => _showSettingsMenu = false);
     }
@@ -459,6 +552,41 @@ class _LiveHostPageState extends State<LiveHostPage>
               builder: (sheetCtx, sheetSetState) {
                 int innerLevel = currentLevel;
                 bool innerEnabled = currentEnabled;
+                Timer? _applyTimer;
+
+                // Debounced apply function
+                void _debouncedApply() {
+                  _applyTimer?.cancel();
+                  _applyTimer = Timer(const Duration(milliseconds: 300), () {
+                    if (!mounted) return;
+
+                    setState(() {
+                      if (isFaceClean) {
+                        _faceCleanEnabled = innerEnabled;
+                        _faceCleanLevel = innerLevel;
+                      } else {
+                        _brightenEnabled = innerEnabled;
+                        _brightenLevel = innerLevel;
+                      }
+                    });
+
+                    // Dispatch to Bloc
+                    try {
+                      context.read<LiveHostBloc>().add(
+                        BeautyPreferencesUpdated(
+                          faceCleanEnabled: _faceCleanEnabled,
+                          faceCleanLevel: _faceCleanLevel,
+                          brightenEnabled: _brightenEnabled,
+                          brightenLevel: _brightenLevel,
+                        ),
+                      );
+                    } catch (e) {
+                      debugPrint('⚠️ Failed to dispatch beauty update: $e');
+                      // Apply directly
+                      _applyEffects();
+                    }
+                  });
+                }
 
                 return _Glass(
                   radius: 18,
@@ -487,6 +615,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                               value: innerEnabled,
                               onChanged: (v) {
                                 sheetSetState(() => innerEnabled = v);
+                                _debouncedApply();
                               },
                               activeColor: const Color(0xFFFF6A00),
                             ),
@@ -505,6 +634,10 @@ class _LiveHostPageState extends State<LiveHostPage>
                           onChanged: (v) {
                             sheetSetState(() => innerLevel = v.round());
                           },
+                          onChangeEnd: (v) {
+                            sheetSetState(() => innerLevel = v.round());
+                            _debouncedApply();
+                          },
                         ),
                         const SizedBox(height: 8),
                         Row(
@@ -512,8 +645,8 @@ class _LiveHostPageState extends State<LiveHostPage>
                             Expanded(
                               child: GestureDetector(
                                 onTap: () {
-                                  // Apply: update page-level state, dispatch to Bloc so persistence happens,
-                                  // and close the sheet.
+                                  _applyTimer?.cancel(); // Cancel any pending
+
                                   setState(() {
                                     if (isFaceClean) {
                                       _faceCleanEnabled = innerEnabled;
@@ -524,7 +657,6 @@ class _LiveHostPageState extends State<LiveHostPage>
                                     }
                                   });
 
-                                  // Dispatch to Bloc to persist + apply via bloc
                                   try {
                                     context.read<LiveHostBloc>().add(
                                       BeautyPreferencesUpdated(
@@ -538,7 +670,6 @@ class _LiveHostPageState extends State<LiveHostPage>
                                     debugPrint(
                                       '⚠️ Failed to dispatch beauty update: $e',
                                     );
-                                    // fallback: apply immediately (best-effort)
                                     _applyEffects();
                                   }
 
@@ -557,6 +688,37 @@ class _LiveHostPageState extends State<LiveHostPage>
                                         color: Colors.white,
                                         fontWeight: FontWeight.w800,
                                       ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Add reset button
+                            GestureDetector(
+                              onTap: () {
+                                // Use the new gradual reset instead of immediate reset
+                                _resetBeautyEffect(isFaceClean);
+                                Navigator.of(ctx).pop();
+                              },
+                              child: Container(
+                                height: 48,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'Reset',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
@@ -581,7 +743,7 @@ class _LiveHostPageState extends State<LiveHostPage>
   Widget _buildSettingsMenu() {
     return Positioned(
       right: 18,
-      bottom: 80, // Position above the bottom actions
+      bottom: 80,
       child: AnimatedOpacity(
         opacity: _showSettingsMenu ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 200),
@@ -625,12 +787,101 @@ class _LiveHostPageState extends State<LiveHostPage>
                   isActive: _brightenEnabled,
                   onTap: () => _showBeautyBottomSheet(isFaceClean: false),
                 ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  void _resetBeautyEffect(bool isFaceClean) {
+    // Store current values
+    final oldFaceEnabled = _faceCleanEnabled;
+    final oldFaceLevel = _faceCleanLevel;
+    final oldBrightenEnabled = _brightenEnabled;
+    final oldBrightenLevel = _brightenLevel;
+
+    // Set to defaults
+    setState(() {
+      if (isFaceClean) {
+        _faceCleanEnabled = false;
+        _faceCleanLevel = 40;
+      } else {
+        _brightenEnabled = false;
+        _brightenLevel = 40;
+      }
+    });
+
+    // Apply changes gradually with animation
+    _applyBeautyGradually(
+      oldFaceEnabled: oldFaceEnabled,
+      oldFaceLevel: oldFaceLevel,
+      oldBrightenEnabled: oldBrightenEnabled,
+      oldBrightenLevel: oldBrightenLevel,
+      newFaceEnabled: isFaceClean ? false : _faceCleanEnabled,
+      newFaceLevel: isFaceClean ? 40 : _faceCleanLevel,
+      newBrightenEnabled: isFaceClean ? _brightenEnabled : false,
+      newBrightenLevel: isFaceClean ? _brightenLevel : 40,
+    );
+
+    try {
+      context.read<LiveHostBloc>().add(
+        BeautyPreferencesUpdated(
+          faceCleanEnabled: _faceCleanEnabled,
+          faceCleanLevel: _faceCleanLevel,
+          brightenEnabled: _brightenEnabled,
+          brightenLevel: _brightenLevel,
+        ),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Failed to dispatch reset: $e');
+    }
+  }
+
+  Future<void> _applyBeautyGradually({
+    required bool oldFaceEnabled,
+    required int oldFaceLevel,
+    required bool oldBrightenEnabled,
+    required int oldBrightenLevel,
+    required bool newFaceEnabled,
+    required int newFaceLevel,
+    required bool newBrightenEnabled,
+    required int newBrightenLevel,
+  }) async {
+    if (!agora.joined) return;
+
+    const steps = 10;
+    const delay = Duration(milliseconds: 50);
+
+    for (int i = 0; i <= steps; i++) {
+      final progress = i / steps;
+
+      // Interpolate values
+      final currentFaceLevel =
+          (oldFaceLevel + (newFaceLevel - oldFaceLevel) * progress).toInt();
+      final currentBrightenLevel =
+          (oldBrightenLevel + (newBrightenLevel - oldBrightenLevel) * progress)
+              .toInt();
+
+      // Apply intermediate state
+      try {
+        await agora.applyBeauty(
+          faceCleanEnabled: progress > 0.5 ? newFaceEnabled : oldFaceEnabled,
+          faceCleanLevel: currentFaceLevel.clamp(0, 100),
+          brightenEnabled: progress > 0.5
+              ? newBrightenEnabled
+              : oldBrightenEnabled,
+          brightenLevel: currentBrightenLevel.clamp(0, 100),
+        );
+      } catch (e) {
+        debugPrint('⚠️ Gradual beauty step failed: $e');
+        break;
+      }
+
+      await Future.delayed(delay);
+    }
   }
 
   String _mmss(int total) {
@@ -1210,6 +1461,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                                 ),
                               );
                             },
+                            // In _BottomActions widget, update the onViewers callback:
                             onViewers: () {
                               final tracker = sl<LiveSessionTracker>();
                               final numericId = tracker.current!.livestreamId;
@@ -1218,9 +1470,12 @@ class _LiveHostPageState extends State<LiveHostPage>
 
                               _registerParticipantsForCurrentSession();
 
-                              Navigator.pushNamed(
-                                context,
-                                RouteNames.listViewers,
+                              // Replace Navigator.pushNamed with showModalBottomSheet
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) => const ViewersListSheet(),
                               );
                             },
                             onPremium: _showPremiumBottomSheet,
@@ -2259,7 +2514,8 @@ class _HeaderBar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                hostName,
+                // hostName,
+                "You are the",
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -2293,8 +2549,14 @@ class _HeaderBar extends StatelessWidget {
 
               _registerParticipantsForCurrentSession();
 
-              Navigator.pushNamed(context, RouteNames.listViewers);
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const ViewersListSheet(),
+              );
             },
+
             child: const Padding(
               padding: EdgeInsets.only(top: 2, left: 3, right: 2),
               child: Icon(

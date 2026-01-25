@@ -120,7 +120,8 @@ class _TopBar extends StatelessWidget {
               fontSize: 16,
             ),
           ),
-          Icon(Icons.more_vert, color: Colors.white),
+          SizedBox(width: 20),
+          // Icon(Icons.more_vert, color: Colors.white),
         ],
       ),
     );
@@ -222,22 +223,119 @@ class _HeaderMeta extends StatelessWidget {
                 children: [
                   _Pill('Club Profile'),
                   const SizedBox(width: 8),
-                  Text(
-                    '${club.membersCount} members',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  // Make the member count clickable
+                  GestureDetector(
+                    onTap: () {
+                      _navigateToMembersPage(context);
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.white30, width: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.people_outline,
+                              size: 12,
+                              color: Colors.white70,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${club.membersCount} members',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(
+                              Icons.chevron_right,
+                              size: 14,
+                              color: Colors.white70,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ],
           ),
         ),
-        _JoinButton(joined: club.isMember, clubUuid: club.uuid),
+        // Conditional button based on join status
+        club.isMember
+            ? _MessagesButton(clubUuid: club.uuid)
+            : _JoinButton(clubUuid: club.uuid),
       ],
     );
   }
-}
 
+  void _navigateToMembersPage(BuildContext context) {
+    // Check if current user is admin (either creator or has admin role)
+    final bool isAdmin = club.isAdmin ?? false;
+
+    Navigator.pushNamed(
+      context,
+      RouteNames.clubMembers,
+      arguments: {'club': club.slug, 'isAdmin': isAdmin},
+    );
+  }
+}
 /* ─────────────────── AVATAR ─────────────────── */
+
+// Messages Button (shown when user is a member)
+class _MessagesButton extends StatelessWidget {
+  final String clubUuid;
+
+  const _MessagesButton({required this.clubUuid});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        _navigateToClubChat(context);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.blue.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.blue, width: 1.5),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.message, color: Colors.blue, size: 18),
+            // SizedBox(width: 6),
+            // Text(
+            //   'Messages',
+            //   style: TextStyle(
+            //     color: Colors.blue,
+            //     fontSize: 14,
+            //     fontWeight: FontWeight.w600,
+            //   ),
+            // ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToClubChat(BuildContext context) {
+    Navigator.pushNamed(context, RouteNames.conversations);
+  }
+}
 
 class _Avatar extends StatelessWidget {
   final String? url;
@@ -282,25 +380,25 @@ class _Avatar extends StatelessWidget {
         ),
 
         // Rank badge (unchanged)
-        Positioned(
-          bottom: -2,
-          right: -2,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.deepPurple,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Text(
-              '#12',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
+        // Positioned(
+        //   bottom: -2,
+        //   right: -2,
+        //   child: Container(
+        //     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        //     decoration: BoxDecoration(
+        //       color: Colors.deepPurple,
+        //       borderRadius: BorderRadius.circular(10),
+        //     ),
+        //     child: const Text(
+        //       '#12',
+        //       style: TextStyle(
+        //         color: Colors.white,
+        //         fontSize: 10,
+        //         fontWeight: FontWeight.w700,
+        //       ),
+        //     ),
+        //   ),
+        // ),
       ],
     );
   }
@@ -312,42 +410,41 @@ class _Avatar extends StatelessWidget {
 
 /* ─────────────────── JOIN BUTTON ─────────────────── */
 
+// Join Button (shown when user is NOT a member)
 class _JoinButton extends StatelessWidget {
-  final bool joined;
   final String clubUuid;
+  final VoidCallback? onJoin;
 
-  const _JoinButton({required this.joined, required this.clubUuid});
+  const _JoinButton({required this.clubUuid, this.onJoin});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: joined
-          ? null
-          : () async {
-              await context.read<ClubProfileCubit>().repository.joinClub(
-                clubUuid,
-              );
-
-              context.read<ClubProfileCubit>().load(clubUuid);
-            },
+      onTap:
+          onJoin ??
+          () {
+            // Handle join logic here
+            // After joining, you might want to rebuild to show Messages button
+          },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
-          color: joined ? Colors.white24 : const Color(0xFFFF7A00),
-          borderRadius: BorderRadius.circular(26),
+          color: const Color(0xFFFF7A00).withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFFF7A00), width: 1.5),
         ),
-        child: Text(
-          joined ? 'Joined' : 'Join Club',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
+        child: const Text(
+          'Join',
+          style: TextStyle(
+            color: Color(0xFFFF7A00),
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
     );
   }
 }
-
 /* ─────────────────── DESCRIPTION ─────────────────── */
 
 class _DescriptionCard extends StatelessWidget {

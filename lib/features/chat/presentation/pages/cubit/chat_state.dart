@@ -1,4 +1,7 @@
+// chat_state.dart
 part of 'chat_cubit.dart';
+
+// Import the UploadProgress from the new file
 
 @immutable
 abstract class ChatState {
@@ -46,7 +49,6 @@ class ChatMessagesLoaded extends ChatState {
   });
 }
 
-// UPDATED: Add messages to loading more state
 class ChatMessagesLoadingMore extends ChatState {
   final List<Message> messages;
   final bool hasMore;
@@ -58,8 +60,6 @@ class ChatMessagesLoadingMore extends ChatState {
     required this.conversationUuid,
   });
 }
-
-class ChatUploadingMedia extends ChatState {}
 
 class ChatMessageSent extends ChatState {
   final List<Message> messages;
@@ -101,3 +101,18 @@ class ChatTypingStarted extends ChatState {
 }
 
 class ChatTypingStopped extends ChatState {}
+
+class ChatUploadingMedia extends ChatState {
+  final List<Message> messages;
+  final String conversationUuid;
+  final Map<String, UploadProgress> uploads;
+
+  ChatUploadingMedia({
+    required this.messages,
+    required this.conversationUuid,
+    required this.uploads,
+  });
+
+  @override
+  List<Object?> get props => [messages, conversationUuid, uploads];
+}

@@ -11,6 +11,11 @@ class ChatConversations extends Equatable {
   final Message? lastMessage;
   final int? memberCount;
   final DateTime? updatedAt;
+  final String? otherUserUuid;
+  final String? otherUserSlug;
+
+  // For club conversations
+  final String? clubUuid;
 
   const ChatConversations({
     required this.uuid,
@@ -19,6 +24,9 @@ class ChatConversations extends Equatable {
     this.imageUrl,
     required this.isPinned,
     required this.unreadCount,
+    this.otherUserUuid,
+    this.otherUserSlug,
+    this.clubUuid,
     this.lastMessage,
     this.memberCount,
     this.updatedAt,
@@ -41,6 +49,9 @@ class ChatConversations extends Equatable {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String).toLocal()
           : null,
+      otherUserUuid: json['other_user_uuid'] as String?,
+      otherUserSlug: json['other_user_slug'] as String?,
+      clubUuid: json['club_uuid'] as String?,
     );
   }
 
@@ -53,6 +64,9 @@ class ChatConversations extends Equatable {
     'unread_count': unreadCount,
     'last_message': lastMessage?.toJson(),
     'member_count': memberCount,
+    'other_user_uuid': otherUserUuid,
+    'other_user_slug': otherUserSlug,
+    'club_uuid': clubUuid,
     'updated_at': updatedAt?.toUtc().toIso8601String(),
   };
 
@@ -70,5 +84,8 @@ class ChatConversations extends Equatable {
     lastMessage,
     memberCount,
     updatedAt,
+    otherUserUuid,
+    otherUserSlug,
+    clubUuid,
   ];
 }

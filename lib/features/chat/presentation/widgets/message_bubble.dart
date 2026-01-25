@@ -1,12 +1,17 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/chat/presentation/widgets/video_player_dialog.dart';
+import 'package:moonlight/widgets/video_thumbnail.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -23,6 +28,7 @@ class MessageBubble extends StatelessWidget {
   final bool isTyping;
   final bool showTail; // Add this parameter for tail styling\
   final ChatCubit? chatCubit;
+  final bool isClub;
   final Function(String messageUuid)? onDeleteMessage;
 
   const MessageBubble({
@@ -41,30 +47,122 @@ class MessageBubble extends StatelessWidget {
     this.isTyping = false,
     this.showTail = true, // Default to true
     this.chatCubit,
+    this.isClub = false,
     this.onDeleteMessage,
   }) : super(key: key);
+
+  Widget _buildSenderName(BuildContext context) {
+    if (!isClub || isMe) return const SizedBox.shrink();
+
+    final sender = message.sender;
+    final fullName = sender.fullName;
+    final userSlug = sender.userSlug;
+
+    return GestureDetector(
+      onTap: () {
+        _navigateToUserProfile(context, sender.uuid, userSlug);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4, left: 4),
+        constraints: BoxConstraints(
+          maxWidth:
+              MediaQuery.of(context).size.width *
+              0.7, // Or your preferred max width
+        ),
+        child: Row(
+          children: [
+            // Avatar
+            if (!isMe && showAvatar && avatarUrl != null)
+              GestureDetector(
+                onTap: () => _navigateToUserProfile(
+                  context,
+                  message.sender.uuid,
+                  message.sender.userSlug,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: CircleAvatar(
+                    backgroundImage: NetworkImage(avatarUrl!),
+                    radius: 16,
+                  ),
+                ),
+              ),
+            // Flexible for both name and slug
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      fullName,
+                      style: TextStyle(
+                        color: AppColors.primary_,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  if (userSlug.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        '@$userSlug',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToUserProfile(
+    BuildContext context,
+    String userUuid,
+    String userSlug,
+  ) {
+    Navigator.pushNamed(
+      context,
+      RouteNames.profileView,
+      arguments: {'userUuid': userUuid, 'userSlug': userSlug},
+    );
+  }
 
   Widget _buildMediaContent(BuildContext context) {
     final hasLocalFile = mediaFile != null && mediaFile!.existsSync();
 
-    // Check if there's media content
     if (message.media.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    // Get the first media attachment
     final media = message.media.first;
 
-    // Check mimeType to determine media type
-    if (media.isImage) {
-      return _buildImageContent(context, hasLocalFile, media);
-    } else if (media.isVideo) {
-      return _buildVideoContent(context, hasLocalFile, media);
-    } else if (media.isAudio) {
-      return _buildAudioContent(media);
-    } else {
-      return _buildFileContent(media);
-    }
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.65,
+      ),
+      child: Builder(
+        builder: (context) {
+          if (media.isImage) {
+            return _buildImageContent(context, hasLocalFile, media);
+          } else if (media.isVideo) {
+            return _buildVideoContent(context, hasLocalFile, media);
+          } else if (media.isAudio) {
+            return _buildAudioContent(media);
+          } else {
+            return _buildFileContent(media);
+          }
+        },
+      ),
+    );
   }
 
   Widget _buildImageContent(
@@ -110,26 +208,38 @@ class MessageBubble extends StatelessWidget {
                       ),
                     ),
                   ),
-                  errorWidget: (context, url, error) => Container(
-                    color: AppColors.card,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.broken_image,
-                            color: AppColors.textSecondary,
-                            size: 40,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Image',
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                        ],
+                  errorWidget: (context, url, error) {
+                    debugPrint('Image load error: $error');
+                    return Container(
+                      width: MediaQuery.of(context).size.width * 0.65,
+                      height: 200,
+                      color: AppColors.card,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              error is SocketException ||
+                                      error.toString().contains('403')
+                                  ? Icons.wifi_off
+                                  : Icons.broken_image,
+                              color: AppColors.textSecondary,
+                              size: 40,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              error is SocketException ||
+                                      error.toString().contains('403')
+                                  ? 'Failed to load\nCheck connection'
+                                  : 'Image',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
         ),
       ),
@@ -152,6 +262,7 @@ class MessageBubble extends StatelessWidget {
       child: Container(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.65,
+          maxHeight: 200,
         ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
@@ -160,27 +271,42 @@ class MessageBubble extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Thumbnail or placeholder
+            // Video thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: VideoThumbnailWidget(
+                videoUrl: media.url,
+                localFile: hasLocalFile ? mediaFile : null,
+                width: MediaQuery.of(context).size.width * 0.65,
+                height: 200,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.black,
+                    child: Center(
+                      child: Icon(
+                        Icons.videocam,
+                        color: Colors.white.withOpacity(0.8),
+                        size: 40,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // Dark overlay for better contrast
             Container(
-              color: Colors.black,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.play_circle_filled,
-                      color: Colors.white.withOpacity(0.8),
-                      size: 50,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Video',
-                      style: TextStyle(color: Colors.white.withOpacity(0.8)),
-                    ),
-                  ],
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.4)],
                 ),
               ),
             ),
+
             // Play button overlay
             Positioned(
               bottom: 8,
@@ -198,6 +324,7 @@ class MessageBubble extends StatelessWidget {
                 ),
               ),
             ),
+
             // Duration overlay
             if (media.duration != null)
               Positioned(
@@ -214,7 +341,11 @@ class MessageBubble extends StatelessWidget {
                   ),
                   child: Text(
                     _formatDuration(media.duration!),
-                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -222,6 +353,75 @@ class MessageBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // Add these helper methods
+  Widget _buildVideoPlaceholder() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Icon(
+          Icons.videocam,
+          color: Colors.white.withOpacity(0.8),
+          size: 40,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoThumbnailLoading() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: CircularProgressIndicator(
+          color: AppColors.primary_,
+          strokeWidth: 2,
+        ),
+      ),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    final i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
+  }
+
+  Future<File?> _getVideoThumbnail(
+    MediaAttachment media,
+    File? localFile,
+  ) async {
+    try {
+      // Check if thumbnail already exists in cache
+      final tempDir = await getTemporaryDirectory();
+      final thumbnailPath =
+          '${tempDir.path}/thumbnail_${media.url.hashCode}.jpg';
+      final thumbnailFile = File(thumbnailPath);
+
+      // Return cached thumbnail if it exists
+      if (await thumbnailFile.exists()) {
+        return thumbnailFile;
+      }
+
+      // Generate thumbnail from local file or URL
+      final thumbnailData = await VideoThumbnail.thumbnailData(
+        video: localFile?.path ?? media.url,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 300,
+        quality: 75,
+        timeMs: 1000, // 1 second into the video
+      );
+
+      if (thumbnailData != null) {
+        await thumbnailFile.writeAsBytes(thumbnailData);
+        return thumbnailFile;
+      }
+    } catch (e) {
+      debugPrint('❌ Error generating video thumbnail: $e');
+    }
+
+    return null;
   }
 
   Widget _buildFileContent(MediaAttachment media) {
@@ -399,13 +599,13 @@ class MessageBubble extends StatelessWidget {
         context: context,
         builder: (context) => VideoPlayerDialog(videoFile: videoFile),
       );
+    } else if (videoUrl != null) {
+      // Uncomment and fix this section
+      showDialog(
+        context: context,
+        builder: (context) => VideoPlayerDialog(videoUrl: videoUrl),
+      );
     }
-    // else if (videoUrl != null) {
-    //   showDialog(
-    //     context: context,
-    //     builder: (context) => VideoPlayerDialog(videoUrl: videoUrl),
-    //   );
-    // }
   }
 
   // Remove the PopupMenuButton section in the build method and update the GestureDetector
@@ -417,6 +617,7 @@ class MessageBubble extends StatelessWidget {
     }
 
     return Container(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width),
       margin: EdgeInsets.only(
         bottom: 12,
         left: isMe ? 40 : 0,
@@ -429,21 +630,34 @@ class MessageBubble extends StatelessWidget {
             : MainAxisAlignment.start,
         children: [
           if (!isMe && showAvatar && avatarUrl != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: CircleAvatar(
-                backgroundImage: NetworkImage(avatarUrl!),
-                radius: 16,
+            GestureDetector(
+              onTap: () => _navigateToUserProfile(
+                context,
+                message.sender.uuid,
+                message.sender.userSlug,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: CircleAvatar(
+                  backgroundImage: NetworkImage(avatarUrl!),
+                  radius: 16,
+                ),
               ),
             ),
-          Flexible(
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
             child: Column(
               crossAxisAlignment: isMe
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
+                // Text(isClub.toString()),
+                // Sender name for club conversations
+                if (isClub && !isMe) _buildSenderName(context),
+
                 GestureDetector(
-                  // Enable long press for BOTH sender and receiver messages
                   onLongPress: () => _showMessageContextMenu(context),
                   child: Container(
                     constraints: BoxConstraints(
@@ -488,7 +702,7 @@ class MessageBubble extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Reply Preview - SIMPLIFIED: Just check if we have a reply
+                        // Reply Preview
                         if (message.replyTo != null)
                           _buildReplyPreview(context),
                         if (message.replyTo != null) const SizedBox(height: 8),
@@ -580,8 +794,6 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          // REMOVED: PopupMenuButton for sender messages
-          // You can keep avatar on the other side if needed
           if (isMe && showAvatar && avatarUrl != null)
             Padding(
               padding: const EdgeInsets.only(left: 8),
