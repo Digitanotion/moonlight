@@ -147,11 +147,10 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          packageName: "com.app.moonlightstream" # ⚠️ CHANGE THIS TO YOUR PACKAGE NAME
+          packageName: "com.app.moonlightstream"
           releaseFiles: app-release.aab
           track: ${{ steps.track.outputs.track }}
-          status: completed
-          # rolloutPercentage: ${{ steps.track.outputs.track == 'production' && '10' || '100' }}
+          # Remove all other parameters - keep it simple
 
       - name: Create Deployment Summary
         if: success()
