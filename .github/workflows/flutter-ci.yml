@@ -60,43 +60,7 @@ jobs:
       - run: flutter pub get
       - run: flutter test --coverage
 
-  # JOB 2: BUILD APKs (Your existing build job)
-  build-apk:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}
-
-      - name: Configure Gradle
-        run: |
-          echo "org.gradle.vfs.watch=false" >> android/gradle.properties
-          echo "org.gradle.daemon=false" >> android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4096m" >> android/gradle.properties
-
-      - name: Get packages
-        run: flutter pub get
-
-      - name: Build Release APK (Split ABI)
-        run: flutter build apk --release --split-per-abi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/*.apk
-          retention-days: 7
+  # JOB 2: BUILD APKs (Your existing build job
 
   # JOB 3: NEW - BUILD APP BUNDLE for Play Store
   build-aab:
