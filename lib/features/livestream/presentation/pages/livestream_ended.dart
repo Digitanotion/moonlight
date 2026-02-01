@@ -49,8 +49,8 @@ class _LivestreamEndedScreenState extends State<LivestreamEndedScreen> {
     final durationText = a?.durationFormatted ?? '00:00:00';
     final viewersText = a != null ? _fmtInt(a.totalViewers) : '0';
     final chatsText = a != null ? _fmtInt(a.totalChats) : '0';
-    final coinsSource = _coinsFromCollected ?? (a?.coinsAmount ?? 0);
-    final coinsText = _fmtInt(coinsSource);
+    final coinsSource = a?.coinsAmount ?? 0;
+    final coinsText = a != null ? _fmtInt(coinsSource) : '0';
 
     return Scaffold(
       backgroundColor: const Color(0xFF020024),

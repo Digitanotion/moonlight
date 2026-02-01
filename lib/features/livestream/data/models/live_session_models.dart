@@ -38,7 +38,7 @@ class HostGiftBroadcast {
               .toString(),
       giftId: (m['gift_id'] ?? '').toString(),
       giftCode: (m['gift_code'] ?? m['gift'] ?? '').toString(),
-      giftName: (m['gift_name'] ?? m['gift'] ?? '').toString(),
+      giftName: (m['gift_code'] ?? m['gift'] ?? '').toString(),
       quantity: (m['quantity'] is int)
           ? m['quantity'] as int
           : int.tryParse('${m['quantity'] ?? 1}') ?? 1,

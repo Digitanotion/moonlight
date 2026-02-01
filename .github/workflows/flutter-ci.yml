@@ -1,34 +1,77 @@
-name: Flutter CI
+name: Flutter CI/CD Pipeline
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+      - ".github/**"
+      - "**/*.png"
+      - "**/*.jpg"
+      - "**/*.svg"
+
+  pull_request:
+    branches: [main, master]
+
+  # NEW: Manual trigger for deployment
+  workflow_dispatch:
+    inputs:
+      deploy_track:
+        description: "Play Store Deployment Track"
+        required: true
+        default: "internal"
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      version_bump:
+        description: "Bump Version?"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - none
+          - patch
+          - minor
+          - major
+
+# Environment variables
+env:
+  PROJECT_PATH: "."
+  FLUTTER_VERSION: "3.32.7"
 
 jobs:
+  # JOB 1: TESTING (Runs on all pushes)
   test:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.32.7"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
       - run: flutter pub get
-      - run: flutter test test/ --coverage
+      - run: flutter test --coverage
 
-  build:
+  # JOB 2: BUILD APKs (Your existing build job)
+  build-apk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.32.7"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      # Cache Gradle
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -37,7 +80,6 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}
 
-      # Ensure Gradle stability
       - name: Configure Gradle
         run: |
           echo "org.gradle.vfs.watch=false" >> android/gradle.properties
@@ -47,13 +89,127 @@ jobs:
       - name: Get packages
         run: flutter pub get
 
-      # 🔑 IMPORTANT: Split ABI APKs
       - name: Build Release APK (Split ABI)
         run: flutter build apk --release --split-per-abi
 
-      # Upload ALL APKs
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 7
+
+  # JOB 3: NEW - BUILD APP BUNDLE for Play Store
+  build-aab:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    needs: [test] # Only run after tests pass
+    outputs:
+      version_code: ${{ steps.get_version.outputs.code }}
+      version_name: ${{ steps.get_version.outputs.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Auto-bump version (if requested)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version_bump != 'none'
+        run: |
+          CURRENT_CODE=$(grep 'versionCode' android/app/build.gradle | awk '{print $2}')
+          NEW_CODE=$((CURRENT_CODE + 1))
+          sed -i "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" android/app/build.gradle
+          echo "✅ Version code bumped from $CURRENT_CODE to $NEW_CODE"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get Version Info
+        id: get_version
+        run: |
+          VERSION_CODE=$(grep 'versionCode' android/app/build.gradle | awk '{print $2}')
+          VERSION_NAME=$(grep 'versionName' android/app/build.gradle | awk '{print $2}' | tr -d '\"')
+          echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "📱 Version: $VERSION_NAME ($VERSION_CODE)"
+
+      - name: Decode Keystore
+        run: |
+          mkdir -p android/app
+          echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "✅ Keystore decoded"
+
+      - name: Build App Bundle (AAB)
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "🚀 Building Android App Bundle..."
+          flutter build appbundle --release
+          echo "✅ AAB built successfully!"
+          ls -lh build/app/outputs/bundle/release/
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-v${{ steps.get_version.outputs.code }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+  # JOB 4: NEW - DEPLOY TO PLAY STORE
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    needs: [build-aab]
+
+    steps:
+      - name: Download AAB Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-bundle-v${{ needs.build-aab.outputs.version_code }}
+
+      - name: Determine Deployment Track
+        id: track
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "track=${{ github.event.inputs.deploy_track }}" >> $GITHUB_OUTPUT
+          else
+            echo "track=internal" >> $GITHUB_OUTPUT
+          fi
+          echo "🎯 Deployment track: ${{ steps.track.outputs.track }}"
+
+      - name: Deploy to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          packageName: "com.app.moonlightstream" # ⚠️ CHANGE THIS TO YOUR PACKAGE NAME
+          releaseFiles: app-release.aab
+          track: ${{ steps.track.outputs.track }}
+          status: completed
+          # rolloutPercentage: ${{ steps.track.outputs.track == 'production' && '10' || '100' }}
+
+      - name: Create Deployment Summary
+        if: success()
+        run: |
+          echo "🎉 DEPLOYMENT SUCCESSFUL!" > summary.md
+          echo "=======================" >> summary.md
+          echo "" >> summary.md
+          echo "**App:** Moonlight Livestream" >> summary.md
+          echo "**Version:** ${{ needs.build-aab.outputs.version_name }} (${{ needs.build-aab.outputs.version_code }})" >> summary.md
+          echo "**Track:** ${{ steps.track.outputs.track }}" >> summary.md
+          echo "**Time:** $(date)" >> summary.md
+          echo "" >> summary.md
+          echo "**Next Steps:**" >> summary.md
+          echo "1. Go to [Play Console](https://play.google.com/console)" >> summary.md
+          echo "2. Navigate to: Testing → ${{ steps.track.outputs.track }} testing" >> summary.md
+          echo "3. Review the uploaded release" >> summary.md
+          echo "4. Click 'Start rollout'" >> summary.md
+          echo "5. Share test link with your team" >> summary.md
+
+      - name: Upload Deployment Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-summary
+          path: summary.md
           retention-days: 7

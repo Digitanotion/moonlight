@@ -522,31 +522,31 @@ class _SettingsMenuContent extends StatelessWidget {
                               : null,
                         ),
 
-                        if (beautyActive || hasBeautySettings) ...[
-                          const SizedBox(height: 8),
-                          _ModernSettingsItem(
-                            icon: Icons.emergency,
-                            label: 'Emergency Reset',
-                            isActive: false,
-                            color: Colors.red,
-                            onTap: () => _showEmergencyResetDialog(context),
-                            badge: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.red.withOpacity(0.5),
-                                    blurRadius: 4,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                        // if (beautyActive || hasBeautySettings) ...[
+                        //   const SizedBox(height: 8),
+                        //   _ModernSettingsItem(
+                        //     icon: Icons.emergency,
+                        //     label: 'Emergency Reset',
+                        //     isActive: false,
+                        //     color: Colors.red,
+                        //     onTap: () => _showEmergencyResetDialog(context),
+                        //     badge: Container(
+                        //       width: 8,
+                        //       height: 8,
+                        //       decoration: BoxDecoration(
+                        //         color: Colors.red,
+                        //         shape: BoxShape.circle,
+                        //         boxShadow: [
+                        //           BoxShadow(
+                        //             color: Colors.red.withOpacity(0.5),
+                        //             blurRadius: 4,
+                        //             spreadRadius: 1,
+                        //           ),
+                        //         ],
+                        //       ),
+                        //     ),
+                        //   ),
+                        // ],
                       ],
                     ),
                   ),

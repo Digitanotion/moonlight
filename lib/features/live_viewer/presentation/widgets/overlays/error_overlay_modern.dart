@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lottie/lottie.dart'; // Add lottie to pubspec.yaml
+import 'package:lottie/lottie.dart';
 import 'package:moonlight/features/live_viewer/domain/entities/error_types.dart';
 
 /// Ultra-modern error overlay for live viewer

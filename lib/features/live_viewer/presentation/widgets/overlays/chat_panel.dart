@@ -63,6 +63,7 @@ class _ChatPanelState extends State<ChatPanel> {
                         username: m.username,
                         text: m.text,
                         isNew: i == 0,
+                        isHost: m.isHost,
                       );
                     },
                   ),

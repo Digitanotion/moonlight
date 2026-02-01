@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/config/runtime_config_cache.dart';
 import 'package:moonlight/core/network/interceptors/auth_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/cache_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/dio_extra_hook.dart';
@@ -17,6 +18,7 @@ import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/core/services/like_memory.dart';
 import 'package:moonlight/core/services/realtime_unread_service.dart';
+import 'package:moonlight/core/services/runtime_config_refresh_service.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:moonlight/features/chat/data/services/chat_api_service.dart';
@@ -378,65 +380,81 @@ class SplashOptimizer {
 
 // In _loadRuntimeConfig() - ADD debug logging:
 Future<RuntimeConfig> _loadRuntimeConfig() async {
-  debugPrint('🔧 Loading RuntimeConfig...');
+  debugPrint('🔧 Loading RuntimeConfig with caching...');
 
-  final bootstrapDio = Dio(
-    BaseOptions(
-      baseUrl: '$_fallbackHost/api',
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-    ),
+  final prefs = await SharedPreferences.getInstance();
+  final cache = RuntimeConfigCache(prefs);
+
+  return await cache.loadWithCache(
+    fetchFresh: () async {
+      debugPrint('🌐 Fetching RuntimeConfig from server...');
+
+      final bootstrapDio = Dio(
+        BaseOptions(
+          baseUrl: '$_fallbackHost/api',
+          connectTimeout: const Duration(seconds: 8), // Reduced timeout
+          receiveTimeout: const Duration(seconds: 8),
+        ),
+      );
+
+      try {
+        final response = await bootstrapDio.get('/v1/config');
+        final data = response.data as Map<String, dynamic>;
+
+        debugPrint('📋 Config response keys: ${data.keys.toList()}');
+
+        final cfg = RuntimeConfig(
+          agoraAppId:
+              data['agora_app_id'] ??
+              const String.fromEnvironment('AGORA_APP_ID', defaultValue: ''),
+          apiBaseUrl: data['api_base_url'] ?? _fallbackHost,
+          pusherKey:
+              data['pusher_key'] ??
+              const String.fromEnvironment('PUSHER_KEY', defaultValue: ''),
+          pusherCluster:
+              data['pusher_cluster'] ??
+              const String.fromEnvironment(
+                'PUSHER_CLUSTER',
+                defaultValue: 'mt1',
+              ),
+        );
+
+        debugPrint('✅ RuntimeConfig fetched from server:');
+        debugPrint('   API Base URL: ${cfg.apiBaseUrl}');
+        debugPrint('   Pusher Key: ${cfg.pusherKey.isEmpty ? "EMPTY" : "SET"}');
+        debugPrint('   Pusher Cluster: ${cfg.pusherCluster}');
+
+        return cfg;
+      } catch (e) {
+        debugPrint('❌ Failed to load config from API: $e');
+
+        // Fallback to environment variables
+        final envCfg = RuntimeConfig(
+          agoraAppId: const String.fromEnvironment(
+            'AGORA_APP_ID',
+            defaultValue: '',
+          ),
+          apiBaseUrl: _fallbackHost,
+          pusherKey: const String.fromEnvironment(
+            'PUSHER_KEY',
+            defaultValue: '',
+          ),
+          pusherCluster: const String.fromEnvironment(
+            'PUSHER_CLUSTER',
+            defaultValue: 'mt1',
+          ),
+        );
+
+        debugPrint('⚠️ Using environment config:');
+        debugPrint(
+          '   Pusher Key from env: ${envCfg.pusherKey.isEmpty ? "EMPTY" : "SET"}',
+        );
+
+        return envCfg;
+      }
+    },
+    forceRefresh: false,
   );
-
-  try {
-    final response = await bootstrapDio.get('/v1/config');
-    final data = response.data as Map<String, dynamic>;
-
-    debugPrint('📋 Config response keys: ${data.keys.toList()}');
-
-    final cfg = RuntimeConfig(
-      agoraAppId:
-          data['agora_app_id'] ??
-          const String.fromEnvironment('AGORA_APP_ID', defaultValue: ''),
-      apiBaseUrl: data['api_base_url'] ?? _fallbackHost,
-      pusherKey:
-          data['pusher_key'] ??
-          const String.fromEnvironment('PUSHER_KEY', defaultValue: ''),
-      pusherCluster:
-          data['pusher_cluster'] ??
-          const String.fromEnvironment('PUSHER_CLUSTER', defaultValue: 'mt1'),
-    );
-
-    debugPrint('✅ RuntimeConfig loaded:');
-    debugPrint('   API Base URL: ${cfg.apiBaseUrl}');
-    debugPrint('   Pusher Key: ${cfg.pusherKey.isEmpty ? "EMPTY" : "SET"}');
-    debugPrint('   Pusher Cluster: ${cfg.pusherCluster}');
-
-    return cfg;
-  } catch (e) {
-    debugPrint('❌ Failed to load config from API: $e');
-
-    // Fallback to environment variables
-    final envCfg = RuntimeConfig(
-      agoraAppId: const String.fromEnvironment(
-        'AGORA_APP_ID',
-        defaultValue: '',
-      ),
-      apiBaseUrl: _fallbackHost,
-      pusherKey: const String.fromEnvironment('PUSHER_KEY', defaultValue: ''),
-      pusherCluster: const String.fromEnvironment(
-        'PUSHER_CLUSTER',
-        defaultValue: 'mt1',
-      ),
-    );
-
-    debugPrint('⚠️ Using environment config:');
-    debugPrint(
-      '   Pusher Key from env: ${envCfg.pusherKey.isEmpty ? "EMPTY" : "SET"}',
-    );
-
-    return envCfg;
-  }
 }
 
 void _initializeLiveViewerServices() {
@@ -886,37 +904,56 @@ Future<void> _initializePusherService() async {
     }
 
     final pusher = sl<PusherService>();
+    final cfg = sl<RuntimeConfig>();
 
-    // 2. Skip if already initialized
-    if (pusher.isInitialized) {
-      debugPrint('✅ Pusher already initialized');
+    // 2. If Pusher is already initialized in bad state, we need to fix it
+    if (pusher.isInitialized && pusher.isInBadState) {
+      debugPrint(
+        '⚠️ Pusher is in bad state (disabled key), will fix when config is ready',
+      );
+
+      // Don't try to initialize with bad config
+      // It will be fixed by RuntimeConfigRefreshService
       return;
     }
 
-    final cfg = sl<RuntimeConfig>();
+    // 3. Skip if already initialized with proper keys
+    if (pusher.isInitialized &&
+        cfg.pusherKey.isNotEmpty &&
+        cfg.pusherKey != 'disabled') {
+      debugPrint('✅ Pusher already properly initialized');
 
-    // 3. Check if we have Pusher configuration
-    if (cfg.pusherKey.isEmpty) {
-      debugPrint('⚠️ Pusher key empty - chat real-time features disabled');
+      // Just ensure it's connected
+      if (!pusher.isConnected) {
+        await pusher.connect();
+      }
+      return;
+    }
+
+    // 4. Check if we have valid Pusher configuration
+    if (cfg.pusherKey.isEmpty || cfg.pusherKey == 'disabled') {
+      debugPrint(
+        '⚠️ Pusher key empty or disabled - chat real-time features disabled',
+      );
       debugPrint(
         '   To enable real-time chat, add PUSHER_KEY to your .env file',
       );
 
-      // Mark as "initialized" but disabled so ChatRepository doesn't keep retrying
+      // Initialize with disabled state (temporary)
       await pusher.initialize(
         apiKey: 'disabled',
         cluster: 'mt1',
         authEndpoint: null,
         authCallback: null,
       );
+
+      debugPrint('✅ Pusher initialized in disabled state');
       return;
     }
 
-    debugPrint(
-      '🔧 Initializing Pusher with key: ${cfg.pusherKey.substring(0, 8)}...',
-    );
+    // 5. Initialize with proper configuration
+    debugPrint('🔧 Initializing Pusher with proper configuration...');
 
-    // 4. Initialize Pusher with proper configuration
     await pusher.initialize(
       apiKey: cfg.pusherKey,
       cluster: cfg.pusherCluster,
@@ -939,10 +976,6 @@ Future<void> _initializePusherService() async {
               },
             ),
           );
-          debugPrint(
-            'socket_id: ${socketId}, channel_name: ${channelName}, TOKEN : Bearer $token',
-          );
-
           return response.data;
         } catch (e) {
           debugPrint('❌ Pusher auth failed: $e');
@@ -953,8 +986,8 @@ Future<void> _initializePusherService() async {
 
     debugPrint('✅ PusherService initialized successfully');
 
-    // 5. Connect automatically
-    await pusher.connect();
+    // 6. Start the refresh service
+    await RuntimeConfigRefreshService().startMonitoring();
   } catch (e) {
     debugPrint('⚠️ Pusher initialization failed: $e');
     // Don't throw - allow app to continue without Pusher

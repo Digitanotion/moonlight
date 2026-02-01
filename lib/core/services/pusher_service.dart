@@ -101,6 +101,36 @@ class PusherService {
     }
   }
 
+  /// Check if Pusher is in a bad state (initialized with 'disabled' key)
+  bool get isInBadState {
+    return _isInitialized &&
+        (_apiKey == 'disabled' || _apiKey == null || _apiKey!.isEmpty);
+  }
+
+  /// Fix bad state by reinitializing with proper keys
+  Future<void> fixBadState({
+    required String apiKey,
+    required String cluster,
+    String? authEndpoint,
+    PusherAuthCallback? authCallback,
+  }) async {
+    if (!isInBadState) {
+      debugPrint('✅ Pusher is not in bad state, skipping fix');
+      return;
+    }
+
+    debugPrint('🔄 Fixing Pusher bad state...');
+    debugPrint('   Old API Key: $_apiKey');
+    debugPrint('   New API Key: $apiKey');
+
+    await reinitialize(
+      apiKey: apiKey,
+      cluster: cluster,
+      authEndpoint: authEndpoint,
+      authCallback: authCallback,
+    );
+  }
+
   /// Disconnect from Pusher
   Future<void> disconnect() async {
     _updateConnectionState(ConnectionState.disconnecting);

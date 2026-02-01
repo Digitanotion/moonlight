@@ -1,40 +1,53 @@
+// lib/main.dart
 import 'dart:async';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/app_router.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/connection_monitor.dart';
+import 'package:moonlight/core/services/runtime_config_refresh_service.dart';
 import 'package:moonlight/core/services/service_registration_manager.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
+import 'package:moonlight/core/widgets/connection_toast.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
-import 'package:provider/provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  debugPrint('🚀 App starting...');
+  debugPrint('🚀 App starting with fast splash...');
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
+  // Initialize Firebase (non-blocking)
+  final firebaseFuture = Firebase.initializeApp();
+
+  // Load absolute minimum essentials (cached)
+  await SplashOptimizer.loadEssentialsOnly();
+
+  // Wait for Firebase (should be fast)
+  await firebaseFuture;
   debugPrint('✅ Firebase initialized');
 
-  // Load essential dependencies
-  await SplashOptimizer.loadEssentialsOnly();
-  debugPrint('✅ Essential dependencies loaded');
+  // Start connection monitoring
+  await ConnectionMonitor().startMonitoring();
 
-  // Start loading remaining dependencies in background
-  final dependencyFuture = SplashOptimizer.loadRemainingDependencies()
-      .then((_) => debugPrint('🎉 All background dependencies loaded'))
-      .catchError((e) => debugPrint('⚠️ Background loading error: $e'));
-
-  // Run app immediately
+  // Run app IMMEDIATELY (no waiting for background services)
   runApp(const MyApp());
 
-  // Wait for dependencies in background (non-blocking)
-  unawaited(dependencyFuture);
+  // Start background service loading AFTER app is running
+  Future(() async {
+    try {
+      debugPrint('🔄 Starting background service initialization...');
+      await SplashOptimizer.loadRemainingDependencies();
+      debugPrint('🎉 All background services loaded');
+
+      // Start config refresh service after dependencies are loaded
+      await RuntimeConfigRefreshService().startMonitoring();
+    } catch (e) {
+      debugPrint('⚠️ Background service loading error: $e (app continues)');
+    }
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -48,9 +61,7 @@ class MyApp extends StatelessWidget {
         BlocProvider<AuthBloc>(
           create: (_) => sl<AuthBloc>()
             ..stream.listen((state) {
-              // Handle service registration on auth state changes
               if (state is AuthUnauthenticated) {
-                // User logged out, unregister services
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   try {
                     await ServiceRegistrationManager().unregisterServices();
@@ -61,7 +72,6 @@ class MyApp extends StatelessWidget {
               }
             }),
         ),
-        // Add other providers as needed
       ],
       child: MaterialApp(
         title: 'Moonlight',
@@ -69,6 +79,11 @@ class MyApp extends StatelessWidget {
         theme: buildAppTheme(),
         onGenerateRoute: AppRouter.generateRoute,
         initialRoute: RouteNames.splash,
+
+        // SIMPLIFIED: Just wrap the child with ConnectionToast
+        builder: (context, child) {
+          return SimpleConnectionToast(child: child!);
+        },
       ),
     );
   }

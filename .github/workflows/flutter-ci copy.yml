@@ -1,0 +1,59 @@
+name: Flutter CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.32.7"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter test test/ --coverage
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.32.7"
+          channel: stable
+          cache: true
+
+      # Cache Gradle
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}
+
+      # Ensure Gradle stability
+      - name: Configure Gradle
+        run: |
+          echo "org.gradle.vfs.watch=false" >> android/gradle.properties
+          echo "org.gradle.daemon=false" >> android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4096m" >> android/gradle.properties
+
+      - name: Get packages
+        run: flutter pub get
+
+      # 🔑 IMPORTANT: Split ABI APKs
+      - name: Build Release APK (Split ABI)
+        run: flutter build apk --release --split-per-abi
+
+      # Upload ALL APKs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 7
