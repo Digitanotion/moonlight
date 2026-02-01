@@ -11,7 +11,7 @@ plugins {
  val kotlin_version = "1.9.22"
 
 android {
-    namespace = "com.example.moonlight"
+    namespace = "com.app.moonlightstream"
     compileSdk = 36  // Changed from flutter.compileSdkVersion to 34
     ndkVersion = "27.0.12077973" //flutter.ndkVersion
     
@@ -25,7 +25,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.moonlight"
+        applicationId = "com.app.moonlightstream"
         minSdk = 23
         targetSdk = 34  // Changed from flutter.targetSdkVersion to 34
         versionCode = flutter.versionCode.toInt()
