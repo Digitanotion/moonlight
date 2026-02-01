@@ -38,7 +38,7 @@ on:
           - minor
           - major
 
-# Environment variables
+# Environment variables.
 env:
   PROJECT_PATH: "."
   FLUTTER_VERSION: "3.32.7"
