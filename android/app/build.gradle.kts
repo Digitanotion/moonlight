@@ -14,6 +14,24 @@ android {
     namespace = "com.app.moonlightstream"
     compileSdk = 36  // Changed from flutter.compileSdkVersion to 34
     ndkVersion = "27.0.12077973" //flutter.ndkVersion
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("upload-keystore.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")  // ✅ Use release config
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
     
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
