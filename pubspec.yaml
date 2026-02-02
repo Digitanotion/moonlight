@@ -2,7 +2,7 @@ name: moonlight
 description: Moonlight Livestream App MVP
 version: 1.0.0+2
 
-# ==== ADD THIS SECTION ====
+# ==== ENVIRONMENT SECTION ====
 environment:
   sdk: ">=3.8.0 <4.0.0" # Matches Flutter 3.22.x
   flutter: ">=3.32.1"
