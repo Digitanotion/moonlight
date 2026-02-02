@@ -121,7 +121,7 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-  # JOB 4: NEW - DEPLOY TO PLAY STORE
+  # JOB 4: NEW - DEPLOY TO PLAY STORE.
   deploy:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
