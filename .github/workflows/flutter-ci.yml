@@ -150,6 +150,7 @@ jobs:
           packageName: "com.app.moonlightstream" # ⚠️ CHANGE THIS TO YOUR PACKAGE NAME
           releaseFiles: app-release.aab
           track: ${{ steps.track.outputs.track }}
+          status: draft
 
       - name: Create Deployment Summary
         if: success()
