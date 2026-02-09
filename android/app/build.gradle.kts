@@ -8,7 +8,7 @@ plugins {
 }
 
 // Get the kotlinVersion from root project
-val kotlin_version = "1.9.22"
+val kotlinVersion = "1.9.22"
 
 android {
     namespace = "com.app.moonlightstream"
@@ -55,9 +55,11 @@ android {
         versionName = flutter.versionName
         // Enable multiDex - CORRECT SYNTAX
         multiDexEnabled = true
-        manifestPlaceholders += [
-            'appAuthRedirectScheme': 'com.app.moonlightstream'  // Your package name
-        ]
+        
+        // FIXED: Correct Kotlin DSL syntax for manifestPlaceholders
+        manifestPlaceholders += mapOf(
+            "appAuthRedirectScheme" to "com.app.moonlightstream"
+        )
     }
 }
 
@@ -73,7 +75,7 @@ dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     
     // ========== KOTLIN ==========
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion")
     
     // ========== FIREBASE ==========
     implementation("com.google.crypto.tink:tink-android:1.12.0")
