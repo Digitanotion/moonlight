@@ -129,12 +129,12 @@ class _SplashScreenState extends State<SplashScreen> {
           // Go directly to home - services will load in background
           Navigator.pushReplacementNamed(context, RouteNames.home);
         } else {
-          Navigator.pushReplacementNamed(context, RouteNames.register);
+          Navigator.pushReplacementNamed(context, RouteNames.login);
         }
       } catch (e) {
         debugPrint('❌ Navigation error: $e');
         // Fallback
-        Navigator.pushReplacementNamed(context, RouteNames.register);
+        Navigator.pushReplacementNamed(context, RouteNames.login);
       }
     });
   }

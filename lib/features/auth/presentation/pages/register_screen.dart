@@ -41,152 +41,166 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AuthBloc, AuthState>(
+    return BlocConsumer<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is RegistrationSuccess) {
           print("✅ Registration successful");
-          // Navigate to Interest Selection screen after successful registration
           Navigator.pushReplacementNamed(context, RouteNames.email_verify);
         } else if (state is AuthFailure) {
-          // Show error if registration failed
           print("❌ Auth failed: ${state.message}");
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(state.message)));
         }
       },
-      child: Scaffold(
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColors.primary, AppColors.dark],
-              begin: Alignment.topLeft,
-              end: Alignment.topRight,
+      builder: (context, state) {
+        return Scaffold(
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primary, AppColors.dark],
+                begin: Alignment.topLeft,
+                end: Alignment.topRight,
+              ),
             ),
-          ),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 40),
-                  Text(
-                    'Create Your Moonlight Account',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textWhite,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Join the community and start earning from your content',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyLarge?.copyWith(color: AppColors.textWhite),
-                  ),
-                  const SizedBox(height: 40),
-                  AuthTextField(
-                    controller: _emailController,
-                    label: 'Email address',
-                    hint: 'Enter your email address',
-                    icon: Icons.email_outlined,
-                  ),
-                  const SizedBox(height: 16),
-                  AuthTextField(
-                    controller: _passwordController,
-                    label: 'Password',
-                    hint: 'Enter your password',
-                    icon: Icons.lock_outline,
-                    isPassword: true,
-                  ),
-                  const SizedBox(height: 16),
-                  AuthTextField(
-                    controller: _confirmPasswordController,
-                    label: 'Confirm Password',
-                    hint: 'Confirm your password',
-                    icon: Icons.lock_outline,
-                    isPassword: true,
-                  ),
-                  const SizedBox(height: 16),
-                  AuthTextField(
-                    controller: _nameController,
-                    label: 'Agent Name',
-                    hint: 'Enter agent name (optional)',
-                    icon: Icons.person_outline,
-                  ),
-                  const SizedBox(height: 32),
-                  BlocBuilder<AuthBloc, AuthState>(
-                    builder: (context, state) {
-                      if (state is AuthLoading) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.green,
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 40),
+                    Text(
+                      'Create Your Moonlight Account',
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textWhite,
                           ),
-                        );
-                      }
-                      return AuthButton(
-                        text: 'Create Account',
-                        onPressed: () {
-                          context.read<AuthBloc>().add(
-                            SignUpRequested(
-                              email: _emailController.text.trim(),
-                              password: _passwordController.text.trim(),
-                              agent_name: _nameController.text.trim(),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  Center(
-                    child: Text(
-                      'or continue with',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Join the community and start earning from your content',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.textWhite,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  SocialAuthButton(
-                    icon: AssetPaths
-                        .googleIcon, // You might want to add a Google icon
-                    text: 'Sign Up with Google',
-                    onPressed: () {
-                      context.read<AuthBloc>().add(
-                        const GoogleSignInRequested(),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.pushReplacementNamed(
-                          context,
-                          RouteNames.login,
-                        );
-                      },
-                      child: Text(
-                        'Already have an account? Login',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textWhite,
-                          fontWeight: FontWeight.bold,
+                    const SizedBox(height: 40),
+                    AuthTextField(
+                      controller: _emailController,
+                      label: 'Email address',
+                      hint: 'Enter your email address',
+                      icon: Icons.email_outlined,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      controller: _passwordController,
+                      label: 'Password',
+                      hint: 'Enter your password',
+                      icon: Icons.lock_outline,
+                      isPassword: true,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      controller: _confirmPasswordController,
+                      label: 'Confirm Password',
+                      hint: 'Confirm your password',
+                      icon: Icons.lock_outline,
+                      isPassword: true,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      controller: _nameController,
+                      label: 'Agent Name',
+                      hint: 'Enter agent name (optional)',
+                      icon: Icons.person_outline,
+                    ),
+                    const SizedBox(height: 32),
+                    // Remove the inner BlocBuilder since we're already in BlocConsumer's builder
+                    _buildAuthButtons(context, state),
+                    const SizedBox(height: 24),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            RouteNames.login,
+                          );
+                        },
+                        child: Text(
+                          'Already have an account? Login',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.textWhite,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  // const TermsAndPolicyText(),
-                ],
+                    const SizedBox(height: 16),
+                    // const TermsAndPolicyText(),
+                  ],
+                ),
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAuthButtons(BuildContext context, AuthState state) {
+    final isRegisterLoading =
+        state is AuthLoading &&
+        (state.loadingType == 'register' || state.loadingType == null);
+    final isGoogleLoading =
+        state is AuthLoading && state.loadingType == 'google';
+
+    if (isRegisterLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.green),
+      );
+    }
+
+    return Column(
+      children: [
+        AuthButton(
+          text: 'Create Account',
+          onPressed: () {
+            context.read<AuthBloc>().add(
+              SignUpRequested(
+                email: _emailController.text.trim(),
+                password: _passwordController.text.trim(),
+                agent_name: _nameController.text.trim(),
+              ),
+            );
+          },
         ),
-      ),
+        const SizedBox(height: 24),
+        Center(
+          child: Text(
+            'or continue with',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SocialAuthButton(
+          icon: AssetPaths.googleIcon,
+          text: isGoogleLoading ? 'Signing up...' : 'Sign Up with Google',
+          onPressed: () {
+            if (!isGoogleLoading) {
+              context.read<AuthBloc>().add(const GoogleSignInRequested());
+            }
+          },
+        ),
+      ],
     );
   }
 }

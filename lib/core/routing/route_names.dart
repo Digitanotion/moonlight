@@ -51,5 +51,6 @@ class RouteNames {
   static const String setNewPin = '/set-new-pin';
   static const String resetPin = '/reset-pin';
   static const String liveViewerEnhanced = '/live-viewer-enhanced';
+  static const String debugScreen = "/debug-screen";
   // static const transactionReceipt = '/transactionReceipt';
 }

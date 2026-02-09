@@ -19,6 +19,7 @@ import 'package:moonlight/core/services/host_pusher_service.dart';
 import 'package:moonlight/core/services/like_memory.dart';
 import 'package:moonlight/core/services/realtime_unread_service.dart';
 import 'package:moonlight/core/services/runtime_config_refresh_service.dart';
+import 'package:moonlight/core/services/token_registration_service.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:moonlight/features/chat/data/services/chat_api_service.dart';
@@ -237,6 +238,13 @@ class SplashOptimizer {
 
       sl.registerLazySingleton<RuntimeConfig>(() => cfg);
 
+      sl.registerLazySingleton<TokenRegistrationService>(() {
+        return TokenRegistrationService(
+          authLocalDataSource: sl<AuthLocalDataSource>(),
+          runtimeConfig: cfg,
+        );
+      });
+
       // Auth essentials
       sl.registerLazySingleton<AuthLocalDataSource>(
         () => AuthLocalDataSourceImpl(sharedPreferences: prefs),
@@ -319,6 +327,7 @@ class SplashOptimizer {
           getCurrentUser: sl(),
           authRepository: sl(),
           currentUserService: sl(),
+          tokenRegistrationService: sl<TokenRegistrationService>(),
         ),
       );
 
@@ -656,7 +665,13 @@ Future<void> initRemainingDependencies() async {
   sl.registerLazySingleton<NotificationsRemoteDataSource>(
     () => NotificationsRemoteDataSource(sl<DioClient>()),
   );
-
+  // Register TokenRegistrationService
+  // sl.registerLazySingleton<TokenRegistrationService>(() {
+  //   return TokenRegistrationService(
+  //     authLocalDataSource: sl<AuthLocalDataSource>(),
+  //     runtimeConfig: sl<RuntimeConfig>(),
+  //   );
+  // });
   // --------- Register remaining repositories ---------
   sl.registerLazySingleton<AccountRepository>(
     () => AccountRepositoryImpl(sl<AccountRemoteDataSource>()), // ✅
@@ -1125,6 +1140,12 @@ void registerProfileView() {
   sl.registerFactory<ProfileCubit>(
     () => ProfileCubit(sl<view_repo.ProfileRepository>()),
   );
+
+  // Register UnreadBadgeService as singleton (for easy widget access)
+  if (!sl.isRegistered<UnreadBadgeService>()) {
+    sl.registerSingleton<UnreadBadgeService>(UnreadBadgeService());
+    debugPrint('✅ UnreadBadgeService registered');
+  }
 }
 
 void _registerRealtimeUnreadServices() {

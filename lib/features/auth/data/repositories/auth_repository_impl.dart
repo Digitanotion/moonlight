@@ -186,11 +186,19 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> loginWithGoogle() async {
     try {
-      final firebaseToken = await googleSignInService.getFirebaseIdToken();
+      // Get Google ID token (not Firebase token)
+      final googleData = await googleSignInService.signIn();
+      final idToken = googleData['idToken'] as String?;
+
+      if (idToken == null || idToken.isEmpty) {
+        return Left(AuthFailure('Failed to get Google ID token'));
+      }
+
       final deviceName = await _getDeviceName();
 
+      // Use the new Google OAuth endpoint
       final loginResponse = await remoteDataSource.loginWithGoogle(
-        firebaseToken,
+        idToken,
         deviceName,
       );
 
@@ -215,9 +223,40 @@ class AuthRepositoryImpl implements AuthRepository {
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
     } catch (e) {
-      return Left(
-        AuthFailure('Unknown error during Google sign-in: ${e.toString()}'),
+      return Left(AuthFailure('Google sign-in failed: ${e.toString()}'));
+    }
+  }
+
+  // NEW: Alternative method for direct ID token login
+  Future<Either<Failure, User>> loginWithGoogleToken(String idToken) async {
+    try {
+      final deviceName = await _getDeviceName();
+
+      final loginResponse = await remoteDataSource.loginWithGoogle(
+        idToken,
+        deviceName,
       );
+
+      final me = await remoteDataSource.fetchMe();
+
+      final merged = me.copyWith(
+        authToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresIn: loginResponse.expiresIn,
+      );
+
+      if (merged.authToken != null) {
+        await localDataSource.cacheToken(merged.authToken!);
+        await localDataSource.cacheUser(merged);
+      }
+
+      return Right(merged.toEntity());
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } on CacheException catch (e) {
+      return Left(CacheFailure(e.message));
+    } catch (e) {
+      return Left(AuthFailure('Google login failed: ${e.toString()}'));
     }
   }
 

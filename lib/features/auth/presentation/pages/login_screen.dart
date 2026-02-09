@@ -62,33 +62,23 @@ class _LoginScreenState extends State<LoginScreen> {
           child: BlocConsumer<AuthBloc, AuthState>(
             listener: (context, state) {
               if (state is AuthAuthenticated) {
-                // showDialog(
-                //   context: context,
-                //   builder: (_) => CustomStatusDialog(
-                //     type: StatusDialogType.success,
-                //     title: 'Login Successful',
-                //     message:
-                //         'Welcome back, ${state.user.name ?? "Moonlighter"}!',
-                //     primaryButtonText: 'Continue',
-                //     onPrimaryPressed: () {
-                //       Navigator.pop(context);
-                //       Navigator.pushReplacementNamed(context, RouteNames.home);
-                //     },
-                //   ),
-                // );
                 Navigator.pushReplacementNamed(
                   context,
                   RouteNames.profile_setup,
                 );
               } else if (state is AuthFailure) {
-                final isEmailNotVerified = state.message.toLowerCase().contains(
-                  'email not verified',
-                );
-
+                debugPrint(state.message);
                 MoonSnack.error(context, state.message);
               }
             },
             builder: (context, state) {
+              // Smart loading checks
+              final isEmailLoading =
+                  state is AuthLoading &&
+                  (state.loadingType == 'email' || state.loadingType == null);
+              final isGoogleLoading =
+                  state is AuthLoading && state.loadingType == 'google';
+
               return SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
@@ -150,8 +140,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
                     AuthButton(
-                      text: state is AuthLoading ? 'Logging in...' : 'Login',
-                      onPressed: state is AuthLoading
+                      text: isEmailLoading ? 'Logging in...' : 'Login',
+                      onPressed: isEmailLoading
                           ? null
                           : () => _onLoginPressed(context),
                     ),
@@ -167,11 +157,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     SocialAuthButton(
                       icon: AssetPaths.googleIcon,
-                      text: 'Sign In with Google',
+                      text: isGoogleLoading
+                          ? 'Signing in...'
+                          : 'Sign In with Google',
                       onPressed: () {
-                        context.read<AuthBloc>().add(
-                          const SocialLoginRequested('google'),
-                        );
+                        if (!isGoogleLoading) {
+                          context.read<AuthBloc>().add(
+                            const GoogleSignInRequested(),
+                          );
+                        }
                       },
                     ),
                     const SizedBox(height: 24),
@@ -190,24 +184,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
-                    //   const SizedBox(height: 30),
-                    //   Center(
-                    //     child: GestureDetector(
-                    //       onTap: () {
-                    //         final userId = 'mock_id_123'; // temporary mock ID
-                    //         Navigator.pushNamed(context, RouteNames.editProfile);
-                    //       },
-                    //       child: Text(
-                    //         'View Profile',
-                    //         style: Theme.of(context).textTheme.bodyMedium
-                    //             ?.copyWith(
-                    //               color: AppColors.textWhite,
-                    //               fontWeight: FontWeight.bold,
-                    //             ),
-                    //       ),
-                    //     ),
-                    //   ),
                   ],
                 ),
               );

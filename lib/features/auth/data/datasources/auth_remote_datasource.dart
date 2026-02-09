@@ -21,12 +21,20 @@ abstract class AuthRemoteDataSource {
 
   Future<LoginResponseModel> socialLogin(String provider, String deviceName);
 
+  // UPDATE: Changed parameter name from firebaseToken to idToken
   Future<LoginResponseModel> loginWithGoogle(
-    String firebaseToken,
+    String idToken, // Changed from firebaseToken
     String deviceName,
   );
 
+  // KEEP: For Firebase-based Google login (alternative)
   Future<UserModel> loginWithFirebase(String firebaseToken, String deviceName);
+
+  // NEW: Google OAuth login using ID token
+  Future<LoginResponseModel> googleOAuthLogin(
+    String idToken,
+    String deviceName,
+  );
 
   Future<String> forgotPassword(String email);
 
@@ -145,30 +153,43 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     }
   }
 
+  // UPDATE: Use the new /auth/google/login endpoint
   @override
   Future<LoginResponseModel> loginWithGoogle(
-    String firebaseToken,
+    String idToken, // Changed parameter name
     String deviceName,
   ) async {
     try {
       final response = await client.post(
-        '${BaseUrl}/v1/login/firebase',
-        data: {'firebase_token': firebaseToken, 'device_name': deviceName},
+        '${BaseUrl}/v1/auth/google/login', // NEW ENDPOINT
+        data: {'id_token': idToken, 'device_name': deviceName},
       );
 
       final data = response.data;
       return LoginResponseModel.fromJson({
-        'access_token': data['token'],
+        'access_token': data['access_token'],
+        'token_type': data['token_type'],
+        'expires_in': data['expires_in'],
         'user': data['user'],
       });
     } on DioException catch (e) {
       throw ServerException(
-        e.response?.data['error'] ?? 'Google login failed',
+        e.response?.data['message'] ?? 'Google login failed',
         statusCode: e.response?.statusCode,
       );
     }
   }
 
+  // NEW: Alias method for consistency
+  @override
+  Future<LoginResponseModel> googleOAuthLogin(
+    String idToken,
+    String deviceName,
+  ) async {
+    return loginWithGoogle(idToken, deviceName);
+  }
+
+  // KEEP: For Firebase-based login (alternative)
   @override
   Future<UserModel> loginWithFirebase(
     String firebaseToken,

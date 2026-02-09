@@ -8,11 +8,11 @@ plugins {
 }
 
 // Get the kotlinVersion from root project
- val kotlin_version = "1.9.22"
+val kotlin_version = "1.9.22"
 
 android {
     namespace = "com.app.moonlightstream"
-    compileSdk = 36  // Changed from flutter.compileSdkVersion to 34
+    compileSdk = 36
     ndkVersion = "27.0.12077973" //flutter.ndkVersion
 
     signingConfigs {
@@ -25,17 +25,22 @@ android {
     }
 
     buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("release")  // ✅ Use release config
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Enable core library desugaring - CORRECT SYNTAX
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -45,12 +50,15 @@ android {
     defaultConfig {
         applicationId = "com.app.moonlightstream"
         minSdk = 23
-        targetSdk = 35 // Changed from flutter.targetSdkVersion to 34
+        targetSdk = 35
         versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName
+        // Enable multiDex - CORRECT SYNTAX
+        multiDexEnabled = true
+        manifestPlaceholders += [
+            'appAuthRedirectScheme': 'com.app.moonlightstream'  // Your package name
+        ]
     }
-
- 
 }
 
 flutter {
@@ -58,13 +66,26 @@ flutter {
 }
 
 dependencies {
+    // ========== CORE LIBRARY DESUGARING ==========
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    
+    // ========== MULTIDEX SUPPORT ==========
+    implementation("androidx.multidex:multidex:2.0.1")
+    
+    // ========== KOTLIN ==========
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version")
+    
+    // ========== FIREBASE ==========
     implementation("com.google.crypto.tink:tink-android:1.12.0")
-    implementation(platform("com.google.firebase:firebase-bom:32.0.0"))
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.android.gms:play-services-auth:20.7.0")
-    // ✅ Add this: provides org.slf4j.impl.StaticLoggerBinder
-    implementation("org.slf4j:slf4j-nop:1.7.36")
-    // (Alternative if you want logs in Logcat instead of no-op)
-    // implementation("org.slf4j:slf4j-android:1.7.36")
+    
+    // ========== WORK MANAGER ==========
+    implementation("androidx.work:work-runtime:2.8.1")
+    
+    // ========== LOGGING ==========
+    implementation("org.slf4j:slf4j-android:1.7.36")
 }

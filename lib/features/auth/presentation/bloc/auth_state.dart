@@ -11,7 +11,14 @@ abstract class AuthState extends Equatable {
 class AuthInitial extends AuthState {}
 
 // Loading state for async operations
-class AuthLoading extends AuthState {}
+class AuthLoading extends AuthState {
+  final String? loadingType; // 'email', 'google', 'register', 'social'
+
+  const AuthLoading({this.loadingType});
+
+  @override
+  List<Object> get props => [loadingType ?? ''];
+}
 
 // When user is successfully authenticated
 class AuthAuthenticated extends AuthState {

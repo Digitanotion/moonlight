@@ -79,6 +79,7 @@ import 'package:moonlight/features/settings/presentation/pages/account_settings_
 import 'package:moonlight/features/settings/presentation/pages/blocked_users_page.dart';
 import 'package:moonlight/features/settings/presentation/pages/change_email_page.dart';
 import 'package:moonlight/features/settings/presentation/pages/change_username_page.dart';
+import 'package:moonlight/features/tests/debug_screen.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/pages/user_interest_screen.dart';
 import 'package:moonlight/features/wallet/presentation/cubit/wallet_cubit.dart';
@@ -121,6 +122,8 @@ class AppRouter {
 
       case RouteNames.home:
         return MaterialPageRoute(builder: (context) => const AppShell());
+      case RouteNames.debugScreen:
+        return MaterialPageRoute(builder: (context) => const DebugScreen());
 
       case RouteNames.email_verify:
         return MaterialPageRoute(
