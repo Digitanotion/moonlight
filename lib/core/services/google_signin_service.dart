@@ -1,26 +1,51 @@
+import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class GoogleSignInService {
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-    // Use your Android client ID for better experience
-    serverClientId:
-        '320614878173-t3fv9nm9u3rcvgdk6a4ji2hotj0ag80d.apps.googleusercontent.com',
-  );
+  final GoogleSignIn _googleSignIn;
+
+  GoogleSignInService()
+    : _googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+
+        // ✅ CORRECT: Use WEB client ID, not Android client ID
+      );
 
   Future<Map<String, dynamic>> signIn() async {
+    debugPrint("🔵 Google Sign-In Started");
     try {
+      // Clear any cached errors first
+      await _googleSignIn.signOut();
+
+      debugPrint("🟡 Attempting Google Sign-In...");
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
+        debugPrint("🟡 User cancelled Google sign-in");
         throw Exception('Google sign-in was cancelled');
       }
 
+      debugPrint("🟢 Got Google user: ${googleUser.email}");
+      debugPrint("🟡 Getting authentication...");
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
+      // Validate token
+      if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+        debugPrint("🔴 ERROR: No ID token received from Google");
+        throw Exception('No ID token received from Google authentication');
+      }
+
+      debugPrint("✅ Google Sign-In SUCCESSFUL!");
+      debugPrint("   Email: ${googleUser.email}");
+      debugPrint("   ID Token exists: ${googleAuth.idToken != null}");
+      debugPrint(
+        "   ID Token (first 50 chars): ${googleAuth.idToken!.substring(0, googleAuth.idToken!.length > 50 ? 50 : googleAuth.idToken!.length)}...",
+      );
+      debugPrint("   Access Token exists: ${googleAuth.accessToken != null}");
+
       return {
-        'idToken': googleAuth.idToken,
+        'idToken': googleAuth.idToken!,
         'accessToken': googleAuth.accessToken,
         'email': googleUser.email,
         'name': googleUser.displayName,
@@ -28,16 +53,31 @@ class GoogleSignInService {
         'id': googleUser.id,
       };
     } catch (e) {
+      debugPrint("🔴 Google Sign-In ERROR: $e");
+      debugPrint("🔴 Error type: ${e.runtimeType}");
       rethrow;
     }
   }
 
   Future<String> getIdToken() async {
-    final data = await signIn();
-    return data['idToken'] as String;
+    try {
+      final data = await signIn();
+      final idToken = data['idToken'] as String?;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Failed to get valid ID token');
+      }
+
+      debugPrint("✅ Got ID Token of length: ${idToken.length}");
+      return idToken;
+    } catch (e) {
+      debugPrint("🔴 getIdToken ERROR: $e");
+      rethrow;
+    }
   }
 
   Future<void> signOut() async {
     await _googleSignIn.signOut();
+    debugPrint("🟡 Signed out from Google");
   }
 }

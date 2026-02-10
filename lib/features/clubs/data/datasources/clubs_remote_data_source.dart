@@ -74,6 +74,7 @@ abstract class ClubsRemoteDataSource {
   });
 
   Future<int> getMyBalance();
+  Future<List<Map<String, dynamic>>> searchClubs(String query);
 }
 
 class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
@@ -296,5 +297,15 @@ class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
         : jsonDecode(res.data as String) as Map<String, dynamic>;
 
     return data['data']['balance'] as int;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> searchClubs(String query) async {
+    final res = await dio.get('/api/v1/search', queryParameters: {'q': query});
+
+    final data = res.data as Map<String, dynamic>;
+    final clubsData = data['clubs'] as List? ?? [];
+
+    return List<Map<String, dynamic>>.from(clubsData);
   }
 }

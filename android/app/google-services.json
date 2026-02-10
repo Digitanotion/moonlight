@@ -12,7 +12,20 @@
           "package_name": "com.app.moonlightstream"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "775545297921-5ddo836gnrvqs63ngrtdps22kavfe80f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.app.moonlightstream",
+            "certificate_hash": "99aaf90eb94e4db367f083ffba059cff59af795a"
+          }
+        },
+        {
+          "client_id": "775545297921-23deb83pd4g6oq8n6rdrhj90raqvrqji.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBwz8O_Yy08oRawA5g_0eN0FvtYvFzxluY"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "775545297921-23deb83pd4g6oq8n6rdrhj90raqvrqji.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "775545297921-ii3ppgkhmmtq7b50e3bu0hfh9l9d96a2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.moonlight"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +56,20 @@
           "package_name": "com.example.moonlight"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "775545297921-u20b54pabr0lfndi8n0fttdibflkikeh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.moonlight",
+            "certificate_hash": "cde183f9b3f84fb017859e5d0aa33790fda0e0f8"
+          }
+        },
+        {
+          "client_id": "775545297921-23deb83pd4g6oq8n6rdrhj90raqvrqji.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBwz8O_Yy08oRawA5g_0eN0FvtYvFzxluY"
@@ -39,7 +77,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "775545297921-23deb83pd4g6oq8n6rdrhj90raqvrqji.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "775545297921-ii3ppgkhmmtq7b50e3bu0hfh9l9d96a2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.moonlight"
+              }
+            }
+          ]
         }
       }
     }

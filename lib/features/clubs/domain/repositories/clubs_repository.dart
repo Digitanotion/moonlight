@@ -100,4 +100,5 @@ abstract class ClubsRepository {
   });
 
   Future<int> getMyBalance();
+  Future<List<Club>> searchClubs(String query);
 }

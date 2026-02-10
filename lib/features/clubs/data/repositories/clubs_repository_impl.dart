@@ -291,4 +291,10 @@ class ClubsRepositoryImpl implements ClubsRepository {
   Future<int> getMyBalance() async {
     return remote.getMyBalance();
   }
+
+  @override
+  Future<List<Club>> searchClubs(String query) async {
+    final data = await remote.searchClubs(query);
+    return data.map((e) => Club.fromJson(e)).toList();
+  }
 }

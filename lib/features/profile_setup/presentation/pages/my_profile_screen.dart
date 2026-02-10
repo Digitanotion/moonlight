@@ -313,14 +313,14 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               ),
                             ),
                           ),
-                          ProfileTab.livestreams => SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: _placeholderNotAvailable(),
-                            ),
-                          ),
+                          // ProfileTab.livestreams => SliverToBoxAdapter(
+                          //   child: Padding(
+                          //     padding: const EdgeInsets.symmetric(
+                          //       horizontal: 16,
+                          //     ),
+                          //     child: _placeholderNotAvailable(),
+                          //   ),
+                          // ),
                         },
 
                       // Previously there was an actions panel here (duplicate of dashboard actions).
@@ -386,11 +386,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
 
   Widget _bioLines(String? bio) {
     final lines = (bio == null || bio.trim().isEmpty)
-        ? [
-            'Digital creator & lifestyle enthusiast',
-            'Sharing moments that matter',
-            'Coffee addict | Travel lover',
-          ]
+        ? []
         : bio.split('|').map((e) => e.trim()).toList();
 
     return Column(
@@ -448,14 +444,13 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         tab('Posts', ProfileTab.posts),
         const SizedBox(width: 10),
         tab('Clubs', ProfileTab.clubs),
-        const SizedBox(width: 10),
-        tab('Livestreams', ProfileTab.livestreams),
+        // const SizedBox(width: 10),
+        // tab('Livestreams', ProfileTab.livestreams),
       ],
     );
   }
 
-  // NEW: posts grid that handles images and videos
-  // NEW: posts grid that handles typed Post objects and legacy Map shapes
+  // Posts grid that handles images and videos
   SliverGrid _postsGrid(List<dynamic> posts) {
     final List<Post> typed = posts
         .map<Post?>((p) {
@@ -580,20 +575,48 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         .whereType<Post>()
         .toList();
 
+    // CHANGED: Check if posts are empty and return a SliverToBoxAdapter with "No Posts Yet"
     if (typed.isEmpty) {
       return SliverGrid(
+        delegate: SliverChildListDelegate([
+          Container(
+            height: 200, // Set a reasonable height
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.photo_library_outlined,
+                  size: 48,
+                  color: Colors.white.withOpacity(0.3),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No Posts Yet',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Create your first post to share with others',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ]),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
+          crossAxisCount: 1, // Single column for the message
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 1,
-        ),
-        delegate: SliverChildBuilderDelegate(
-          (context, idx) => ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Container(color: Colors.white10),
-          ),
-          childCount: 3,
+          childAspectRatio: 2, // Wider aspect ratio for the message
         ),
       );
     }

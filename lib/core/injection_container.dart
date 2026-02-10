@@ -40,6 +40,7 @@ import 'package:moonlight/features/clubs/presentation/cubit/donate_club_cubit.da
 import 'package:moonlight/features/clubs/presentation/cubit/edit_club_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart'
     show MyClubsCubit;
+import 'package:moonlight/features/clubs/presentation/cubit/search_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/suggested_clubs_cubit.dart';
 import 'package:moonlight/features/create_post/data/datasources/create_post_remote_datasource.dart';
 import 'package:moonlight/features/create_post/data/repositories/create_post_repository_impl.dart';
@@ -676,6 +677,8 @@ Future<void> initRemainingDependencies() async {
   sl.registerLazySingleton<AccountRepository>(
     () => AccountRepositoryImpl(sl<AccountRemoteDataSource>()), // ✅
   );
+
+  sl.registerFactory(() => SearchClubsCubit(sl()));
 
   // Register the new usecases
   sl.registerLazySingleton(() => UpdateNotificationSettings(sl()));

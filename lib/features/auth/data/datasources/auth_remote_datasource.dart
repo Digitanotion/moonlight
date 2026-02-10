@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/features/auth/data/models/user_model.dart';
@@ -53,6 +54,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final BaseUrl = "https://svc.moonlightstream.app/api";
 
   @override
+  /*************  ✨ Windsurf Command ⭐  *************/
+  /// Fetch the current user's profile information.
+  ///
+  /// This endpoint is accessible only with a valid access token.
+  ///
+  /// Returns a [UserModel] containing the user's information.
+  ///
+  /*******  0766317b-8522-4e05-aecc-3c176077396c  *******/
   Future<UserModel> fetchMe() async {
     final res = await client.get(
       '${BaseUrl}/v1/profile/me',
@@ -153,15 +162,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     }
   }
 
-  // UPDATE: Use the new /auth/google/login endpoint
   @override
   Future<LoginResponseModel> loginWithGoogle(
-    String idToken, // Changed parameter name
+    String idToken,
     String deviceName,
   ) async {
     try {
       final response = await client.post(
-        '${BaseUrl}/v1/auth/google/login', // NEW ENDPOINT
+        '${BaseUrl}/v1/auth/google/login',
         data: {'id_token': idToken, 'device_name': deviceName},
       );
 
@@ -180,6 +188,50 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     }
   }
 
+  // Update the Firebase method too
+  @override
+  Future<UserModel> loginWithFirebase(
+    String firebaseToken,
+    String deviceName,
+  ) async {
+    try {
+      final response = await client.post(
+        '${BaseUrl}/v1/auth/google/firebase',
+        data: {'firebase_token': firebaseToken, 'device_name': deviceName},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+
+      // ✅ DEBUG: Check types
+      debugPrint("🟡 expires_in type: ${data['expires_in'].runtimeType}");
+      debugPrint("🟡 expires_in value: ${data['expires_in']}");
+
+      // Handle int/string conversion
+      final expiresIn = data['expires_in'];
+      final expiresInInt = expiresIn is int
+          ? expiresIn
+          : expiresIn is String
+          ? int.tryParse(expiresIn)
+          : null;
+
+      // Create UserModel with proper types
+      return UserModel(
+        uuid: data['user']?['uuid'] as String?,
+        userId: data['user']?['id']?.toString(), // Convert to String if needed
+        email: data['user']?['email'] as String? ?? '',
+        // ... other user fields ...
+        authToken: data['access_token'] as String?,
+        tokenType: data['token_type'] as String?,
+        expiresIn: expiresInInt.toString(), // Use the converted int
+      );
+    } on DioException catch (e) {
+      throw ServerException(
+        e.response?.data['message'] ?? 'Firebase login failed',
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
   // NEW: Alias method for consistency
   @override
   Future<LoginResponseModel> googleOAuthLogin(
@@ -190,29 +242,29 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   // KEEP: For Firebase-based login (alternative)
-  @override
-  Future<UserModel> loginWithFirebase(
-    String firebaseToken,
-    String deviceName,
-  ) async {
-    try {
-      final response = await client.post(
-        '${BaseUrl}/v1/login/firebase',
-        data: {'firebase_token': firebaseToken, 'device_name': deviceName},
-      );
+  // @override
+  // Future<UserModel> loginWithFirebase(
+  //   String firebaseToken,
+  //   String deviceName,
+  // ) async {
+  //   try {
+  //     final response = await client.post(
+  //       '${BaseUrl}/v1/login/firebase',
+  //       data: {'firebase_token': firebaseToken, 'device_name': deviceName},
+  //     );
 
-      final data = response.data;
-      return UserModel.fromJson({
-        ...data['user'],
-        'access_token': data['token'],
-      });
-    } on DioException catch (e) {
-      throw ServerException(
-        e.response?.data['error'] ?? 'Firebase login failed',
-        statusCode: e.response?.statusCode,
-      );
-    }
-  }
+  //     final data = response.data;
+  //     return UserModel.fromJson({
+  //       ...data['user'],
+  //       'access_token': data['token'],
+  //     });
+  //   } on DioException catch (e) {
+  //     throw ServerException(
+  //       e.response?.data['error'] ?? 'Firebase login failed',
+  //       statusCode: e.response?.statusCode,
+  //     );
+  //   }
+  // }
 
   @override
   Future<String> forgotPassword(String email) async {

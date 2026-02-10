@@ -17,7 +17,8 @@ typedef FetchMyPosts =
       int perPage,
     });
 
-enum ProfileTab { posts, clubs, livestreams }
+// enum ProfileTab { posts, clubs, livestreams }
+enum ProfileTab { posts, clubs }
 
 class ProfilePageCubit extends Cubit<ProfilePageState> {
   final FetchMyProfile fetchMyProfile;
@@ -51,25 +52,25 @@ class ProfilePageCubit extends Cubit<ProfilePageState> {
       }
 
       // If we still don't have posts, fall back to legacy placeholders (as Post objects)
-      if (posts.isEmpty) {
-        posts = List.generate(8, (i) {
-          return Post(
-            id: 'placeholder_$i',
-            author: AppUser(
-              id: '0',
-              name: 'You',
-              avatarUrl: '',
-              countryFlagEmoji: '',
-              roleLabel: '',
-              roleColor: '',
-            ),
-            mediaUrl: 'https://picsum.photos/seed/p_$i/400',
-            caption: '',
-            tags: const [],
-            createdAt: DateTime.now(),
-          );
-        });
-      }
+      // if (posts.isEmpty) {
+      //   posts = List.generate(8, (i) {
+      //     return Post(
+      //       id: 'placeholder_$i',
+      //       author: AppUser(
+      //         id: '0',
+      //         name: 'You',
+      //         avatarUrl: '',
+      //         countryFlagEmoji: '',
+      //         roleLabel: '',
+      //         roleColor: '',
+      //       ),
+      //       mediaUrl: 'https://picsum.photos/seed/p_$i/400',
+      //       caption: '',
+      //       tags: const [],
+      //       createdAt: DateTime.now(),
+      //     );
+      //   });
+      // }
 
       // existing fallback clubs/replays (unchanged)
       final clubs = state.clubs.isEmpty

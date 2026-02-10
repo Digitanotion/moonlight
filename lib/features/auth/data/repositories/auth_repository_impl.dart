@@ -1,7 +1,10 @@
 import 'package:dartz/dartz.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:moonlight/core/errors/exceptions.dart';
 import 'package:moonlight/core/errors/failures.dart';
+import 'package:moonlight/core/services/firebase_google_signin_service.dart';
 import 'package:moonlight/core/services/google_signin_service.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_remote_datasource.dart';
@@ -53,8 +56,14 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> logout() async {
     try {
+      // 1. Logout from your backend
       await localDataSource.clearToken();
       await localDataSource.clearUserData();
+
+      // 2. Logout from Google (important!)
+      final googleService = FirebaseGoogleSignInService();
+      await googleService.signOut();
+
       return const Right(null);
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
@@ -186,48 +195,83 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> loginWithGoogle() async {
     try {
-      // Get Google ID token (not Firebase token)
-      final googleData = await googleSignInService.signIn();
-      final idToken = googleData['idToken'] as String?;
+      debugPrint("🟡 Using Firebase Google Sign-In...");
 
-      if (idToken == null || idToken.isEmpty) {
-        return Left(AuthFailure('Failed to get Google ID token'));
+      // Use Firebase Google Sign-In service
+      final firebaseGoogleService = FirebaseGoogleSignInService();
+      final firebaseData = await firebaseGoogleService.signIn();
+      final firebaseToken = firebaseData['firebaseToken'] as String;
+
+      if (firebaseToken.isEmpty) {
+        return Left(AuthFailure('Failed to get Firebase token'));
       }
 
       final deviceName = await _getDeviceName();
 
-      // Use the new Google OAuth endpoint
-      final loginResponse = await remoteDataSource.loginWithGoogle(
-        idToken,
+      debugPrint(
+        "🟡 Sending Firebase token to backend: ${firebaseToken.substring(0, 50)}...",
+      );
+
+      // Call backend with Firebase token using the loginWithFirebase method
+      final userModel = await remoteDataSource.loginWithFirebase(
+        firebaseToken,
         deviceName,
       );
 
-      final me = await remoteDataSource.fetchMe();
-
-      final merged = me.copyWith(
-        authToken: loginResponse.accessToken,
-        tokenType: loginResponse.tokenType,
-        expiresIn: loginResponse.expiresIn,
+      debugPrint("✅ Backend response received!");
+      debugPrint(
+        "   Access token: ${userModel.authToken?.substring(0, 50)}...",
       );
+      debugPrint("   Token type: ${userModel.tokenType}");
+      debugPrint("   Expires in: ${userModel.expiresIn}");
 
-      if (merged.authToken != null) {
-        await localDataSource.cacheToken(merged.authToken!);
-        await localDataSource.cacheUser(merged);
+      // ✅ CRITICAL: Cache the token FIRST
+      if (userModel.authToken != null) {
+        debugPrint("🟡 Caching token...");
+        await localDataSource.cacheToken(userModel.authToken!);
+        debugPrint("✅ Token cached!");
       }
 
+      // Now try to fetch full profile
+      debugPrint("🟡 Fetching user profile...");
+      final me = await remoteDataSource.fetchMe();
+      debugPrint("✅ Profile fetched successfully!");
+
+      // Merge with token information
+      final merged = me.copyWith(
+        authToken: userModel.authToken,
+        tokenType: userModel.tokenType,
+        expiresIn: userModel.expiresIn,
+      );
+
+      // Cache the complete user
+      if (merged.authToken != null) {
+        await localDataSource.cacheUser(merged);
+        debugPrint("✅ User data cached!");
+      }
+
+      debugPrint("✅ Firebase Google Sign-In COMPLETE!");
       return Right(merged.toEntity());
-    } on AuthException catch (e) {
-      return Left(AuthFailure(e.message));
     } on ServerException catch (e) {
+      debugPrint("🔴 Firebase Google Sign-In server error: ${e.message}");
+      debugPrint("🔴 Status code: ${e.statusCode}");
       return Left(ServerFailure(e.message));
+    } on DioException catch (e) {
+      debugPrint("🔴 Dio error during Google Sign-In:");
+      debugPrint("   Status: ${e.response?.statusCode}");
+      debugPrint("   Message: ${e.response?.data}");
+      debugPrint("   Headers: ${e.response?.headers}");
+      return Left(ServerFailure(e.message ?? ""));
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint("🔴 Firebase Google Sign-In error: $e");
+      debugPrint("Stack: $stackTrace");
       return Left(AuthFailure('Google sign-in failed: ${e.toString()}'));
     }
   }
 
-  // NEW: Alternative method for direct ID token login
+  // Alternative method for direct ID token login (if needed)
   Future<Either<Failure, User>> loginWithGoogleToken(String idToken) async {
     try {
       final deviceName = await _getDeviceName();

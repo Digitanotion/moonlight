@@ -237,9 +237,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading(loadingType: 'google'));
-
+    // debugPrint('Google sign-in requested');
     final result = await authRepository.loginWithGoogle();
-
+    // debugPrint('Google sign-in result: $result');
     result.fold((failure) => emit(AuthFailure(failure.message)), (user) async {
       currentUserService.setUser(user); // Sync with service
 

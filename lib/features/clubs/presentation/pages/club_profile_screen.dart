@@ -5,11 +5,14 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/icon_data.dart';
 import 'package:moonlight/core/utils/formatting.dart';
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
+import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_income_details_screen.dart';
 import 'package:moonlight/features/clubs/domain/entities/club_profile.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_profile_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_profile_state.dart';
 import 'package:moonlight/features/clubs/presentation/pages/support_club_page.dart';
+import 'package:moonlight/widgets/top_snack.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ClubProfileScreen extends StatefulWidget {
   const ClubProfileScreen({super.key});
@@ -21,11 +24,44 @@ class ClubProfileScreen extends StatefulWidget {
 class _ClubProfileScreenState extends State<ClubProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
+  bool _showMessageGuide = false;
+  final GlobalKey _messageButtonKey = GlobalKey();
+  bool _isLayoutComplete = false;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkShouldShowGuide();
+      setState(() {
+        _isLayoutComplete = true;
+      });
+    });
+  }
+
+  Future<void> _checkShouldShowGuide() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenGuide = prefs.getBool('club_message_guide_seen') ?? false;
+
+    if (!hasSeenGuide) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        setState(() {
+          _showMessageGuide = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _dismissGuide() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('club_message_guide_seen', true);
+    if (mounted) {
+      setState(() {
+        _showMessageGuide = false;
+      });
+    }
   }
 
   @override
@@ -38,7 +74,24 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgBottom,
-      body: BlocBuilder<ClubProfileCubit, ClubProfileState>(
+      body: BlocConsumer<ClubProfileCubit, ClubProfileState>(
+        listener: (context, state) {
+          // Handle errors
+          if (state.error != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              TopSnack.error(context, state.error!);
+              context.read<ClubProfileCubit>().clearMessages();
+            });
+          }
+
+          // Handle success messages
+          if (state.success != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              TopSnack.success(context, state.success!);
+              context.read<ClubProfileCubit>().clearMessages();
+            });
+          }
+        },
         builder: (context, state) {
           if (state.loading) {
             return const Center(
@@ -55,7 +108,6 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
               ),
             );
           }
-
           return Stack(
             children: [
               _CoverImage(
@@ -74,18 +126,16 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _HeaderMeta(club: club),
+                            _HeaderMeta(
+                              club: club,
+                              messageButtonKey: _messageButtonKey,
+                            ),
                             const SizedBox(height: 30),
                             _DescriptionCard(club.description),
                             const SizedBox(height: 25),
                             _IncomeCard(club: club, clubUuid: club.uuid),
                             const SizedBox(height: 35),
                             _TopMembers(members: club.membersYouKnow),
-
-                            // const SizedBox(height: 24),
-                            // _Tabs(controller: _tabs),
-                            // const SizedBox(height: 16),
-                            // _TabContent(controller: _tabs),
                           ],
                         ),
                       ),
@@ -93,9 +143,365 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                   ],
                 ),
               ),
+
+              // Modern floating guide for messaging - only show after layout is complete
+              if (_showMessageGuide && club.isMember && _isLayoutComplete)
+                _MessageGuideOverlay(
+                  messageButtonKey: _messageButtonKey,
+                  clubName: club.name,
+                  onDismiss: _dismissGuide,
+                ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/* ─────────────────── MESSAGE GUIDE OVERLAY ─────────────────── */
+
+class _MessageGuideOverlay extends StatefulWidget {
+  final GlobalKey messageButtonKey;
+  final String clubName;
+  final VoidCallback onDismiss;
+
+  const _MessageGuideOverlay({
+    required this.messageButtonKey,
+    required this.clubName,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_MessageGuideOverlay> createState() => __MessageGuideOverlayState();
+}
+
+class __MessageGuideOverlayState extends State<_MessageGuideOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _opacityAnimation;
+  Offset? _buttonPosition;
+  Size? _buttonSize;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Wait for the next frame to ensure layout is complete
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getButtonPosition();
+    });
+
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    )..forward();
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.9,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+
+    _opacityAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  void _getButtonPosition() {
+    final context = widget.messageButtonKey.currentContext;
+    if (context != null) {
+      final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize) {
+        setState(() {
+          _buttonPosition = renderBox.localToGlobal(Offset.zero);
+          _buttonSize = renderBox.size;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // If we don't have the button position yet, show nothing
+    if (_buttonPosition == null || _buttonSize == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Calculate guide position
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    double guideLeft = _buttonPosition!.dx + _buttonSize!.width / 2 - 150;
+    guideLeft = guideLeft.clamp(16, screenWidth - 316);
+
+    double guideTop = _buttonPosition!.dy - 140;
+    guideTop = guideTop.clamp(100, screenHeight - 220);
+
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          // Dimmed overlay with tap to dismiss
+          GestureDetector(
+            onTap: widget.onDismiss,
+            child: Container(color: Colors.black.withOpacity(0.4)),
+          ),
+
+          // Guide bubble
+          Positioned(
+            left: guideLeft,
+            top: guideTop,
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: FadeTransition(
+                opacity: _opacityAnimation,
+                child: _GuideBubble(
+                  clubName: widget.clubName,
+                  onDismiss: widget.onDismiss,
+                  onNavigateToMessages: () {
+                    widget.onDismiss();
+                    Navigator.pushNamed(context, RouteNames.conversations);
+                  },
+                ),
+              ),
+            ),
+          ),
+
+          // Highlight ring around message button
+          Positioned(
+            left: _buttonPosition!.dx - 8,
+            top: _buttonPosition!.dy - 8,
+            child: Container(
+              width: _buttonSize!.width + 16,
+              height: _buttonSize!.height + 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.blue.withOpacity(0.8),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.3),
+                    blurRadius: 20,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GuideBubble extends StatelessWidget {
+  final String clubName;
+  final VoidCallback onDismiss;
+  final VoidCallback onNavigateToMessages;
+
+  const _GuideBubble({
+    required this.clubName,
+    required this.onDismiss,
+    required this.onNavigateToMessages,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 300,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 30,
+            spreadRadius: 5,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.2),
+            blurRadius: 40,
+            spreadRadius: 2,
+          ),
+        ],
+        border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF4F6BED), Color(0xFF8458FF)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.4),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.spa, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Welcome to the club! 🎉',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'You\'ve joined "$clubName"',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onDismiss,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white70,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Divider
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.blue.withOpacity(0.3),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+
+          // Content
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ready to chat with everyone?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      const TextSpan(
+                        text: 'Tap the ',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      WidgetSpan(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.message,
+                            color: Colors.blue,
+                            size: 12,
+                          ),
+                        ),
+                      ),
+                      const TextSpan(
+                        text:
+                            ' button above to go to Messages, then select "Clubs" to find your club.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Actions
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: onNavigateToMessages,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.message, size: 16),
+                        SizedBox(width: 8),
+                        Text('Go to Messages'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -121,7 +527,6 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: 20),
-          // Icon(Icons.more_vert, color: Colors.white),
         ],
       ),
     );
@@ -150,7 +555,6 @@ class _CoverImage extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 🔹 ALWAYS render fallback base
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -168,7 +572,6 @@ class _CoverImage extends StatelessWidget {
             ),
           ),
 
-          // 🔹 Overlay image if valid
           if (_hasValidUrl)
             Image.network(
               url!,
@@ -176,7 +579,6 @@ class _CoverImage extends StatelessWidget {
               errorBuilder: (_, __, ___) => const SizedBox(),
             ),
 
-          // 🔹 Dark overlay (matches screenshot)
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -196,7 +598,9 @@ class _CoverImage extends StatelessWidget {
 
 class _HeaderMeta extends StatelessWidget {
   final dynamic club;
-  const _HeaderMeta({required this.club});
+  final GlobalKey messageButtonKey;
+
+  const _HeaderMeta({required this.club, required this.messageButtonKey});
 
   @override
   Widget build(BuildContext context) {
@@ -223,7 +627,6 @@ class _HeaderMeta extends StatelessWidget {
                 children: [
                   _Pill('Club Profile'),
                   const SizedBox(width: 8),
-                  // Make the member count clickable
                   GestureDetector(
                     onTap: () {
                       _navigateToMembersPage(context);
@@ -273,16 +676,14 @@ class _HeaderMeta extends StatelessWidget {
             ],
           ),
         ),
-        // Conditional button based on join status
         club.isMember
-            ? _MessagesButton(clubUuid: club.uuid)
+            ? _MessagesButton(clubUuid: club.uuid, key: messageButtonKey)
             : _JoinButton(clubUuid: club.uuid),
       ],
     );
   }
 
   void _navigateToMembersPage(BuildContext context) {
-    // Check if current user is admin (either creator or has admin role)
     final bool isAdmin = club.isAdmin ?? false;
 
     Navigator.pushNamed(
@@ -292,13 +693,13 @@ class _HeaderMeta extends StatelessWidget {
     );
   }
 }
+
 /* ─────────────────── AVATAR ─────────────────── */
 
-// Messages Button (shown when user is a member)
 class _MessagesButton extends StatelessWidget {
   final String clubUuid;
 
-  const _MessagesButton({required this.clubUuid});
+  const _MessagesButton({required this.clubUuid, Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -315,18 +716,7 @@ class _MessagesButton extends StatelessWidget {
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.message, color: Colors.blue, size: 18),
-            // SizedBox(width: 6),
-            // Text(
-            //   'Messages',
-            //   style: TextStyle(
-            //     color: Colors.blue,
-            //     fontSize: 14,
-            //     fontWeight: FontWeight.w600,
-            //   ),
-            // ),
-          ],
+          children: [Icon(Icons.message, color: Colors.blue, size: 18)],
         ),
       ),
     );
@@ -378,27 +768,6 @@ class _Avatar extends StatelessWidget {
                 : _fallback(icon),
           ),
         ),
-
-        // Rank badge (unchanged)
-        // Positioned(
-        //   bottom: -2,
-        //   right: -2,
-        //   child: Container(
-        //     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        //     decoration: BoxDecoration(
-        //       color: Colors.deepPurple,
-        //       borderRadius: BorderRadius.circular(10),
-        //     ),
-        //     child: const Text(
-        //       '#12',
-        //       style: TextStyle(
-        //         color: Colors.white,
-        //         fontSize: 10,
-        //         fontWeight: FontWeight.w700,
-        //       ),
-        //     ),
-        //   ),
-        // ),
       ],
     );
   }
@@ -410,7 +779,6 @@ class _Avatar extends StatelessWidget {
 
 /* ─────────────────── JOIN BUTTON ─────────────────── */
 
-// Join Button (shown when user is NOT a member)
 class _JoinButton extends StatelessWidget {
   final String clubUuid;
   final VoidCallback? onJoin;
@@ -419,29 +787,69 @@ class _JoinButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap:
-          onJoin ??
-          () {
-            // Handle join logic here
-            // After joining, you might want to rebuild to show Messages button
-          },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFF7A00).withOpacity(0.2),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFFF7A00), width: 1.5),
-        ),
-        child: const Text(
-          'Join',
-          style: TextStyle(
-            color: Color(0xFFFF7A00),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+    return BlocBuilder<ClubProfileCubit, ClubProfileState>(
+      builder: (context, state) {
+        final isJoining = state.joining;
+        final isMember = state.profile?.isMember ?? false;
+
+        // If already a member, show joined state
+        if (isMember) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.green, width: 1.5),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check, color: Colors.green, size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'Joined',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return GestureDetector(
+          onTap: isJoining
+              ? null
+              : (onJoin ?? () => context.read<ClubProfileCubit>().joinClub()),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF7A00).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFFF7A00), width: 1.5),
+            ),
+            child: isJoining
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: const Color(0xFFFF7A00),
+                    ),
+                  )
+                : const Text(
+                    'Join',
+                    style: TextStyle(
+                      color: Color(0xFFFF7A00),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -509,14 +917,13 @@ class _IncomeCard extends StatelessWidget {
                     context,
                     RouteNames.supportClub,
                     arguments: {
-                      'clubUuid': club.uuid, // 🔥 REQUIRED
+                      'clubUuid': club.uuid,
                       'clubName': club.name,
                       'clubDescription': club.description,
                       'clubAvatar': club.coverImageUrl.toString(),
                     },
                   );
                 },
-
                 child: Text(
                   'Donate to Club',
                   style: TextStyle(
@@ -622,10 +1029,7 @@ class _TopMembers extends StatelessWidget {
                       Navigator.pushNamed(
                         context,
                         RouteNames.profileView,
-                        arguments: {
-                          'userUuid': member.uuid,
-                          'user_slug': '', // kept for compatibility
-                        },
+                        arguments: {'userUuid': member.uuid, 'user_slug': ''},
                       );
                     },
                     child: CircleAvatar(
@@ -656,102 +1060,6 @@ class _TopMembers extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/* ─────────────────── TABS ─────────────────── */
-
-class _Tabs extends StatelessWidget {
-  final TabController controller;
-  const _Tabs({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 54,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        color: Colors.white.withOpacity(0.06),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: TabBar(
-        controller: controller,
-        dividerColor: Colors.transparent,
-        splashFactory: NoSplash.splashFactory,
-        overlayColor: MaterialStateProperty.all(Colors.transparent),
-        indicatorSize: TabBarIndicatorSize.tab,
-        indicator: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF7A00), Color(0xFFFFB347)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0xFFFF7A00).withOpacity(0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        labelColor: Colors.black,
-        unselectedLabelColor: Colors.white60,
-        labelStyle: const TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.3,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        tabs: const [
-          _TabLabel(text: 'Posts'),
-          _TabLabel(text: 'Livestreams'),
-          _TabLabel(text: 'About'),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabLabel extends StatelessWidget {
-  final String text;
-  const _TabLabel({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
-    );
-  }
-}
-
-class _TabContent extends StatelessWidget {
-  final TabController controller;
-  const _TabContent({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 500,
-      child: TabBarView(
-        controller: controller,
-        children: const [
-          Center(
-            child: Text('Posts', style: TextStyle(color: Colors.white)),
-          ),
-          Center(
-            child: Text('Livestreams', style: TextStyle(color: Colors.white)),
-          ),
-          Center(
-            child: Text('About', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
     );
   }
 }

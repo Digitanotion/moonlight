@@ -49,18 +49,61 @@ class ClubProfile extends Equatable {
       description: json['description'],
       membersCount: json['membersCount'] ?? 0,
       coverImageUrl: json['coverImageUrl'],
-      isMember: json['isMember'] ?? true,
-      isCreator: json['isCreator'] ?? true,
-      isAdmin: json['isAdmin'] ?? true,
-      isPrivate: json['isPrivate'] ?? true,
+      isMember:
+          json['isMember'] ?? false, // Changed from true to false (default)
+      isCreator:
+          json['isCreator'] ?? false, // Changed from true to false (default)
+      isAdmin: json['isAdmin'] ?? false, // Changed from true to false (default)
+      isPrivate:
+          json['isPrivate'] ?? false, // Changed from true to false (default)
       location: json['location'],
       motto: json['motto'],
       totalIncomeCoins: json['totalIncomeCoins'] ?? 0,
       basicStats: json['basicStats'] ?? 0,
-      membersYouKnow: (json['membersYouKnows'] as List? ?? [])
-          .map((e) => ClubProfileMember.fromJson(e))
-          .toList(),
+      membersYouKnow:
+          (json['membersYouKnow'] as List? ??
+                  []) // Fixed typo: membersYouKnows → membersYouKnow
+              .map((e) => ClubProfileMember.fromJson(e))
+              .toList(),
       admin: ClubProfileAdmin.fromJson(json['admin']),
+    );
+  }
+
+  ClubProfile copyWith({
+    String? uuid,
+    String? slug,
+    String? name,
+    String? description,
+    String? motto,
+    String? location,
+    int? membersCount,
+    String? coverImageUrl,
+    bool? isPrivate,
+    bool? isMember,
+    bool? isCreator,
+    bool? isAdmin,
+    int? totalIncomeCoins,
+    int? basicStats,
+    List<ClubProfileMember>? membersYouKnow,
+    ClubProfileAdmin? admin, // Added missing admin parameter
+  }) {
+    return ClubProfile(
+      uuid: uuid ?? this.uuid,
+      slug: slug ?? this.slug,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      motto: motto ?? this.motto,
+      location: location ?? this.location,
+      membersCount: membersCount ?? this.membersCount,
+      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
+      isPrivate: isPrivate ?? this.isPrivate,
+      isMember: isMember ?? this.isMember,
+      isCreator: isCreator ?? this.isCreator,
+      isAdmin: isAdmin ?? this.isAdmin,
+      totalIncomeCoins: totalIncomeCoins ?? this.totalIncomeCoins,
+      basicStats: basicStats ?? this.basicStats,
+      membersYouKnow: membersYouKnow ?? this.membersYouKnow,
+      admin: admin ?? this.admin, // Added this line
     );
   }
 

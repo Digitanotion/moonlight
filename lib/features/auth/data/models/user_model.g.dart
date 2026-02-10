@@ -39,15 +39,16 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
       ?.map((e) => e as String)
       .toList(),
   phone: json['phone'] as String?,
+  roleLabel: json['roleLabel'] as String?,
   referralCode: json['referral_code'] as String?,
   referredBy: json['referred_by'] as String?,
   emailVerifiedAt: json['email_verified_at'] as String?,
   dateOfBirth: json['date_of_birth'] as String?,
   createdAt: json['created_at'] as String?,
   updatedAt: json['updated_at'] as String?,
-  authToken: json['authToken'] as String?,
-  tokenType: json['tokenType'] as String?,
-  expiresIn: json['expiresIn'] as String?,
+  authToken: json['access_token'] as String?, // ✅ THIS LINE IS CRITICAL
+  tokenType: json['token_type'] as String?, // ✅ THIS LINE IS CRITICAL
+  expiresIn: json['expires_in'] as String?, // ✅ THIS LINE IS CRITICAL
 );
 
 Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
@@ -65,13 +66,14 @@ Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
   'bio': instance.bio,
   'user_interests': instance.userInterests,
   'phone': instance.phone,
+  'roleLabel': instance.roleLabel,
   'referral_code': instance.referralCode,
   'referred_by': instance.referredBy,
   'email_verified_at': instance.emailVerifiedAt,
   'date_of_birth': instance.dateOfBirth,
   'created_at': instance.createdAt,
   'updated_at': instance.updatedAt,
-  'authToken': instance.authToken,
-  'tokenType': instance.tokenType,
-  'expiresIn': instance.expiresIn,
+  'access_token': instance.authToken, // ✅ THIS LINE IS CRITICAL
+  'token_type': instance.tokenType, // ✅ THIS LINE IS CRITICAL
+  'expires_in': instance.expiresIn, // ✅ THIS LINE IS CRITICAL
 };
