@@ -33,20 +33,64 @@ class PlayBillingService {
        _idem = idem; // 👈 Initialize it
 
   Future<void> init() async {
-    _isAvailable = await _iap.isAvailable();
+    debugPrint('🔍 ===== PLAY BILLING DIAGNOSTIC =====');
 
-    if (!_isAvailable) {
-      debugPrint('⚠️ Google Play Billing not available');
-      return;
+    try {
+      // 1. Check if billing is available
+      _isAvailable = await _iap.isAvailable();
+      debugPrint('📱 Billing available: $_isAvailable');
+
+      // 2. Try to get connection details
+      try {
+        final bool isReady = await _iap.isAvailable();
+        debugPrint('📱 Connection check: $isReady');
+      } catch (e) {
+        debugPrint('📱 Connection check failed: $e');
+      }
+
+      // 3. Try to get billing client version (if supported)
+      try {
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          final androidAddition = _iap
+              .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+          // This might not exist in your version - that's OK
+          debugPrint('✅ Android platform addition available');
+        }
+      } catch (e) {
+        debugPrint('ℹ️ Android platform addition not needed: $e');
+      }
+
+      // 4. Try to query products even if not available (to see error)
+      try {
+        debugPrint('🔍 Attempting to query test product...');
+        // Use a dummy product ID just to test connection
+        final response = await _iap.queryProductDetails({'test_product'});
+        debugPrint(
+          '📦 Query response: ${response.error?.message ?? 'No error'}',
+        );
+        debugPrint('📦 Products found: ${response.productDetails.length}');
+      } catch (e) {
+        debugPrint('📦 Query failed: $e');
+      }
+
+      // 5. Check Play Store version (can't directly, but log device info)
+      debugPrint('📱 Device info:');
+      debugPrint('   - Platform: ${defaultTargetPlatform}');
+
+      if (!_isAvailable) {
+        debugPrint('⚠️ BILLING NOT AVAILABLE - Possible causes:');
+        debugPrint('   1. App not installed from Play Store (sideloaded?)');
+        debugPrint('   2. Wrong Google account in Play Store');
+        debugPrint('   3. Play Services needs update');
+        debugPrint('   4. Billing permission not in merged manifest');
+        debugPrint('   5. Device/region restrictions');
+      }
+
+      debugPrint('🔍 ===== END DIAGNOSTIC =====');
+    } catch (e) {
+      debugPrint('❌ Billing initialization error: $e');
+      _isAvailable = false;
     }
-
-    // Enable pending purchases for Android
-    //   if (defaultTargetPlatform == TargetPlatform.android) {
-    //   final androidPlatform = _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
-    //   await androidPlatform.enablePendingPurchases();
-    // }
-
-    debugPrint('✅ Google Play Billing initialized');
   }
 
   void dispose() {
