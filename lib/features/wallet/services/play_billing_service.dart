@@ -2,202 +2,342 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:moonlight/features/wallet/data/datasources/wallet_remote_mapper.dart';
-import 'package:moonlight/features/wallet/data/repositories/wallet_repository_impl.dart';
-import 'package:moonlight/features/wallet/domain/models/transaction_model.dart';
-import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:get_it/get_it.dart';
+import 'package:uuid/uuid.dart';
 
-import '../services/idempotency_helper.dart';
+import '../data/repositories/wallet_repository_impl.dart';
+import '../domain/models/transaction_model.dart';
+import 'idempotency_helper.dart'; // 👈 Add this import
 
-/// PlayBillingService: orchestrates Play Billing -> backend verification -> acknowledge.
-/// - Exposes buyAndComplete(productId, ...)
-/// - Returns TransactionModel on success (or null)
 class PlayBillingService {
   final InAppPurchase _iap = InAppPurchase.instance;
-  final WalletRepositoryImpl repo;
-  final IdempotencyHelper idem;
+  final WalletRepositoryImpl _repo;
+  final IdempotencyHelper _idem; // 👈 Add this
   final Uuid _uuid = const Uuid();
 
-  StreamSubscription<List<PurchaseDetails>>? _sub;
+  bool _isAvailable = false;
+  bool _isPurchasing = false;
+  StreamSubscription<List<PurchaseDetails>>? _subscription;
 
-  PlayBillingService({required this.repo, required this.idem});
+  // Track pending purchases to prevent duplicate processing
+  final Set<String> _processingPurchases = {};
 
-  /// Call once on app startup (optional)
+  // 👈 Update constructor to accept idem
+  PlayBillingService({
+    required WalletRepositoryImpl repo,
+    required IdempotencyHelper idem, // 👈 Add this
+  }) : _repo = repo,
+       _idem = idem; // 👈 Initialize it
+
   Future<void> init() async {
-    final available = await _iap.isAvailable();
-    if (!available) {
-      debugPrint('PlayBillingService: Play Billing NOT available');
-    } else {
-      debugPrint('PlayBillingService: Play Billing available');
+    _isAvailable = await _iap.isAvailable();
+
+    if (!_isAvailable) {
+      debugPrint('⚠️ Google Play Billing not available');
+      return;
     }
-    // We don't permanently attach a subscription here; buyAndComplete installs a one-off listener.
+
+    // Enable pending purchases for Android
+    //   if (defaultTargetPlatform == TargetPlatform.android) {
+    //   final androidPlatform = _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+    //   await androidPlatform.enablePendingPurchases();
+    // }
+
+    debugPrint('✅ Google Play Billing initialized');
   }
 
   void dispose() {
-    _sub?.cancel();
+    _subscription?.cancel();
   }
 
-  /// End-to-end purchase:
-  /// - productId: Play product id (SKU)
-  /// - packageCode: optional server package code (if your server needs it)
-  /// - isPurchaseAndGift/gift params omitted here; you can extend method if needed.
+  /// Main method to purchase coins
   Future<TransactionModel?> buyAndComplete({
     required String productId,
     String? packageCode,
-    // Optional fields for purchase-and-gift variant (extend as needed)
-    bool isPurchaseAndGift = false,
-    String? giftCode,
-    String? toUserUuid,
-    String? livestreamId,
-    Duration timeout = const Duration(seconds: 60),
+    Duration timeout = const Duration(minutes: 2),
   }) async {
-    // 1) Ensure Play Billing available
-    final available = await _iap.isAvailable();
-    if (!available) {
-      throw Exception('Play Billing not available on this device');
+    if (_isPurchasing) {
+      debugPrint('⚠️ Purchase already in progress');
+      throw Exception('Purchase already in progress');
     }
 
-    // 2) Query product details
-    final productResponse = await _iap.queryProductDetails({productId});
-    if (productResponse.error != null) {
-      throw Exception(
-        'Failed to query product details: ${productResponse.error!.message}',
-      );
+    if (!_isAvailable) {
+      throw Exception('Google Play Billing not available');
     }
-    if (productResponse.productDetails.isEmpty) {
-      throw Exception('Product not found in Play Console: $productId');
-    }
-    final productDetails = productResponse.productDetails.first;
 
-    // 3) Create idempotency key and persist metadata (so we can recover after crash)
-    final idempotencyKey = _uuid.v4();
-    await idem.persist(idempotencyKey, {
-      'productId': productId,
-      'packageCode': packageCode,
-      'op': isPurchaseAndGift ? 'purchase_and_gift' : 'purchase',
-      if (giftCode != null) 'giftCode': giftCode,
-      if (toUserUuid != null) 'toUserUuid': toUserUuid,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    _isPurchasing = true;
+    _subscription?.cancel(); // Cancel any existing subscription
 
-    // 4) PurchaseParam and start purchase (consumable)
-    final purchaseParam = PurchaseParam(productDetails: productDetails);
-    // autoConsume=false ensures we control acknowledgement/consumption
-    final buyResult = await _iap.buyConsumable(
-      purchaseParam: purchaseParam,
-      autoConsume: false,
-    );
+    final completer = Completer<TransactionModel?>();
 
-    // 5) Listen for the purchase update and wait for the purchase for this productId
-    final completer = Completer<PurchaseDetails?>();
-    StreamSubscription<List<PurchaseDetails>>? sub;
-    sub = _iap.purchaseStream.listen(
-      (purchases) {
-        for (final p in purchases) {
-          if (p.productID != productId) continue;
-          // Found a matching purchase, complete the completer only once
-          if (!completer.isCompleted) completer.complete(p);
-          break;
-        }
-      },
-      onError: (err) {
-        if (!completer.isCompleted) completer.completeError(err);
-      },
-    );
-
-    PurchaseDetails? purchaseDetails;
     try {
-      purchaseDetails = await completer.future.timeout(
-        timeout,
-        onTimeout: () {
-          sub?.cancel();
-          throw Exception('Purchase timed out after ${timeout.inSeconds}s');
+      // 1. Query product details
+      debugPrint('🔍 Querying product: $productId');
+      final productResponse = await _iap.queryProductDetails({productId});
+
+      if (productResponse.error != null) {
+        throw Exception(
+          'Failed to query product: ${productResponse.error!.message}',
+        );
+      }
+
+      if (productResponse.productDetails.isEmpty) {
+        throw Exception('Product not found: $productId');
+      }
+
+      final productDetails = productResponse.productDetails.first;
+      debugPrint('✅ Product found: ${productDetails.title}');
+
+      // 2. Generate idempotency key using helper
+      final idempotencyKey = _idem.generateKey(); // 👈 Use helper
+      await _idem.persist(idempotencyKey, {
+        // 👈 Use helper
+        'productId': productId,
+        'packageCode': packageCode,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      // 3. Set up purchase stream listener
+      _subscription = _iap.purchaseStream.listen(
+        (purchases) => _handlePurchaseUpdates(
+          purchases,
+          completer,
+          productId,
+          idempotencyKey,
+          packageCode,
+        ),
+        onError: (error) {
+          debugPrint('❌ Purchase stream error: $error');
+          if (!completer.isCompleted) {
+            completer.completeError(error);
+          }
         },
       );
+
+      // 4. Start purchase
+      debugPrint('💰 Starting purchase for: $productId');
+      final purchaseParam = PurchaseParam(productDetails: productDetails);
+      final success = await _iap.buyConsumable(
+        purchaseParam: purchaseParam,
+        autoConsume: false, // We'll acknowledge after server verification
+      );
+
+      if (!success) {
+        throw Exception('Failed to start purchase');
+      }
+
+      // 5. Wait for completion with timeout
+      final result = await completer.future.timeout(
+        timeout,
+        onTimeout: () {
+          throw Exception(
+            'Purchase timed out after ${timeout.inSeconds} seconds',
+          );
+        },
+      );
+
+      return result;
+    } catch (e) {
+      debugPrint('❌ Purchase failed: $e');
+      rethrow;
     } finally {
-      // cancel listener when done
-      sub?.cancel();
+      _isPurchasing = false;
+      await _subscription?.cancel();
+      _subscription = null;
     }
+  }
 
-    if (purchaseDetails == null) {
-      throw Exception('Failed to obtain purchase details');
-    }
+  void _handlePurchaseUpdates(
+    List<PurchaseDetails> purchases,
+    Completer<TransactionModel?> completer,
+    String expectedProductId,
+    String idempotencyKey,
+    String? packageCode,
+  ) {
+    for (final purchase in purchases) {
+      // Only handle our expected product
+      if (purchase.productID != expectedProductId) continue;
 
-    // 6) Handle purchase status
-    if (purchaseDetails.status == PurchaseStatus.pending) {
-      // Shouldn't happen because we awaited non-pending, but handle gracefully
-      throw Exception('Purchase is pending – try again later');
-    }
+      // Prevent duplicate processing
+      final purchaseId = '${purchase.purchaseID}_${purchase.productID}';
+      if (_processingPurchases.contains(purchaseId)) {
+        debugPrint('⚠️ Already processing purchase: $purchaseId');
+        continue;
+      }
+      _processingPurchases.add(purchaseId);
 
-    if (purchaseDetails.status == PurchaseStatus.error) {
-      final message =
-          purchaseDetails.error?.message ?? 'Unknown purchase error';
-      throw Exception('Purchase error: $message');
-    }
+      debugPrint(
+        '📦 Purchase update: ${purchase.status} for ${purchase.productID}',
+      );
 
-    if (purchaseDetails.status == PurchaseStatus.purchased ||
-        purchaseDetails.status == PurchaseStatus.restored) {
-      // 7) Get purchase token (serverVerificationData) and send to backend for verification
-      final purchaseToken =
-          purchaseDetails.verificationData.serverVerificationData;
-      try {
-        TransactionModel? txn;
-        if (isPurchaseAndGift) {
-          // If you plan to support purchase-and-gift, extend your repo to implement purchaseAndGift
-          final res = await repo.purchaseAndGift(
-            productId: productId,
-            purchaseToken: purchaseToken,
-            giftCode: giftCode!,
-            toUserUuid: toUserUuid!,
-            livestreamId: livestreamId,
-            idempotencyKey: idempotencyKey,
-          );
-          // Map purchase txn from res if available
-          final purchaseTxnJson =
-              (res['transactions'] != null &&
-                  res['transactions']['purchase'] != null)
-              ? res['transactions']['purchase']
-              : (res['purchase'] ?? res['transaction']);
-          if (purchaseTxnJson != null) {
-            txn = WalletRemoteMapper.transactionFromJson(
-              Map<String, dynamic>.from(purchaseTxnJson),
-            );
+      // Handle different purchase states
+      switch (purchase.status) {
+        case PurchaseStatus.purchased:
+        case PurchaseStatus.restored:
+          _handleSuccessfulPurchase(
+                purchase,
+                completer,
+                idempotencyKey,
+                packageCode,
+              )
+              .then((_) {
+                _processingPurchases.remove(purchaseId);
+              })
+              .catchError((error) {
+                _processingPurchases.remove(purchaseId);
+                if (!completer.isCompleted) {
+                  completer.completeError(error);
+                }
+              });
+          break;
+
+        case PurchaseStatus.error:
+          debugPrint('❌ Purchase error: ${purchase.error}');
+          _processingPurchases.remove(purchaseId);
+          if (!completer.isCompleted) {
+            completer.completeError(purchase.error ?? 'Purchase failed');
           }
-        } else {
-          // Regular purchase verify
-          txn = await repo.purchaseWithToken(
-            productId: productId,
-            purchaseToken: purchaseToken,
-            packageCode: packageCode,
-            idempotencyKey: idempotencyKey,
-          );
-        }
+          _iap.completePurchase(purchase);
+          break;
 
-        // 8) Backend verified: mark idempotency complete and acknowledge/complete the purchase
-        await idem.complete(idempotencyKey);
+        case PurchaseStatus.pending:
+          debugPrint('⏳ Purchase pending...');
+          // Don't complete yet, wait for final status
+          _processingPurchases.remove(purchaseId);
+          break;
 
-        // Complete/acknowledge the purchase with the platform (Android)
-        try {
-          await _iap.completePurchase(purchaseDetails);
-        } catch (ackError) {
-          // Log but do not fail the overall operation if ack fails (app can recover)
-          debugPrint('Warning: completePurchase failed: $ackError');
-        }
-
-        return txn;
-      } catch (e) {
-        // If the server verification fails, DO NOT acknowledge the purchase.
-        // This leaves the purchase unacknowledged so it can be retried or reconciled.
-        // Bubble up the error so UI can show message and retry.
-        rethrow;
+        case PurchaseStatus.canceled:
+          debugPrint('🚫 Purchase canceled by user');
+          _processingPurchases.remove(purchaseId);
+          if (!completer.isCompleted) {
+            completer.complete(null); // null indicates user canceled
+          }
+          _iap.completePurchase(purchase);
+          break;
       }
     }
+  }
 
-    // If we reach here, something unexpected happened
-    throw Exception('Unhandled purchase status: ${purchaseDetails.status}');
+  Future<void> _handleSuccessfulPurchase(
+    PurchaseDetails purchase,
+    Completer<TransactionModel?> completer,
+    String idempotencyKey,
+    String? packageCode,
+  ) async {
+    try {
+      if (purchase is! GooglePlayPurchaseDetails) {
+        throw Exception('Only Google Play purchases are supported');
+      }
+
+      final purchaseToken = purchase.billingClientPurchase.purchaseToken;
+      final productId = purchase.productID;
+
+      debugPrint('✅ Purchase successful! Token: $purchaseToken');
+
+      // Verify with backend
+      debugPrint('🔐 Verifying purchase with server...');
+      final transaction = await _repo.purchaseWithToken(
+        productId: productId,
+        purchaseToken: purchaseToken,
+        packageCode: packageCode,
+        idempotencyKey: idempotencyKey,
+      );
+
+      debugPrint('✅ Server verification successful!');
+
+      // Mark idempotency as completed
+      await _idem.complete(idempotencyKey); // 👈 Use helper
+
+      // Complete/acknowledge the purchase with Google Play
+      try {
+        await _iap.completePurchase(purchase);
+        debugPrint('✅ Purchase acknowledged with Google Play');
+      } catch (e) {
+        // Log but don't fail - server already credited
+        debugPrint('⚠️ Warning: Failed to acknowledge purchase: $e');
+      }
+
+      // Clear pending purchase (from SharedPreferences)
+      await _clearPendingPurchase(idempotencyKey);
+
+      if (!completer.isCompleted) {
+        completer.complete(transaction);
+      }
+    } catch (e) {
+      debugPrint('❌ Server verification failed: $e');
+
+      // DO NOT acknowledge the purchase if verification fails
+      // This allows retry through the app
+
+      if (!completer.isCompleted) {
+        completer.completeError(e);
+      }
+    }
+  }
+
+  // Keep these methods for backward compatibility, but they're less critical
+  // now that we have IdempotencyHelper
+  Future<void> _savePendingPurchase(
+    String idempotencyKey,
+    String productId,
+    String? packageCode,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getStringList('pending_purchases') ?? [];
+      pending.add(
+        jsonEncode({
+          'idempotency_key': idempotencyKey,
+          'product_id': productId,
+          'package_code': packageCode,
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+      );
+      await prefs.setStringList('pending_purchases', pending);
+    } catch (e) {
+      debugPrint('Failed to save pending purchase: $e');
+    }
+  }
+
+  Future<void> _clearPendingPurchase(String idempotencyKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getStringList('pending_purchases') ?? [];
+      final filtered = pending.where((item) {
+        try {
+          final map = jsonDecode(item);
+          return map['idempotency_key'] != idempotencyKey;
+        } catch (_) {
+          return true;
+        }
+      }).toList();
+      await prefs.setStringList('pending_purchases', filtered);
+    } catch (e) {
+      debugPrint('Failed to clear pending purchase: $e');
+    }
+  }
+
+  Future<void> retryPendingPurchases() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getStringList('pending_purchases') ?? [];
+
+      for (final item in pending) {
+        try {
+          final data = jsonDecode(item);
+          // Attempt to verify again
+          // This would need a method to check purchase status with Google
+          // For now, just log
+          debugPrint('Found pending purchase: $data');
+        } catch (e) {
+          debugPrint('Failed to parse pending purchase: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to retry pending purchases: $e');
+    }
   }
 }

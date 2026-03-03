@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/entities/chat_paginated.dart';
@@ -27,6 +28,7 @@ abstract class ChatRepository {
     required File file,
     String? body,
     String? replyToUuid,
+    CancelToken? cancelToken,
     void Function(int sent, int total)? onSendProgress, // Add this
   });
   Future<Message> editMessage(String messageUuid, String newBody);

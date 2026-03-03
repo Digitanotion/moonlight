@@ -232,30 +232,103 @@ class ChatRepositoryImpl implements ChatRepository {
     required File file,
     String? body,
     String? replyToUuid,
-    void Function(int sent, int total)? onSendProgress, // Add this parameter
+    CancelToken? cancelToken,
+    void Function(int sent, int total)? onSendProgress,
   }) async {
     try {
+      // Validate file exists
+      if (!await file.exists()) {
+        throw Exception('File does not exist');
+      }
+
+      // Get file bytes and check size
+      final fileBytes = await file.readAsBytes();
+      debugPrint('📤 Uploading file: ${file.path}');
+      debugPrint('📤 File size: ${fileBytes.length} bytes');
+      debugPrint('📤 File type: ${_getMimeType(file.path)}');
+
       final formData = FormData.fromMap({
         if (body != null && body.isNotEmpty) 'body': body,
         if (replyToUuid != null) 'reply_to_uuid': replyToUuid,
         'media[]': await MultipartFile.fromFile(
           file.path,
           filename: file.path.split('/').last,
+          contentType: DioMediaType.parse(_getMimeType(file.path)),
         ),
       });
 
       final response = await _client.dio.post(
         '/api/v1/chat/conversations/$conversationUuid/messages',
         data: formData,
-        onSendProgress: onSendProgress, // Pass to Dio
+        cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
+        options: Options(
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Accept': 'application/json',
+          },
+        ),
       );
+
+      // Check if response is HTML (error)
+      if (response.headers.value('content-type')?.contains('text/html') ??
+          false) {
+        throw Exception('Server returned HTML instead of JSON');
+      }
 
       final responseData =
           (response.data as Map)['data'] as Map<String, dynamic>;
       return Message.fromJson(responseData);
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        debugPrint('📤 Upload cancelled by user');
+        rethrow;
+      }
+
+      // Log detailed error
+      debugPrint('❌ Upload error: ${e.response?.statusCode}');
+      debugPrint('❌ Response data: ${e.response?.data}');
+      debugPrint('❌ Response headers: ${e.response?.headers}');
+
+      // Check if response is HTML
+      if (e.response?.headers.value('content-type')?.contains('text/html') ??
+          false) {
+        throw Exception(
+          'Server error: Please check if the file format is supported',
+        );
+      }
+
+      rethrow;
     } catch (e) {
       debugPrint('❌ Error sending media message: $e');
       rethrow;
+    }
+  }
+
+  String _getMimeType(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'avi':
+        return 'video/x-msvideo';
+      case 'pdf':
+        return 'application/pdf';
+      case 'mp3':
+        return 'audio/mpeg';
+      default:
+        return 'application/octet-stream';
     }
   }
 

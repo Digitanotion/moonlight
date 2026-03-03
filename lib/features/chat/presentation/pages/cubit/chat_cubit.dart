@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
@@ -7,6 +8,7 @@ import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/entities/chat_paginated.dart';
 import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
+import 'package:moonlight/features/chat/presentation/services/upload_manager.dart';
 import 'package:moonlight/features/chat/presentation/widgets/upload_progress.dart';
 import 'package:moonlight/features/chat/presentation/widgets/upload_progress_widget.dart'
     hide UploadStatus;
@@ -15,6 +17,7 @@ part 'chat_state.dart';
 
 class ChatCubit extends Cubit<ChatState> {
   final ChatRepository _repository;
+  final UploadManager _uploadManager = UploadManager();
 
   StreamSubscription<Message>? _messageSubscription;
   StreamSubscription<String>? _typingSubscription;
@@ -31,9 +34,12 @@ class ChatCubit extends Cubit<ChatState> {
   final CurrentUserService? _currentUserService;
   final List<Message> _allMessages = [];
   final Set<String> _loadedPageMessages = <String>{};
+  bool get mounted => !isClosed;
 
   ChatCubit(this._repository, [this._currentUserService])
-    : super(ChatInitial());
+    : super(ChatInitial()) {
+    _setupUploadListeners();
+  }
 
   /* -------------------------------------------------------------------------- */
   /*                               CONVERSATIONS                                 */
@@ -230,105 +236,132 @@ class ChatCubit extends Cubit<ChatState> {
     String? body,
     String? replyToUuid,
   }) async {
-    final fileId =
-        '${DateTime.now().millisecondsSinceEpoch}_${file.path.hashCode}';
-    final fileName = file.path.split('/').last;
-    final fileType = _getFileType(file);
-
-    // Create progress controllers
-    final progressController = StreamController<double>();
-    final statusController = StreamController<UploadStatus>();
-
-    // Add to current uploads
-    _currentUploads[fileId] = UploadProgress(
-      fileId: fileId,
-      fileName: fileName,
-      fileType: fileType,
-      progressController: progressController,
-      statusController: statusController,
+    // Add task to manager
+    final fileId = _uploadManager.addTask(
+      conversationUuid: conversationUuid,
+      file: file,
+      body: body,
+      replyToUuid: replyToUuid,
     );
 
-    // Emit uploading state
+    final task = _uploadManager.getTask(fileId)!;
+
+    // Emit initial state with the Map format
     emit(
       ChatUploadingMedia(
         messages: _getCurrentMessages(),
         conversationUuid: conversationUuid,
-        uploads: Map.from(_currentUploads),
+        uploads:
+            _uploadManager.uploadsMap, // Use uploadsMap instead of activeTasks
       ),
     );
 
+    // Start upload
+    _performUpload(task);
+  }
+
+  // Update the upload listener to use the Map format:
+  void _setupUploadListeners() {
+    // Listen for upload updates
+    _uploadManager.onTaskUpdated.listen((task) {
+      if (isClosed) return;
+
+      emit(
+        ChatUploadingMedia(
+          messages: _getCurrentMessages(),
+          conversationUuid: _currentConversationUuid!,
+          uploads: _uploadManager.uploadsMap, // Use uploadsMap here
+        ),
+      );
+    });
+
+    _uploadManager.onTaskRemoved.listen((task) {
+      if (isClosed) return;
+
+      emit(
+        ChatUploadingMedia(
+          messages: _getCurrentMessages(),
+          conversationUuid: _currentConversationUuid!,
+          uploads: _uploadManager.uploadsMap, // Use uploadsMap here
+        ),
+      );
+    });
+  }
+
+  Future<void> _performUpload(UploadTask task) async {
     try {
-      // Update status to preparing
-      statusController.add(UploadStatus.preparing);
+      task.updateStatus(UploadStatus.preparing);
+      task.cancelToken = CancelToken();
 
-      // 1. Upload file to your backend with progress tracking
+      // Small delay to show preparing state
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      task.updateStatus(UploadStatus.uploading);
+
       final message = await _repository.sendMediaMessage(
-        conversationUuid,
-        file: file,
-        body: body,
-        replyToUuid: replyToUuid,
-        // If your repository supports progress callbacks, use them
+        task.conversationUuid,
+        file: task.file,
+        body: task.body,
+        replyToUuid: task.replyToUuid,
+        cancelToken: task.cancelToken,
         onSendProgress: (sent, total) {
-          if (total > 0) {
+          if (total > 0 && !task.cancelToken!.isCancelled) {
             final progress = sent / total;
-            progressController.add(progress);
-
-            // Update progress in the map
-            if (_currentUploads.containsKey(fileId)) {
-              _currentUploads[fileId] = _currentUploads[fileId]!.copyWith(
-                progress: progress,
-                status: UploadStatus.uploading,
-              );
-
-              // Emit updated state
-              emit(
-                ChatUploadingMedia(
-                  messages: _getCurrentMessages(),
-                  conversationUuid: conversationUuid,
-                  uploads: Map.from(_currentUploads),
-                ),
-              );
-            }
+            task.updateProgress(progress);
+            _uploadManager.updateTask(task.fileId, progress: progress);
           }
         },
       );
 
-      // 2. Update status to success
-      statusController.add(UploadStatus.success);
+      if (task.cancelToken!.isCancelled) {
+        throw Exception('Upload cancelled');
+      }
 
-      // 3. Add the message to local list
+      task.updateStatus(UploadStatus.success);
+
+      // Add message to list
       _allMessages.add(message);
-
-      // 4. Sort messages by creation date
       _allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-      // 5. Clean up upload progress
-      await Future.delayed(
-        const Duration(milliseconds: 500),
-      ); // Show success briefly
-      _currentUploads.remove(fileId);
-      await progressController.close();
-      await statusController.close();
+      // Show success briefly then remove
+      await Future.delayed(const Duration(seconds: 1));
 
-      // 6. Emit success state with the new message
+      _uploadManager.removeTask(task.fileId);
+
       emit(
         ChatMessageSent(
           messages: List.from(_allMessages),
-          conversationUuid: conversationUuid,
+          conversationUuid: task.conversationUuid,
         ),
       );
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        task.updateStatus(UploadStatus.cancelled);
+        await Future.delayed(const Duration(milliseconds: 500));
+        _uploadManager.removeTask(task.fileId);
+      } else {
+        task.updateStatus(UploadStatus.failed);
+        _uploadManager.updateTask(task.fileId, status: UploadStatus.failed);
+      }
     } catch (e) {
-      debugPrint('❌ Error uploading media: $e');
+      debugPrint('❌ Upload error: $e');
+      task.updateStatus(UploadStatus.failed);
+      _uploadManager.updateTask(task.fileId, status: UploadStatus.failed);
+    }
+  }
+
+  void _handleUploadFailed(
+    String fileId,
+    String conversationUuid,
+    dynamic error,
+  ) {
+    if (_currentUploads.containsKey(fileId)) {
+      final upload = _currentUploads[fileId]!;
 
       // Update status to failed
-      statusController.add(UploadStatus.failed);
+      upload.statusController?.add(UploadStatus.failed);
 
-      // Keep in uploads for retry
-      if (_currentUploads.containsKey(fileId)) {
-        _currentUploads[fileId] = _currentUploads[fileId]!.copyWith(
-          status: UploadStatus.failed,
-        );
-      }
+      _currentUploads[fileId] = upload.copyWith(status: UploadStatus.failed);
 
       // Emit failed state
       emit(
@@ -338,9 +371,113 @@ class ChatCubit extends Cubit<ChatState> {
           uploads: Map.from(_currentUploads),
         ),
       );
+    }
+  }
 
-      // Re-throw error to be caught by UI
-      rethrow;
+  void _handleUploadCancelled(String fileId, String conversationUuid) {
+    if (_currentUploads.containsKey(fileId)) {
+      final upload = _currentUploads[fileId]!;
+
+      // Update status to cancelled
+      upload.statusController?.add(UploadStatus.cancelled);
+
+      // Close controllers
+      upload.progressController?.close();
+      upload.statusController?.close();
+
+      // Remove after showing cancelled state briefly
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _currentUploads.remove(fileId);
+          emit(
+            ChatUploadingMedia(
+              messages: _getCurrentMessages(),
+              conversationUuid: conversationUuid,
+              uploads: Map.from(_currentUploads),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  // In chat_cubit.dart, add debug logging to retryUpload:
+
+  void retryUpload(String fileId) {
+    debugPrint('🔄 RetryUpload called for fileId: $fileId');
+
+    final task = _uploadManager.getTask(fileId);
+    if (task == null) {
+      debugPrint('❌ Task not found for fileId: $fileId');
+      return;
+    }
+
+    if (task.status != UploadStatus.failed) {
+      debugPrint('❌ Task status is ${task.status}, not failed');
+      return;
+    }
+
+    debugPrint(
+      '✅ Retrying upload for: ${task.fileName} (attempt ${task.retryCount + 1})',
+    );
+
+    // Reset task state
+    task.retryCount++;
+    task.progress = 0.0;
+    task.updateProgress(0.0);
+    task.updateStatus(UploadStatus.preparing);
+
+    // Update the state
+    _uploadManager.updateTask(
+      task.fileId,
+      status: UploadStatus.preparing,
+      progress: 0.0,
+      retryCount: task.retryCount,
+    );
+
+    // Start upload again with exponential backoff
+    _retryWithBackoff(task);
+  }
+
+  Future<void> _retryWithBackoff(UploadTask task) async {
+    // Exponential backoff: 1s, 2s, 4s, 8s...
+    final delay = Duration(seconds: 1 << (task.retryCount - 1));
+
+    task.updateStatus(UploadStatus.preparing);
+    _uploadManager.updateTask(task.fileId, status: UploadStatus.preparing);
+
+    await Future.delayed(delay);
+
+    if (task.status == UploadStatus.cancelled) return;
+
+    _performUpload(task);
+  }
+
+  Future<void> _retryUploadWithBackoff(String fileId, int retryCount) async {
+    final upload = _currentUploads[fileId];
+    if (upload == null) return;
+
+    // Exponential backoff: 1s, 2s, 4s, 8s...
+    final delay = Duration(seconds: 1 << retryCount);
+
+    await Future.delayed(delay);
+
+    // Re-trigger upload here with the same parameters
+    // You'll need to store the original parameters
+  }
+
+  void cancelUpload(String fileId) {
+    final task = _uploadManager.getTask(fileId);
+    if (task != null) {
+      task.cancelToken?.cancel();
+      task.updateStatus(UploadStatus.cancelled);
+
+      // Remove after animation
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!isClosed) {
+          _uploadManager.removeTask(fileId);
+        }
+      });
     }
   }
 
@@ -361,27 +498,6 @@ class ChatCubit extends Cubit<ChatState> {
       return (state as ChatUploadingMedia).messages;
     }
     return [];
-  }
-
-  void retryUpload(String fileId) {
-    final upload = _currentUploads[fileId];
-    if (upload != null && upload.status == UploadStatus.failed) {
-      // Reset progress and status
-      upload.progressController?.add(0.0);
-      upload.statusController?.add(UploadStatus.preparing);
-
-      // Retry logic...
-    }
-  }
-
-  void cancelUpload(String fileId) {
-    final upload = _currentUploads[fileId];
-    if (upload != null) {
-      upload.statusController?.add(UploadStatus.cancelled);
-      upload.progressController?.close();
-      upload.statusController?.close();
-      _currentUploads.remove(fileId);
-    }
   }
 
   String _getFileType(File file) {
@@ -639,8 +755,29 @@ class ChatCubit extends Cubit<ChatState> {
     emit(ChatInitial());
   }
 
+  List<UploadProgress> getCurrentUploads() {
+    return _uploadManager.activeTasks
+        .map(
+          (task) => UploadProgress(
+            fileId: task.fileId,
+            fileName: task.fileName,
+            fileType: task.fileType,
+            progress: task.progress,
+            status: task.status,
+            progressController:
+                task.progressController as StreamController<double>?,
+            statusController:
+                task.statusController as StreamController<UploadStatus>?,
+            cancelToken: task.cancelToken,
+            retryCount: task.retryCount,
+          ),
+        )
+        .toList();
+  }
+
   @override
   Future<void> close() {
+    _uploadManager.dispose();
     clearConversation();
     return super.close();
   }

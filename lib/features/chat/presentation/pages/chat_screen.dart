@@ -13,6 +13,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/chat/data/models/chat_conversations.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/chat/presentation/utils/file_utils.dart';
 import 'package:moonlight/features/chat/presentation/widgets/message_bubble.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/chat/presentation/widgets/upload_progress_widget.dart';
@@ -619,42 +620,47 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       );
     } else if (state is ChatUploadingMedia) {
+      // Convert the map values to a list for iteration
+      final uploads = state.uploads.values.toList();
+
       return Column(
         children: [
           // Upload progress section
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: AppColors.surface.withOpacity(0.9),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Uploading ${state.uploads.length} file${state.uploads.length > 1 ? 's' : ''}',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+          if (uploads.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              color: AppColors.surface.withOpacity(0.9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Uploading ${uploads.length} file${uploads.length > 1 ? 's' : ''}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                ...state.uploads.values.map((upload) {
-                  return UploadProgressWidget(
-                    key: ValueKey(upload.fileId),
-                    fileName: upload.fileName,
-                    fileType: upload.fileType,
-                    initialProgress: upload.progress,
-                    initialStatus: upload.status,
-                    progressStream: upload.progressController?.stream,
-                    statusStream: upload.statusController?.stream,
-                    onRetry: () =>
-                        context.read<ChatCubit>().retryUpload(upload.fileId),
-                    onCancel: () =>
-                        context.read<ChatCubit>().cancelUpload(upload.fileId),
-                  );
-                }).toList(),
-              ],
+                  const SizedBox(height: 8),
+                  ...uploads.map((upload) {
+                    return UploadProgressWidget(
+                      key: ValueKey(upload.fileId),
+                      fileId: upload.fileId,
+                      fileName: upload.fileName,
+                      fileType: upload.fileType,
+                      initialProgress: upload.progress,
+                      initialStatus: upload.status,
+                      progressStream: upload.progressController?.stream,
+                      statusStream: upload.statusController?.stream,
+                      onRetry: () =>
+                          context.read<ChatCubit>().retryUpload(upload.fileId),
+                      onCancel: () =>
+                          context.read<ChatCubit>().cancelUpload(upload.fileId),
+                    );
+                  }).toList(),
+                ],
+              ),
             ),
-          ),
 
           // Messages list
           Expanded(
@@ -668,7 +674,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ],
       );
     }
-
     return _buildMessagesList(
       messages,
       hasMore,
@@ -1482,26 +1487,44 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Pick only images from gallery
   Future<void> _pickImageFromGallery() async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85, // Reduce quality for faster upload
-        maxWidth: 1920, // Limit resolution
-      );
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
 
       if (image != null) {
-        setState(() {
-          _selectedMedia.add(File(image.path));
-        });
-        _messageFocusNode.requestFocus();
-
-        // Show success feedback
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo added'),
-            duration: Duration(seconds: 1),
-            backgroundColor: AppColors.primary_,
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(color: AppColors.primary_),
           ),
         );
+
+        // Validate and compress image
+        final compressedFile = await FileUtils.validateAndCompressImage(image);
+
+        Navigator.pop(context); // Remove loading
+
+        if (compressedFile != null) {
+          setState(() {
+            _selectedMedia.add(compressedFile);
+          });
+          _messageFocusNode.requestFocus();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Photo added'),
+              duration: Duration(seconds: 1),
+              backgroundColor: AppColors.primary_,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Image could not be processed'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error picking image: $e');
@@ -1632,25 +1655,43 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Take photo with camera
   Future<void> _takePhotoWithCamera() async {
     try {
-      final XFile? photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-        maxWidth: 1920,
-      );
+      final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
 
       if (photo != null) {
-        setState(() {
-          _selectedMedia.add(File(photo.path));
-        });
-        _messageFocusNode.requestFocus();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo taken'),
-            duration: Duration(seconds: 1),
-            backgroundColor: AppColors.primary_,
+        // Show loading
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(color: AppColors.primary_),
           ),
         );
+
+        final compressedFile = await FileUtils.validateAndCompressImage(photo);
+
+        Navigator.pop(context);
+
+        if (compressedFile != null) {
+          setState(() {
+            _selectedMedia.add(compressedFile);
+          });
+          _messageFocusNode.requestFocus();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Photo taken'),
+              duration: Duration(seconds: 1),
+              backgroundColor: AppColors.primary_,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to process photo'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error taking photo: $e');

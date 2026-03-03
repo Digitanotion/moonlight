@@ -218,6 +218,43 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
   }
 
+  Future<bool> checkIfLivestreamActive() async {
+    try {
+      final response = await http.dio.get('${_basePath}/status');
+      final data = _asMap(response.data);
+
+      // Check if status is 'online' (from your backend response)
+      final status = data['status']?.toString() ?? '';
+      final isOnline = status == 'online';
+
+      debugPrint(
+        '🔍 Livestream status check: $status -> ${isOnline ? "ONLINE" : "OFFLINE"}',
+      );
+
+      return isOnline;
+    } on DioException catch (e) {
+      // Handle the 422 response you mentioned
+      if (e.response?.statusCode == 422) {
+        final errorData = _asMap(e.response?.data);
+        final message = errorData['message']?.toString() ?? '';
+
+        debugPrint('⚠️ Livestream status 422: $message');
+
+        // Your exact message: "Livestream is not active"
+        if (message.contains('not active')) {
+          return false;
+        }
+      }
+
+      // For other errors, log but assume active? Better to rethrow
+      debugPrint('❌ Error checking livestream status: $e');
+      rethrow; // Let the caller handle other errors
+    } catch (e) {
+      debugPrint('⚠️ Unexpected error checking livestream status: $e');
+      return true; // Assume active on other errors to avoid blocking
+    }
+  }
+
   @override
   Future<int> like() async {
     try {

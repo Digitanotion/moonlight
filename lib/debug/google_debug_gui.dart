@@ -1,87 +1,158 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter/services.dart';
 
-void main() {
-  runApp(GoogleDebugApp());
-}
+class GoogleTokenTestScreen extends StatelessWidget {
+  const GoogleTokenTestScreen({super.key});
 
-class GoogleDebugApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: Text('Google Sign-In Debug')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(
-                onPressed: () => _testSignIn(),
-                child: Text('Test Google Sign-In'),
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => _printConfig(),
-                child: Text('Print Current Config'),
-              ),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Get Google ID Token')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () => _getAndShowToken(context),
+              child: const Text('Get Google ID Token'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => _testApiCall(context),
+              child: const Text('Test API with Token'),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  void _printConfig() {
-    print('=== GOOGLE SIGN-IN CONFIGURATION ===');
-    print('Package name: com.app.moonlightstream');
-    print(
-      'Web Client ID: 320614878173-mvjq8nijnqna327ogmean5q04stl9u96.apps.googleusercontent.com',
-    );
-    print(
-      'Android Client ID: 320614878173-t3fv9nm9u3rcvgdk6a4ji2hotj0ag80d.apps.googleusercontent.com',
-    );
-    print('====================================');
+  Future<void> _getAndShowToken(BuildContext context) async {
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+      );
+
+      final GoogleSignInAccount? account = await googleSignIn.signIn();
+
+      if (account == null) {
+        _showSnackBar(context, 'User cancelled sign-in');
+        return;
+      }
+
+      final GoogleSignInAuthentication auth = await account.authentication;
+
+      if (auth.idToken == null) {
+        _showSnackBar(context, 'No ID token received');
+        return;
+      }
+
+      // Show token in dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Google ID Token'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Email:'),
+                Text(
+                  account.email,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                const Text('ID Token (first 100 chars):'),
+                SelectableText(
+                  auth.idToken!.substring(
+                    0,
+                    auth.idToken!.length > 100 ? 100 : auth.idToken!.length,
+                  ),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: auth.idToken!));
+                    _showSnackBar(context, 'Token copied to clipboard!');
+                  },
+                  child: const Text('Copy Full Token'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+
+      print('✅ ID Token obtained!');
+      print('Email: ${account.email}');
+      print('Token length: ${auth.idToken!.length}');
+      print('First 50 chars: ${auth.idToken!.substring(0, 50)}...');
+    } catch (e) {
+      _showSnackBar(context, 'Error: ${e.toString()}');
+      print('❌ Error: $e');
+    }
   }
 
-  Future<void> _testSignIn() async {
-    print('=== STARTING GOOGLE SIGN-IN TEST ===');
-
+  Future<void> _testApiCall(BuildContext context) async {
     try {
-      // Test 1: No configuration (should work for basic)
-      print('Test 1: No client ID');
-      final google1 = GoogleSignIn(scopes: ['email']);
-      final account1 = await google1.signIn();
-      print('Result 1: ${account1?.email ?? "Failed"}');
-
-      if (account1 != null) {
-        final auth1 = await account1.authentication;
-        print('ID Token 1: ${auth1.idToken != null ? "Yes" : "No"}');
-        return;
-      }
-    } catch (e) {
-      print('Error Test 1: $e');
-    }
-
-    try {
-      // Test 2: With Web Client ID
-      print('\nTest 2: With Web Client ID');
-      final google2 = GoogleSignIn(
-        scopes: ['email'],
-        serverClientId:
-            '320614878173-mvjq8nijnqna327ogmean5q04stl9u96.apps.googleusercontent.com',
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
       );
-      final account2 = await google2.signIn();
-      print('Result 2: ${account2?.email ?? "Failed"}');
 
-      if (account2 != null) {
-        final auth2 = await account2.authentication;
-        print('ID Token 2: ${auth2.idToken != null ? "Yes" : "No"}');
+      final GoogleSignInAccount? account = await googleSignIn.signIn();
+
+      if (account == null) {
+        _showSnackBar(context, 'User cancelled');
         return;
       }
-    } catch (e) {
-      print('Error Test 2: $e');
-    }
 
-    print('\n=== ALL TESTS FAILED ===');
+      final GoogleSignInAuthentication auth = await account.authentication;
+
+      if (auth.idToken == null) {
+        _showSnackBar(context, 'No ID token');
+        return;
+      }
+
+      // Call your Laravel API
+      final response = await http.post(
+        Uri.parse('https://svc.moonlightstream.app/api/v1/auth/google/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id_token': auth.idToken,
+          'device_name': 'Test Device from Flutter',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _showSnackBar(
+          context,
+          '✅ API Success! Token: ${data['access_token']?.substring(0, 20)}...',
+        );
+        print('API Response: $data');
+      } else {
+        _showSnackBar(context, '❌ API Error: ${response.statusCode}');
+        print('API Error: ${response.body}');
+      }
+    } catch (e) {
+      _showSnackBar(context, 'Error: ${e.toString()}');
+      print('❌ Error: $e');
+    }
+  }
+
+  void _showSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

@@ -2,6 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_from_notification.dart';
+import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
+import 'package:moonlight/features/profile_view/presentation/pages/profile_view.dart';
+import 'package:moonlight/features/post_view/presentation/pages/post_view_screen.dart';
 import 'package:moonlight/main.dart' as main_app;
 
 class NotificationHandlerService {
@@ -18,15 +22,38 @@ class NotificationHandlerService {
     final type = payload['type'] as String? ?? '';
 
     switch (type) {
+      // Live Stream Notifications
       case 'live_stream_started':
         _handleLiveStreamNotification(payload);
         break;
+
+      // Chat Notifications
       case 'new_message':
-        _handleMessageNotification(payload);
+      case 'chat.direct.started':
+        _handleChatNotification(payload);
         break;
+
+      // Club Notifications
+      case 'club.member_added':
+      case 'club.member_joined':
+      case 'club.role_changed':
+      case 'club.ownership_transferred':
+      case 'club.donation.received':
+      case 'club.donation.confirmed':
+        _handleClubNotification(payload);
+        break;
+
+      // Social Notifications
       case 'new_follower':
         _handleFollowerNotification(payload);
         break;
+      case 'new_comment':
+        _handleCommentNotification(payload);
+        break;
+      case 'new_gift':
+        _handleGiftNotification(payload);
+        break;
+
       default:
         print('⚠️ Unknown notification type: $type');
     }
@@ -94,13 +121,8 @@ class NotificationHandlerService {
     };
 
     print('🎥 Opening live stream from notification: ${args['id']}');
-    print('🎥 Notification args: $args');
 
-    // In NotificationHandlerService._handleLiveStreamNotification()
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('🎥 Opening live stream from notification: ${args['id']}');
-
-      // Navigate using the new wrapper
       main_app.MyApp.navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (_) => LiveViewerFromNotification(args: args),
@@ -110,30 +132,126 @@ class NotificationHandlerService {
     });
   }
 
-  void _handleMessageNotification(Map<String, dynamic> payload) {
-    // Handle message notifications
-    final conversationId = payload['conversation_id']?.toString() ?? '';
-    print('💬 Opening conversation: $conversationId');
+  void _handleChatNotification(Map<String, dynamic> payload) {
+    // Extract data from payload
+    final conversationUuid = payload['conversation_uuid']?.toString() ?? '';
+    final senderUuid =
+        payload['sender_uuid']?.toString() ??
+        payload['actor_uuid']?.toString() ??
+        '';
+    final senderName =
+        payload['sender_name']?.toString() ??
+        payload['actor_name']?.toString() ??
+        'Someone';
+    final messagePreview = payload['message_preview']?.toString() ?? '';
 
-    // Navigate to chat
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   main_app.MyApp.navigatorKey.currentState?.pushNamed(
-    //     RouteNames.chatConversation,
-    //     arguments: {'conversationId': conversationId},
-    //   );
-    // });
+    print('💬 Chat notification from $senderName');
+    print('💬 Conversation: $conversationUuid');
+
+    if (conversationUuid.isEmpty) {
+      print('❌ No conversation UUID in notification payload');
+      return;
+    }
+
+    // Navigate to chat conversations list first? Or directly to the conversation?
+    // Since ChatScreen requires a ChatConversations object, we might need to create a minimal one
+    // or navigate to conversations list and let the user tap on the conversation
+
+    // Option 1: Navigate to conversations list (safer)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      main_app.MyApp.navigatorKey.currentState?.pushNamed(
+        RouteNames.conversations,
+      );
+    });
+
+    // Option 2: If you have a way to open directly to a conversation with just UUID,
+    // you would do that here. For now, we'll use conversations list.
+  }
+
+  void _handleClubNotification(Map<String, dynamic> payload) {
+    final clubUuid = payload['club_uuid']?.toString() ?? '';
+    final clubSlug = payload['club_slug']?.toString() ?? '';
+    final clubName = payload['club_name']?.toString() ?? 'Club';
+    final action = payload['type'] as String? ?? 'club.updated';
+
+    print('👥 Club notification: $action for $clubName');
+
+    // Use clubUuid if available, otherwise try clubSlug
+    final identifier = clubUuid.isNotEmpty ? clubUuid : clubSlug;
+
+    if (identifier.isEmpty) {
+      print('❌ No club identifier in notification payload');
+      return;
+    }
+
+    // Navigate to club profile
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      main_app.MyApp.navigatorKey.currentState?.pushNamed(
+        RouteNames.clubProfile,
+        arguments: {'clubUuid': identifier},
+      );
+    });
   }
 
   void _handleFollowerNotification(Map<String, dynamic> payload) {
-    // Handle follower notifications
-    final followerId = payload['follower_id']?.toString() ?? '';
-    print('👤 Opening follower profile: $followerId');
+    final followerUuid = payload['follower_uuid']?.toString() ?? '';
+    final followerSlug = payload['follower_slug']?.toString() ?? '';
+    final followerName = payload['follower_name']?.toString() ?? 'Someone';
 
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   main_app.MyApp.navigatorKey.currentState?.pushNamed(
-    //     RouteNames.profile,
-    //     arguments: {'userId': followerId},
-    //   );
-    // });
+    print('👤 New follower: $followerName');
+
+    // Use UUID if available, otherwise use slug
+    final userIdentifier = followerUuid.isNotEmpty
+        ? followerUuid
+        : followerSlug;
+
+    if (userIdentifier.isEmpty) {
+      print('❌ No follower identifier in notification payload');
+      return;
+    }
+
+    // Navigate to profile view
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      main_app.MyApp.navigatorKey.currentState?.pushNamed(
+        RouteNames.profileView,
+        arguments: {'userUuid': followerUuid}, // ProfileView expects 'userUuid'
+      );
+    });
+  }
+
+  void _handleCommentNotification(Map<String, dynamic> payload) {
+    final postUuid = payload['post_uuid']?.toString() ?? '';
+    final commenterName = payload['commenter_name']?.toString() ?? 'Someone';
+    final commentPreview = payload['comment_preview']?.toString() ?? '';
+
+    print('💬 New comment from $commenterName: $commentPreview');
+
+    if (postUuid.isEmpty) {
+      print('❌ No post UUID in notification payload');
+      return;
+    }
+
+    // Navigate to post view
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      main_app.MyApp.navigatorKey.currentState?.pushNamed(
+        RouteNames.postView,
+        arguments: {
+          'postId': postUuid,
+          'isOwner': false, // Not the owner since they're commenting
+        },
+      );
+    });
+  }
+
+  void _handleGiftNotification(Map<String, dynamic> payload) {
+    final gifterName = payload['gifter_name']?.toString() ?? 'Someone';
+    final giftName = payload['gift_name']?.toString() ?? 'a gift';
+
+    print('🎁 New gift from $gifterName: $giftName');
+
+    // Navigate to wallet to see gifts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      main_app.MyApp.navigatorKey.currentState?.pushNamed(RouteNames.wallet);
+    });
   }
 }

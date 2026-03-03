@@ -191,7 +191,18 @@ Future<void> _setupFirebaseMessaging() async {
 // When user clicks on a push notification
 void _handleNotificationTap(Map<String, dynamic> data) {
   print('📱 Notification tap received: $data');
-  NotificationHandlerService().handleNotificationClick(data);
+
+  // Ensure we have a valid payload with a type
+  if (data.containsKey('type')) {
+    NotificationHandlerService().handleNotificationClick(data);
+  } else if (data.containsKey('data') && data['data'] is Map) {
+    // Handle nested data structure
+    NotificationHandlerService().handleNotificationClick(
+      data['data'] as Map<String, dynamic>,
+    );
+  } else {
+    print('⚠️ Notification payload missing type field');
+  }
 }
 
 class MyApp extends StatelessWidget {

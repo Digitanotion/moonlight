@@ -150,11 +150,12 @@ class ConversationItem extends StatelessWidget {
                     children: [
                       // Media icon or text
                       if (hasMedia) ...[
-                        _buildMediaIcon(lastMessage!.media.first),
-                        SizedBox(width: 6),
                         Expanded(
-                          child: _buildMediaText(lastMessage.media.first),
+                          child: _buildMediaIcon(lastMessage!.media.first),
                         ),
+
+                        SizedBox(width: 6),
+                        Expanded(child: Text("Media")),
                       ] else if (lastMessage != null &&
                           lastMessage.body.isNotEmpty) ...[
                         // Check if message is from current user
@@ -188,7 +189,9 @@ class ConversationItem extends StatelessWidget {
                       ] else ...[
                         // Empty message case
                         Text(_formatLastMessageMedia(lastMessage)),
+                        Text("Sent you a file"),
                         Icon(Icons.image, size: 16, color: AppColors.primary_),
+                        Expanded(child: SizedBox(width: 6)),
                       ],
 
                       // Unread count badge
