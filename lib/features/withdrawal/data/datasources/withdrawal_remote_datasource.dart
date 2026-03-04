@@ -1,48 +1,44 @@
+// lib/features/withdrawal/data/datasources/withdrawal_remote_datasource.dart
+
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 
 class WithdrawalRemoteDataSource {
   final DioClient http;
-
   WithdrawalRemoteDataSource(this.http);
 
-  /// Get current user's withdrawable balance
   Future<int> getWithdrawableBalance() async {
-    final res = await http.dio.get(
-      '/api/v1/wallet',
-      options: Options(responseType: ResponseType.json),
-    );
-
-    final data = res.data is Map
-        ? res.data as Map<String, dynamic>
-        : jsonDecode(res.data as String) as Map<String, dynamic>;
-
-    return data['data']['balance'] as int;
+    final res = await http.dio.get('/api/v1/wallet');
+    final data = _extract(res);
+    return data['data']['balance'] as int; // ← use withdrawable_cents
   }
 
-  /// Verify user's wallet PIN
   Future<void> verifyPin(String pin) async {
     final res = await http.dio.post(
-      '/api/v1/wallet/pin/verify',
+      '/api/v1/settings/wallet-pin/verify',
       data: {'pin': pin},
-      options: Options(responseType: ResponseType.json),
     );
-
-    if (res.statusCode != 200) {
-      final msg = res.data is Map
-          ? res.data['message'] ?? 'PIN verification failed'
-          : 'PIN verification failed';
-      throw Exception(msg);
+    if ((res.statusCode ?? 0) != 200) {
+      throw Exception(_extract(res)['message'] ?? 'Invalid PIN');
     }
   }
 
-  /// Create withdrawal request
+  Future<List<Map<String, dynamic>>> fetchBanks(String country) async {
+    final res = await http.dio.get(
+      '/api/v1/wallet/banks',
+      queryParameters: {'country': country},
+    );
+    final data = _extract(res);
+    return List<Map<String, dynamic>>.from(data['data'] as List);
+  }
+
   Future<Map<String, dynamic>> createWithdrawalRequest({
     required int amountUsdCents,
     required String bankAccountName,
     required String bankAccountNumber,
     required String bankName,
+    required String bankCode, // ← NEW
     required String country,
     String? swift,
     String? email,
@@ -51,12 +47,12 @@ class WithdrawalRemoteDataSource {
     required String pin,
     String? idempotencyKey,
   }) async {
-    amountUsdCents = amountUsdCents;
     final body = {
       'amount_usd_cents': amountUsdCents,
       'bank_account_name': bankAccountName,
       'bank_account_number': bankAccountNumber,
       'bank_name': bankName,
+      'bank_code': bankCode, // ← NEW
       'country': country,
       'pin': pin,
       if (swift != null) 'swift': swift,
@@ -66,34 +62,26 @@ class WithdrawalRemoteDataSource {
       if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
     };
 
-    print(body.toString());
     final res = await http.dio.post(
       '/api/v1/wallet/withdraw-request',
       data: body,
-      options: Options(
-        responseType: ResponseType.json,
-        headers: {
-          if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
-        },
-      ),
     );
+    final statusCode = res.statusCode ?? 0;
 
-    print(res.toString());
-
-    if (res.statusCode == 201) {
-      return res.data is Map
-          ? res.data as Map<String, dynamic>
-          : jsonDecode(res.data as String) as Map<String, dynamic>;
+    if (statusCode == 201) return _extract(res);
+    if (statusCode == 422) {
+      final errors = _extract(res)['errors'] as Map?;
+      throw Exception(
+        errors?.values.first?.first?.toString() ?? 'Validation error',
+      );
     }
+    if (statusCode == 409) throw Exception('Duplicate withdrawal request');
 
-    if (res.statusCode == 422) {
-      final errors = res.data['errors'];
-      throw Exception(errors.values.first.first.toString());
-    }
-    if (res.statusCode == 409) {
-      throw Exception('Duplicate withdrawal request');
-    }
+    throw Exception(_extract(res)['message'] ?? 'Withdrawal failed');
+  }
 
-    throw Exception('Failed to create withdrawal request');
+  Map<String, dynamic> _extract(Response res) {
+    if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
+    return Map<String, dynamic>.from(jsonDecode(res.data as String) as Map);
   }
 }

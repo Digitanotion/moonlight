@@ -818,7 +818,12 @@ Future<void> initRemainingDependencies() async {
   creatPost();
   liveFeeds();
   await _initializePusherService();
-
+  // ✅ Initialize Play Billing in background, don't block app startup
+  unawaited(
+    sl<PlayBillingService>().init().catchError(
+      (e) => debugPrint('⚠️ PlayBilling init error (non-fatal): $e'),
+    ),
+  );
   // --------- Register Realtime Unread Services ---------
   _registerRealtimeUnreadServices();
 
@@ -1189,16 +1194,24 @@ void wallet() {
   sl.registerLazySingleton<RemoteWalletDataSource>(
     () => RemoteWalletDataSource(client: sl<Dio>(instanceName: 'mainDio')),
   );
-  sl.registerLazySingleton<WalletRepository>(
+
+  // Register the concrete impl separately so PlayBillingService can use it directly
+  sl.registerLazySingleton<WalletRepositoryImpl>(
     () => WalletRepositoryImpl(remote: sl<RemoteWalletDataSource>()),
   );
+
+  // Keep the abstract registration pointing to the same instance
+  sl.registerLazySingleton<WalletRepository>(() => sl<WalletRepositoryImpl>());
+
   sl.registerFactory<WalletCubit>(() => WalletCubit(sl<WalletRepository>()));
+
   sl.registerLazySingleton<IdempotencyHelper>(
     () => IdempotencyHelper(sl<SharedPreferences>()),
   );
+
   sl.registerLazySingleton<PlayBillingService>(
     () => PlayBillingService(
-      repo: sl<WalletRepository>() as WalletRepositoryImpl,
+      repo: sl<WalletRepositoryImpl>(), // ✅ No cast needed
       idem: sl<IdempotencyHelper>(),
     ),
   );

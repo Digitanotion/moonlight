@@ -1,3 +1,5 @@
+// lib/features/withdrawal/presentation/cubit/withdrawal_cubit.dart
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:meta/meta.dart';
@@ -8,7 +10,6 @@ part 'withdrawal_state.dart';
 class WithdrawalCubit extends Cubit<WithdrawalState> {
   final WithdrawalRepository repository;
 
-  // For retry functionality
   Map<String, dynamic>? _lastWithdrawalData;
   String? _lastPin;
 
@@ -25,12 +26,18 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     }
   }
 
-  /// Verify PIN + submit withdrawal request
+  /// Fetch bank list for a given country from Flutterwave (via backend)
+  Future<List<Map<String, dynamic>>> fetchBanks(String country) async {
+    return await repository.fetchBanks(country);
+  }
+
+  /// Submit withdrawal — PIN verification + Flutterwave transfer
   Future<void> submitWithdrawal({
     required int amountUsdCents,
     required String bankAccountName,
     required String bankAccountNumber,
     required String bankName,
+    required String bankCode, // ← Flutterwave bank code
     required String country,
     String? swift,
     String? email,
@@ -38,12 +45,12 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     String? reason,
     required String pin,
   }) async {
-    // Save for retry
     _lastWithdrawalData = {
       'amountUsdCents': amountUsdCents,
       'bankAccountName': bankAccountName,
       'bankAccountNumber': bankAccountNumber,
       'bankName': bankName,
+      'bankCode': bankCode,
       'country': country,
       'swift': swift,
       'email': email,
@@ -55,15 +62,16 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     emit(WithdrawalSubmitting());
 
     try {
-      // 1️⃣ Verify PIN
+      // 1. Verify PIN
       await repository.verifyPin(pin);
 
-      // 2️⃣ Execute withdrawal request
+      // 2. Execute withdrawal (Flutterwave instant transfer)
       final result = await repository.createWithdrawalRequest(
         amountUsdCents: amountUsdCents,
         bankAccountName: bankAccountName,
         bankAccountNumber: bankAccountNumber,
         bankName: bankName,
+        bankCode: bankCode,
         country: country,
         swift: swift,
         email: email,
@@ -72,10 +80,8 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
         pin: pin,
       );
 
-      // 3️⃣ Emit success
       emit(WithdrawalSuccess(transactionData: result));
 
-      // Clear last data
       _lastWithdrawalData = null;
       _lastPin = null;
     } catch (e) {
@@ -86,22 +92,22 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
   /// Retry last withdrawal
   Future<void> retryWithdrawal() async {
     if (_lastWithdrawalData == null || _lastPin == null) return;
-
+    final d = _lastWithdrawalData!;
     await submitWithdrawal(
-      amountUsdCents: _lastWithdrawalData!['amountUsdCents'],
-      bankAccountName: _lastWithdrawalData!['bankAccountName'],
-      bankAccountNumber: _lastWithdrawalData!['bankAccountNumber'],
-      bankName: _lastWithdrawalData!['bankName'],
-      country: _lastWithdrawalData!['country'],
-      swift: _lastWithdrawalData!['swift'],
-      email: _lastWithdrawalData!['email'],
-      phone: _lastWithdrawalData!['phone'],
-      reason: _lastWithdrawalData!['reason'],
+      amountUsdCents: d['amountUsdCents'],
+      bankAccountName: d['bankAccountName'],
+      bankAccountNumber: d['bankAccountNumber'],
+      bankName: d['bankName'],
+      bankCode: d['bankCode'],
+      country: d['country'],
+      swift: d['swift'],
+      email: d['email'],
+      phone: d['phone'],
+      reason: d['reason'],
       pin: _lastPin!,
     );
   }
 
-  /// Reset to initial state
   void reset() {
     emit(WithdrawalInitial());
     _lastWithdrawalData = null;
