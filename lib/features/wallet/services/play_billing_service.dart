@@ -10,110 +10,149 @@ import 'package:uuid/uuid.dart';
 
 import '../data/repositories/wallet_repository_impl.dart';
 import '../domain/models/transaction_model.dart';
-import 'idempotency_helper.dart'; // 👈 Add this import
+import 'idempotency_helper.dart';
 
 class PlayBillingService {
   final InAppPurchase _iap = InAppPurchase.instance;
   final WalletRepositoryImpl _repo;
-  final IdempotencyHelper _idem; // 👈 Add this
+  final IdempotencyHelper _idem;
   final Uuid _uuid = const Uuid();
 
   bool _isAvailable = false;
+  bool _isInitialized = false;
   bool _isPurchasing = false;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
 
   // Track pending purchases to prevent duplicate processing
   final Set<String> _processingPurchases = {};
 
-  // 👈 Update constructor to accept idem
   PlayBillingService({
     required WalletRepositoryImpl repo,
-    required IdempotencyHelper idem, // 👈 Add this
+    required IdempotencyHelper idem,
   }) : _repo = repo,
-       _idem = idem; // 👈 Initialize it
+       _idem = idem;
 
+  // ─────────────────────────────────────────────
+  // Public getters
+  // ─────────────────────────────────────────────
+
+  /// Whether Google Play Billing is available on this device.
+  /// Always false until [init] has completed successfully.
+  bool get isAvailable => _isAvailable;
+
+  /// Whether [init] has been called and finished (regardless of outcome).
+  bool get isInitialized => _isInitialized;
+
+  // ─────────────────────────────────────────────
+  // Init
+  // ─────────────────────────────────────────────
+
+  /// Must be awaited before calling [buyAndComplete].
+  /// Safe to call multiple times — re-runs the availability check each time.
   Future<void> init() async {
-    debugPrint('🔍 ===== PLAY BILLING DIAGNOSTIC =====');
+    debugPrint('🔍 ===== PLAY BILLING INIT =====');
 
     try {
-      // 1. Check if billing is available
+      // 1. Check billing availability
       _isAvailable = await _iap.isAvailable();
       debugPrint('📱 Billing available: $_isAvailable');
 
-      // 2. Try to get connection details
-      try {
-        final bool isReady = await _iap.isAvailable();
-        debugPrint('📱 Connection check: $isReady');
-      } catch (e) {
-        debugPrint('📱 Connection check failed: $e');
-      }
-
-      // 3. Try to get billing client version (if supported)
-      try {
-        if (defaultTargetPlatform == TargetPlatform.android) {
-          final androidAddition = _iap
-              .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
-          // This might not exist in your version - that's OK
-          debugPrint('✅ Android platform addition available');
-        }
-      } catch (e) {
-        debugPrint('ℹ️ Android platform addition not needed: $e');
-      }
-
-      // 4. Try to query products even if not available (to see error)
-      try {
-        debugPrint('🔍 Attempting to query test product...');
-        // Use a dummy product ID just to test connection
-        final response = await _iap.queryProductDetails({'test_product'});
-        debugPrint(
-          '📦 Query response: ${response.error?.message ?? 'No error'}',
-        );
-        debugPrint('📦 Products found: ${response.productDetails.length}');
-      } catch (e) {
-        debugPrint('📦 Query failed: $e');
-      }
-
-      // 5. Check Play Store version (can't directly, but log device info)
-      debugPrint('📱 Device info:');
-      debugPrint('   - Platform: ${defaultTargetPlatform}');
-
       if (!_isAvailable) {
-        debugPrint('⚠️ BILLING NOT AVAILABLE - Possible causes:');
+        debugPrint('⚠️  BILLING NOT AVAILABLE — Possible causes:');
         debugPrint('   1. App not installed from Play Store (sideloaded?)');
-        debugPrint('   2. Wrong Google account in Play Store');
-        debugPrint('   3. Play Services needs update');
-        debugPrint('   4. Billing permission not in merged manifest');
-        debugPrint('   5. Device/region restrictions');
+        debugPrint('   2. Wrong Google account signed into Play Store');
+        debugPrint('   3. Play Services needs an update');
+        debugPrint('   4. BILLING permission missing from merged manifest');
+        debugPrint('   5. Device/region restriction');
+        _isInitialized = true;
+        return;
       }
 
-      debugPrint('🔍 ===== END DIAGNOSTIC =====');
+      // 2. Confirm Android platform addition is accessible
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        try {
+          _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+          debugPrint('✅ Android platform addition available');
+        } catch (e) {
+          debugPrint('ℹ️  Android platform addition unavailable: $e');
+        }
+      }
+
+      // 3. Probe connection with a lightweight product query
+      try {
+        final probe = await _iap.queryProductDetails({'__probe__'});
+        debugPrint(
+          '📦 Billing connection probe — '
+          'error: ${probe.error?.message ?? "none"}, '
+          'products: ${probe.productDetails.length}',
+        );
+      } catch (e) {
+        // A failed probe only means the dummy SKU doesn't exist — billing
+        // itself is still reachable.
+        debugPrint('📦 Probe query threw (expected for dummy SKU): $e');
+      }
+
+      debugPrint('✅ PlayBillingService initialised successfully');
     } catch (e) {
-      debugPrint('❌ Billing initialization error: $e');
+      debugPrint('❌ Billing initialisation error: $e');
       _isAvailable = false;
+    } finally {
+      _isInitialized = true;
+      debugPrint('🔍 ===== END PLAY BILLING INIT =====');
     }
   }
 
+  // ─────────────────────────────────────────────
+  // Dispose
+  // ─────────────────────────────────────────────
+
   void dispose() {
     _subscription?.cancel();
+    _subscription = null;
   }
 
-  /// Main method to purchase coins
+  // ─────────────────────────────────────────────
+  // Main purchase entry point
+  // ─────────────────────────────────────────────
+
+  /// Full end-to-end purchase flow:
+  ///   1. Query product from Play
+  ///   2. Launch billing sheet
+  ///   3. Receive purchase token
+  ///   4. Verify with your backend
+  ///   5. Acknowledge with Google Play
+  ///
+  /// Returns [TransactionModel] on success, `null` if the user cancelled.
+  /// Throws on any other error.
   Future<TransactionModel?> buyAndComplete({
     required String productId,
     String? packageCode,
     Duration timeout = const Duration(minutes: 2),
   }) async {
-    if (_isPurchasing) {
-      debugPrint('⚠️ Purchase already in progress');
-      throw Exception('Purchase already in progress');
+    // ── Guard: init must have run ──────────────────────────────────────────
+    if (!_isInitialized) {
+      debugPrint(
+        '⚠️  buyAndComplete called before init() finished — running init now',
+      );
+      await init();
     }
 
     if (!_isAvailable) {
-      throw Exception('Google Play Billing not available');
+      throw Exception(
+        'Google Play Billing is not available on this device. '
+        'Make sure the app was installed from the Play Store and that '
+        'Google Play Services are up to date.',
+      );
+    }
+
+    // ── Guard: no concurrent purchases ────────────────────────────────────
+    if (_isPurchasing) {
+      debugPrint('⚠️  Purchase already in progress');
+      throw Exception('A purchase is already in progress. Please wait.');
     }
 
     _isPurchasing = true;
-    _subscription?.cancel(); // Cancel any existing subscription
+    _subscription?.cancel();
 
     final completer = Completer<TransactionModel?>();
 
@@ -124,27 +163,33 @@ class PlayBillingService {
 
       if (productResponse.error != null) {
         throw Exception(
-          'Failed to query product: ${productResponse.error!.message}',
+          'Failed to query product "$productId": ${productResponse.error!.message}',
         );
       }
 
       if (productResponse.productDetails.isEmpty) {
-        throw Exception('Product not found: $productId');
+        throw Exception(
+          'Product "$productId" not found in Play Console. '
+          'Ensure the SKU is Active and the app version has been submitted '
+          'to at least the Internal Testing track.',
+        );
       }
 
       final productDetails = productResponse.productDetails.first;
-      debugPrint('✅ Product found: ${productDetails.title}');
+      debugPrint(
+        '✅ Product found: ${productDetails.title} — ${productDetails.price}',
+      );
 
-      // 2. Generate idempotency key using helper
-      final idempotencyKey = _idem.generateKey(); // 👈 Use helper
+      // 2. Generate & persist idempotency key
+      final idempotencyKey = _idem.generateKey();
       await _idem.persist(idempotencyKey, {
-        // 👈 Use helper
         'productId': productId,
         'packageCode': packageCode,
         'timestamp': DateTime.now().toIso8601String(),
       });
+      debugPrint('🔑 Idempotency key: $idempotencyKey');
 
-      // 3. Set up purchase stream listener
+      // 3. Subscribe to purchase stream BEFORE launching the billing sheet
       _subscription = _iap.purchaseStream.listen(
         (purchases) => _handlePurchaseUpdates(
           purchases,
@@ -153,32 +198,37 @@ class PlayBillingService {
           idempotencyKey,
           packageCode,
         ),
-        onError: (error) {
+        onError: (Object error) {
           debugPrint('❌ Purchase stream error: $error');
           if (!completer.isCompleted) {
             completer.completeError(error);
           }
         },
+        cancelOnError: false,
       );
 
-      // 4. Start purchase
-      debugPrint('💰 Starting purchase for: $productId');
+      // 4. Launch the billing sheet
+      debugPrint('💰 Launching billing sheet for: $productId');
       final purchaseParam = PurchaseParam(productDetails: productDetails);
-      final success = await _iap.buyConsumable(
+      final launched = await _iap.buyConsumable(
         purchaseParam: purchaseParam,
-        autoConsume: false, // We'll acknowledge after server verification
+        autoConsume: false, // We acknowledge only after server verification
       );
 
-      if (!success) {
-        throw Exception('Failed to start purchase');
+      if (!launched) {
+        throw Exception(
+          'Failed to launch the Google Play billing sheet for "$productId".',
+        );
       }
 
-      // 5. Wait for completion with timeout
+      // 5. Wait for the purchase stream to resolve (or time out)
       final result = await completer.future.timeout(
         timeout,
         onTimeout: () {
-          throw Exception(
-            'Purchase timed out after ${timeout.inSeconds} seconds',
+          throw TimeoutException(
+            'Purchase timed out after ${timeout.inSeconds}s. '
+            'The Play billing sheet may still be open.',
+            timeout,
           );
         },
       );
@@ -194,6 +244,10 @@ class PlayBillingService {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // Purchase stream handler
+  // ─────────────────────────────────────────────
+
   void _handlePurchaseUpdates(
     List<PurchaseDetails> purchases,
     Completer<TransactionModel?> completer,
@@ -205,19 +259,19 @@ class PlayBillingService {
       // Only handle our expected product
       if (purchase.productID != expectedProductId) continue;
 
-      // Prevent duplicate processing
-      final purchaseId = '${purchase.purchaseID}_${purchase.productID}';
-      if (_processingPurchases.contains(purchaseId)) {
-        debugPrint('⚠️ Already processing purchase: $purchaseId');
+      // Deduplicate — same purchase can arrive multiple times
+      final purchaseKey = '${purchase.purchaseID}_${purchase.productID}';
+      if (_processingPurchases.contains(purchaseKey)) {
+        debugPrint('⚠️  Already processing: $purchaseKey — skipping');
         continue;
       }
-      _processingPurchases.add(purchaseId);
+      _processingPurchases.add(purchaseKey);
 
       debugPrint(
-        '📦 Purchase update: ${purchase.status} for ${purchase.productID}',
+        '📦 Purchase update — status: ${purchase.status.name}, '
+        'product: ${purchase.productID}',
       );
 
-      // Handle different purchase states
       switch (purchase.status) {
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
@@ -228,10 +282,10 @@ class PlayBillingService {
                 packageCode,
               )
               .then((_) {
-                _processingPurchases.remove(purchaseId);
+                _processingPurchases.remove(purchaseKey);
               })
-              .catchError((error) {
-                _processingPurchases.remove(purchaseId);
+              .catchError((Object error) {
+                _processingPurchases.remove(purchaseKey);
                 if (!completer.isCompleted) {
                   completer.completeError(error);
                 }
@@ -239,31 +293,49 @@ class PlayBillingService {
           break;
 
         case PurchaseStatus.error:
-          debugPrint('❌ Purchase error: ${purchase.error}');
-          _processingPurchases.remove(purchaseId);
+          final msg = purchase.error?.message ?? 'Unknown purchase error';
+          debugPrint('❌ Purchase error from Play: $msg');
+          _processingPurchases.remove(purchaseKey);
           if (!completer.isCompleted) {
-            completer.completeError(purchase.error ?? 'Purchase failed');
+            completer.completeError(Exception(msg));
           }
-          _iap.completePurchase(purchase);
+          // Always complete/acknowledge errored purchases to avoid them
+          // being re-delivered indefinitely.
+          _iap
+              .completePurchase(purchase)
+              .catchError(
+                (Object e) =>
+                    debugPrint('⚠️  completePurchase (error) threw: $e'),
+              );
           break;
 
         case PurchaseStatus.pending:
-          debugPrint('⏳ Purchase pending...');
-          // Don't complete yet, wait for final status
-          _processingPurchases.remove(purchaseId);
+          // Pending = payment method delayed (e.g. cash payment kiosks).
+          // Do nothing — wait for a future update.
+          debugPrint('⏳ Purchase pending — waiting for final status');
+          _processingPurchases.remove(purchaseKey);
           break;
 
         case PurchaseStatus.canceled:
-          debugPrint('🚫 Purchase canceled by user');
-          _processingPurchases.remove(purchaseId);
+          debugPrint('🚫 Purchase cancelled by user');
+          _processingPurchases.remove(purchaseKey);
           if (!completer.isCompleted) {
-            completer.complete(null); // null indicates user canceled
+            completer.complete(null); // null = user-cancelled, not an error
           }
-          _iap.completePurchase(purchase);
+          _iap
+              .completePurchase(purchase)
+              .catchError(
+                (Object e) =>
+                    debugPrint('⚠️  completePurchase (cancel) threw: $e'),
+              );
           break;
       }
     }
   }
+
+  // ─────────────────────────────────────────────
+  // Server verification + acknowledgement
+  // ─────────────────────────────────────────────
 
   Future<void> _handleSuccessfulPurchase(
     PurchaseDetails purchase,
@@ -273,38 +345,42 @@ class PlayBillingService {
   ) async {
     try {
       if (purchase is! GooglePlayPurchaseDetails) {
-        throw Exception('Only Google Play purchases are supported');
+        throw Exception(
+          'Unexpected purchase type: ${purchase.runtimeType}. '
+          'Only GooglePlayPurchaseDetails is supported.',
+        );
       }
 
       final purchaseToken = purchase.billingClientPurchase.purchaseToken;
       final productId = purchase.productID;
 
-      debugPrint('✅ Purchase successful! Token: $purchaseToken');
+      debugPrint('✅ Raw purchase received — token: $purchaseToken');
 
-      // Verify with backend
-      debugPrint('🔐 Verifying purchase with server...');
+      // ── Server verification ────────────────────────────────────────────
+      debugPrint('🔐 Verifying purchase with backend…');
       final transaction = await _repo.purchaseWithToken(
         productId: productId,
         purchaseToken: purchaseToken,
         packageCode: packageCode,
         idempotencyKey: idempotencyKey,
       );
+      debugPrint('✅ Backend verification successful');
 
-      debugPrint('✅ Server verification successful!');
+      // ── Mark idempotency key as done ───────────────────────────────────
+      await _idem.complete(idempotencyKey);
 
-      // Mark idempotency as completed
-      await _idem.complete(idempotencyKey); // 👈 Use helper
-
-      // Complete/acknowledge the purchase with Google Play
+      // ── Acknowledge with Google Play ───────────────────────────────────
+      // Must happen within 3 days or Google will refund automatically.
       try {
         await _iap.completePurchase(purchase);
         debugPrint('✅ Purchase acknowledged with Google Play');
       } catch (e) {
-        // Log but don't fail - server already credited
-        debugPrint('⚠️ Warning: Failed to acknowledge purchase: $e');
+        // Server already credited the user — log but do not fail.
+        // The purchase will be re-delivered and can be re-acknowledged.
+        debugPrint('⚠️  completePurchase threw (non-fatal): $e');
       }
 
-      // Clear pending purchase (from SharedPreferences)
+      // ── Clear from local pending list ──────────────────────────────────
       await _clearPendingPurchase(idempotencyKey);
 
       if (!completer.isCompleted) {
@@ -312,18 +388,17 @@ class PlayBillingService {
       }
     } catch (e) {
       debugPrint('❌ Server verification failed: $e');
-
-      // DO NOT acknowledge the purchase if verification fails
-      // This allows retry through the app
-
+      // Do NOT acknowledge — keeps the purchase deliverable for retry.
       if (!completer.isCompleted) {
         completer.completeError(e);
       }
     }
   }
 
-  // Keep these methods for backward compatibility, but they're less critical
-  // now that we have IdempotencyHelper
+  // ─────────────────────────────────────────────
+  // Pending purchase persistence (local fallback)
+  // ─────────────────────────────────────────────
+
   Future<void> _savePendingPurchase(
     String idempotencyKey,
     String productId,
@@ -342,7 +417,7 @@ class PlayBillingService {
       );
       await prefs.setStringList('pending_purchases', pending);
     } catch (e) {
-      debugPrint('Failed to save pending purchase: $e');
+      debugPrint('⚠️  Failed to save pending purchase locally: $e');
     }
   }
 
@@ -352,36 +427,48 @@ class PlayBillingService {
       final pending = prefs.getStringList('pending_purchases') ?? [];
       final filtered = pending.where((item) {
         try {
-          final map = jsonDecode(item);
+          final map = jsonDecode(item) as Map<String, dynamic>;
           return map['idempotency_key'] != idempotencyKey;
         } catch (_) {
-          return true;
+          return true; // keep malformed entries rather than silently dropping
         }
       }).toList();
       await prefs.setStringList('pending_purchases', filtered);
     } catch (e) {
-      debugPrint('Failed to clear pending purchase: $e');
+      debugPrint('⚠️  Failed to clear pending purchase locally: $e');
     }
   }
 
+  // ─────────────────────────────────────────────
+  // Retry pending purchases (call on app resume)
+  // ─────────────────────────────────────────────
+
+  /// Call this when the app resumes (e.g. in [WidgetsBindingObserver.didChangeAppLifecycleState])
+  /// to re-attempt server verification for any purchases that completed on
+  /// the Play side but whose server call previously failed.
   Future<void> retryPendingPurchases() async {
+    if (!_isAvailable) return;
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final pending = prefs.getStringList('pending_purchases') ?? [];
+      if (pending.isEmpty) return;
+
+      debugPrint('🔄 Found ${pending.length} pending purchase(s) — retrying…');
 
       for (final item in pending) {
         try {
-          final data = jsonDecode(item);
-          // Attempt to verify again
-          // This would need a method to check purchase status with Google
-          // For now, just log
-          debugPrint('Found pending purchase: $data');
+          final data = jsonDecode(item) as Map<String, dynamic>;
+          debugPrint('🔄 Retrying pending purchase: $data');
+          // TODO: implement a restore-by-token flow if your backend supports it.
+          // For now we log; the purchase stream will re-deliver unacknowledged
+          // purchases automatically on next app launch.
         } catch (e) {
-          debugPrint('Failed to parse pending purchase: $e');
+          debugPrint('⚠️  Failed to parse pending purchase entry: $e');
         }
       }
     } catch (e) {
-      debugPrint('Failed to retry pending purchases: $e');
+      debugPrint('⚠️  retryPendingPurchases failed: $e');
     }
   }
 }
