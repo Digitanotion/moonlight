@@ -12,51 +12,56 @@ class WalletRepositoryImpl implements WalletRepository {
 
   WalletRepositoryImpl({required this.remote});
 
-  // --- Read operations (remote only) ---
-  @override
-  Future<int> fetchBalance() async {
-    return await remote.fetchBalance();
-  }
+  // ── Read ──────────────────────────────────────────────────────────────────
 
   @override
-  Future<double> fetchEarned() async {
-    return await remote.fetchEarned();
-  }
+  Future<int> fetchBalance() => remote.fetchBalance();
 
   @override
-  Future<List<CoinPackage>> fetchPackages() async {
-    return await remote.fetchPackages();
-  }
+  Future<double> fetchEarned() => remote.fetchEarned();
 
   @override
-  Future<List<TransactionModel>> fetchRecentActivity() async {
-    return await remote.fetchRecentActivity();
-  }
+  Future<List<CoinPackage>> fetchPackages() => remote.fetchPackages();
 
-  // --- Money operations (remote only) ---
-  /// Purchase using Google Play purchase token.
-  /// `productId` is the Play SKU, `purchaseToken` is the Play token.
-  /// Returns a TransactionModel representing the purchase transaction.
-  ///
+  @override
+  Future<List<TransactionModel>> fetchRecentActivity() =>
+      remote.fetchRecentActivity();
+
+  // ── Purchases ─────────────────────────────────────────────────────────────
+
+  /// [priceUsdCents] comes from Google Play's ProductDetails.skuDetails
+  /// .priceAmountMicros / 10000. Pass it through to the server so the server
+  /// can compute coins = priceUsdCents / 0.01 using the real Play price,
+  /// not a stale DB value.
   @override
   Future<TransactionModel> purchaseWithToken({
     required String productId,
     required String purchaseToken,
+    required int? priceUsdCents, // ✅ from Google Play
     String? packageCode,
     String? idempotencyKey,
   }) async {
     final key = idempotencyKey ?? _uuid.v4();
-    final txn = await remote.purchase(
+    return remote.purchase(
       productId: productId,
       purchaseToken: purchaseToken,
+      priceUsdCents: priceUsdCents, // ✅ passed to datasource → HTTP body
       packageCode: packageCode,
       idempotencyKey: key,
     );
-    return txn;
   }
 
-  /// Purchase-and-gift in one atomic operation.
-  /// Returns a map with `gift_event` and `transactions`.
+  @override
+  Future<TransactionModel> purchasePackage(String packageId) {
+    throw UnsupportedError(
+      'purchasePackage(packageId) is not supported. '
+      'Use purchaseWithToken(productId, purchaseToken, priceUsdCents).',
+    );
+  }
+
+  // ── Purchase-and-gift ────────────────────────────────────────────────────
+
+  @override
   Future<Map<String, dynamic>> purchaseAndGift({
     required String productId,
     required String purchaseToken,
@@ -66,7 +71,7 @@ class WalletRepositoryImpl implements WalletRepository {
     String? idempotencyKey,
   }) async {
     final key = idempotencyKey ?? _uuid.v4();
-    final res = await remote.purchaseAndGift(
+    return remote.purchaseAndGift(
       productId: productId,
       purchaseToken: purchaseToken,
       giftCode: giftCode,
@@ -74,10 +79,11 @@ class WalletRepositoryImpl implements WalletRepository {
       livestreamId: livestreamId,
       idempotencyKey: key,
     );
-    return res;
   }
 
-  /// Gift using existing wallet balance (no purchase)
+  // ── Gifts & transfers ────────────────────────────────────────────────────
+
+  @override
   Future<Map<String, dynamic>> gift({
     required String giftCode,
     required String toUserUuid,
@@ -86,17 +92,16 @@ class WalletRepositoryImpl implements WalletRepository {
     String? idempotencyKey,
   }) async {
     final key = idempotencyKey ?? _uuid.v4();
-    final res = await remote.gift(
+    return remote.gift(
       giftCode: giftCode,
       toUserUuid: toUserUuid,
       livestreamId: livestreamId,
       pin: pin,
       idempotencyKey: key,
     );
-    return res;
   }
 
-  /// Create transfer request
+  @override
   Future<Map<String, dynamic>> createTransferRequest({
     required String toUserUuid,
     required int coins,
@@ -105,17 +110,18 @@ class WalletRepositoryImpl implements WalletRepository {
     String? idempotencyKey,
   }) async {
     final key = idempotencyKey ?? _uuid.v4();
-    final res = await remote.createTransferRequest(
+    return remote.createTransferRequest(
       toUserUuid: toUserUuid,
       coins: coins,
       reason: reason,
       pin: pin,
       idempotencyKey: key,
     );
-    return res;
   }
 
-  /// Create withdraw request
+  // ── Withdrawals ──────────────────────────────────────────────────────────
+
+  @override
   Future<Map<String, dynamic>> createWithdrawRequest({
     required int amountUsdCents,
     required String bankAccountName,
@@ -130,7 +136,7 @@ class WalletRepositoryImpl implements WalletRepository {
     String? idempotencyKey,
   }) async {
     final key = idempotencyKey ?? _uuid.v4();
-    final res = await remote.createWithdrawRequest(
+    return remote.createWithdrawRequest(
       amountUsdCents: amountUsdCents,
       bankAccountName: bankAccountName,
       bankAccountNumber: bankAccountNumber,
@@ -143,25 +149,13 @@ class WalletRepositoryImpl implements WalletRepository {
       pin: pin,
       idempotencyKey: key,
     );
-    return res;
   }
 
-  /// Pin management
-  Future<void> setPin(String pin) async {
-    await remote.setPin(pin);
-  }
+  // ── PIN ──────────────────────────────────────────────────────────────────
 
-  Future<bool> verifyPin(String pin) async {
-    return await remote.verifyPin(pin);
-  }
-
-  // Keep interface-compatible method for older UI: forward to remote purchase
   @override
-  Future<TransactionModel> purchasePackage(String packageId) {
-    // Note: this method signature has only packageId (legacy). You must map packageId -> productId + purchaseToken
-    // We choose to throw to force the UI to use purchaseWithToken with actual Play tokens.
-    throw UnsupportedError(
-      'purchasePackage(packageId) is not supported in remote-only mode. Use purchaseWithToken(productId, purchaseToken).',
-    );
-  }
+  Future<void> setPin(String pin) => remote.setPin(pin);
+
+  @override
+  Future<bool> verifyPin(String pin) => remote.verifyPin(pin);
 }

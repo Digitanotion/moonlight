@@ -82,11 +82,13 @@ class RemoteWalletDataSource {
     required String productId,
     required String purchaseToken,
     String? packageCode,
+    int? priceUsdCents,
     required String idempotencyKey,
   }) async {
     final body = {
       'product_id': productId,
       'purchase_token': purchaseToken,
+      if (priceUsdCents != null) 'price_usd_cents': priceUsdCents,
       if (packageCode != null) 'package_code': packageCode,
       'idempotency_key': idempotencyKey,
     };

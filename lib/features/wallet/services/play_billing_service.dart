@@ -23,7 +23,6 @@ class PlayBillingService {
   bool _isPurchasing = false;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
 
-  // Track pending purchases to prevent duplicate processing
   final Set<String> _processingPurchases = {};
 
   PlayBillingService({
@@ -32,28 +31,16 @@ class PlayBillingService {
   }) : _repo = repo,
        _idem = idem;
 
-  // ─────────────────────────────────────────────
-  // Public getters
-  // ─────────────────────────────────────────────
-
-  /// Whether Google Play Billing is available on this device.
-  /// Always false until [init] has completed successfully.
   bool get isAvailable => _isAvailable;
-
-  /// Whether [init] has been called and finished (regardless of outcome).
   bool get isInitialized => _isInitialized;
 
   // ─────────────────────────────────────────────
   // Init
   // ─────────────────────────────────────────────
 
-  /// Must be awaited before calling [buyAndComplete].
-  /// Safe to call multiple times — re-runs the availability check each time.
   Future<void> init() async {
     debugPrint('🔍 ===== PLAY BILLING INIT =====');
-
     try {
-      // 1. Check billing availability
       _isAvailable = await _iap.isAvailable();
       debugPrint('📱 Billing available: $_isAvailable');
 
@@ -68,7 +55,6 @@ class PlayBillingService {
         return;
       }
 
-      // 2. Confirm Android platform addition is accessible
       if (defaultTargetPlatform == TargetPlatform.android) {
         try {
           _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
@@ -78,7 +64,6 @@ class PlayBillingService {
         }
       }
 
-      // 3. Probe connection with a lightweight product query
       try {
         final probe = await _iap.queryProductDetails({'__probe__'});
         debugPrint(
@@ -87,8 +72,6 @@ class PlayBillingService {
           'products: ${probe.productDetails.length}',
         );
       } catch (e) {
-        // A failed probe only means the dummy SKU doesn't exist — billing
-        // itself is still reachable.
         debugPrint('📦 Probe query threw (expected for dummy SKU): $e');
       }
 
@@ -102,10 +85,6 @@ class PlayBillingService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // Dispose
-  // ─────────────────────────────────────────────
-
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
@@ -115,25 +94,13 @@ class PlayBillingService {
   // Main purchase entry point
   // ─────────────────────────────────────────────
 
-  /// Full end-to-end purchase flow:
-  ///   1. Query product from Play
-  ///   2. Launch billing sheet
-  ///   3. Receive purchase token
-  ///   4. Verify with your backend
-  ///   5. Acknowledge with Google Play
-  ///
-  /// Returns [TransactionModel] on success, `null` if the user cancelled.
-  /// Throws on any other error.
   Future<TransactionModel?> buyAndComplete({
     required String productId,
     String? packageCode,
     Duration timeout = const Duration(minutes: 2),
   }) async {
-    // ── Guard: init must have run ──────────────────────────────────────────
     if (!_isInitialized) {
-      debugPrint(
-        '⚠️  buyAndComplete called before init() finished — running init now',
-      );
+      debugPrint('⚠️  buyAndComplete called before init() — running init now');
       await init();
     }
 
@@ -145,7 +112,6 @@ class PlayBillingService {
       );
     }
 
-    // ── Guard: no concurrent purchases ────────────────────────────────────
     if (_isPurchasing) {
       debugPrint('⚠️  Purchase already in progress');
       throw Exception('A purchase is already in progress. Please wait.');
@@ -157,7 +123,7 @@ class PlayBillingService {
     final completer = Completer<TransactionModel?>();
 
     try {
-      // 1. Query product details
+      // 1. Query product from Play — this gives us the authoritative price
       debugPrint('🔍 Querying product: $productId');
       final productResponse = await _iap.queryProductDetails({productId});
 
@@ -166,7 +132,6 @@ class PlayBillingService {
           'Failed to query product "$productId": ${productResponse.error!.message}',
         );
       }
-
       if (productResponse.productDetails.isEmpty) {
         throw Exception(
           'Product "$productId" not found in Play Console. '
@@ -180,16 +145,29 @@ class PlayBillingService {
         '✅ Product found: ${productDetails.title} — ${productDetails.price}',
       );
 
+      // ✅ Extract the authoritative USD price from Google Play.
+      // priceAmountMicros is always in the currency the product was priced in
+      // on Play Console (USD). It is NOT the user's local display price.
+      // 1 USD = 1,000,000 micros = 100 cents → cents = micros / 10,000
+      //   $0.99  →  990,000 micros →  99 cents
+      //   $4.99  → 4,990,000 micros → 499 cents
+      final int priceUsdCents = _extractPriceUsdCents(productDetails);
+      debugPrint(
+        '💵 Price from Play: $priceUsdCents cents '
+        '(\$${(priceUsdCents / 100).toStringAsFixed(2)})',
+      );
+
       // 2. Generate & persist idempotency key
       final idempotencyKey = _idem.generateKey();
       await _idem.persist(idempotencyKey, {
         'productId': productId,
         'packageCode': packageCode,
+        'priceUsdCents': priceUsdCents,
         'timestamp': DateTime.now().toIso8601String(),
       });
       debugPrint('🔑 Idempotency key: $idempotencyKey');
 
-      // 3. Subscribe to purchase stream BEFORE launching the billing sheet
+      // 3. Subscribe BEFORE launching the billing sheet
       _subscription = _iap.purchaseStream.listen(
         (purchases) => _handlePurchaseUpdates(
           purchases,
@@ -197,22 +175,21 @@ class PlayBillingService {
           productId,
           idempotencyKey,
           packageCode,
+          priceUsdCents, // ✅ price flows all the way to the server call
         ),
         onError: (Object error) {
           debugPrint('❌ Purchase stream error: $error');
-          if (!completer.isCompleted) {
-            completer.completeError(error);
-          }
+          if (!completer.isCompleted) completer.completeError(error);
         },
         cancelOnError: false,
       );
 
-      // 4. Launch the billing sheet
+      // 4. Launch billing sheet
       debugPrint('💰 Launching billing sheet for: $productId');
       final purchaseParam = PurchaseParam(productDetails: productDetails);
       final launched = await _iap.buyConsumable(
         purchaseParam: purchaseParam,
-        autoConsume: false, // We acknowledge only after server verification
+        autoConsume: false, // server consumes after verification
       );
 
       if (!launched) {
@@ -221,19 +198,15 @@ class PlayBillingService {
         );
       }
 
-      // 5. Wait for the purchase stream to resolve (or time out)
-      final result = await completer.future.timeout(
+      // 5. Wait for result
+      return await completer.future.timeout(
         timeout,
-        onTimeout: () {
-          throw TimeoutException(
-            'Purchase timed out after ${timeout.inSeconds}s. '
-            'The Play billing sheet may still be open.',
-            timeout,
-          );
-        },
+        onTimeout: () => throw TimeoutException(
+          'Purchase timed out after ${timeout.inSeconds}s. '
+          'The Play billing sheet may still be open.',
+          timeout,
+        ),
       );
-
-      return result;
     } catch (e) {
       debugPrint('❌ Purchase failed: $e');
       rethrow;
@@ -242,6 +215,50 @@ class PlayBillingService {
       await _subscription?.cancel();
       _subscription = null;
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // Price extraction
+  // ─────────────────────────────────────────────
+
+  /// Extracts the product price in USD cents from Google Play's ProductDetails.
+  ///
+  /// Primary method: AndroidProductDetails.skuDetails.priceAmountMicros
+  ///   — This is the price exactly as set in Play Console in USD micros.
+  ///   — Always USD regardless of the user's country/currency display.
+  ///
+  /// Fallback: parse the formatted price string (e.g. "$0.99")
+  ///   — Less reliable for non-USD locales, but better than returning 0.
+  int _extractPriceUsdCents(ProductDetails productDetails) {
+    // Primary: Android SkuDetails (most accurate)
+    if (productDetails is GooglePlayProductDetails) {
+      try {
+        final micros = productDetails.rawPrice;
+        final cents = (micros / 10000).round();
+        debugPrint('💵 priceAmountMicros: $micros → $cents cents');
+        return cents;
+      } catch (e) {
+        debugPrint('⚠️  skuDetails.priceAmountMicros failed: $e');
+      }
+    }
+
+    // Fallback: parse formatted price string e.g. "$0.99", "US$4.99"
+    try {
+      final digits = productDetails.price.replaceAll(RegExp(r'[^\d.]'), '');
+      final dollars = double.tryParse(digits) ?? 0.0;
+      final cents = (dollars * 100).round();
+      debugPrint(
+        '💵 Fallback price from "${productDetails.price}" → $cents cents',
+      );
+      return cents;
+    } catch (e) {
+      debugPrint('⚠️  Price string parse failed: $e');
+    }
+
+    debugPrint(
+      '⚠️  Could not determine price — returning 0 (server will use DB fallback)',
+    );
+    return 0;
   }
 
   // ─────────────────────────────────────────────
@@ -254,12 +271,11 @@ class PlayBillingService {
     String expectedProductId,
     String idempotencyKey,
     String? packageCode,
+    int priceUsdCents, // ✅ carried through
   ) {
     for (final purchase in purchases) {
-      // Only handle our expected product
       if (purchase.productID != expectedProductId) continue;
 
-      // Deduplicate — same purchase can arrive multiple times
       final purchaseKey = '${purchase.purchaseID}_${purchase.productID}';
       if (_processingPurchases.contains(purchaseKey)) {
         debugPrint('⚠️  Already processing: $purchaseKey — skipping');
@@ -280,15 +296,14 @@ class PlayBillingService {
                 completer,
                 idempotencyKey,
                 packageCode,
+                priceUsdCents, // ✅ passed to server
               )
               .then((_) {
                 _processingPurchases.remove(purchaseKey);
               })
               .catchError((Object error) {
                 _processingPurchases.remove(purchaseKey);
-                if (!completer.isCompleted) {
-                  completer.completeError(error);
-                }
+                if (!completer.isCompleted) completer.completeError(error);
               });
           break;
 
@@ -296,11 +311,7 @@ class PlayBillingService {
           final msg = purchase.error?.message ?? 'Unknown purchase error';
           debugPrint('❌ Purchase error from Play: $msg');
           _processingPurchases.remove(purchaseKey);
-          if (!completer.isCompleted) {
-            completer.completeError(Exception(msg));
-          }
-          // Always complete/acknowledge errored purchases to avoid them
-          // being re-delivered indefinitely.
+          if (!completer.isCompleted) completer.completeError(Exception(msg));
           _iap
               .completePurchase(purchase)
               .catchError(
@@ -310,8 +321,6 @@ class PlayBillingService {
           break;
 
         case PurchaseStatus.pending:
-          // Pending = payment method delayed (e.g. cash payment kiosks).
-          // Do nothing — wait for a future update.
           debugPrint('⏳ Purchase pending — waiting for final status');
           _processingPurchases.remove(purchaseKey);
           break;
@@ -319,9 +328,7 @@ class PlayBillingService {
         case PurchaseStatus.canceled:
           debugPrint('🚫 Purchase cancelled by user');
           _processingPurchases.remove(purchaseKey);
-          if (!completer.isCompleted) {
-            completer.complete(null); // null = user-cancelled, not an error
-          }
+          if (!completer.isCompleted) completer.complete(null);
           _iap
               .completePurchase(purchase)
               .catchError(
@@ -342,6 +349,7 @@ class PlayBillingService {
     Completer<TransactionModel?> completer,
     String idempotencyKey,
     String? packageCode,
+    int priceUsdCents, // ✅ sent to backend
   ) async {
     try {
       if (purchase is! GooglePlayPurchaseDetails) {
@@ -355,54 +363,47 @@ class PlayBillingService {
       final productId = purchase.productID;
 
       debugPrint('✅ Raw purchase received — token: $purchaseToken');
+      debugPrint('💵 Sending price to server: $priceUsdCents cents');
 
-      // ── Server verification ────────────────────────────────────────────
-      debugPrint('🔐 Verifying purchase with backend…');
+      // Verify with backend — price_usd_cents tells server how many coins to credit
       final transaction = await _repo.purchaseWithToken(
         productId: productId,
         purchaseToken: purchaseToken,
+        priceUsdCents: priceUsdCents, // ✅ server: coins = priceUsdCents / 0.01
         packageCode: packageCode,
         idempotencyKey: idempotencyKey,
       );
       debugPrint('✅ Backend verification successful');
 
-      // ── Mark idempotency key as done ───────────────────────────────────
       await _idem.complete(idempotencyKey);
 
-      // ── Acknowledge with Google Play ───────────────────────────────────
-      // Must happen within 3 days or Google will refund automatically.
+      // Acknowledge with Google Play (non-fatal if it fails)
       try {
         await _iap.completePurchase(purchase);
         debugPrint('✅ Purchase acknowledged with Google Play');
       } catch (e) {
-        // Server already credited the user — log but do not fail.
-        // The purchase will be re-delivered and can be re-acknowledged.
         debugPrint('⚠️  completePurchase threw (non-fatal): $e');
       }
 
-      // ── Clear from local pending list ──────────────────────────────────
       await _clearPendingPurchase(idempotencyKey);
 
-      if (!completer.isCompleted) {
-        completer.complete(transaction);
-      }
+      if (!completer.isCompleted) completer.complete(transaction);
     } catch (e) {
       debugPrint('❌ Server verification failed: $e');
-      // Do NOT acknowledge — keeps the purchase deliverable for retry.
-      if (!completer.isCompleted) {
-        completer.completeError(e);
-      }
+      // Do NOT acknowledge — keeps purchase deliverable for retry
+      if (!completer.isCompleted) completer.completeError(e);
     }
   }
 
   // ─────────────────────────────────────────────
-  // Pending purchase persistence (local fallback)
+  // Pending purchase persistence
   // ─────────────────────────────────────────────
 
   Future<void> _savePendingPurchase(
     String idempotencyKey,
     String productId,
     String? packageCode,
+    int priceUsdCents,
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -412,6 +413,7 @@ class PlayBillingService {
           'idempotency_key': idempotencyKey,
           'product_id': productId,
           'package_code': packageCode,
+          'price_usd_cents': priceUsdCents,
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
@@ -430,7 +432,7 @@ class PlayBillingService {
           final map = jsonDecode(item) as Map<String, dynamic>;
           return map['idempotency_key'] != idempotencyKey;
         } catch (_) {
-          return true; // keep malformed entries rather than silently dropping
+          return true;
         }
       }).toList();
       await prefs.setStringList('pending_purchases', filtered);
@@ -439,30 +441,22 @@ class PlayBillingService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // Retry pending purchases (call on app resume)
-  // ─────────────────────────────────────────────
-
-  /// Call this when the app resumes (e.g. in [WidgetsBindingObserver.didChangeAppLifecycleState])
-  /// to re-attempt server verification for any purchases that completed on
-  /// the Play side but whose server call previously failed.
+  /// Call on app resume to retry any purchases whose server call failed.
+  /// The purchase stream will also re-deliver unacknowledged purchases
+  /// automatically on next app launch.
   Future<void> retryPendingPurchases() async {
     if (!_isAvailable) return;
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final pending = prefs.getStringList('pending_purchases') ?? [];
       if (pending.isEmpty) return;
-
       debugPrint('🔄 Found ${pending.length} pending purchase(s) — retrying…');
-
       for (final item in pending) {
         try {
           final data = jsonDecode(item) as Map<String, dynamic>;
-          debugPrint('🔄 Retrying pending purchase: $data');
-          // TODO: implement a restore-by-token flow if your backend supports it.
-          // For now we log; the purchase stream will re-deliver unacknowledged
-          // purchases automatically on next app launch.
+          debugPrint('🔄 Pending purchase data: $data');
+          // Purchase stream re-delivers unacknowledged purchases on next launch.
+          // For explicit retry, call buyAndComplete() with the same productId.
         } catch (e) {
           debugPrint('⚠️  Failed to parse pending purchase entry: $e');
         }

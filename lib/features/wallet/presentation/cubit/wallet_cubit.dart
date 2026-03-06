@@ -59,6 +59,7 @@ class WalletCubit extends Cubit<WalletState> {
     required String productId,
     required String purchaseToken,
     String? packageCode,
+    int? priceUsdCents,
     String? idempotencyKey,
   }) async {
     // Keep UI responsive: Busy state while we contact server
@@ -67,6 +68,7 @@ class WalletCubit extends Cubit<WalletState> {
       final txn = await repo.purchaseWithToken(
         productId: productId,
         purchaseToken: purchaseToken,
+        priceUsdCents: priceUsdCents,
         packageCode: packageCode,
         idempotencyKey: idempotencyKey,
       );
