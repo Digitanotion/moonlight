@@ -55,13 +55,13 @@ class WalletRemoteMapper {
     final amountPaid = () {
       final v =
           json['amount_paid'] ?? json['amountPaid'] ?? json['amount'] ?? 0;
-      if (v is num) return v.toInt();
-      return int.tryParse(v.toString()) ?? 0;
+      if (v is num) return v.toDouble();
+      return double.tryParse(v.toString()) ?? 0;
     }();
 
     final coinsChange = () {
       final v =
-          json['coins_change'] ?? json['coinsChange'] ?? json['coins'] ?? 0;
+          json['coins_added'] ?? json['coins_change'] ?? json['coins'] ?? 0;
       if (v is num) return v.toInt();
       return int.tryParse(v.toString()) ?? 0;
     }();
@@ -128,7 +128,7 @@ class WalletRemoteMapper {
       date: date,
       method: json['method'] as String? ?? 'unknown',
       type: json['type'] as String? ?? 'transaction',
-      amountPaid: (amountPaid).toInt(),
+      amountPaid: amountPaid,
       coinsChange: (coinsChange).toInt(),
     );
   }

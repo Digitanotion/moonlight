@@ -3,7 +3,7 @@ class TransactionModel {
   final DateTime date;
   final String method;
   final String type;
-  final int amountPaid; // in naira
+  final double amountPaid; // in naira
   final int coinsChange; // positive or negative
 
   TransactionModel({
