@@ -678,7 +678,7 @@ class _ActivityTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 transaction.amountPaid > 0
-                    ? convertcointousd(transaction.coinsChange)
+                    ? convertCoinToUsd(transaction.coinsChange)
                     : '',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
