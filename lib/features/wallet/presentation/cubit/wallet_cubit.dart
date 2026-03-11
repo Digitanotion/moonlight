@@ -59,7 +59,7 @@ class WalletCubit extends Cubit<WalletState> {
     required String productId,
     required String purchaseToken,
     String? packageCode,
-    int? priceUsdCents,
+    double? priceUsdCents,
     String? idempotencyKey,
   }) async {
     // Keep UI responsive: Busy state while we contact server

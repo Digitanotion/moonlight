@@ -7,9 +7,14 @@ String formatusd(double v) =>
     NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(v);
 String formatusdint(int v) =>
     NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(v);
-String convertcointousd(int v) {
-  v = ((0.01 * v / 1).toInt());
-  return NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(v);
+String convertCoinToUsd(int coin) {
+  final usd = 0.01 * coin;
+  return NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(usd);
+}
+
+String convertUsdToCoin(double v) {
+  v = ((v / 0.01));
+  return v.round().toString();
 }
 
 String formatDate(DateTime d) =>

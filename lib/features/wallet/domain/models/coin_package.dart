@@ -2,7 +2,7 @@ class CoinPackage {
   final String id; // package UUID (frontend-facing)
   final String productId; // Google Play SKU: e.g. com.moonlight.coins.p1
   final int coins; // coins (integer)
-  final int priceUsdCents; // canonical: USD cents (e.g. 500 => $5.00)
+  final double priceUsdCents; // canonical: USD cents (e.g. 500 => $5.00)
 
   CoinPackage({
     required this.id,
@@ -13,7 +13,7 @@ class CoinPackage {
 
   /// Backwards-compatible alias used in some existing UI code.
   /// Returns cents (integer) to avoid floating rounding issues.
-  int get priceUSD => priceUsdCents;
+  double get priceUSD => priceUsdCents;
 
   /// Convenience: human-friendly dollar string (e.g. 5.00)
   String get priceUsdAsString {
@@ -26,21 +26,21 @@ class CoinPackage {
   /// and accepts older fields if backend used slightly different keys.
   factory CoinPackage.fromJson(Map<String, dynamic> json) {
     // tolerate both price_usd_cents and priceUSD or price_usd
-    int parsePriceCents() {
+    double parsePriceCents() {
       if (json['price_usd_cents'] != null) {
-        return (json['price_usd_cents'] as num).toInt();
+        return (json['price_usd_cents'] as num).toDouble();
       }
       if (json['priceUsdCents'] != null) {
-        return (json['priceUsdCents'] as num).toInt();
+        return (json['priceUsdCents'] as num).toDouble();
       }
       if (json['priceUSD'] != null) {
         // if backend sent price as cents already in priceUSD field
-        return (json['priceUSD'] as num).toInt();
+        return (json['priceUSD'] as num).toDouble();
       }
       // last resort: price in dollars as float -> convert to cents
       if (json['price'] != null) {
         final p = double.tryParse(json['price'].toString()) ?? 0.0;
-        return (p * 100).round();
+        return (p * 100);
       }
       return 0;
     }

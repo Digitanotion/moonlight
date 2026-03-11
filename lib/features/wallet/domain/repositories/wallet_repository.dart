@@ -24,7 +24,7 @@ abstract class WalletRepository {
   Future<TransactionModel> purchaseWithToken({
     required String productId,
     required String purchaseToken,
-    required int? priceUsdCents, // ✅ from Google Play ProductDetails
+    required double? priceUsdCents, // ✅ from Google Play ProductDetails
     String? packageCode,
     String? idempotencyKey,
   });

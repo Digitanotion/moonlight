@@ -209,7 +209,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
         title: const Text('Confirm Purchase'),
         content: Text(
           // Use priceUsdCents if your model uses cents; adapt if you use priceUSD
-          'Buy ${formatCoin(pkg.coins)} coins for ${convertcointousd(pkg.priceUsdCents ?? pkg.priceUSD)}?',
+          'Buy ${formatCoin(pkg.coins)} coins for ${formatusd(pkg.priceUsdCents ?? pkg.priceUSD)}?',
         ),
         backgroundColor: AppColors.bluePrimary,
         actions: [
@@ -347,7 +347,7 @@ class _CoinPackageCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  convertcointousd(pkg.priceUSD),
+                  formatusd(pkg.priceUSD),
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],

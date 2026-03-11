@@ -2,9 +2,15 @@
 import '../../domain/models/coin_package.dart';
 import '../../domain/models/transaction_model.dart';
 
+/// Coin rate: 1 coin = $0.01 USD
+///   coins → USD : coins * 0.01   (20 coins = $0.20)
+///   USD → coins : usd / 0.01     ($0.20 = 20 coins)
+///
+/// price_usd_cents is a DOUBLE stored as dollars (e.g. 0.20, 1.39, 10.50).
+/// Flutter reads it directly for display — no division needed.
+/// Flutter sends it back to /purchase as-is.
 class WalletRemoteMapper {
-  /// Parse package JSON from the API into CoinPackage.
-  /// Accepts several common key variants and normalizes price to USD cents (int).
+  /// Parse package JSON → CoinPackage
   static CoinPackage packageFromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? json['uuid'] ?? json['code'] ?? '').toString();
     final productId =
@@ -17,119 +23,104 @@ class WalletRemoteMapper {
       return int.tryParse(v.toString()) ?? 0;
     }();
 
+    // ✅ price_usd_cents is a DOUBLE (dollars): 0.20, 1.39, 10.50
+    // Do NOT call .toInt() — that truncates 0.20 → 0
     final priceUsdCents = () {
-      // support price_usd_cents, priceUsdCents, priceUSD (cents), or price (dollars)
-      if (json['price_usd_cents'] != null && json['price_usd_cents'] is num) {
-        return (json['price_usd_cents'] as num).toInt();
-      }
-      if (json['priceUsdCents'] != null && json['priceUsdCents'] is num) {
-        return (json['priceUsdCents'] as num).toInt();
-      }
-      if (json['priceUSD'] != null && json['priceUSD'] is num) {
-        return (json['priceUSD'] as num).toInt();
-      }
-      if (json['price'] != null) {
-        // price might be a float in dollars -> convert to cents
-        final p = double.tryParse(json['price'].toString()) ?? 0.0;
-        return (p * 100).round();
-      }
-      // fallback: try to parse any string numeric
-      final fallback = json['amount'] ?? json['amount_cents'];
-      if (fallback is num) return fallback.toInt();
-      return int.tryParse('${fallback ?? 0}') ?? 0;
+      final raw = json['price_usd_cents'];
+      if (raw is num) return raw.toDouble();
+      if (raw is String) return double.tryParse(raw) ?? 0.0;
+      return 0.0;
     }();
 
     return CoinPackage(
       id: id,
       productId: productId,
       coins: coins,
-      priceUsdCents: priceUsdCents,
+      priceUsdCents: priceUsdCents, // double dollars e.g. 0.20
     );
   }
 
-  /// Parse transaction JSON returned by the API into TransactionModel.
-  /// Tolerates multiple key variants and date formats (ISO string or epoch).
+  /// Parse transaction JSON → TransactionModel
+  ///
+  /// Server /purchase response shape:
+  /// {
+  ///   "data": {
+  ///     "transaction": { uuid, amount_paid, coins_change, ... },  ← unwrap this
+  ///     "coin_balance": 20,
+  ///     "coins_added": 20
+  ///   }
+  /// }
+  ///
+  /// amount_paid is stored as DOUBLE dollars (e.g. 0.20, 1.39).
+  /// Receipt screen: display directly as "$0.20" (no division needed).
   static TransactionModel transactionFromJson(Map<String, dynamic> json) {
-    final id = (json['uuid'] ?? json['id'] ?? '').toString();
+    // ✅ Unwrap nested transaction key if present
+    // datasource passes the full data{} map; transaction sits inside it
+    final txnJson = (json['transaction'] is Map)
+        ? Map<String, dynamic>.from(json['transaction'] as Map)
+        : json;
 
+    final id = (txnJson['uuid'] ?? txnJson['id'] ?? '').toString();
+
+    // ✅ amount_paid is DOUBLE dollars (e.g. 0.20 = $0.20)
     final amountPaid = () {
       final v =
-          json['amount_paid'] ?? json['amountPaid'] ?? json['amount'] ?? 0;
+          txnJson['amount_paid'] ??
+          txnJson['amountPaid'] ??
+          txnJson['amount'] ??
+          0;
       if (v is num) return v.toDouble();
-      return double.tryParse(v.toString()) ?? 0;
+      return double.tryParse(v.toString()) ?? 0.0;
     }();
 
     final coinsChange = () {
       final v =
-          json['coins_added'] ?? json['coins_change'] ?? json['coins'] ?? 0;
+          txnJson['coins_change'] ??
+          txnJson['coins_added'] ??
+          txnJson['coins'] ??
+          0;
       if (v is num) return v.toInt();
       return int.tryParse(v.toString()) ?? 0;
     }();
 
     DateTime parseDate() {
       final raw =
-          json['created_at'] ??
-          json['createdAt'] ??
-          json['date'] ??
-          json['timestamp'] ??
-          json['time'];
-
+          txnJson['created_at'] ??
+          txnJson['createdAt'] ??
+          txnJson['date'] ??
+          txnJson['timestamp'] ??
+          txnJson['time'];
       if (raw == null) return DateTime.now();
-
       if (raw is String) {
-        final parsed = DateTime.tryParse(raw);
-        if (parsed != null) return parsed;
-        // try parse as integer string
+        final p = DateTime.tryParse(raw);
+        if (p != null) return p;
         final asInt = int.tryParse(raw);
-        if (asInt != null) {
-          // try ms then seconds
-          if (asInt > 1000000000000) {
-            return DateTime.fromMillisecondsSinceEpoch(asInt);
-          } else {
-            return DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
-          }
-        }
+        if (asInt != null)
+          return asInt > 1000000000000
+              ? DateTime.fromMillisecondsSinceEpoch(asInt)
+              : DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
         return DateTime.now();
       }
-
-      if (raw is int) {
-        // Heuristic: > 1e12 -> milliseconds, else seconds
-        if (raw > 1000000000000) {
-          return DateTime.fromMillisecondsSinceEpoch(raw);
-        } else {
-          return DateTime.fromMillisecondsSinceEpoch(raw * 1000);
-        }
-      }
-
+      if (raw is int)
+        return raw > 1000000000000
+            ? DateTime.fromMillisecondsSinceEpoch(raw)
+            : DateTime.fromMillisecondsSinceEpoch(raw * 1000);
       if (raw is double) {
-        final asInt = raw.toInt();
-        if (asInt > 1000000000000) {
-          return DateTime.fromMillisecondsSinceEpoch(asInt);
-        } else {
-          return DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
-        }
+        final i = raw.toInt();
+        return i > 1000000000000
+            ? DateTime.fromMillisecondsSinceEpoch(i)
+            : DateTime.fromMillisecondsSinceEpoch(i * 1000);
       }
-
       return DateTime.now();
     }
 
-    final date = parseDate();
-
-    final method =
-        (json['method'] ??
-                json['payment_provider'] ??
-                json['provider'] ??
-                json['gateway'] ??
-                '')
-            .toString();
-
     return TransactionModel(
       id: id,
-      date: date,
-      method: json['method'] as String? ?? 'unknown',
-      type: json['type'] as String? ?? 'transaction',
-      amountPaid: amountPaid,
-      coinsChange: (coinsChange).toInt(),
+      date: parseDate(),
+      method: txnJson['method'] as String? ?? 'unknown',
+      type: txnJson['type'] as String? ?? 'transaction',
+      amountPaid: amountPaid, // ✅ double dollars e.g. 0.20
+      coinsChange: coinsChange, // e.g. 20
     );
   }
 }

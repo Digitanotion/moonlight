@@ -151,7 +151,7 @@ class PlayBillingService {
       // 1 USD = 1,000,000 micros = 100 cents → cents = micros / 10,000
       //   $0.99  →  990,000 micros →  99 cents
       //   $4.99  → 4,990,000 micros → 499 cents
-      final int priceUsdCents = _extractPriceUsdCents(productDetails);
+      final double priceUsdCents = _extractPriceUsdCents(productDetails);
       debugPrint(
         '💵 Price from Play: $priceUsdCents cents '
         '(\$${(priceUsdCents / 100).toStringAsFixed(2)})',
@@ -229,12 +229,12 @@ class PlayBillingService {
   ///
   /// Fallback: parse the formatted price string (e.g. "$0.99")
   ///   — Less reliable for non-USD locales, but better than returning 0.
-  int _extractPriceUsdCents(ProductDetails productDetails) {
+  double _extractPriceUsdCents(ProductDetails productDetails) {
     // Primary: Android SkuDetails (most accurate)
     if (productDetails is GooglePlayProductDetails) {
       try {
         final micros = productDetails.rawPrice;
-        final cents = (micros / 10000).round();
+        final cents = (micros / 10000);
         debugPrint('💵 priceAmountMicros: $micros → $cents cents');
         return cents;
       } catch (e) {
@@ -246,7 +246,7 @@ class PlayBillingService {
     try {
       final digits = productDetails.price.replaceAll(RegExp(r'[^\d.]'), '');
       final dollars = double.tryParse(digits) ?? 0.0;
-      final cents = (dollars * 100).round();
+      final cents = (dollars * 100);
       debugPrint(
         '💵 Fallback price from "${productDetails.price}" → $cents cents',
       );
@@ -271,7 +271,7 @@ class PlayBillingService {
     String expectedProductId,
     String idempotencyKey,
     String? packageCode,
-    int priceUsdCents, // ✅ carried through
+    double priceUsdCents, // ✅ carried through
   ) {
     for (final purchase in purchases) {
       if (purchase.productID != expectedProductId) continue;
@@ -349,7 +349,7 @@ class PlayBillingService {
     Completer<TransactionModel?> completer,
     String idempotencyKey,
     String? packageCode,
-    int priceUsdCents, // ✅ sent to backend
+    double priceUsdCents, // ✅ sent to backend
   ) async {
     try {
       if (purchase is! GooglePlayPurchaseDetails) {

@@ -37,7 +37,7 @@ class WalletRepositoryImpl implements WalletRepository {
   Future<TransactionModel> purchaseWithToken({
     required String productId,
     required String purchaseToken,
-    required int? priceUsdCents, // ✅ from Google Play
+    required double? priceUsdCents, // ✅ from Google Play
     String? packageCode,
     String? idempotencyKey,
   }) async {

@@ -13,24 +13,23 @@ class RemoteWalletDataSource {
     if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
     if (res.data is String)
       return Map<String, dynamic>.from(jsonDecode(res.data as String));
-    throw Exception('Unexpected response type');
+    throw Exception('Unexpected response type: ${res.data.runtimeType}');
   }
 
   Future<int> fetchBalance() async {
     final res = await client.get('/api/v1/wallet');
     final data = await _extractData(res);
-    final payload = data['data'] as Map<String, dynamic>;
-    return payload['balance'] as int;
+    return ((data['data'] as Map)['balance'] as num).toInt();
   }
 
   Future<double> fetchEarned() async {
     final res = await client.get('/api/v1/wallet');
     final data = await _extractData(res);
     final payload = data['data'] as Map<String, dynamic>;
-    final earnedcents = payload['earnings_cents'] * 0.005; //Convert to Dollar
-    final bonusCentsEarned = payload['bonus_cents'] * 0.005; //Convert to Dollar
-    final earnedDollar = earnedcents + bonusCentsEarned;
-    return earnedDollar;
+    // Coin rate (earning side): 1 coin = $0.005 (streamer receives half)
+    final earnedCents = (payload['earnings_cents'] as num? ?? 0).toDouble();
+    final bonusCents = (payload['bonus_cents'] as num? ?? 0).toDouble();
+    return (earnedCents + bonusCents) * 0.005;
   }
 
   Future<List<CoinPackage>> fetchPackages() async {
@@ -59,15 +58,13 @@ class RemoteWalletDataSource {
     final items = payload is Map && payload['data'] is List
         ? payload['data'] as List
         : (data['data'] as List? ?? []);
-    final list = (items)
+    return items
         .map(
           (e) => WalletRemoteMapper.transactionFromJson(
             Map<String, dynamic>.from(e as Map),
           ),
         )
         .toList();
-    // print(List.from(list));
-    return List<TransactionModel>.from(list);
   }
 
   Future<TransactionModel> fetchTransaction(String transactionId) async {
@@ -78,25 +75,32 @@ class RemoteWalletDataSource {
     );
   }
 
+  /// [priceUsdCents] — DOUBLE dollars from Google Play (priceAmountMicros / 1_000_000)
+  ///   e.g. $0.20 product → pass 0.20  (NOT 20)
+  ///   Server: coins = priceUsd * 100 = 20 coins
   Future<TransactionModel> purchase({
     required String productId,
     required String purchaseToken,
     String? packageCode,
-    int? priceUsdCents,
+    double? priceUsdCents, // ✅ double dollars e.g. 0.20
     required String idempotencyKey,
   }) async {
     final body = {
       'product_id': productId,
       'purchase_token': purchaseToken,
-      if (priceUsdCents != null) 'price_usd_cents': priceUsdCents,
+      if (priceUsdCents != null && priceUsdCents > 0)
+        'price_usd_cents': priceUsdCents, // double e.g. 0.20
       if (packageCode != null) 'package_code': packageCode,
       'idempotency_key': idempotencyKey,
     };
+
     final res = await client.post('/api/v1/wallet/purchase', data: body);
     final data = await _extractData(res);
-    return WalletRemoteMapper.transactionFromJson(
-      Map<String, dynamic>.from(data['data'] as Map),
-    );
+
+    // ✅ Server returns { data: { transaction: {...}, coin_balance, coins_added } }
+    // Pass the full data map — mapper unwraps the nested 'transaction' key
+    final dataMap = data['data'] as Map<String, dynamic>? ?? {};
+    return WalletRemoteMapper.transactionFromJson(dataMap);
   }
 
   Future<Map<String, dynamic>> purchaseAndGift({
@@ -198,9 +202,8 @@ class RemoteWalletDataSource {
     return Map<String, dynamic>.from(data['data'] as Map);
   }
 
-  Future<void> setPin(String pin) async {
-    await client.post('/api/v1/wallet/pin/set', data: {'pin': pin});
-  }
+  Future<void> setPin(String pin) async =>
+      client.post('/api/v1/wallet/pin/set', data: {'pin': pin});
 
   Future<bool> verifyPin(String pin) async {
     final res = await client.post(
