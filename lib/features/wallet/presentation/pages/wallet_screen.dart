@@ -668,7 +668,7 @@ class _ActivityTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                formatCoin(int.tryParse(amountText) as int),
+                amountText,
                 style: TextStyle(
                   color: amountColor,
                   fontWeight: FontWeight.w900,
@@ -678,7 +678,7 @@ class _ActivityTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 transaction.amountPaid > 0
-                    ? convertCoinToUsd(transaction.coinsChange)
+                    ? formatusd(transaction.amountPaid)
                     : '',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
