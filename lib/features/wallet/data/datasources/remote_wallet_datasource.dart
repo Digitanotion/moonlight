@@ -207,7 +207,7 @@ class RemoteWalletDataSource {
 
   Future<bool> verifyPin(String pin) async {
     final res = await client.post(
-      '/api/v1/wallet/pin/verify',
+      '/api/v1/settings/wallet-pin/verify',
       data: {'pin': pin},
     );
     final data = await _extractData(res);

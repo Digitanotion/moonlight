@@ -110,10 +110,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     final s = msg.toLowerCase();
     return s.contains('no pin') ||
         s.contains('pin not set') ||
-        s.contains('pin_not_set') ||
-        s.contains('wallet pin') ||
-        s.contains('invalid pin') ||
-        s.contains('wallet not found') ||
+        s.contains('No PIN set') ||
+        s.contains('Please set a wallet PIN') ||
         s.isEmpty;
   }
 

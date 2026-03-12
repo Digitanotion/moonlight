@@ -1,12 +1,9 @@
 import 'package:intl/intl.dart';
 
 String formatCoin(int v) => NumberFormat.decimalPattern().format(v);
-String formatNaira(int v) =>
-    NumberFormat.currency(symbol: '₦', decimalDigits: 0).format(v);
-String formatusd(double v) =>
-    NumberFormat.currency(symbol: '\$', decimalDigits: 1).format(v);
-String formatusdint(int v) =>
-    NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(v);
+String formatNaira(int v) => NumberFormat.currency(symbol: '₦').format(v);
+String formatusdint(int v) => NumberFormat.currency(symbol: '\$').format(v);
+String formatusd(double v) => NumberFormat.currency(symbol: '\$').format(v);
 String convertCoinToUsd(int coin) {
   final usd = 0.01 * coin;
   return NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(usd);
