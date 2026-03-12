@@ -152,10 +152,10 @@ class PlayBillingService {
       //   $0.99  →  990,000 micros →  99 cents
       //   $4.99  → 4,990,000 micros → 499 cents
       final double priceUsdCents = _extractPriceUsdCents(productDetails);
-      debugPrint(
-        '💵 Price from Play: $priceUsdCents cents '
-        '(\$${(priceUsdCents / 100).toStringAsFixed(2)})',
-      );
+      // debugPrint(
+      //   '💵 Price from Play: $priceUsdCents cents '
+      //   '(\$${(priceUsdCents / 100).toStringAsFixed(2)})',
+      // );
 
       // 2. Generate & persist idempotency key
       final idempotencyKey = _idem.generateKey();
@@ -234,9 +234,9 @@ class PlayBillingService {
     if (productDetails is GooglePlayProductDetails) {
       try {
         final micros = productDetails.rawPrice;
-        final cents = (micros / 10000);
-        debugPrint('💵 priceAmountMicros: $micros → $cents cents');
-        return micros;
+        final actual_amount = micros;
+        debugPrint('💵 priceAmountMicros: $micros → $actual_amount');
+        return actual_amount;
       } catch (e) {
         debugPrint('⚠️  skuDetails.priceAmountMicros failed: $e');
       }
@@ -246,11 +246,11 @@ class PlayBillingService {
     try {
       final digits = productDetails.price.replaceAll(RegExp(r'[^\d.]'), '');
       final dollars = double.tryParse(digits) ?? 0.0;
-      final cents = (dollars * 100);
+      final actual_amount = productDetails.rawPrice;
       debugPrint(
-        '💵 Fallback price from "${productDetails.price}" → $cents cents',
+        '💵 Fallback price from "${productDetails.price}" → $actual_amount',
       );
-      return cents;
+      return actual_amount;
     } catch (e) {
       debugPrint('⚠️  Price string parse failed: $e');
     }
