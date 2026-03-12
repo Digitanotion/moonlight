@@ -1,4 +1,10 @@
 // lib/features/wallet/presentation/pages/wallet_screen.dart
+//
+// Changes vs previous version:
+//   1. _ActivityTile is now tappable → navigates to transactionDetail
+//   2. _onBuyCoins() uses .then() to refresh WalletCubit after returning
+//   3. All other pushNamed calls for buy-coins use the same pattern
+//
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -19,13 +25,11 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> {
-  // local UI state: hide/show balance
   bool _hideBalance = false;
 
   @override
   void initState() {
     super.initState();
-    // trigger load once displayed
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => context.read<WalletCubit>().loadAll(),
     );
@@ -33,7 +37,14 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _onRefresh() => context.read<WalletCubit>().loadAll();
 
-  // Bottom sheet with Transfer / Gift / Buy actions
+  // ── Navigate to Buy Coins and refresh wallet when user returns ──────────────
+  void _goToBuyCoins() {
+    HapticFeedback.selectionClick();
+    Navigator.pushNamed(context, RouteNames.buyCoins).then((_) {
+      if (mounted) context.read<WalletCubit>().loadAll();
+    });
+  }
+
   void _showActionsSheet() {
     HapticFeedback.selectionClick();
     showModalBottomSheet(
@@ -57,7 +68,6 @@ class _WalletScreenState extends State<WalletScreen> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-
               _sheetTile(
                 icon: Icons.card_giftcard,
                 label: 'Transfer Coins',
@@ -66,20 +76,6 @@ class _WalletScreenState extends State<WalletScreen> {
                   Navigator.pop(ctx);
                   HapticFeedback.selectionClick();
                   Navigator.pushNamed(context, RouteNames.giftCoins);
-                  // placeholder: gift flow
-                  // showDialog(
-                  //   context: context,
-                  //   builder: (_) => AlertDialog(
-                  //     title: const Text('Gift Coins'),
-                  //     content: const Text('Gift flow goes here (placeholder).'),
-                  //     actions: [
-                  //       TextButton(
-                  //         onPressed: () => Navigator.pop(context),
-                  //         child: const Text('Close'),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // );
                 },
               ),
               const SizedBox(height: 10),
@@ -89,12 +85,9 @@ class _WalletScreenState extends State<WalletScreen> {
                 subtitle: 'Open coin packages',
                 onTap: () {
                   Navigator.pop(ctx);
-                  HapticFeedback.selectionClick();
-                  // navigate to buy coins screen already wired to WalletCubit
-                  Navigator.pushNamed(context, RouteNames.buyCoins);
+                  _goToBuyCoins();
                 },
               ),
-
               const SizedBox(height: 10),
               _sheetTile(
                 icon: Icons.account_balance,
@@ -106,10 +99,9 @@ class _WalletScreenState extends State<WalletScreen> {
                   Navigator.pushNamed(context, RouteNames.withdrawal);
                 },
               ),
-
               const SizedBox(height: 10),
               _sheetTile(
-                icon: Icons.account_balance,
+                icon: Icons.lock_outline,
                 label: 'Set Wallet PIN',
                 subtitle: 'Protect your wallet with a PIN',
                 onTap: () {
@@ -183,7 +175,6 @@ class _WalletScreenState extends State<WalletScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // overall app gradient matching screenshot (dark blue -> near-black)
     const screenGradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
@@ -199,7 +190,6 @@ class _WalletScreenState extends State<WalletScreen> {
         }
       },
       builder: (context, state) {
-        // Show skeleton while loading or initial
         if (state is WalletLoading || state is WalletInitial) {
           return Scaffold(
             backgroundColor: Colors.transparent,
@@ -224,7 +214,6 @@ class _WalletScreenState extends State<WalletScreen> {
           );
         }
 
-        // If loading failed
         if (state is WalletError) {
           return Scaffold(
             backgroundColor: Colors.transparent,
@@ -272,7 +261,6 @@ class _WalletScreenState extends State<WalletScreen> {
           );
         }
 
-        // Loaded state - render actual wallet
         final loaded = state as WalletLoaded;
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -285,7 +273,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
                   children: [
-                    // top bar
+                    // Top bar
                     Row(
                       children: [
                         InkWell(
@@ -314,7 +302,6 @@ class _WalletScreenState extends State<WalletScreen> {
                               ),
                         ),
                         const Spacer(flex: 2),
-                        // ACTIONS: show vertical menu (three dots)
                         InkWell(
                           onTap: _showActionsSheet,
                           borderRadius: BorderRadius.circular(12),
@@ -335,7 +322,6 @@ class _WalletScreenState extends State<WalletScreen> {
 
                     const SizedBox(height: 18),
 
-                    // Balance card (replica: big balance + total earned inside same card)
                     _BalanceCard(
                       balance: loaded.balance,
                       earnedbalance: loaded.earnedBalance,
@@ -344,11 +330,11 @@ class _WalletScreenState extends State<WalletScreen> {
                         HapticFeedback.selectionClick();
                         setState(() => _hideBalance = !_hideBalance);
                       },
+                      onBuyCoins: _goToBuyCoins,
                     ),
 
                     const SizedBox(height: 20),
 
-                    // Recent Activity header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -361,9 +347,7 @@ class _WalletScreenState extends State<WalletScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () {
-                            // optional: navigate to full history
-                          },
+                          onPressed: () {},
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.white70,
                           ),
@@ -373,13 +357,10 @@ class _WalletScreenState extends State<WalletScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Recent activity list (cards)
                     ...loaded.recent
                         .map((t) => _ActivityTile(transaction: t))
                         .toList(),
 
-                    const SizedBox(height: 12),
-                    // Spacer bottom
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -392,12 +373,14 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 }
 
-/// Balance card: exact layout replica (balance big, total earned small, action buttons)
+// ─── balance card ─────────────────────────────────────────────────────────────
+
 class _BalanceCard extends StatelessWidget {
   final int balance;
   final double earnedbalance;
   final bool hideBalance;
   final VoidCallback onToggleHide;
+  final VoidCallback onBuyCoins;
 
   const _BalanceCard({
     Key? key,
@@ -405,11 +388,11 @@ class _BalanceCard extends StatelessWidget {
     required this.earnedbalance,
     required this.hideBalance,
     required this.onToggleHide,
+    required this.onBuyCoins,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // card colors and style tuned to screenshot
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -429,7 +412,6 @@ class _BalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // header row: label + actions
           Row(
             children: [
               Column(
@@ -462,7 +444,6 @@ class _BalanceCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Eye icon replaces the previous monetization-trigger expectation
                       GestureDetector(
                         onTap: onToggleHide,
                         child: Icon(
@@ -486,29 +467,21 @@ class _BalanceCard extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              // action icon (stylized) - leave monetization icon as decorative
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.white12,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Column(
-                  children: const [
-                    Icon(
-                      Icons.monetization_on,
-                      color: Color(0xFFFFD54F),
-                      size: 22,
-                    ),
-                  ],
+                child: const Icon(
+                  Icons.monetization_on,
+                  color: Color(0xFFFFD54F),
+                  size: 22,
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Total Earning (inside same card) - replicate the smaller panel inside
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -518,7 +491,6 @@ class _BalanceCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // left: small column
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -546,56 +518,22 @@ class _BalanceCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // right: balance actions
-                Row(
-                  children: [
-                    // Buy button
-                    ElevatedButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, RouteNames.buyCoins),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF7A00),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 10,
-                        ),
-                      ),
-                      child: const Text(
-                        'Buy',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
+                ElevatedButton(
+                  onPressed: onBuyCoins,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A00),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
                     ),
-
-                    // const SizedBox(width: 10),
-                    // // Gift / transfer fallback icon (tap to open same bottom sheet)
-                    // InkWell(
-                    //   onTap: () {
-                    //     HapticFeedback.selectionClick();
-                    //     // Open the same bottom sheet actions (transfer/gift)
-                    //     // since this widget is stateless, we navigate up to find state
-                    //     final state = context
-                    //         .findAncestorStateOfType<_WalletScreenState>();
-                    //     state?._showActionsSheet();
-                    //   },
-                    //   borderRadius: BorderRadius.circular(12),
-                    //   child: Container(
-                    //     padding: const EdgeInsets.all(10),
-                    //     decoration: BoxDecoration(
-                    //       color: Colors.white12,
-                    //       borderRadius: BorderRadius.circular(12),
-                    //     ),
-                    //     child: const Icon(
-                    //       Icons.card_giftcard,
-                    //       color: Colors.white70,
-                    //       size: 18,
-                    //     ),
-                    //   ),
-                    // ),
-                  ],
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: const Text(
+                    'Buy',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
               ],
             ),
@@ -606,104 +544,120 @@ class _BalanceCard extends StatelessWidget {
   }
 }
 
-/// Each activity tile that matches screenshot style (rounded card, left icon, method, time, coin delta)
+// ─── activity tile ────────────────────────────────────────────────────────────
+
 class _ActivityTile extends StatelessWidget {
   final TransactionModel transaction;
   const _ActivityTile({Key? key, required this.transaction}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final isCredit = transaction.coinsChange >= 0;
-    final amountText = '${isCredit ? '+' : ''}${transaction.coinsChange}';
+    final txn = transaction;
+    final isCredit = txn.coinsChange >= 0;
+    final amountText = '${isCredit ? '+' : ''}${txn.coinsChange}';
     final amountColor = isCredit ? Colors.greenAccent : Colors.redAccent;
-    String formattedTXTType = transaction.type.replaceAll('_', ' ');
 
-    // 2. Split into words, capitalize each
-    formattedTXTType = formattedTXTType
+    String formattedType = txn.type.replaceAll('_', ' ');
+    formattedType = formattedType
         .split(' ')
-        .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
+        .map(
+          (w) => w.isEmpty
+              ? ''
+              : w[0].toUpperCase() + w.substring(1).toLowerCase(),
+        )
         .join(' ');
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: Colors.white10,
-            child: Icon(
-              transaction.amountPaid > 0
-                  ? Icons.shopping_bag
-                  : Icons.swap_horiz,
-              color: Colors.white70,
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        Navigator.pushNamed(
+          context,
+          RouteNames.transactionDetail,
+          arguments: txn,
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Colors.white10,
+              child: Icon(
+                txn.amountPaid > 0 ? Icons.shopping_bag : Icons.swap_horiz,
+                color: Colors.white70,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    formattedType,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    DateFormat.yMMMd().add_jm().format(txn.date),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  formattedTXTType,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                  amountText,
+                  style: TextStyle(
+                    color: amountColor,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  DateFormat.yMMMd().add_jm().format(transaction.date),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  txn.amountPaid > 0 ? formatusd(txn.amountPaid) : '',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                amountText,
-                style: TextStyle(
-                  color: amountColor,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                transaction.amountPaid > 0
-                    ? formatusd(transaction.amountPaid)
-                    : '',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
-          ),
-        ],
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white24,
+              size: 18,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Shimmer skeleton showing wireframe of the expected screen (balance card + list rows)
+// ─── shimmer ──────────────────────────────────────────────────────────────────
+
 class _WalletShimmerSkeleton extends StatelessWidget {
   const _WalletShimmerSkeleton({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final base = Colors.grey.shade800;
-    final highlight = Colors.grey.shade700;
     return Shimmer.fromColors(
-      baseColor: base,
-      highlightColor: highlight,
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade700,
       child: Column(
         children: [
-          // top skeleton card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
@@ -732,17 +686,14 @@ class _WalletShimmerSkeleton extends StatelessWidget {
   }
 }
 
-/// Skeleton list rows
 class _ShimmerList extends StatelessWidget {
   const _ShimmerList({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final base = Colors.grey.shade800;
-    final highlight = Colors.grey.shade700;
     return Shimmer.fromColors(
-      baseColor: base,
-      highlightColor: highlight,
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade700,
       child: Column(
         children: List.generate(4, (i) {
           return Container(

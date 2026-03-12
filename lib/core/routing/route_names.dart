@@ -52,5 +52,6 @@ class RouteNames {
   static const String resetPin = '/reset-pin';
   static const String liveViewerEnhanced = '/live-viewer-enhanced';
   static const String debugScreen = "/debug-screen";
+  static const transactionDetail = '/wallet/transaction-detail';
   // static const transactionReceipt = '/transactionReceipt';
 }

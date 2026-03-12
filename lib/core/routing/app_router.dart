@@ -82,6 +82,7 @@ import 'package:moonlight/features/settings/presentation/pages/change_username_p
 import 'package:moonlight/features/tests/debug_screen.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/pages/user_interest_screen.dart';
+import 'package:moonlight/features/wallet/domain/models/transaction_model.dart';
 import 'package:moonlight/features/wallet/presentation/cubit/wallet_cubit.dart';
 import 'package:moonlight/features/wallet/presentation/pages/buy_coins_screen.dart';
 import 'package:moonlight/features/wallet/presentation/pages/reset_pin_page.dart';
@@ -89,6 +90,7 @@ import 'package:moonlight/features/wallet/presentation/pages/set_new_pin_page.da
 import 'package:moonlight/features/wallet/presentation/pages/set_pin_page.dart';
 import 'package:moonlight/features/wallet/presentation/pages/transaction_receipt_screen.dart';
 import 'package:moonlight/features/wallet/presentation/pages/wallet_screen.dart';
+import 'package:moonlight/features/wallet/presentation/transaction_detail_screen.dart';
 import 'package:moonlight/features/withdrawal/data/datasources/withdrawal_remote_datasource.dart';
 import 'package:moonlight/features/withdrawal/data/repositories/withdrawal_repository_impl.dart';
 import 'package:moonlight/features/withdrawal/presentation/cubit/withdrawal_cubit.dart';
@@ -728,6 +730,12 @@ class AppRouter {
             create: (context) => sl<WithdrawalCubit>(), // Get from GetIt
             child: const WithdrawalPage(),
           ),
+        );
+
+      case RouteNames.transactionDetail:
+        final txn = settings.arguments as TransactionModel;
+        return MaterialPageRoute(
+          builder: (_) => TransactionDetailScreen(transaction: txn),
         );
 
       // case RouteNames.setPin:
