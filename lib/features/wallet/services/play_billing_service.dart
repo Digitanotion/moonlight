@@ -236,7 +236,7 @@ class PlayBillingService {
         final micros = productDetails.rawPrice;
         final cents = (micros / 10000);
         debugPrint('💵 priceAmountMicros: $micros → $cents cents');
-        return cents;
+        return micros;
       } catch (e) {
         debugPrint('⚠️  skuDetails.priceAmountMicros failed: $e');
       }

@@ -112,12 +112,12 @@ class WalletRemoteMapper {
           return 0.0;
         }
         // If server sent cents (> 10 is a reliable heuristic since max purchase is ~$10.50)
-        if (rawDouble > 10) return rawDouble / 100.0;
+        // if (rawDouble > 10) return rawDouble / 100.0;
         return rawDouble; // already dollars
       }
 
       // Non-purchase types: stored as cents
-      if (rawDouble > 0) return rawDouble / 100.0;
+      // if (rawDouble > 0) return rawDouble / 100.0;
       return 0.0;
     }();
 

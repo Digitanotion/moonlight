@@ -161,7 +161,10 @@ class _TransactionReceiptScreenState extends State<TransactionReceiptScreen>
                     thickness: 1,
                   ),
 
-                  _buildRow('Amount Paid', formatusd(txn.amountPaid)),
+                  _buildRow(
+                    'Amount Paid (${txn.coinsChange * 0.001} USD)',
+                    formatusd(txn.amountPaid),
+                  ),
                   const SizedBox(height: 10),
                   _buildRow('Payment Method', txn.method),
                   const SizedBox(height: 10),

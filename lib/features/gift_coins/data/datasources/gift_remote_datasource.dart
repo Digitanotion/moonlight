@@ -51,7 +51,7 @@ class GiftRemoteDataSource {
   /// Verify user's wallet PIN
   Future<void> verifyPin(String pin) async {
     final res = await http.dio.post(
-      '/api/v1/wallet/pin/verify',
+      '/api/v1/settings/wallet-pin/verify',
       data: {'pin': pin},
       options: Options(responseType: ResponseType.json),
     );
