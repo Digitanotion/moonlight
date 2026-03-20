@@ -27,6 +27,8 @@ abstract class WalletRepository {
     required double? priceUsdCents, // ✅ from Google Play ProductDetails
     String? packageCode,
     String? idempotencyKey,
+    String? actual_price_paid,
+    String? actual_price_currency,
   });
 
   /// Legacy compatibility — throws UnsupportedError in remote-only mode.
@@ -63,7 +65,7 @@ abstract class WalletRepository {
   // ── Withdrawals ──────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> createWithdrawRequest({
-    required int amountUsdCents,
+    required double amountUsdCents,
     required String bankAccountName,
     required String bankAccountNumber,
     required String bankName,

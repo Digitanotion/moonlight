@@ -84,10 +84,14 @@ class RemoteWalletDataSource {
     String? packageCode,
     double? priceUsdCents, // ✅ double dollars e.g. 0.20
     required String idempotencyKey,
+    String? actual_price_paid,
+    String? actual_price_currency,
   }) async {
     final body = {
       'product_id': productId,
       'purchase_token': purchaseToken,
+      'actual_price_paid': actual_price_paid,
+      'actual_price_currency': actual_price_currency,
       if (priceUsdCents != null && priceUsdCents > 0)
         'price_usd_cents': priceUsdCents, // double e.g. 0.20
       if (packageCode != null) 'package_code': packageCode,
@@ -169,7 +173,7 @@ class RemoteWalletDataSource {
   }
 
   Future<Map<String, dynamic>> createWithdrawRequest({
-    required int amountUsdCents,
+    required double amountUsdCents,
     required String bankAccountName,
     required String bankAccountNumber,
     required String bankName,

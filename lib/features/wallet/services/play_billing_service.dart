@@ -152,6 +152,8 @@ class PlayBillingService {
       //   $0.99  →  990,000 micros →  99 cents
       //   $4.99  → 4,990,000 micros → 499 cents
       final double priceUsdCents = _extractPriceUsdCents(productDetails);
+      final String actual_price_paid = productDetails.price;
+      final String actual_price_currency = productDetails.currencySymbol;
       // debugPrint(
       //   '💵 Price from Play: $priceUsdCents cents '
       //   '(\$${(priceUsdCents / 100).toStringAsFixed(2)})',
@@ -176,6 +178,8 @@ class PlayBillingService {
           idempotencyKey,
           packageCode,
           priceUsdCents, // ✅ price flows all the way to the server call
+          actual_price_paid,
+          actual_price_currency,
         ),
         onError: (Object error) {
           debugPrint('❌ Purchase stream error: $error');
@@ -272,6 +276,8 @@ class PlayBillingService {
     String idempotencyKey,
     String? packageCode,
     double priceUsdCents, // ✅ carried through
+    String? actual_price_paid,
+    String? actual_price_currency,
   ) {
     for (final purchase in purchases) {
       if (purchase.productID != expectedProductId) continue;
@@ -296,7 +302,9 @@ class PlayBillingService {
                 completer,
                 idempotencyKey,
                 packageCode,
-                priceUsdCents, // ✅ passed to server
+                priceUsdCents,
+                actual_price_paid, // ✅ passed to server
+                actual_price_currency,
               )
               .then((_) {
                 _processingPurchases.remove(purchaseKey);
@@ -350,6 +358,8 @@ class PlayBillingService {
     String idempotencyKey,
     String? packageCode,
     double priceUsdCents, // ✅ sent to backend
+    String? actual_price_paid,
+    String? actual_price_currency,
   ) async {
     try {
       if (purchase is! GooglePlayPurchaseDetails) {
@@ -372,6 +382,8 @@ class PlayBillingService {
         priceUsdCents: priceUsdCents, // ✅ server: coins = priceUsdCents / 0.01
         packageCode: packageCode,
         idempotencyKey: idempotencyKey,
+        actual_price_paid: actual_price_paid,
+        actual_price_currency: actual_price_currency,
       );
       debugPrint('✅ Backend verification successful');
 

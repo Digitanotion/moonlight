@@ -13,6 +13,8 @@ class TransactionModel {
   ///   See WalletRemoteMapper for full logic.
   final double amountPaid;
 
+  String? amountPaidLocal;
+
   /// Coins added (positive) or removed (negative).
   final int coinsChange;
 
@@ -26,12 +28,13 @@ class TransactionModel {
   /// Raw meta map from server (for any extra display data).
   final Map<String, dynamic>? meta;
 
-  const TransactionModel({
+  TransactionModel({
     required this.id,
     required this.date,
     required this.method,
     required this.type,
     required this.amountPaid,
+    this.amountPaidLocal,
     required this.coinsChange,
     this.balanceAfter,
     this.relatedUserName,

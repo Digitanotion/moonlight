@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 
 class WithdrawalPinPage extends StatefulWidget {
-  final int amountUsdCents;
+  final double amountUsdCents;
   final String bankAccountName;
 
   /// Changed to Future<void> so this page can await it and catch errors.
@@ -247,7 +247,7 @@ class _WithdrawalPinPageState extends State<WithdrawalPinPage> {
   @override
   Widget build(BuildContext context) {
     // amountUsdCents ÷ 100 → dollars
-    final amountDisplay = (widget.amountUsdCents / 100).toStringAsFixed(2);
+    final amountDisplay = (widget.amountUsdCents).toStringAsFixed(2);
 
     return Scaffold(
       backgroundColor: const Color(0xFF060522),

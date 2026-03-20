@@ -1,5 +1,6 @@
 // lib/features/withdrawal/presentation/pages/withdrawal_page.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,16 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/utils/formatting.dart';
 import '../cubit/withdrawal_cubit.dart';
 import 'withdrawal_pin_page.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment method enum
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _PaymentMethod { flutterwave, paypal }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
 
 class WithdrawalPage extends StatefulWidget {
   const WithdrawalPage({Key? key}) : super(key: key);
@@ -16,23 +27,33 @@ class WithdrawalPage extends StatefulWidget {
 }
 
 class _WithdrawalPageState extends State<WithdrawalPage> {
+  // ── Form key ───────────────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
-  final _amountController =
-      TextEditingController(); // user types dollars e.g. "150"
+
+  // ── Shared controllers ─────────────────────────────────────────────────────
+  final _amountController = TextEditingController();
+  final _reasonController = TextEditingController();
+
+  // ── Flutterwave controllers ────────────────────────────────────────────────
   final _accountNameController = TextEditingController();
   final _accountNumberController = TextEditingController();
   final _swiftCodeController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _reasonController = TextEditingController();
 
+  // ── PayPal controllers ─────────────────────────────────────────────────────
+  final _paypalEmailController = TextEditingController();
+  final _paypalEmailConfirmController = TextEditingController();
+
+  // ── State ──────────────────────────────────────────────────────────────────
   bool _isSubmitting = false;
   bool _loadingBanks = false;
+  bool _resolvingAccountName = false;
+  String? _accountNameError;
 
-  // ✅ Stored locally so the validator always has the latest value.
-  // The API returns withdrawable_cents (already in cents); coin * 0.005 = USD
-  // so coin * 0.5 = cents. The server stores the pre-calculated cents value.
   int _withdrawableCents = 0;
+
+  _PaymentMethod _selectedMethod = _PaymentMethod.flutterwave;
 
   String _selectedCountry = 'Nigeria';
   final List<String> _countries = [
@@ -47,19 +68,19 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   List<Map<String, dynamic>> _banks = [];
   Map<String, dynamic>? _selectedBank;
 
-  // ── Computed ───────────────────────────────────────────────────────────
+  // ── Debounce timer for account-name resolution ─────────────────────────────
+  Timer? _accountResolutionTimer;
 
-  /// What the user typed as a dollar amount
+  // ── Computed helpers ───────────────────────────────────────────────────────
+
   double get _enteredDollars =>
       double.tryParse(_amountController.text.trim()) ?? 0.0;
 
-  /// Entered dollars → cents (sent to API)
-  int get _enteredCents => (_enteredDollars * 100).round();
+  double get _enteredCents => _enteredDollars; // sent as-is to server
 
-  /// Withdrawable balance in USD (display only)
   double get _withdrawableDollars => _withdrawableCents / 100.0;
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -72,23 +93,28 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
 
   @override
   void dispose() {
+    _accountResolutionTimer?.cancel();
     _amountController.dispose();
+    _reasonController.dispose();
     _accountNameController.dispose();
     _accountNumberController.dispose();
     _swiftCodeController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _reasonController.dispose();
+    _paypalEmailController.dispose();
+    _paypalEmailConfirmController.dispose();
     super.dispose();
   }
 
-  // ── Bank fetch ─────────────────────────────────────────────────────────
+  // ── Bank fetch ─────────────────────────────────────────────────────────────
 
   Future<void> _fetchBanks(String country) async {
     setState(() {
       _loadingBanks = true;
       _selectedBank = null;
       _banks = [];
+      _accountNameController.clear();
+      _accountNameError = null;
     });
     try {
       final banks = await context.read<WithdrawalCubit>().fetchBanks(country);
@@ -104,18 +130,52 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     }
   }
 
-  // ── PIN-not-set detection (mirrors pin page) ───────────────────────────
+  // ── Account name resolution ────────────────────────────────────────────────
+
+  /// Called whenever account number or bank changes.
+  /// Debounces 800 ms then fires the Flutterwave account lookup.
+  void _scheduleAccountNameResolution() {
+    _accountResolutionTimer?.cancel();
+    final number = _accountNumberController.text.trim();
+    final bank = _selectedBank;
+
+    if (number.length < 8 || bank == null) {
+      if (mounted) {
+        setState(() {
+          _accountNameController.clear();
+          _accountNameError = null;
+          _resolvingAccountName = false;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _resolvingAccountName = true;
+      _accountNameError = null;
+      _accountNameController.clear();
+    });
+
+    _accountResolutionTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      context.read<WithdrawalCubit>().resolveAccountName(
+        accountNumber: number,
+        bankCode: bank['code']?.toString() ?? '',
+      );
+    });
+  }
+
+  // ── PIN detection ──────────────────────────────────────────────────────────
 
   bool _isPinNotSet(String msg) {
     final s = msg.toLowerCase();
     return s.contains('no pin') ||
         s.contains('pin not set') ||
-        s.contains('No PIN set') ||
         s.contains('Please set a wallet PIN') ||
         s.isEmpty;
   }
 
-  // ── Dialogs ────────────────────────────────────────────────────────────
+  // ── Dialogs ────────────────────────────────────────────────────────────────
 
   void _showNoPinDialog() {
     showDialog(
@@ -187,9 +247,21 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   }
 
   void _showSuccessDialog(Map<String, dynamic> data) {
-    final flwStatus = (data['data']?['flw_status'] ?? 'pending')
+    final method = data['data']?['method']?.toString() ?? 'bank transfer';
+    final flwStatus = (data['data']?['flw_status'] ?? '')
         .toString()
         .toUpperCase();
+    final ppStatus = (data['data']?['paypal_status'] ?? '')
+        .toString()
+        .toUpperCase();
+    final statusLabel = method == 'paypal'
+        ? (ppStatus.isNotEmpty ? ppStatus : 'PROCESSING')
+        : (flwStatus.isNotEmpty ? flwStatus : 'PENDING');
+
+    final recipientLabel = _selectedMethod == _PaymentMethod.paypal
+        ? _paypalEmailController.text
+        : '${_accountNameController.text}'
+              '${_selectedBank != null ? " — ${_selectedBank!['name']}" : ""}';
 
     showDialog(
       context: context,
@@ -212,15 +284,13 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              '\$${_enteredDollars.toStringAsFixed(2)} is being transferred to '
-              '${_accountNameController.text}'
-              '${_selectedBank != null ? " — ${_selectedBank!['name']}" : ""}.',
+              '\$${_enteredDollars.toStringAsFixed(2)} is being transferred to $recipientLabel.',
               style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Status: $flwStatus',
+              'Status: $statusLabel',
               style: const TextStyle(
                 color: Colors.deepOrangeAccent,
                 fontWeight: FontWeight.bold,
@@ -248,7 +318,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   }
 
   void _showErrorDialog(String message, {bool retryable = false}) {
-    // Intercept PIN-not-set before showing generic error
     if (_isPinNotSet(message)) {
       _showNoPinDialog();
       return;
@@ -288,9 +357,9 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────
+  // ── Submit routing ─────────────────────────────────────────────────────────
 
-  Future<void> _submitWithdrawal(String pin) async {
+  Future<void> _submitFlutterwave(String pin) async {
     await context.read<WithdrawalCubit>().submitWithdrawal(
       amountUsdCents: _enteredCents,
       bankAccountName: _accountNameController.text.trim(),
@@ -314,36 +383,60 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
+  Future<void> _submitPayPal(String pin) async {
+    await context.read<WithdrawalCubit>().submitPayPalWithdrawal(
+      amountUsd: _enteredCents,
+      paypalEmail: _paypalEmailController.text.trim(),
+      paypalEmailConfirm: _paypalEmailConfirmController.text.trim(),
+      reason: _reasonController.text.isNotEmpty
+          ? _reasonController.text.trim()
+          : null,
+      pin: pin,
+    );
+  }
+
   void _onProceedToPin() {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedBank == null) {
-      _showErrorDialog('Please select your bank.');
-      return;
+    if (_selectedMethod == _PaymentMethod.flutterwave) {
+      if (_selectedBank == null) {
+        _showErrorDialog('Please select your bank.');
+        return;
+      }
+      if (_accountNameController.text.trim().isEmpty) {
+        _showErrorDialog(
+          'Account name could not be verified. Please check account number and bank.',
+        );
+        return;
+      }
     }
+
+    final displayName = _selectedMethod == _PaymentMethod.paypal
+        ? _paypalEmailController.text.trim()
+        : _accountNameController.text.trim();
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => WithdrawalPinPage(
           amountUsdCents: _enteredCents,
-          bankAccountName: _accountNameController.text.trim(),
-          // ✅ async callback — pin page awaits this and catches errors
+          bankAccountName: displayName,
           onPinVerified: (pin) async {
-            Navigator.pop(context); // dismiss pin page first
-            await _submitWithdrawal(pin);
+            Navigator.pop(context);
+            if (_selectedMethod == _PaymentMethod.paypal) {
+              await _submitPayPal(pin);
+            } else {
+              await _submitFlutterwave(pin);
+            }
           },
         ),
       ),
     );
   }
 
-  // ── Widgets ────────────────────────────────────────────────────────────
+  // ── Widgets ────────────────────────────────────────────────────────────────
 
   Widget _buildBalanceCard() {
-    // withdrawable_cents already represents earnings in cents (coin * 0.5).
-    // Display as dollars: cents / 100.
-    final dollars = _withdrawableDollars;
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -370,7 +463,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            formatusd(dollars),
+            formatusd(_withdrawableDollars),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 32,
@@ -379,23 +472,74 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Powered by Flutterwave — instant transfer',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          Text(
             'Minimum: \$100.00',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ],
       ),
     );
   }
 
-  /// Amount field — user enters dollars (e.g. "150"), not cents
+  // ── Payment method selector ─────────────────────────────────────────────────
+
+  Widget _buildMethodSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Withdrawal Method',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _MethodCard(
+                  label: 'Bank Transfer',
+                  sublabel: 'via Flutterwave',
+                  icon: Icons.account_balance,
+                  accentColor: const Color(0xFFF5A623),
+                  selected: _selectedMethod == _PaymentMethod.flutterwave,
+                  onTap: () {
+                    if (_selectedMethod != _PaymentMethod.flutterwave) {
+                      setState(
+                        () => _selectedMethod = _PaymentMethod.flutterwave,
+                      );
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _MethodCard(
+                  label: 'PayPal',
+                  sublabel: 'Instant to email',
+                  icon: Icons.send_to_mobile,
+                  accentColor: const Color(0xFF003087),
+                  selected: _selectedMethod == _PaymentMethod.paypal,
+                  onTap: () {
+                    if (_selectedMethod != _PaymentMethod.paypal) {
+                      setState(() => _selectedMethod = _PaymentMethod.paypal);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  // ── Amount field ───────────────────────────────────────────────────────────
+
   Widget _buildAmountField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -455,9 +599,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     if (v == null || v.isEmpty) return 'Enter an amount';
                     final dollars = double.tryParse(v) ?? 0.0;
                     final cents = (dollars * 100).round();
-                    if (cents < 10000) {
-                      return 'Minimum withdrawal is \$100.00';
-                    }
+                    if (cents < 10000) return 'Minimum withdrawal is \$100.00';
                     if (cents > _withdrawableCents) {
                       return 'Exceeds your available balance of '
                           '\$${_withdrawableDollars.toStringAsFixed(2)}';
@@ -482,21 +624,38 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  Widget _buildInputField({
-    required String label,
-    required TextEditingController controller,
-    required String? Function(String?) validator,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    int? maxLines = 1,
-    String? hint,
-  }) {
+  // ── Flutterwave form ───────────────────────────────────────────────────────
+
+  Widget _buildFlutterwaveForm() {
+    return Column(
+      children: [
+        _buildCountryDropdown(),
+        _buildBankDropdown(),
+        _buildAccountNumberField(),
+        _buildAccountNameField(), // disabled, auto-populated
+        _buildInputField(
+          label: 'Email (Optional)',
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          validator: (_) => null,
+        ),
+        _buildInputField(
+          label: 'Phone (Optional)',
+          controller: _phoneController,
+          keyboardType: TextInputType.phone,
+          validator: (_) => null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccountNumberField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
+        const Text(
+          'Account Number',
+          style: TextStyle(
             color: Colors.white70,
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -509,24 +668,135 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: TextFormField(
-            controller: controller,
-            keyboardType: keyboardType,
-            inputFormatters: inputFormatters,
-            maxLines: maxLines,
+            controller: _accountNumberController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               border: InputBorder.none,
-              hintText: hint,
-              hintStyle: const TextStyle(color: Colors.white30),
-              contentPadding: const EdgeInsets.symmetric(
+              hintText: 'Enter account number',
+              hintStyle: TextStyle(color: Colors.white30),
+              contentPadding: EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 14,
               ),
-              errorStyle: const TextStyle(color: Colors.redAccent),
+              errorStyle: TextStyle(color: Colors.redAccent),
             ),
-            validator: validator,
+            onChanged: (_) => _scheduleAccountNameResolution(),
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Enter account number';
+              if (v.length < 8) return 'Enter a valid account number';
+              return null;
+            },
           ),
         ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  /// Account name field — always disabled, filled by Flutterwave lookup.
+  Widget _buildAccountNameField() {
+    final isResolving = _resolvingAccountName;
+    final hasError = _accountNameError != null;
+    final hasName = _accountNameController.text.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Account Name',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF141433),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: hasError
+                  ? Colors.redAccent.withOpacity(0.5)
+                  : hasName
+                  ? Colors.greenAccent.withOpacity(0.35)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _accountNameController,
+                  readOnly: true,
+                  style: TextStyle(
+                    color: hasName ? Colors.greenAccent : Colors.white38,
+                    fontStyle: hasName ? FontStyle.normal : FontStyle.italic,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: isResolving
+                        ? 'Verifying…'
+                        : 'Auto-filled from your bank',
+                    hintStyle: TextStyle(
+                      color: isResolving ? Colors.white54 : Colors.white30,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                  ),
+                  validator: (_) {
+                    if (_selectedMethod != _PaymentMethod.flutterwave)
+                      return null;
+                    if (_accountNameController.text.trim().isEmpty) {
+                      return 'Account name could not be verified';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: isResolving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(
+                            Colors.deepOrangeAccent,
+                          ),
+                        ),
+                      )
+                    : hasName
+                    ? const Icon(
+                        Icons.verified,
+                        color: Colors.greenAccent,
+                        size: 20,
+                      )
+                    : hasError
+                    ? const Icon(
+                        Icons.error_outline,
+                        color: Colors.redAccent,
+                        size: 20,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
+        if (hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              _accountNameError!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
         const SizedBox(height: 16),
       ],
     );
@@ -565,6 +835,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
               setState(() {
                 _selectedCountry = val;
                 _selectedBank = null;
+                _accountNameController.clear();
+                _accountNameError = null;
               });
               _fetchBanks(val);
             },
@@ -650,17 +922,26 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     'Select your bank',
                     style: TextStyle(color: Colors.white38),
                   ),
-                  items: _banks.map((bank) {
-                    return DropdownMenuItem<Map<String, dynamic>>(
-                      value: bank,
-                      child: Text(
-                        bank['name']?.toString() ?? '',
-                        style: const TextStyle(color: Colors.white),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) => setState(() => _selectedBank = val),
+                  items: _banks
+                      .map(
+                        (bank) => DropdownMenuItem(
+                          value: bank,
+                          child: Text(
+                            bank['name']?.toString() ?? '',
+                            style: const TextStyle(color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedBank = val;
+                      _accountNameController.clear();
+                      _accountNameError = null;
+                    });
+                    _scheduleAccountNameResolution();
+                  },
                   validator: (_) =>
                       _selectedBank == null ? 'Please select a bank' : null,
                   decoration: const InputDecoration(
@@ -679,7 +960,124 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────
+  // ── PayPal form ────────────────────────────────────────────────────────────
+
+  Widget _buildPayPalForm() {
+    return Column(
+      children: [
+        // PayPal info banner
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF003087).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF003087).withOpacity(0.4)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Color(0xFF009CDE), size: 18),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Funds will be sent to your PayPal account in USD. '
+                  'Make sure your PayPal account is verified.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildInputField(
+          label: 'PayPal Email Address',
+          hint: 'your@paypal.com',
+          controller: _paypalEmailController,
+          keyboardType: TextInputType.emailAddress,
+          validator: (v) {
+            if (v == null || v.isEmpty) return 'Enter your PayPal email';
+            if (!RegExp(
+              r'^[\w\.\+\-]+@[\w\-]+\.[a-zA-Z]{2,}$',
+            ).hasMatch(v.trim())) {
+              return 'Enter a valid email address';
+            }
+            return null;
+          },
+        ),
+        _buildInputField(
+          label: 'Confirm PayPal Email',
+          hint: 'Re-enter your PayPal email',
+          controller: _paypalEmailConfirmController,
+          keyboardType: TextInputType.emailAddress,
+          validator: (v) {
+            if (v == null || v.isEmpty)
+              return 'Please confirm your PayPal email';
+            if (v.trim() != _paypalEmailController.text.trim()) {
+              return 'Emails do not match';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  // ── Generic input field ────────────────────────────────────────────────────
+
+  Widget _buildInputField({
+    required String label,
+    required TextEditingController controller,
+    required String? Function(String?) validator,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLines = 1,
+    String? hint,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF141433),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
+            maxLines: maxLines,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: hint,
+              hintStyle: const TextStyle(color: Colors.white30),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              errorStyle: const TextStyle(color: Colors.redAccent),
+            ),
+            validator: validator,
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -700,20 +1098,35 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           if (state is WithdrawalSuccess) {
             _showSuccessDialog(state.transactionData);
           } else if (state is WithdrawalError) {
-            // ✅ PIN-not-set is intercepted inside _showErrorDialog
             _showErrorDialog(
               state.message,
               retryable: !_isPinNotSet(state.message),
             );
           } else if (state is WithdrawalBalanceLoaded) {
-            // ✅ Capture balance in listener so it's always up-to-date
             setState(() => _withdrawableCents = state.balance);
+          } else if (state is WithdrawalAccountNameLoaded) {
+            setState(() {
+              _accountNameController.text = state.accountName;
+              _resolvingAccountName = false;
+              _accountNameError = null;
+            });
+          } else if (state is WithdrawalAccountNameError) {
+            setState(() {
+              _accountNameController.clear();
+              _resolvingAccountName = false;
+              _accountNameError = state.message;
+            });
+          } else if (state is WithdrawalAccountNameLoading) {
+            setState(() {
+              _resolvingAccountName = true;
+              _accountNameError = null;
+            });
           }
         },
         builder: (ctx, state) {
           _isSubmitting = state is WithdrawalSubmitting;
 
-          // Also sync in builder for first paint
+          // Sync balance on first build
           if (state is WithdrawalBalanceLoaded) {
             _withdrawableCents = state.balance;
           }
@@ -732,93 +1145,16 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
               padding: const EdgeInsets.only(bottom: 120),
               children: [
                 _buildBalanceCard(),
-
-                // Flutterwave badge
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF5A623).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: const Color(0xFFF5A623).withOpacity(0.4),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.flash_on,
-                              color: Color(0xFFF5A623),
-                              size: 14,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Instant transfer via Flutterwave',
-                              style: TextStyle(
-                                color: Color(0xFFF5A623),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
+                _buildMethodSelector(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     children: [
-                      _buildAmountField(), // ← dollars input
-                      _buildCountryDropdown(),
-                      _buildBankDropdown(),
-                      _buildInputField(
-                        label: 'Account Name',
-                        hint: 'Exactly as registered with your bank',
-                        controller: _accountNameController,
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Enter account name'
-                            : null,
-                      ),
-                      _buildInputField(
-                        label: 'Account Number',
-                        controller: _accountNumberController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Enter account number';
-                          }
-                          if (v.length < 8) {
-                            return 'Enter a valid account number';
-                          }
-                          return null;
-                        },
-                      ),
-                      _buildInputField(
-                        label: 'Email (Optional)',
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (_) => null,
-                      ),
-                      _buildInputField(
-                        label: 'Phone (Optional)',
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        validator: (_) => null,
-                      ),
+                      _buildAmountField(),
+                      if (_selectedMethod == _PaymentMethod.flutterwave)
+                        _buildFlutterwaveForm()
+                      else
+                        _buildPayPalForm(),
                       _buildInputField(
                         label: 'Reason (Optional)',
                         controller: _reasonController,
@@ -861,6 +1197,86 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment method selector card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MethodCard extends StatelessWidget {
+  final String label;
+  final String sublabel;
+  final IconData icon;
+  final Color accentColor;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MethodCard({
+    required this.label,
+    required this.sublabel,
+    required this.icon,
+    required this.accentColor,
+    required this.selected,
+    required this.onTap,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? accentColor.withOpacity(0.15)
+              : const Color(0xFF141433),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? accentColor : Colors.white12,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  icon,
+                  color: selected ? accentColor : Colors.white38,
+                  size: 22,
+                ),
+                const Spacer(),
+                if (selected)
+                  Icon(Icons.check_circle, color: accentColor, size: 18),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.white54,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              sublabel,
+              style: TextStyle(
+                color: selected
+                    ? accentColor.withOpacity(0.85)
+                    : Colors.white30,
+                fontSize: 11,
+              ),
+            ),
+          ],
         ),
       ),
     );

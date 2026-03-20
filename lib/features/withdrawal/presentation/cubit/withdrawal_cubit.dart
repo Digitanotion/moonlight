@@ -10,34 +10,67 @@ part 'withdrawal_state.dart';
 class WithdrawalCubit extends Cubit<WithdrawalState> {
   final WithdrawalRepository repository;
 
+  // ── Retry cache ────────────────────────────────────────────────────────────
   Map<String, dynamic>? _lastWithdrawalData;
   String? _lastPin;
 
   WithdrawalCubit({required this.repository}) : super(WithdrawalInitial());
 
-  /// Load user's current withdrawable balance
+  // ── Balance ────────────────────────────────────────────────────────────────
+
+  /// Load the user's current withdrawable balance.
   Future<void> loadBalance() async {
     emit(WithdrawalLoading());
     try {
       final balance = await repository.getWithdrawableBalance();
       emit(WithdrawalBalanceLoaded(balance: balance));
     } catch (e) {
-      emit(WithdrawalError(message: _short(e.toString())));
+      emit(WithdrawalError(message: _clean(e.toString())));
     }
   }
 
-  /// Fetch bank list for a given country from Flutterwave (via backend)
-  Future<List<Map<String, dynamic>>> fetchBanks(String country) async {
-    return await repository.fetchBanks(country);
+  // ── Banks ──────────────────────────────────────────────────────────────────
+
+  /// Fetch Flutterwave bank list for a given country name (e.g. "Nigeria").
+  Future<List<Map<String, dynamic>>> fetchBanks(String country) {
+    return repository.fetchBanks(country);
   }
 
-  /// Submit withdrawal — PIN verification + Flutterwave transfer
+  // ── Account name resolution (Flutterwave) ──────────────────────────────────
+
+  /// Resolve the account holder name for [accountNumber] at [bankCode].
+  /// Emits [WithdrawalAccountNameLoading] → [WithdrawalAccountNameLoaded] or
+  /// [WithdrawalAccountNameError].
+  /// The previous balance state is preserved; the page re-syncs it via the
+  /// builder, so this does not overwrite [WithdrawalBalanceLoaded].
+  Future<void> resolveAccountName({
+    required String accountNumber,
+    required String bankCode,
+  }) async {
+    if (accountNumber.length < 8 || bankCode.isEmpty) return;
+
+    emit(WithdrawalAccountNameLoading());
+
+    try {
+      final name = await repository.resolveAccountName(
+        accountNumber: accountNumber,
+        bankCode: bankCode,
+      );
+      emit(WithdrawalAccountNameLoaded(accountName: name));
+    } catch (e) {
+      emit(WithdrawalAccountNameError(message: _clean(e.toString())));
+    }
+  }
+
+  // ── Flutterwave withdrawal ─────────────────────────────────────────────────
+
+  /// Submit a Flutterwave bank-transfer withdrawal.
   Future<void> submitWithdrawal({
-    required int amountUsdCents,
+    required double amountUsdCents,
     required String bankAccountName,
     required String bankAccountNumber,
     required String bankName,
-    required String bankCode, // ← Flutterwave bank code
+    required String bankCode,
     required String country,
     String? swift,
     String? email,
@@ -46,6 +79,7 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     required String pin,
   }) async {
     _lastWithdrawalData = {
+      'type': 'flutterwave',
       'amountUsdCents': amountUsdCents,
       'bankAccountName': bankAccountName,
       'bankAccountNumber': bankAccountNumber,
@@ -62,10 +96,6 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     emit(WithdrawalSubmitting());
 
     try {
-      // 1. Verify PIN
-      await repository.verifyPin(pin);
-
-      // 2. Execute withdrawal (Flutterwave instant transfer)
       final result = await repository.createWithdrawalRequest(
         amountUsdCents: amountUsdCents,
         bankAccountName: bankAccountName,
@@ -80,42 +110,99 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
         pin: pin,
       );
 
+      _clearRetryCache();
       emit(WithdrawalSuccess(transactionData: result));
-
-      _lastWithdrawalData = null;
-      _lastPin = null;
     } catch (e) {
-      emit(WithdrawalError(message: _short(e.toString())));
+      emit(WithdrawalError(message: _clean(e.toString())));
     }
   }
 
-  /// Retry last withdrawal
+  // ── PayPal withdrawal ──────────────────────────────────────────────────────
+
+  /// Submit a PayPal payout withdrawal.
+  Future<void> submitPayPalWithdrawal({
+    required double amountUsd,
+    required String paypalEmail,
+    required String paypalEmailConfirm,
+    String? reason,
+    required String pin,
+  }) async {
+    _lastWithdrawalData = {
+      'type': 'paypal',
+      'amountUsd': amountUsd,
+      'paypalEmail': paypalEmail,
+      'paypalEmailConfirm': paypalEmailConfirm,
+      'reason': reason,
+    };
+    _lastPin = pin;
+
+    emit(WithdrawalSubmitting());
+
+    try {
+      final result = await repository.createPayPalWithdrawal(
+        amountUsd: amountUsd,
+        paypalEmail: paypalEmail,
+        paypalEmailConfirm: paypalEmailConfirm,
+        reason: reason,
+        pin: pin,
+      );
+
+      _clearRetryCache();
+      emit(WithdrawalSuccess(transactionData: result));
+    } catch (e) {
+      emit(WithdrawalError(message: _clean(e.toString())));
+    }
+  }
+
+  // ── Retry ──────────────────────────────────────────────────────────────────
+
   Future<void> retryWithdrawal() async {
     if (_lastWithdrawalData == null || _lastPin == null) return;
     final d = _lastWithdrawalData!;
-    await submitWithdrawal(
-      amountUsdCents: d['amountUsdCents'],
-      bankAccountName: d['bankAccountName'],
-      bankAccountNumber: d['bankAccountNumber'],
-      bankName: d['bankName'],
-      bankCode: d['bankCode'],
-      country: d['country'],
-      swift: d['swift'],
-      email: d['email'],
-      phone: d['phone'],
-      reason: d['reason'],
-      pin: _lastPin!,
-    );
+
+    if (d['type'] == 'paypal') {
+      await submitPayPalWithdrawal(
+        amountUsd: d['amountUsd'],
+        paypalEmail: d['paypalEmail'],
+        paypalEmailConfirm: d['paypalEmailConfirm'],
+        reason: d['reason'],
+        pin: _lastPin!,
+      );
+    } else {
+      await submitWithdrawal(
+        amountUsdCents: d['amountUsdCents'],
+        bankAccountName: d['bankAccountName'],
+        bankAccountNumber: d['bankAccountNumber'],
+        bankName: d['bankName'],
+        bankCode: d['bankCode'],
+        country: d['country'],
+        swift: d['swift'],
+        email: d['email'],
+        phone: d['phone'],
+        reason: d['reason'],
+        pin: _lastPin!,
+      );
+    }
   }
 
+  // ── Reset ──────────────────────────────────────────────────────────────────
+
   void reset() {
+    _clearRetryCache();
     emit(WithdrawalInitial());
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  void _clearRetryCache() {
     _lastWithdrawalData = null;
     _lastPin = null;
   }
 
-  String _short(String s) {
-    if (s.contains('Exception:')) s = s.replaceFirst('Exception:', '');
-    return s.trim();
+  String _clean(String s) {
+    return s
+        .replaceFirst(RegExp(r'^Exception:\s*'), '')
+        .replaceFirst(RegExp(r'^exception:\s*'), '')
+        .trim();
   }
 }

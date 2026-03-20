@@ -40,6 +40,8 @@ class WalletRepositoryImpl implements WalletRepository {
     required double? priceUsdCents, // ✅ from Google Play
     String? packageCode,
     String? idempotencyKey,
+    String? actual_price_paid,
+    String? actual_price_currency,
   }) async {
     final key = idempotencyKey ?? _uuid.v4();
     return remote.purchase(
@@ -48,6 +50,7 @@ class WalletRepositoryImpl implements WalletRepository {
       priceUsdCents: priceUsdCents, // ✅ passed to datasource → HTTP body
       packageCode: packageCode,
       idempotencyKey: key,
+      actual_price_paid: actual_price_paid,
     );
   }
 
@@ -123,7 +126,7 @@ class WalletRepositoryImpl implements WalletRepository {
 
   @override
   Future<Map<String, dynamic>> createWithdrawRequest({
-    required int amountUsdCents,
+    required double amountUsdCents,
     required String bankAccountName,
     required String bankAccountNumber,
     required String bankName,

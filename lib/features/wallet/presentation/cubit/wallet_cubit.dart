@@ -61,6 +61,8 @@ class WalletCubit extends Cubit<WalletState> {
     String? packageCode,
     double? priceUsdCents,
     String? idempotencyKey,
+    String? actual_price_paid,
+    String? actual_price_currency,
   }) async {
     // Keep UI responsive: Busy state while we contact server
     emit(WalletBusy());
@@ -71,6 +73,8 @@ class WalletCubit extends Cubit<WalletState> {
         priceUsdCents: priceUsdCents,
         packageCode: packageCode,
         idempotencyKey: idempotencyKey,
+        actual_price_paid: actual_price_paid,
+        actual_price_currency: actual_price_currency,
       );
       await loadAll();
       return txn;
