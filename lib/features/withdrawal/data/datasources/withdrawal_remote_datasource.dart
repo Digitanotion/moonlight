@@ -14,7 +14,7 @@ class WithdrawalRemoteDataSource {
     final res = await http.dio.get('/api/v1/wallet');
     final data = _extract(res);
     // withdrawable_cents is the server-authoritative withdrawable amount.
-    return (data['data']['withdrawable_cents'] as num).toInt();
+    return (data['data']['balance'] as num).toInt();
   }
 
   // ── PIN verify ─────────────────────────────────────────────────────────────

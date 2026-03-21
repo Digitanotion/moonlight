@@ -10,8 +10,10 @@ import '../cubit/withdrawal_cubit.dart';
 import 'withdrawal_pin_page.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Payment method enum
+// Nigeria NUBAN is always exactly 10 digits → resolve immediately on hit.
+// All other FLW-supported countries vary (9-16 digits) → 600 ms debounce.
 // ─────────────────────────────────────────────────────────────────────────────
+const int _kNubanLength = 10;
 
 enum _PaymentMethod { flutterwave, paypal }
 
@@ -27,7 +29,7 @@ class WithdrawalPage extends StatefulWidget {
 }
 
 class _WithdrawalPageState extends State<WithdrawalPage> {
-  // ── Form key ───────────────────────────────────────────────────────────────
+  // ── Form ───────────────────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
 
   // ── Shared controllers ─────────────────────────────────────────────────────
@@ -45,7 +47,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   final _paypalEmailController = TextEditingController();
   final _paypalEmailConfirmController = TextEditingController();
 
-  // ── State ──────────────────────────────────────────────────────────────────
+  // ── State flags ────────────────────────────────────────────────────────────
   bool _isSubmitting = false;
   bool _loadingBanks = false;
   bool _resolvingAccountName = false;
@@ -54,7 +56,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   int _withdrawableCents = 0;
 
   _PaymentMethod _selectedMethod = _PaymentMethod.flutterwave;
-
   String _selectedCountry = 'Nigeria';
   final List<String> _countries = [
     'Nigeria',
@@ -68,17 +69,16 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   List<Map<String, dynamic>> _banks = [];
   Map<String, dynamic>? _selectedBank;
 
-  // ── Debounce timer for account-name resolution ─────────────────────────────
+  // ── Debounce timer ─────────────────────────────────────────────────────────
   Timer? _accountResolutionTimer;
 
-  // ── Computed helpers ───────────────────────────────────────────────────────
-
+  // ── Computed ───────────────────────────────────────────────────────────────
   double get _enteredDollars =>
       double.tryParse(_amountController.text.trim()) ?? 0.0;
 
-  double get _enteredCents => _enteredDollars; // sent as-is to server
+  double get _enteredCents => _enteredDollars;
 
-  double get _withdrawableDollars => _withdrawableCents / 100.0;
+  double get _withdrawableDollars => _withdrawableCents * 0.005;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -132,46 +132,89 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
 
   // ── Account name resolution ────────────────────────────────────────────────
 
-  /// Called whenever account number or bank changes.
-  /// Debounces 800 ms then fires the Flutterwave account lookup.
-  void _scheduleAccountNameResolution() {
-    _accountResolutionTimer?.cancel();
-    final number = _accountNumberController.text.trim();
+  void _onAccountNumberChanged(String value) {
+    final number = value.trim();
     final bank = _selectedBank;
 
-    if (number.length < 8 || bank == null) {
-      if (mounted) {
-        setState(() {
-          _accountNameController.clear();
-          _accountNameError = null;
-          _resolvingAccountName = false;
-        });
-      }
+    // Always clear previous result when number changes
+    setState(() {
+      _accountNameController.clear();
+      _accountNameError = null;
+      _resolvingAccountName = false;
+    });
+    _accountResolutionTimer?.cancel();
+
+    if (bank == null || number.length < _kNubanLength) return;
+
+    // Nigeria (NUBAN): exactly 10 digits → fire immediately, no debounce
+    if (number.length == _kNubanLength) {
+      _triggerResolution(number, bank);
       return;
     }
 
-    setState(() {
-      _resolvingAccountName = true;
-      _accountNameError = null;
-      _accountNameController.clear();
-    });
-
-    _accountResolutionTimer = Timer(const Duration(milliseconds: 800), () {
+    // Other countries (>10 digits): debounce 600 ms after user stops typing
+    setState(() => _resolvingAccountName = true);
+    _accountResolutionTimer = Timer(const Duration(milliseconds: 600), () {
       if (!mounted) return;
-      context.read<WithdrawalCubit>().resolveAccountName(
-        accountNumber: number,
-        bankCode: bank['code']?.toString() ?? '',
-      );
+      _triggerResolution(number, bank);
     });
   }
 
-  // ── PIN detection ──────────────────────────────────────────────────────────
+  void _onBankSelected(Map<String, dynamic> bank) {
+    setState(() {
+      _selectedBank = bank;
+      _accountNameController.clear();
+      _accountNameError = null;
+      _resolvingAccountName = false;
+    });
+    _accountResolutionTimer?.cancel();
+
+    final number = _accountNumberController.text.trim();
+    if (number.length >= _kNubanLength) {
+      _triggerResolution(number, bank);
+    }
+  }
+
+  void _triggerResolution(String number, Map<String, dynamic> bank) {
+    setState(() {
+      _resolvingAccountName = true;
+      _accountNameError = null;
+    });
+    context.read<WithdrawalCubit>().resolveAccountName(
+      accountNumber: number,
+      bankCode: bank['code']?.toString() ?? '',
+    );
+  }
+
+  // ── Bank search sheet ──────────────────────────────────────────────────────
+
+  void _openBankSearchSheet() {
+    if (_banks.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1C1533),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _BankSearchSheet(
+        banks: _banks,
+        onSelected: (bank) {
+          Navigator.pop(context);
+          _onBankSelected(bank);
+        },
+      ),
+    );
+  }
+
+  // ── PIN / error helpers ────────────────────────────────────────────────────
 
   bool _isPinNotSet(String msg) {
     final s = msg.toLowerCase();
     return s.contains('no pin') ||
         s.contains('pin not set') ||
-        s.contains('Please set a wallet PIN') ||
+        s.contains('please set a wallet pin') ||
         s.isEmpty;
   }
 
@@ -403,9 +446,13 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
         _showErrorDialog('Please select your bank.');
         return;
       }
+      if (_resolvingAccountName) {
+        _showErrorDialog('Please wait — verifying your account number…');
+        return;
+      }
       if (_accountNameController.text.trim().isEmpty) {
         _showErrorDialog(
-          'Account name could not be verified. Please check account number and bank.',
+          'Account name could not be verified. Please check your account number and bank.',
         );
         return;
       }
@@ -422,7 +469,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           amountUsdCents: _enteredCents,
           bankAccountName: displayName,
           onPinVerified: (pin) async {
-            Navigator.pop(context);
+            Navigator.pop(context); // dismiss PIN page
             if (_selectedMethod == _PaymentMethod.paypal) {
               await _submitPayPal(pin);
             } else {
@@ -480,8 +527,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  // ── Payment method selector ─────────────────────────────────────────────────
-
   Widget _buildMethodSelector() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -537,8 +582,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       ),
     );
   }
-
-  // ── Amount field ───────────────────────────────────────────────────────────
 
   Widget _buildAmountField() {
     return Column(
@@ -630,9 +673,9 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     return Column(
       children: [
         _buildCountryDropdown(),
-        _buildBankDropdown(),
+        _buildBankSelector(),
         _buildAccountNumberField(),
-        _buildAccountNameField(), // disabled, auto-populated
+        _buildAccountNameField(),
         _buildInputField(
           label: 'Email (Optional)',
           controller: _emailController,
@@ -648,6 +691,126 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       ],
     );
   }
+
+  // ── Searchable bank selector ───────────────────────────────────────────────
+
+  Widget _buildBankSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Bank',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Tappable pill that opens the search sheet
+        GestureDetector(
+          onTap: _loadingBanks || _banks.isEmpty ? null : _openBankSearchSheet,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141433),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _selectedBank != null
+                    ? Colors.deepOrangeAccent.withOpacity(0.45)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _loadingBanks
+                      ? const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.deepOrangeAccent,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              'Loading banks…',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ],
+                        )
+                      : _banks.isEmpty
+                      ? Row(
+                          children: [
+                            const Text(
+                              'No banks loaded',
+                              style: TextStyle(color: Colors.white38),
+                            ),
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () => _fetchBanks(_selectedCountry),
+                              child: const Text(
+                                'Retry',
+                                style: TextStyle(
+                                  color: Colors.deepOrangeAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          _selectedBank?['name']?.toString() ??
+                              'Tap to search your bank',
+                          style: TextStyle(
+                            color: _selectedBank != null
+                                ? Colors.white
+                                : Colors.white38,
+                            fontSize: 15,
+                          ),
+                        ),
+                ),
+                if (!_loadingBanks && _banks.isNotEmpty)
+                  Icon(
+                    Icons.search,
+                    color: _selectedBank != null
+                        ? Colors.deepOrangeAccent
+                        : Colors.white38,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // Hidden FormField for validation wiring
+        FormField<Map<String, dynamic>>(
+          initialValue: _selectedBank,
+          validator: (_) =>
+              _selectedBank == null ? 'Please select a bank' : null,
+          builder: (field) => field.errorText != null
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Text(
+                    field.errorText!,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ── Account number field ───────────────────────────────────────────────────
 
   Widget _buildAccountNumberField() {
     return Column(
@@ -670,7 +833,10 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           child: TextFormField(
             controller: _accountNumberController,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(16),
+            ],
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               border: InputBorder.none,
@@ -682,10 +848,11 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
               ),
               errorStyle: TextStyle(color: Colors.redAccent),
             ),
-            onChanged: (_) => _scheduleAccountNameResolution(),
+            onChanged: _onAccountNumberChanged,
             validator: (v) {
               if (v == null || v.isEmpty) return 'Enter account number';
-              if (v.length < 8) return 'Enter a valid account number';
+              if (v.length < _kNubanLength)
+                return 'Enter a valid account number';
               return null;
             },
           ),
@@ -695,7 +862,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  /// Account name field — always disabled, filled by Flutterwave lookup.
+  // ── Account name field (read-only, auto-populated) ─────────────────────────
+
   Widget _buildAccountNameField() {
     final isResolving = _resolvingAccountName;
     final hasError = _accountNameError != null;
@@ -856,116 +1024,11 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  Widget _buildBankDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Bank',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF141433),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: _loadingBanks
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.deepOrangeAccent,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Text(
-                        'Loading banks…',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ],
-                  ),
-                )
-              : _banks.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Text(
-                        'No banks loaded',
-                        style: TextStyle(color: Colors.white38),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => _fetchBanks(_selectedCountry),
-                        child: const Text(
-                          'Retry',
-                          style: TextStyle(color: Colors.deepOrangeAccent),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : DropdownButtonFormField<Map<String, dynamic>>(
-                  value: _selectedBank,
-                  isExpanded: true,
-                  hint: const Text(
-                    'Select your bank',
-                    style: TextStyle(color: Colors.white38),
-                  ),
-                  items: _banks
-                      .map(
-                        (bank) => DropdownMenuItem(
-                          value: bank,
-                          child: Text(
-                            bank['name']?.toString() ?? '',
-                            style: const TextStyle(color: Colors.white),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _selectedBank = val;
-                      _accountNameController.clear();
-                      _accountNameError = null;
-                    });
-                    _scheduleAccountNameResolution();
-                  },
-                  validator: (_) =>
-                      _selectedBank == null ? 'Please select a bank' : null,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                  ),
-                  dropdownColor: const Color(0xFF1C1533),
-                  style: const TextStyle(color: Colors.white),
-                ),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
   // ── PayPal form ────────────────────────────────────────────────────────────
 
   Widget _buildPayPalForm() {
     return Column(
       children: [
-        // PayPal info banner
         Container(
           margin: const EdgeInsets.only(bottom: 16),
           padding: const EdgeInsets.all(14),
@@ -1077,6 +1140,36 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
+  // ── Submit loading banner ──────────────────────────────────────────────────
+
+  Widget _buildSubmittingBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      color: const Color(0xFF1C1533),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _selectedMethod == _PaymentMethod.paypal
+                ? 'Sending to PayPal…'
+                : 'Processing bank transfer…',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -1126,7 +1219,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
         builder: (ctx, state) {
           _isSubmitting = state is WithdrawalSubmitting;
 
-          // Sync balance on first build
           if (state is WithdrawalBalanceLoaded) {
             _withdrawableCents = state.balance;
           }
@@ -1169,35 +1261,238 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           );
         },
       ),
+
+      // ── Bottom bar ─────────────────────────────────────────────────────────
       bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: ElevatedButton(
-            onPressed: _isSubmitting ? null : _onProceedToPin,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepOrangeAccent,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.deepOrangeAccent.withOpacity(0.5),
-              minimumSize: const Size.fromHeight(56),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Progress banner — slides in while request is in flight
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: _isSubmitting
+                  ? _buildSubmittingBanner()
+                  : const SizedBox.shrink(),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _onProceedToPin,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrangeAccent,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.deepOrangeAccent.withOpacity(
+                    0.5,
+                  ),
+                  minimumSize: const Size.fromHeight(56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: _isSubmitting
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Processing…',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Proceed to Withdraw',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bank search bottom sheet  (self-contained, stateful)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BankSearchSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> banks;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+
+  const _BankSearchSheet({
+    required this.banks,
+    required this.onSelected,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  State<_BankSearchSheet> createState() => _BankSearchSheetState();
+}
+
+class _BankSearchSheetState extends State<_BankSearchSheet> {
+  final _searchCtrl = TextEditingController();
+  late List<Map<String, dynamic>> _filtered;
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = List.of(widget.banks);
+    _searchCtrl.addListener(_filter);
+  }
+
+  void _filter() {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? List.of(widget.banks)
+          : widget.banks
+                .where(
+                  (b) =>
+                      (b['name']?.toString() ?? '').toLowerCase().contains(q),
+                )
+                .toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl
+      ..removeListener(_filter)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.75;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Column(
+        children: [
+          // Drag handle
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 8),
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // Header
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                Text(
+                  'Select Bank',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Search field
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF141433),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Search bank name…',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ),
+
+          // Result count
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${_filtered.length} bank${_filtered.length == 1 ? '' : 's'}',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ),
+          ),
+
+          const Divider(color: Colors.white12, height: 1),
+
+          // Results list
+          Expanded(
+            child: _filtered.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No banks match your search.',
+                      style: TextStyle(color: Colors.white54),
                     ),
                   )
-                : const Text(
-                    'Proceed to Withdraw',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                : ListView.builder(
+                    itemCount: _filtered.length,
+                    itemBuilder: (_, i) {
+                      final bank = _filtered[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          bank['name']?.toString() ?? '',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: Colors.white24,
+                          size: 18,
+                        ),
+                        onTap: () => widget.onSelected(bank),
+                      );
+                    },
                   ),
           ),
-        ),
+
+          // Keyboard clearance
+          SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+        ],
       ),
     );
   }
