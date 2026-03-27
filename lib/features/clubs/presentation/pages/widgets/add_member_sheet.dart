@@ -1,5 +1,3 @@
-// lib/features/clubs/presentation/pages/widgets/add_member_sheet.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -200,7 +198,8 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                   final user = _selectedUsers[index];
                   return _SelectedUserCard(
                     user: user,
-                    onClear: () => _removeSelectedUser(user),
+                    onClear: () =>
+                        _removeSelectedUser(user), // Fixed: use onClear
                   );
                 },
               ),
@@ -278,7 +277,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                     )
                   : Text(
                       'Add ${_selectedUsers.isEmpty ? '' : '(${_selectedUsers.length})'} to Club',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -342,7 +341,9 @@ class _SelectedUserCard extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '${user.fullname}\n@${user.slug}',
+              user.fullname != null
+                  ? '${user.fullname}\n@${user.slug}'
+                  : '@${user.slug}',
               style: const TextStyle(color: Colors.white),
             ),
           ),
