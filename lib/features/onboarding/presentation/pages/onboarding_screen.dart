@@ -109,7 +109,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (currentAuthState is AuthAuthenticated) {
         _navigateTo(RouteNames.home);
       } else {
-        _navigateTo(RouteNames.register);
+        _navigateTo(RouteNames.login);
       }
     } catch (e, stack) {
       debugPrint('❌ Onboarding completion error: $e');
@@ -117,7 +117,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       if (mounted) {
         // Fallback navigation on error
-        _navigateTo(RouteNames.register);
+        _navigateTo(RouteNames.login);
       }
     } finally {
       _safeSetState(() {
@@ -136,10 +136,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } catch (e) {
       debugPrint('❌ Navigation error to $routeName: $e');
       // Emergency fallback
-      if (routeName == RouteNames.register) {
+      if (routeName == RouteNames.login) {
         Navigator.of(
           context,
-        ).pushNamedAndRemoveUntil(RouteNames.register, (route) => false);
+        ).pushNamedAndRemoveUntil(RouteNames.login, (route) => false);
       }
     }
   }

@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
-import 'package:moonlight/core/theme/app_text_styles.dart';
+import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 class FeedPostCard extends StatelessWidget {
   const FeedPostCard({
@@ -29,11 +31,6 @@ class FeedPostCard extends StatelessWidget {
         u.endsWith('.webm');
   }
 
-  String get _previewUrl {
-    // Prefer thumb for videos; else mediaUrl. For images, mediaUrl is fine.
-    return post.thumbUrl?.isNotEmpty == true ? post.thumbUrl! : post.mediaUrl;
-  }
-
   bool _isValidUrl(String? url) {
     if (url == null || url.isEmpty) return false;
     final uri = Uri.tryParse(url);
@@ -43,7 +40,6 @@ class FeedPostCard extends StatelessWidget {
   Widget _buildAvatar() {
     final avatar = post.author.avatarUrl;
     final valid = _isValidUrl(avatar);
-
     if (!valid) {
       return CircleAvatar(
         radius: 20,
@@ -51,7 +47,6 @@ class FeedPostCard extends StatelessWidget {
         child: const Icon(Icons.person, color: Colors.white70),
       );
     }
-
     return CircleAvatar(
       radius: 20,
       backgroundImage: CachedNetworkImageProvider(avatar),
@@ -61,7 +56,6 @@ class FeedPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeAgo = DateFormat.MMMd().add_Hm().format(post.createdAt.toLocal());
     final badge = post.author.roleLabel.isNotEmpty
         ? post.author.roleLabel
         : 'Member';
@@ -116,7 +110,7 @@ class FeedPostCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  timeAgo,
+                  timeAgoFrom(post.createdAt),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.white60,
                     fontWeight: FontWeight.w600,
@@ -126,95 +120,25 @@ class FeedPostCard extends StatelessWidget {
             ),
           ),
 
-          // Media (image or video preview)
+          // Media
           GestureDetector(
             onTap: onOpenPost,
             child: Hero(
               tag: 'post_${post.id}',
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(14),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                height: 180,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Preview image (thumb for video, or image itself)
-                      CachedNetworkImage(
-                        imageUrl: _previewUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        fadeInDuration: const Duration(milliseconds: 160),
-                        placeholder: (c, _) => Container(color: Colors.white12),
-                        errorWidget: (c, _, __) => const Center(
-                          child: Icon(
-                            Icons.broken_image,
-                            color: Colors.white54,
-                          ),
-                        ),
-                      ),
-
-                      if (_isVideo) ...[
-                        // gradient scrim for better contrast
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [Colors.black54, Colors.transparent],
-                            ),
-                          ),
-                        ),
-                        // centered play icon
-                        const Center(
-                          child: Icon(
-                            Icons.play_circle_fill_rounded,
-                            size: 58,
-                            color: Colors.white,
-                          ),
-                        ),
-                        // subtle "Video" chip (bottom-left)
-                        Positioned(
-                          left: 10,
-                          bottom: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.45),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: const [
-                                Icon(
-                                  Icons.videocam_rounded,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Video',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                clipBehavior: Clip.antiAlias,
+                child: _isVideo
+                    ? _VideoThumbnailWidget(
+                        videoUrl: post.mediaUrl,
+                        serverThumbUrl: post.thumbUrl,
+                      )
+                    : _ImageWidget(url: post.mediaUrl),
               ),
             ),
           ),
@@ -236,7 +160,7 @@ class FeedPostCard extends StatelessWidget {
             ),
           ),
 
-          // Metrics (like, comment, views) – NO share here
+          // Metrics
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
             child: Row(
@@ -267,6 +191,210 @@ class FeedPostCard extends StatelessWidget {
   }
 }
 
+// Image widget
+class _ImageWidget extends StatelessWidget {
+  final String url;
+  const _ImageWidget({required this.url});
+
+  bool get _valid {
+    if (url.isEmpty) return false;
+    final uri = Uri.tryParse(url);
+    return uri != null && uri.hasScheme && uri.hasAuthority;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_valid) {
+      return Container(
+        color: Colors.white10,
+        child: const Center(
+          child: Icon(Icons.photo, color: Colors.white38, size: 40),
+        ),
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      fadeInDuration: const Duration(milliseconds: 160),
+      placeholder: (_, __) => Container(color: Colors.white12),
+      errorWidget: (_, __, ___) =>
+          const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+    );
+  }
+}
+
+// Video thumbnail widget
+// Priority: 1) serverThumbUrl  2) on-device generation  3) placeholder
+class _VideoThumbnailWidget extends StatefulWidget {
+  final String videoUrl;
+  final String? serverThumbUrl;
+
+  const _VideoThumbnailWidget({required this.videoUrl, this.serverThumbUrl});
+
+  @override
+  State<_VideoThumbnailWidget> createState() => _VideoThumbnailWidgetState();
+}
+
+class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
+  File? _localThumb;
+  bool _generating = false;
+  bool _failed = false;
+
+  bool get _serverThumbValid {
+    final url = widget.serverThumbUrl;
+    if (url == null || url.isEmpty) return false;
+    final uri = Uri.tryParse(url);
+    return uri != null && uri.hasScheme && uri.hasAuthority;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_serverThumbValid) _generateThumbnail();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoThumbnailWidget old) {
+    super.didUpdateWidget(old);
+    if (old.videoUrl != widget.videoUrl && !_serverThumbValid) {
+      setState(() {
+        _localThumb = null;
+        _failed = false;
+      });
+      _generateThumbnail();
+    }
+  }
+
+  Future<void> _generateThumbnail() async {
+    if (_generating || widget.videoUrl.isEmpty) return;
+    _generating = true;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final cacheKey = widget.videoUrl.hashCode.abs();
+      final cachePath = '${tempDir.path}/feed_thumb_$cacheKey.jpg';
+      final cacheFile = File(cachePath);
+
+      if (await cacheFile.exists()) {
+        if (mounted) setState(() => _localThumb = cacheFile);
+        return;
+      }
+
+      final bytes = await VideoThumbnail.thumbnailData(
+        video: widget.videoUrl,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 480,
+        quality: 75,
+        timeMs: 1000,
+      );
+
+      if (bytes != null && bytes.isNotEmpty) {
+        await cacheFile.writeAsBytes(bytes);
+        if (mounted) setState(() => _localThumb = cacheFile);
+      } else {
+        if (mounted) setState(() => _failed = true);
+      }
+    } catch (e) {
+      debugPrint('FeedPostCard thumb gen failed: $e');
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      _generating = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Thumbnail layer
+        if (_serverThumbValid)
+          CachedNetworkImage(
+            imageUrl: widget.serverThumbUrl!,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            fadeInDuration: const Duration(milliseconds: 160),
+            placeholder: (_, __) => _buildPlaceholder(loading: true),
+            errorWidget: (_, __, ___) => _buildPlaceholder(loading: false),
+          )
+        else if (_localThumb != null)
+          Image.file(
+            _localThumb!,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+          )
+        else
+          _buildPlaceholder(loading: !_failed),
+
+        // Video overlays
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [Colors.black54, Colors.transparent],
+            ),
+          ),
+        ),
+        const Center(
+          child: Icon(
+            Icons.play_circle_fill_rounded,
+            size: 58,
+            color: Colors.white,
+          ),
+        ),
+        Positioned(
+          left: 10,
+          bottom: 10,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.45),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.videocam_rounded, size: 14, color: Colors.white),
+                SizedBox(width: 6),
+                Text(
+                  'Video',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlaceholder({required bool loading}) {
+    return Container(
+      color: Colors.white10,
+      child: Center(
+        child: loading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white54,
+                ),
+              )
+            : const Icon(
+                Icons.videocam_outlined,
+                color: Colors.white38,
+                size: 40,
+              ),
+      ),
+    );
+  }
+}
+
+// Metric widgets
 class _Metric extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -308,43 +436,65 @@ class _LikeMetric extends StatefulWidget {
 
 class _LikeMetricState extends State<_LikeMetric>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
+  late final AnimationController _ctrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 120),
-    lowerBound: 0.9,
+    duration: const Duration(milliseconds: 200),
+    lowerBound: 0.7,
     upperBound: 1.0,
+    value: 1.0,
   );
+
+  static const _likedColor = Color(0xFFFF4D67);
 
   @override
   void dispose() {
-    _c.dispose();
+    _ctrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleTap() async {
+    await _ctrl.animateTo(
+      0.7,
+      duration: const Duration(milliseconds: 80),
+      curve: Curves.easeIn,
+    );
+    await _ctrl.animateTo(
+      1.0,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.elasticOut,
+    );
+    widget.onTap();
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isLiked ? const Color(0xFFFF4D67) : Colors.white70;
+    final color = widget.isLiked ? _likedColor : Colors.white70;
+
     return GestureDetector(
-      onTap: () async {
-        await _c.forward(from: 0.9);
-        widget.onTap();
-      },
+      onTap: _handleTap,
       child: ScaleTransition(
-        scale: _c.drive(Tween(begin: 1.0, end: 1.0)),
+        scale: _ctrl,
         child: Row(
           children: [
-            Icon(
-              widget.isLiked ? Icons.favorite : Icons.favorite_border,
-              color: color,
-              size: 18,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
+              child: Icon(
+                widget.isLiked ? Icons.favorite : Icons.favorite_border,
+                key: ValueKey(widget.isLiked),
+                color: color,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 6),
-            Text(
-              '${widget.count}',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white70,
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                color: color,
                 fontWeight: FontWeight.w600,
               ),
+              child: Text('${widget.count}'),
             ),
           ],
         ),

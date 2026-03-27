@@ -24,8 +24,8 @@ class MyClubsTab extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _CreateClubCTA(),
-            const SizedBox(height: 12),
+            // _CreateClubCTA(),
+            // const SizedBox(height: 12),
             ...state.clubs.map(
               (club) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),

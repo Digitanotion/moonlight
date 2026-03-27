@@ -102,6 +102,12 @@ class UserModel extends Equatable {
   @JsonKey(name: 'updated_at')
   final String? updatedAt;
 
+  @JsonKey(name: 'followers_count')
+  final int? followersCount;
+
+  @JsonKey(name: 'following_count')
+  final int? followingCount;
+
   // Filled via LoginResponseModel
   final String? authToken;
   final String? tokenType;
@@ -132,6 +138,8 @@ class UserModel extends Equatable {
     this.authToken,
     this.tokenType,
     this.expiresIn,
+    this.followersCount,
+    this.followingCount,
   });
 
   /// CopyWith (keeps immutability)
@@ -159,6 +167,8 @@ class UserModel extends Equatable {
     String? authToken,
     String? tokenType,
     String? expiresIn,
+    int? followersCount,
+    int? followingCount,
   }) {
     return UserModel(
       uuid: uuid ?? this.uuid,
@@ -184,6 +194,8 @@ class UserModel extends Equatable {
       authToken: authToken ?? this.authToken,
       tokenType: tokenType ?? this.tokenType,
       expiresIn: expiresIn ?? this.expiresIn,
+      followersCount: followersCount ?? this.followersCount,
+      followingCount: followingCount ?? this.followingCount,
     );
   }
 
@@ -219,6 +231,8 @@ class UserModel extends Equatable {
     expiresIn: null,
     // 'avatar' raw not present in UserResource; keep null
     avatar: null,
+    followersCount: json['followers_count'] as int? ?? 0,
+    followingCount: json['following_count'] as int? ?? 0,
   );
 
   Map<String, dynamic> toJson() => _$UserModelToJson(this);

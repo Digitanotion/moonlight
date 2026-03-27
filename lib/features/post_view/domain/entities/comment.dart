@@ -1,27 +1,37 @@
 import 'package:moonlight/features/post_view/domain/entities/user.dart';
 
+// lib/features/post_view/domain/entities/comment.dart
+
 class Comment {
   final String id;
   final AppUser user;
   final String text;
   final DateTime createdAt;
   final int likes;
+  final bool isLiked;
   final List<Comment> replies;
+
   const Comment({
     required this.id,
     required this.user,
     required this.text,
     required this.createdAt,
     this.likes = 0,
+    this.isLiked = false,
     this.replies = const [],
   });
 
-  Comment copyWith({int? likes, List<Comment>? replies}) => Comment(
+  Comment copyWith({
+    int? likes,
+    bool? isLiked, // ← ADD THIS
+    List<Comment>? replies,
+  }) => Comment(
     id: id,
     user: user,
     text: text,
     createdAt: createdAt,
     likes: likes ?? this.likes,
+    isLiked: isLiked ?? this.isLiked, // ← ADD THIS
     replies: replies ?? this.replies,
   );
 }

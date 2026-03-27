@@ -10,8 +10,10 @@ import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/profile_view/presentation/pages/follow_list_screen.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
@@ -467,6 +469,8 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: _StatsCard(
+                        userUuid: user?.uuid ?? '',
+                        displayName: user?.fullName ?? '',
                         stats: [
                           _Stat(
                             label: 'Fans',
@@ -476,8 +480,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                             label: 'Following',
                             value: '${user?.following ?? 0}',
                           ),
-                          const _Stat(label: 'Live Sessions', value: '—'),
-                          const _Stat(label: 'Coins', value: '—'),
                         ],
                       ),
                     ),
@@ -779,8 +781,16 @@ class _BadgePill extends StatelessWidget {
 }
 
 class _StatsCard extends StatelessWidget {
-  const _StatsCard({required this.stats});
+  const _StatsCard({
+    required this.stats,
+    required this.userUuid,
+    required this.displayName,
+  });
+
   final List<_Stat> stats;
+  final String userUuid;
+  final String displayName;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -794,9 +804,36 @@ class _StatsCard extends StatelessWidget {
         borderRadius: BorderRadius.all(Radius.circular(16)),
       ),
       child: Row(
-        children: stats
-            .map((s) => Expanded(child: _StatItem(stat: s)))
-            .toList(),
+        children: [
+          // Fans → opens followers tab (index 0)
+          Expanded(
+            child: _StatItem(
+              stat: stats[0],
+              onTap: () => _openFollowList(context, initialTab: 0),
+            ),
+          ),
+          // Following → opens following tab (index 1)
+          Expanded(
+            child: _StatItem(
+              stat: stats[1],
+              onTap: () => _openFollowList(context, initialTab: 1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openFollowList(BuildContext context, {required int initialTab}) {
+    if (userUuid.isEmpty) return;
+    final ds = GetIt.I<FollowListRemoteDataSource>();
+    Navigator.push(
+      context,
+      FollowListScreen.route(
+        dataSource: ds,
+        userUuid: userUuid,
+        displayName: displayName,
+        initialTab: initialTab,
       ),
     );
   }
@@ -809,11 +846,13 @@ class _Stat {
 }
 
 class _StatItem extends StatelessWidget {
-  const _StatItem({required this.stat});
+  const _StatItem({required this.stat, this.onTap});
   final _Stat stat;
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       children: [
         Text(
           stat.value,
@@ -826,7 +865,29 @@ class _StatItem extends StatelessWidget {
           stat.label,
           style: AppTextStyles.small.copyWith(color: Colors.white70),
         ),
+        const SizedBox(height: 2),
+        if (onTap != null)
+          Container(
+            width: 24,
+            height: 2,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
       ],
+    );
+
+    if (onTap == null) return content;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      splashColor: Colors.white.withOpacity(0.05),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: content,
+      ),
     );
   }
 }
@@ -837,7 +898,10 @@ class _Tabs extends StatelessWidget {
   final ValueChanged<int> onChanged;
   @override
   Widget build(BuildContext context) {
-    final labels = const ['Posts', 'Clubs', 'Live Replays'];
+    final labels = const [
+      'Posts',
+      'Clubs',
+    ]; //const ['Posts', 'Clubs', 'Live Replays'];
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.06),

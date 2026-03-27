@@ -18,7 +18,14 @@ abstract class PostRepository {
   Future<Comment> addReply(String postId, String commentId, String text);
 
   /// 🔄 updated signature
-  Future<int> toggleCommentLike(String postId, String commentId);
+  Future<LikeResult> toggleCommentLike(String postId, String commentId);
   Future<Comment> editComment(String postId, String commentId, String text);
   Future<void> deleteComment(String postId, String commentId);
+}
+
+class LikeResult {
+  final bool liked;
+  final int count;
+
+  const LikeResult({required this.liked, required this.count});
 }

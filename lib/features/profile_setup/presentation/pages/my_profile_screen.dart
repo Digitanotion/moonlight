@@ -1,12 +1,16 @@
+// lib/features/profile_setup/presentation/pages/my_profile_screen.dart
+
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
+import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/auth/data/models/user_model.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/pages/my_clubs_tab.dart';
@@ -14,10 +18,10 @@ import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/domain/entities/user.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
-
-// new import
+import 'package:moonlight/features/profile_view/presentation/pages/follow_list_screen.dart';
+import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
-// if you have one
+import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -28,14 +32,29 @@ class MyProfileScreen extends StatefulWidget {
 
 class _MyProfileScreenState extends State<MyProfileScreen> {
   bool _isShowingProgress = false;
-
-  // cache generated thumbnails for videos to avoid regenerating on scroll
   final Map<int, Uint8List?> _videoThumbCache = {};
+  String? _currentUserUuid;
 
   @override
   void initState() {
     super.initState();
-    // context.read<ProfilePageCubit>().load();
+    _loadCurrentUserUuid();
+    // Load profile data including posts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProfilePageCubit>().load();
+    });
+  }
+
+  Future<void> _loadCurrentUserUuid() async {
+    try {
+      final authLocalDataSource = sl<AuthLocalDataSource>();
+      final uuid = await authLocalDataSource.getCurrentUserUuid();
+      setState(() {
+        _currentUserUuid = uuid;
+      });
+    } catch (e) {
+      print('Error loading user UUID: $e');
+    }
   }
 
   void _showProgress() {
@@ -91,7 +110,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
 
     if (res == true) {
-      // dispatch logout
       context.read<AuthBloc>().add(LogoutRequested());
     }
   }
@@ -100,22 +118,18 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     if (state is AuthLoading) {
       _showProgress();
     } else {
-      // hide progress for any non-loading state
       _hideProgress();
     }
 
     if (state is AuthUnauthenticated) {
-      // successful logout -> route to login/register and clear stack
       Navigator.pushNamedAndRemoveUntil(
         ctx,
-        RouteNames
-            .login, // replace with your login route name, e.g. RouteNames.login
+        RouteNames.login,
         (route) => false,
       );
     }
 
     if (state is AuthFailure) {
-      // show error
       ScaffoldMessenger.of(
         ctx,
       ).showSnackBar(SnackBar(content: Text(state.message)));
@@ -131,11 +145,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       end: Alignment.bottomRight,
     );
 
-    // MultiBlocListener so we keep listening to ProfilePageCubit (existing)
-    // and also to AuthBloc for logout results.
     return MultiBlocListener(
       listeners: [
-        // keep your profile page listener (converted from BlocConsumer listener piece)
         BlocListener<ProfilePageCubit, ProfilePageState>(
           listener: (context, state) {
             if (state.error != null) {
@@ -145,7 +156,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
             }
           },
         ),
-        // Auth listener for logout flow
         BlocListener<AuthBloc, AuthState>(listener: _onAuthStateChanged),
       ],
       child: BlocBuilder<ProfilePageCubit, ProfilePageState>(
@@ -157,8 +167,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
               child: SafeArea(
                 child: RefreshIndicator(
                   color: orange,
-                  onRefresh: () =>
-                      context.read<ProfilePageCubit>().load(haptic: true),
+                  onRefresh: () async {
+                    await context.read<ProfilePageCubit>().load(haptic: true);
+                  },
                   child: CustomScrollView(
                     physics: const BouncingScrollPhysics(
                       parent: AlwaysScrollableScrollPhysics(),
@@ -182,7 +193,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                     ),
                               ),
                               const Spacer(),
-                              // settings icon removed as requested
                             ],
                           ),
                         ),
@@ -243,7 +253,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               _bioLines(user?.bio),
                               const SizedBox(height: 16),
 
-                              // Dashboard button (replaces Edit Profile)
+                              // Dashboard button
                               SizedBox(
                                 width: 160,
                                 child: ElevatedButton(
@@ -269,8 +279,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               ),
                               const SizedBox(height: 16),
 
-                              // Stats card (kept commented as before)
-                              // _statsCard(...),
+                              // Stats Card with Fans & Following
+                              _statsCard(user, context),
                             ],
                           ),
                         ),
@@ -298,7 +308,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             sliver: _postsGrid(state.posts),
                           ),
-                          // temporarily disabled
                           ProfileTab.clubs => SliverToBoxAdapter(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
@@ -313,18 +322,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                               ),
                             ),
                           ),
-                          // ProfileTab.livestreams => SliverToBoxAdapter(
-                          //   child: Padding(
-                          //     padding: const EdgeInsets.symmetric(
-                          //       horizontal: 16,
-                          //     ),
-                          //     child: _placeholderNotAvailable(),
-                          //   ),
-                          // ),
                         },
 
-                      // Previously there was an actions panel here (duplicate of dashboard actions).
-                      // Per request, removed the bottom panel that contained the Edit Profile duplicate.
                       const SliverToBoxAdapter(child: SizedBox(height: 12)),
                     ],
                   ),
@@ -337,29 +336,64 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
   }
 
-  Widget _placeholderNotAvailable() {
+  // Stats Card with clickable Fans and Following
+  Widget _statsCard(UserModel? user, BuildContext context) {
+    if (user == null) return const SizedBox.shrink();
+
+    // You need to have followersCount and followingCount in your UserModel
+    // If not, you might need to fetch them from the API or use placeholders
+    final followersCount = user.followersCount ?? 0;
+    final followingCount = user.followingCount ?? 0;
+
     return Container(
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(vertical: 40),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1B2153), Color(0xFF0F1432)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: const Text(
-        'Not available at the moment',
-        style: TextStyle(color: Colors.white70),
+      child: Row(
+        children: [
+          // Fans - opens followers tab
+          Expanded(
+            child: _StatItem(
+              label: 'Fans',
+              value: '$followersCount',
+              onTap: () => _openFollowList(context, initialTab: 0),
+            ),
+          ),
+          // Following - opens following tab
+          Expanded(
+            child: _StatItem(
+              label: 'Following',
+              value: '$followingCount',
+              onTap: () => _openFollowList(context, initialTab: 1),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _iconButton(BuildContext ctx, IconData icon, VoidCallback onTap) {
-    return InkResponse(
-      onTap: onTap,
-      radius: 26,
-      child: Container(
-        width: 36,
-        height: 36,
-        child: Icon(icon, color: Colors.white, size: 20),
+  // Helper method to open follow list
+  void _openFollowList(BuildContext context, {required int initialTab}) {
+    final user = context.read<ProfilePageCubit>().state.user;
+    if (user == null || user.uuid == null) {
+      print('Cannot open follow list: user or UUID is null');
+      return;
+    }
+
+    final ds = GetIt.I<FollowListRemoteDataSource>();
+    Navigator.push(
+      context,
+      FollowListScreen.route(
+        dataSource: ds,
+        userUuid: user.uuid!,
+        displayName: user.fullname ?? user.userSlug ?? 'User',
+        initialTab: initialTab,
       ),
     );
   }
@@ -374,11 +408,14 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.workspace_premium, color: Color(0xFFFFD54F), size: 16),
-        SizedBox(width: 6),
+        Icon(Icons.workspace_premium, color: const Color(0xFFFFD54F), size: 16),
+        const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+            color: Colors.white70,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ],
     ),
@@ -444,143 +481,16 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         tab('Posts', ProfileTab.posts),
         const SizedBox(width: 10),
         tab('Clubs', ProfileTab.clubs),
-        // const SizedBox(width: 10),
-        // tab('Livestreams', ProfileTab.livestreams),
       ],
     );
   }
 
-  // Posts grid that handles images and videos
-  SliverGrid _postsGrid(List<dynamic> posts) {
-    final List<Post> typed = posts
-        .map<Post?>((p) {
-          if (p == null) return null;
-          if (p is Post) return p;
-          if (p is Map<String, dynamic>) {
-            try {
-              final authorMap = p['author'] is Map
-                  ? (p['author'] as Map).cast<String, dynamic>()
-                  : <String, dynamic>{};
-              final au = AppUser(
-                id: (authorMap['id'] ?? authorMap['uuid'] ?? '0').toString(),
-                name: (authorMap['name'] ?? authorMap['fullName'] ?? '')
-                    .toString(),
-                avatarUrl:
-                    (authorMap['avatarUrl'] ?? authorMap['avatar_url'] ?? '')
-                        .toString(),
-                countryFlagEmoji:
-                    (authorMap['countryFlagEmoji'] ??
-                            authorMap['country_flag_emoji'] ??
-                            '')
-                        .toString(),
-                roleLabel:
-                    (authorMap['roleLabel'] ?? authorMap['role_label'] ?? '')
-                        .toString(),
-                roleColor:
-                    (authorMap['roleColor'] ?? authorMap['role_color'] ?? '')
-                        .toString(),
-              );
-
-              final id = (p['uuid'] ?? p['id'] ?? p['post_id'] ?? '')
-                  .toString();
-              final mediaUrl =
-                  (p['mediaUrl'] ?? p['media_url'] ?? p['url'] ?? '')
-                      .toString();
-              final thumb =
-                  (p['thumbUrl'] ??
-                          p['thumb'] ??
-                          p['thumbnail'] ??
-                          p['thumb_url'])
-                      ?.toString();
-              final mediaType =
-                  (p['mediaType'] ??
-                          p['media_type'] ??
-                          p['mime'] ??
-                          p['mimetype'])
-                      ?.toString();
-              final caption = (p['caption'] ?? '').toString();
-              final tags = (p['tags'] is List)
-                  ? (p['tags'] as List).map((e) => '$e').toList()
-                  : <String>[];
-              final created =
-                  DateTime.tryParse(
-                    (p['createdAt'] ?? p['created_at'] ?? '').toString(),
-                  ) ??
-                  DateTime.now();
-              final likes = (p['likes'] is num)
-                  ? (p['likes'] as num).toInt()
-                  : int.tryParse((p['likes'] ?? '0').toString()) ?? 0;
-              final comments =
-                  (p['commentsCount'] ?? p['comments_count'] ?? 0) is num
-                  ? ((p['commentsCount'] ?? p['comments_count'] ?? 0) as num)
-                        .toInt()
-                  : int.tryParse(
-                          (p['commentsCount'] ?? p['comments_count'] ?? '0')
-                              .toString(),
-                        ) ??
-                        0;
-              final shares = (p['shares'] is num)
-                  ? (p['shares'] as num).toInt()
-                  : int.tryParse((p['shares'] ?? '0').toString()) ?? 0;
-              final isLiked = (p['isLiked'] == true) || (p['is_liked'] == true);
-              final views = (p['views'] is num)
-                  ? (p['views'] as num).toInt()
-                  : int.tryParse((p['views'] ?? '0').toString()) ?? 0;
-
-              return Post(
-                id: id.isNotEmpty ? id : mediaUrl.hashCode.toString(),
-                author: au,
-                mediaUrl: mediaUrl,
-                thumbUrl: thumb,
-                mediaType: mediaType,
-                caption: caption,
-                tags: tags,
-                createdAt: created,
-                likes: likes,
-                commentsCount: comments,
-                shares: shares,
-                isLiked: isLiked,
-                views: views,
-              );
-            } catch (_) {
-              return null;
-            }
-          }
-
-          try {
-            final dyn = p as dynamic;
-            final id = (dyn.id ?? dyn.uuid ?? '').toString();
-            final url = (dyn.mediaUrl ?? dyn.url ?? '').toString();
-            final mt = (dyn.mediaType ?? dyn.mime ?? '').toString();
-            return Post(
-              id: id.isNotEmpty ? id : url.hashCode.toString(),
-              author: AppUser(
-                id: '0',
-                name: '',
-                avatarUrl: '',
-                countryFlagEmoji: '',
-                roleLabel: '',
-                roleColor: '',
-              ),
-              mediaUrl: url,
-              mediaType: mt.isNotEmpty ? mt : null,
-              caption: (dyn.caption ?? '').toString(),
-              tags: <String>[],
-              createdAt: DateTime.now(),
-            );
-          } catch (_) {
-            return null;
-          }
-        })
-        .whereType<Post>()
-        .toList();
-
-    // CHANGED: Check if posts are empty and return a SliverToBoxAdapter with "No Posts Yet"
-    if (typed.isEmpty) {
+  SliverGrid _postsGrid(List<Post> posts) {
+    if (posts.isEmpty) {
       return SliverGrid(
         delegate: SliverChildListDelegate([
           Container(
-            height: 200, // Set a reasonable height
+            height: 200,
             alignment: Alignment.center,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -613,10 +523,10 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           ),
         ]),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 1, // Single column for the message
+          crossAxisCount: 1,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 2, // Wider aspect ratio for the message
+          childAspectRatio: 2,
         ),
       );
     }
@@ -629,7 +539,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         childAspectRatio: 1,
       ),
       delegate: SliverChildBuilderDelegate((context, idx) {
-        final Post p = typed[idx];
+        final Post p = posts[idx];
         final isVideo = p.isVideo;
         final mediaUrl = p.mediaUrl;
         final thumbUrl = p.thumbUrl;
@@ -695,7 +605,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
             ),
           ),
         );
-      }, childCount: typed.length),
+      }, childCount: posts.length),
     );
   }
 
@@ -720,78 +630,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     } catch (_) {
       _videoThumbCache[key] = null;
       return null;
-    }
-  }
-
-  Future<Uint8List?> _getVideoThumbnail(int index, String videoUrl) async {
-    if (_videoThumbCache.containsKey(index)) return _videoThumbCache[index];
-    try {
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: videoUrl,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 1024,
-        quality: 75,
-      );
-      _videoThumbCache[index] = bytes;
-      return bytes;
-    } catch (_) {
-      _videoThumbCache[index] = null;
-      return null;
-    }
-  }
-
-  String _extractMediaUrl(dynamic p) {
-    try {
-      if (p == null) return '';
-      if (p is String)
-        return p; // earlier implementations may have been a list of urls
-      if (p is Map) {
-        // common possible keys
-        return (p['mediaUrl'] ??
-                p['media_url'] ??
-                p['url'] ??
-                p['thumbnail'] ??
-                '')
-            .toString();
-      }
-      // fallback to using a mediaUrl property (Post entity)
-      final media = (p as dynamic).mediaUrl;
-      return media?.toString() ?? '';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  bool _isVideoPost(dynamic p) {
-    try {
-      if (p == null) return false;
-      if (p is Map) {
-        final t = (p['type'] ?? p['media_type'] ?? p['mime'] ?? p['mimetype'])
-            ?.toString()
-            .toLowerCase();
-        if (t == null) return false;
-        return t.contains('video') || t.contains('mp4') || t.contains('mov');
-      }
-      final mim = (p as dynamic).mediaType;
-      if (mim != null) return mim.toString().toLowerCase().contains('video');
-      final url = _extractMediaUrl(p);
-      return url.endsWith('.mp4') ||
-          url.endsWith('.mov') ||
-          url.contains('video');
-    } catch (_) {
-      return false;
-    }
-  }
-
-  String _extractPostId(dynamic p) {
-    try {
-      if (p == null) return '0';
-      if (p is Map)
-        return (p['uuid'] ?? p['id'] ?? p['post_id'] ?? '${p.hashCode}')
-            .toString();
-      return (p as dynamic).id?.toString() ?? '0';
-    } catch (_) {
-      return '0';
     }
   }
 
@@ -901,19 +739,69 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   }
 }
 
+// StatItem widget for clickable stats
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  const _StatItem({required this.label, required this.value, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: Colors.white70, fontSize: 12)),
+        if (onTap != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Container(
+              width: 24,
+              height: 2,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    if (onTap == null) return content;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      splashColor: Colors.white.withOpacity(0.05),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: content,
+      ),
+    );
+  }
+}
+
 class _ShimmerList extends StatelessWidget {
   const _ShimmerList();
 
   @override
   Widget build(BuildContext context) {
-    // Minimal placeholder without external packages
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Column(children: List.generate(3, (i) => _item()).toList()),
+      child: Column(children: List.generate(3, (i) => _shimmerItem()).toList()),
     );
   }
 
-  Widget _item() => Container(
+  Widget _shimmerItem() => Container(
     height: 160,
     margin: const EdgeInsets.only(bottom: 12),
     decoration: BoxDecoration(

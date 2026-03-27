@@ -8,6 +8,7 @@ class CommentDto {
   final DateTime createdAt;
   final int likes;
   final List<CommentDto> replies;
+  final bool isLiked;
 
   CommentDto({
     required this.id,
@@ -16,6 +17,7 @@ class CommentDto {
     required this.createdAt,
     required this.likes,
     required this.replies,
+    this.isLiked = false,
   });
 
   factory CommentDto.fromMap(Map<String, dynamic> m) => CommentDto(
@@ -27,6 +29,7 @@ class CommentDto {
     replies: ((m['replies'] as List?) ?? const [])
         .map((r) => CommentDto.fromMap((r as Map).cast<String, dynamic>()))
         .toList(),
+    isLiked: m['isLiked'] == true,
   );
 
   Comment toEntity() => Comment(
@@ -36,6 +39,7 @@ class CommentDto {
     createdAt: createdAt,
     likes: likes,
     replies: replies.map((e) => e.toEntity()).toList(),
+    isLiked: isLiked,
   );
 
   static CommentDto fromEntity(Comment c) => CommentDto(
@@ -53,5 +57,6 @@ class CommentDto {
     createdAt: c.createdAt,
     likes: c.likes,
     replies: c.replies.map(CommentDto.fromEntity).toList(),
+    isLiked: c.isLiked,
   );
 }

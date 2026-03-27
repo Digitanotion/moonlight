@@ -181,25 +181,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
             );
           },
         ),
-        const SizedBox(height: 24),
-        Center(
-          child: Text(
-            'or continue with',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SocialAuthButton(
-          icon: AssetPaths.googleIcon,
-          text: isGoogleLoading ? 'Signing up...' : 'Sign Up with Google',
-          onPressed: () {
-            if (!isGoogleLoading) {
-              context.read<AuthBloc>().add(const GoogleSignInRequested());
-            }
-          },
-        ),
+        // const SizedBox(height: 24),
+        // Center(
+        //   child: Text(
+        //     'or continue with',
+        //     style: Theme.of(
+        //       context,
+        //     ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+        //   ),
+        // ),
+        // const SizedBox(height: 16),
+        // SocialAuthButton(
+        //   icon: AssetPaths.googleIcon,
+        //   text: isGoogleLoading ? 'Signing up...' : 'Sign Up with Google',
+        //   onPressed: () {
+        //     if (!isGoogleLoading) {
+        //       context.read<AuthBloc>().add(const GoogleSignInRequested());
+        //     }
+        //   },
+        // ),
       ],
     );
   }

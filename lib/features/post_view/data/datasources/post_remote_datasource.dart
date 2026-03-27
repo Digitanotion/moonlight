@@ -47,9 +47,9 @@ class PostRemoteDataSource {
 
   Future<PostDto> toggleLike(String postUuid) async {
     // hit like endpoint
-    await http.dio.post(_p(postUuid, '/like'));
+    final res = await http.dio.post(_p(postUuid, '/like'));
     // then refetch full post (and unwrap)
-    final res = await http.dio.get(
+    final res2 = await http.dio.get(
       _p(postUuid),
       options: Options(
         // ensure we don’t get a stale cached body after mutating
@@ -136,13 +136,18 @@ class PostRemoteDataSource {
     return CommentDto.fromMap(_unwrap(res.data)).toEntity();
   }
 
-  /// Return ONLY the updated likes count; let the Cubit merge into state.
-  Future<int> toggleCommentLike(String postUuid, String commentUuid) async {
+  Future<({bool liked, int count})> toggleCommentLike(
+    String postUuid,
+    String commentUuid,
+  ) async {
     final res = await http.dio.post(
       _p(postUuid, '/comments/$commentUuid/like'),
     );
     final m = _unwrap(res.data);
-    return (m['likes'] as num?)?.toInt() ?? 0;
+    return (
+      liked: m['liked'] as bool? ?? false,
+      count: (m['likes'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<Comment> editComment(

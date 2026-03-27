@@ -137,22 +137,35 @@ class PostCubit extends Cubit<PostState> {
     if (_liking || state.post == null) return;
     _liking = true;
     final p = state.post!;
-    // optimistic update
-    final optimistic = p.copyWith(
-      isLiked: !p.isLiked,
-      likes: p.isLiked ? (p.likes - 1) : (p.likes + 1),
-    );
-    emit(state.copyWith(post: optimistic, lastAction: null));
+
     try {
       final updated = await repo.toggleLike(postId);
-      // repo returns full post — trust it as source of truth
-      emit(state.copyWith(post: updated));
+
+      // ✅ Force a new object by creating it fresh
+      emit(
+        state.copyWith(
+          post: Post(
+            id: updated.id,
+            author: updated.author,
+            mediaUrl: updated.mediaUrl,
+            thumbUrl: updated.thumbUrl,
+            mediaType: updated.mediaType,
+            caption: updated.caption,
+            tags: updated.tags,
+            createdAt: updated.createdAt,
+            likes: updated.likes,
+            commentsCount: updated.commentsCount,
+            shares: updated.shares,
+            isLiked: updated.isLiked,
+            views: updated.views,
+          ),
+          lastAction: null,
+        ),
+      );
+
       GetIt.I<LikeMemory>().setLiked(postId, updated.isLiked);
-      // emit again to ensure listeners get latest
-      emit(state.copyWith(post: updated));
     } catch (e) {
-      // rollback on error
-      emit(state.copyWith(post: p));
+      // Show error
     } finally {
       _liking = false;
     }
@@ -246,9 +259,9 @@ class PostCubit extends Cubit<PostState> {
 
   Future<void> toggleCommentLike(String commentId) async {
     try {
-      final likes = await repo.toggleCommentLike(postId, commentId);
+      final result = await repo.toggleCommentLike(postId, commentId);
       final list = [...state.comments];
-      if (_applyLike(list, commentId, likes)) {
+      if (_applyLike(list, commentId, result.count, result.liked)) {
         emit(state.copyWith(comments: list, lastAction: null));
       }
     } catch (_) {
@@ -315,14 +328,17 @@ class PostCubit extends Cubit<PostState> {
     }
   }
 
-  bool _applyLike(List<Comment> list, String id, int likes) {
+  bool _applyLike(List<Comment> list, String id, int likes, bool liked) {
     for (var i = 0; i < list.length; i++) {
       if (list[i].id == id) {
-        list[i] = list[i].copyWith(likes: likes);
+        list[i] = list[i].copyWith(
+          likes: likes,
+          isLiked: liked, // ← Use the server's liked state
+        );
         return true;
       }
       final child = [...list[i].replies];
-      final ok = _applyLike(child, id, likes);
+      final ok = _applyLike(child, id, likes, liked);
       if (ok) {
         list[i] = list[i].copyWith(replies: child);
         return true;

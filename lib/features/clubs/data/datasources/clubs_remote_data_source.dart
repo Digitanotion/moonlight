@@ -75,6 +75,10 @@ abstract class ClubsRemoteDataSource {
 
   Future<int> getMyBalance();
   Future<List<Map<String, dynamic>>> searchClubs(String query);
+  Future<Map<String, dynamic>> bulkAddMembers({
+    required String club,
+    required List<Map<String, dynamic>> members,
+  });
 }
 
 class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
@@ -307,5 +311,17 @@ class ClubsRemoteDataSourceImpl implements ClubsRemoteDataSource {
     final clubsData = data['clubs'] as List? ?? [];
 
     return List<Map<String, dynamic>>.from(clubsData);
+  }
+
+  @override
+  Future<Map<String, dynamic>> bulkAddMembers({
+    required String club,
+    required List<Map<String, dynamic>> members,
+  }) async {
+    final res = await dio.post(
+      '/api/v1/clubs/$club/members/bulk',
+      data: {'members': members},
+    );
+    return res.data;
   }
 }

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
-import 'package:moonlight/core/routing/app_router.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/utils/asset_paths.dart';
@@ -28,33 +27,22 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    // Step 1: Show UI immediately (no delay)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _showUI = true;
-      });
+      setState(() => _showUI = true);
 
-      // Step 2: Start minimal timer (2 seconds minimum)
       _minimalTimer = Timer(const Duration(milliseconds: 2000), () {
-        setState(() {
-          _minimalTimePassed = true;
-        });
+        setState(() => _minimalTimePassed = true);
         _tryNavigation();
       });
 
-      // Step 3: Start background loading immediately
       _startBackgroundLoading();
-
-      // Step 4: Trigger quick auth check (non-blocking)
       _triggerQuickAuthCheck();
     });
   }
 
   void _startBackgroundLoading() {
-    // Start loading dependencies in background
     Future(() async {
       try {
-        // This runs in background, doesn't block UI
         await SplashOptimizer.loadRemainingDependencies();
         debugPrint('✅ Background dependencies loaded');
       } catch (e) {
@@ -64,18 +52,10 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _triggerQuickAuthCheck() {
-    // Trigger auth check without waiting for it
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authBloc = context.read<AuthBloc>();
-      final onboardingBloc = context.read<OnboardingBloc>();
+      context.read<AuthBloc>().add(CheckAuthStatusEvent());
+      context.read<OnboardingBloc>().add(const CheckFirstLaunchStatus());
 
-      // Trigger auth check (fire and forget)
-      authBloc.add(CheckAuthStatusEvent());
-
-      // Trigger onboarding check (fire and forget)
-      onboardingBloc.add(const CheckFirstLaunchStatus());
-
-      // Set a loading timer to navigate even if checks take too long
       _loadingTimer = Timer(const Duration(milliseconds: 2500), () {
         if (!_navigationTriggered) {
           debugPrint('⏱️ Loading timer expired, forcing navigation');
@@ -88,20 +68,13 @@ class _SplashScreenState extends State<SplashScreen> {
   void _tryNavigation() {
     if (!_minimalTimePassed || _navigationTriggered) return;
 
-    // Check if we have enough info to navigate
     final authState = context.read<AuthBloc>().state;
     final onboardingState = context.read<OnboardingBloc>().state;
 
-    // If we have auth state, navigate
     if (authState is AuthAuthenticated || authState is AuthUnauthenticated) {
-      if (onboardingState.isFirstLaunch != null) {
-        _navigateToAppropriateScreen();
-      } else {
-        // Onboarding state not ready yet, wait a bit more
-        Future.delayed(const Duration(milliseconds: 500), _tryNavigation);
-      }
+      _navigateToAppropriateScreen();
     } else {
-      // Auth state not ready yet, wait a bit more
+      // Auth state not resolved yet — retry shortly
       Future.delayed(const Duration(milliseconds: 500), _tryNavigation);
     }
   }
@@ -117,23 +90,31 @@ class _SplashScreenState extends State<SplashScreen> {
       try {
         final authState = context.read<AuthBloc>().state;
         final onboardingState = context.read<OnboardingBloc>().state;
-        final isFirstLaunch = onboardingState.isFirstLaunch ?? true;
+        final isFirstLaunch = onboardingState.isFirstLaunch;
+        final hasCompletedProfile = onboardingState.hasCompletedProfile;
 
         debugPrint('🚀 Navigating from splash:');
-        debugPrint('   - Auth state: ${authState.runtimeType}');
-        debugPrint('   - First launch: $isFirstLaunch');
+        debugPrint('   Auth state     : ${authState.runtimeType}');
+        debugPrint('   First launch   : $isFirstLaunch');
+        debugPrint('   Profile done   : $hasCompletedProfile');
 
         if (isFirstLaunch) {
+          // Brand-new install — show onboarding slides first.
           Navigator.pushReplacementNamed(context, RouteNames.onboarding);
         } else if (authState is AuthAuthenticated) {
-          // Go directly to home - services will load in background
-          Navigator.pushReplacementNamed(context, RouteNames.home);
+          if (!hasCompletedProfile) {
+            // Returning user who skipped profile setup — send them there once.
+            Navigator.pushReplacementNamed(context, RouteNames.profile_setup);
+          } else {
+            // Fully set-up returning user — go straight to home.
+            Navigator.pushReplacementNamed(context, RouteNames.home);
+          }
         } else {
+          // Not authenticated — go to login.
           Navigator.pushReplacementNamed(context, RouteNames.login);
         }
       } catch (e) {
         debugPrint('❌ Navigation error: $e');
-        // Fallback
         Navigator.pushReplacementNamed(context, RouteNames.login);
       }
     });
@@ -157,25 +138,13 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo
               Image.asset(
                 AssetPaths.logo,
                 width: 150,
                 height: 150,
                 filterQuality: FilterQuality.high,
               ),
-
               const SizedBox(height: 32),
-
-              // Subtle loading indicator (only shows after 1 second)
-              if (!_minimalTimePassed)
-                _buildLoadingIndicator()
-              else
-                _buildReadyIndicator(),
-
-              const SizedBox(height: 24),
-
-              // App name
               Text(
                 'Moonlight',
                 style: TextStyle(
@@ -187,6 +156,20 @@ class _SplashScreenState extends State<SplashScreen> {
             ],
           ),
         ),
+      ),
+      // bottomNavigationBar: _buildBottomBar(),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Center(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildLoadingIndicator(),
+          const SizedBox(width: 16),
+          _buildReadyIndicator(),
+        ],
       ),
     );
   }
@@ -219,7 +202,7 @@ class _SplashScreenState extends State<SplashScreen> {
           ),
         ],
       ),
-      child: Icon(Icons.check, color: Colors.white, size: 20),
+      child: const Icon(Icons.check, color: Colors.white, size: 20),
     );
   }
 }

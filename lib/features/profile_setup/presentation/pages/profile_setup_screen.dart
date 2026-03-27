@@ -50,17 +50,37 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     return BlocConsumer<ProfileSetupCubit, ProfileSetupState>(
       listener: (context, state) async {
         if (state.success) {
-          // ✅ Persist onboarding completion for skip
+          // ✅ Profile saved successfully
           final prefs = await SharedPreferences.getInstance();
-
           await prefs.setBool('hasCompletedProfile', true);
           MoonSnack.success(context, "Great Job! Profile saved");
           Navigator.pushReplacementNamed(context, '/interests');
         } else if (state.error != null) {
-          MoonSnack.error(context, state.error!);
-          // ScaffoldMessenger.of(
-          //   context,
-          // ).showSnackBar(SnackBar(content: Text(state.error!)));
+          // ── Check if backend is telling us the profile already exists ──────────
+          // Matches messages like: "profile already setup", "already exists",
+          // "already been set up", "profile exists", "already complete" etc.
+          final errorLower = state.error!.toLowerCase();
+          final alreadyDone = [
+            'already setup',
+            'already set up',
+            'already exists',
+            'already been set',
+            'already complete',
+            'profile exists',
+            'already created',
+            'already saved',
+          ].any((phrase) => errorLower.contains(phrase));
+
+          if (alreadyDone) {
+            // Backend confirms profile is done — treat as success
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('hasCompletedProfile', true);
+            MoonSnack.success(context, "Profile already set up. Welcome!");
+            Navigator.pushReplacementNamed(context, '/interests');
+          } else {
+            // Genuine error — show it
+            MoonSnack.error(context, state.error!);
+          }
         }
       },
       builder: (context, state) {

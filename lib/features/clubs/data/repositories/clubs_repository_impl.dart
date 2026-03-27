@@ -297,4 +297,20 @@ class ClubsRepositoryImpl implements ClubsRepository {
     final data = await remote.searchClubs(query);
     return data.map((e) => Club.fromJson(e)).toList();
   }
+
+  @override
+  Future<BulkAddResult> bulkAddMembers({
+    required String club,
+    required List<BulkMember> members,
+  }) async {
+    try {
+      final response = await remote.bulkAddMembers(
+        club: club,
+        members: members.map((m) => m.toJson()).toList(),
+      );
+      return BulkAddResult.fromJson(response);
+    } catch (e) {
+      throw Exception('Failed to add members: $e');
+    }
+  }
 }

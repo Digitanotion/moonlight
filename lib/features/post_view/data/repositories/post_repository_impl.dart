@@ -46,8 +46,10 @@ class PostRepositoryImpl implements PostRepository {
 
   /// Now returns updated likes count
   @override
-  Future<int> toggleCommentLike(String postId, String commentId) =>
-      remote.toggleCommentLike(postId, commentId);
+  Future<LikeResult> toggleCommentLike(String postId, String commentId) async {
+    final result = await remote.toggleCommentLike(postId, commentId);
+    return LikeResult(liked: result.liked, count: result.count);
+  }
 
   @override
   Future<Comment> editComment(String postId, String commentId, String text) =>

@@ -76,6 +76,7 @@ import 'package:moonlight/features/post_view/data/datasources/post_remote_dataso
 import 'package:moonlight/features/post_view/data/repositories/post_repository_impl.dart';
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
 import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
+import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/features/settings/data/datasources/blocked_users_remote_datasource.dart';
 import 'package:moonlight/features/settings/data/datasources/change_email_remote_datasource.dart';
@@ -1154,6 +1155,10 @@ void registerProfileView() {
     sl.registerSingleton<UnreadBadgeService>(UnreadBadgeService());
     debugPrint('✅ UnreadBadgeService registered');
   }
+
+  sl.registerLazySingleton<FollowListRemoteDataSource>(
+    () => FollowListRemoteDataSource(sl<DioClient>()),
+  );
 }
 
 void _registerRealtimeUnreadServices() {

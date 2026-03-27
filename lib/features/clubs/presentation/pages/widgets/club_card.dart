@@ -1,28 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
-import 'package:moonlight/features/clubs/presentation/pages/widgets/club_context_menu.dart';
 
 class ClubCard extends StatelessWidget {
   final Club club;
-
   const ClubCard({super.key, required this.club});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(
+        context,
+        RouteNames.clubProfile,
+        arguments: {'clubUuid': club.uuid},
       ),
-      child: Row(
-        children: [
-          _Cover(club.coverImageUrl),
-          const SizedBox(width: 12),
-          Expanded(child: _Info(club)),
-          ClubContextMenu(club: club),
-        ],
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            _Cover(club.coverImageUrl),
+            const SizedBox(width: 12),
+            Expanded(child: _Info(club)),
+          ],
+        ),
       ),
     );
   }
@@ -30,7 +35,6 @@ class ClubCard extends StatelessWidget {
 
 class _Cover extends StatelessWidget {
   final String? url;
-
   const _Cover(this.url);
 
   bool get _valid =>
@@ -63,7 +67,6 @@ class _Cover extends StatelessWidget {
 
 class _Info extends StatelessWidget {
   final Club club;
-
   const _Info(this.club);
 
   @override

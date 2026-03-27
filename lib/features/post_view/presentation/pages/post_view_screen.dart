@@ -1,6 +1,7 @@
 // lib/features/post_view/presentation/pages/post_view_screen.dart
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
@@ -9,20 +10,22 @@ import 'package:moonlight/core/widgets/sign_in_prompt.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/skeleton_line_plus.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/user_helper.dart';
-import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/time_ago.dart';
-import '../../../../core/routing/route_names.dart'; // <-- ADDED
-import '../../../../core/services/share_service.dart'; // <-- ADDED
+import '../../../../core/routing/route_names.dart';
+import '../../../../core/services/share_service.dart';
 import '../../domain/entities/post.dart';
 import '../../domain/entities/comment.dart';
 import '../cubit/post_cubit.dart';
 import '../cubit/post_actions.dart';
 import '../widgets/chips.dart';
 import '../widgets/sheets.dart';
+
+// ── Shared like color constant ────────────────────────────────────────────────
+const _kLikedColor = Color(0xFFFF4D67);
 
 class PostViewScreen extends StatefulWidget {
   final String postId;
@@ -100,7 +103,6 @@ class _PostViewScreenState extends State<PostViewScreen> {
     if (text.isEmpty) return;
 
     final cubit = context.read<PostCubit>();
-
     if (_editingCommentId != null) {
       cubit.editComment(_editingCommentId!, text);
     } else if (_replyingToCommentId != null) {
@@ -108,7 +110,6 @@ class _PostViewScreenState extends State<PostViewScreen> {
     } else {
       cubit.addComment(text);
     }
-
     _cancelAction();
   }
 
@@ -165,9 +166,7 @@ class _PostViewScreenState extends State<PostViewScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             makeSnack(Icons.check_circle, Colors.green, 'Post deleted'),
           );
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          }
+          if (Navigator.canPop(context)) Navigator.pop(context);
         } else if (action is PostEdited) {
           ScaffoldMessenger.of(context).showSnackBar(
             makeSnack(Icons.check_circle, Colors.green, 'Caption updated'),
@@ -201,7 +200,6 @@ class _PostViewScreenState extends State<PostViewScreen> {
             makeSnack(Icons.error_outline, Colors.red, action.message),
           );
         }
-
         context.read<PostCubit>().consumeAction();
       },
       child: BlocBuilder<PostCubit, PostState>(
@@ -252,9 +250,7 @@ class _PostViewScreenState extends State<PostViewScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                context.read<PostCubit>().load();
-              },
+              onPressed: () => context.read<PostCubit>().load(),
               child: const Text('Retry'),
             ),
           ],
@@ -407,6 +403,8 @@ class _PostViewScreenState extends State<PostViewScreen> {
   }
 }
 
+// ── Post media ────────────────────────────────────────────────────────────────
+
 class _PostMedia extends StatefulWidget {
   final Post post;
   const _PostMedia({required this.post});
@@ -453,7 +451,7 @@ class _PostMediaState extends State<_PostMedia> {
   bool _detectVideo(Post p) {
     final t = (p.mediaType ?? '').toLowerCase();
     if (t.startsWith('video/')) return true;
-    final u = (p.mediaUrl).toLowerCase();
+    final u = p.mediaUrl.toLowerCase();
     return u.endsWith('.mp4') ||
         u.endsWith('.mov') ||
         u.endsWith('.mkv') ||
@@ -479,25 +477,22 @@ class _PostMediaState extends State<_PostMedia> {
           _vc?.setLooping(true);
           _flashGlyph();
         });
-    } catch (_) {
-      // Invalid URL string; ignore and render placeholder
-    }
+    } catch (_) {}
   }
 
   String get _previewUrl {
-    final thumb = widget.post.thumbUrl;
-    if (_isValidUrl(thumb)) return thumb!;
+    // For videos: prefer thumb; fallback to mediaUrl
+    if (_isVideo) {
+      final thumb = widget.post.thumbUrl;
+      if (_isValidUrl(thumb)) return thumb!;
+    }
     return _isValidUrl(widget.post.mediaUrl) ? widget.post.mediaUrl : '';
   }
 
   void _togglePlay() {
     if (!_isVideo || !_isInitialized) return;
     final playing = _vc!.value.isPlaying;
-    if (playing) {
-      _vc!.pause();
-    } else {
-      _vc!.play();
-    }
+    playing ? _vc!.pause() : _vc!.play();
     _flashGlyph();
     setState(() {});
   }
@@ -616,6 +611,8 @@ class _MediaPlaceholder extends StatelessWidget {
   }
 }
 
+// ── Meta section ──────────────────────────────────────────────────────────────
+
 class _Meta extends StatelessWidget {
   final Post post;
   final Function(String, String) onStartReply;
@@ -633,8 +630,6 @@ class _Meta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use GetIt instead of Provider
-    final currentUserService = GetIt.I<CurrentUserService>();
     final isPostOwner = UserHelper.isPostOwner(context, post);
 
     return Padding(
@@ -642,6 +637,7 @@ class _Meta extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Author row
           Row(
             children: [
               SafeCircleAvatar(
@@ -685,27 +681,26 @@ class _Meta extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                timeAgo(DateTime.now().difference(post.createdAt)),
-                style: AppTextStyles.small,
-              ),
+              // ── Twitter-style time ─────────────────────────────────────
+              Text(timeAgoFrom(post.createdAt), style: AppTextStyles.small),
               const SizedBox(width: 6),
               _PostMenuButton(isOwner: isPostOwner, post: post),
             ],
           ),
+
           const SizedBox(height: 12),
           Text(post.caption, style: AppTextStyles.body),
           const SizedBox(height: 8),
           Wrap(children: post.tags.map((t) => TagChip(text: t)).toList()),
           const SizedBox(height: 14),
+
+          // ── Action row: like · comment · share ─────────────────────────
           Row(
             children: [
-              _IconStat(
-                icon: post.isLiked ? Icons.favorite : Icons.favorite_border,
-                value: post.likes.toString(),
+              _AnimatedLikeStat(
+                isLiked: post.isLiked,
+                count: post.likes,
                 onTap: () => cubit.toggleLike(),
-                active: post
-                    .isLiked, // stays red if liked (persisted by LikeMemory)
               ),
               const SizedBox(width: 18),
               _IconStat(
@@ -714,15 +709,11 @@ class _Meta extends StatelessWidget {
                 onTap: () {},
               ),
               const SizedBox(width: 18),
-              _IconStat(
-                icon: Icons.share_outlined,
-                value: "",
-                onTap: () async {
-                  await ShareService.sharePost(post);
-                },
-              ),
+              // ── Improved share button ──────────────────────────────────
+              _ShareButton(post: post),
             ],
           ),
+
           const SizedBox(height: 16),
           const Divider(color: AppColors.divider),
           const SizedBox(height: 8),
@@ -756,11 +747,7 @@ class _Meta extends StatelessWidget {
 
   Widget _buildCommentsList(BuildContext context) {
     final comments = cubit.state.comments;
-
-    if (comments.isEmpty) {
-      return _buildEmptyComments();
-    }
-
+    if (comments.isEmpty) return _buildEmptyComments();
     return Column(
       children: comments
           .map(
@@ -776,7 +763,6 @@ class _Meta extends StatelessWidget {
   }
 
   Widget _buildEmptyComments() {
-    // Ultra-modern empty-state card
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       padding: const EdgeInsets.all(18),
@@ -835,6 +821,231 @@ class _Meta extends StatelessWidget {
   }
 }
 
+// ── Animated like stat (post-view version) ───────────────────────────────────
+
+class _AnimatedLikeStat extends StatefulWidget {
+  const _AnimatedLikeStat({
+    required this.isLiked,
+    required this.count,
+    required this.onTap,
+  });
+  final bool isLiked;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  State<_AnimatedLikeStat> createState() => _AnimatedLikeStatState();
+}
+
+class _AnimatedLikeStatState extends State<_AnimatedLikeStat>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+    lowerBound: 0.7,
+    upperBound: 1.0,
+    value: 1.0,
+  );
+
+  Future<void> _handleTap() async {
+    await _ctrl.animateTo(
+      0.7,
+      duration: const Duration(milliseconds: 80),
+      curve: Curves.easeIn,
+    );
+    await _ctrl.animateTo(
+      1.0,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.elasticOut,
+    );
+    widget.onTap();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.isLiked ? _kLikedColor : AppColors.onSurface;
+    return InkWell(
+      onTap: _handleTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: ScaleTransition(
+          scale: _ctrl,
+          child: Row(
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Icon(
+                  widget.isLiked ? Icons.favorite : Icons.favorite_border,
+                  key: ValueKey(widget.isLiked),
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 8),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: AppTextStyles.body.copyWith(color: color),
+                child: Text('${widget.count}'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Share button ──────────────────────────────────────────────────────────────
+
+class _ShareButton extends StatelessWidget {
+  final Post post;
+  const _ShareButton({required this.post});
+
+  void _show(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.navyDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Share post',
+                style: AppTextStyles.titleMedium.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _ShareOption(
+                    icon: Icons.share_rounded,
+                    label: 'Share via',
+                    color: AppColors.primary,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await ShareService.sharePost(post);
+                    },
+                  ),
+                  _ShareOption(
+                    icon: Icons.copy_rounded,
+                    label: 'Copy link',
+                    color: const Color(0xFF4C8DFF),
+                    onTap: () {
+                      Navigator.pop(context);
+                      final link =
+                          'https://moonlightstream.app/post/${post.id}';
+                      Clipboard.setData(ClipboardData(text: link));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Link copied to clipboard'),
+                          backgroundColor: AppColors.primary,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _show(context),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          children: [
+            Icon(Icons.share_outlined, color: AppColors.onSurface),
+            const SizedBox(width: 8),
+            Text('Share', style: AppTextStyles.body),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ShareOption({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: AppTextStyles.small.copyWith(color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Comment tile ──────────────────────────────────────────────────────────────
+
 class _CommentTile extends StatefulWidget {
   final Comment comment;
   final Function(String, String) onStartReply;
@@ -855,13 +1066,11 @@ class _CommentTile extends StatefulWidget {
 class _CommentTileState extends State<_CommentTile> {
   bool _expanded = true;
 
-  bool get _isCurrentUserComment {
-    return UserHelper.isCommentOwner(context, widget.comment);
-  }
+  bool get _isCurrentUserComment =>
+      UserHelper.isCommentOwner(context, widget.comment);
 
   void _showCommentMenu() {
     final postCubit = context.read<PostCubit>();
-
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.navyDark,
@@ -906,9 +1115,7 @@ class _CommentTileState extends State<_CommentTile> {
                     isDestructive: true,
                     onTap: () {
                       Navigator.pop(menuContext);
-                      widget.onDeleteComment(
-                        widget.comment.id,
-                      ); // route to confirm
+                      widget.onDeleteComment(widget.comment.id);
                     },
                   ),
                 ],
@@ -1005,28 +1212,17 @@ class _CommentTileState extends State<_CommentTile> {
                       Row(
                         children: [
                           Text(
-                            timeAgo(DateTime.now().difference(c.createdAt)),
+                            timeAgoFrom(c.createdAt),
                             style: AppTextStyles.small.copyWith(
                               color: Colors.white54,
                             ),
                           ),
                           const SizedBox(width: 16),
-                          GestureDetector(
-                            onTap: () => context
-                                .read<PostCubit>()
-                                .toggleCommentLike(c.id),
-                            child: const Icon(
-                              Icons.favorite_border,
-                              size: 16,
-                              color: Colors.white54,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${c.likes}',
-                            style: AppTextStyles.small.copyWith(
-                              color: Colors.white54,
-                            ),
+                          // ── Like with red state ───────────────────────
+                          _CommentLikeButton(
+                            commentId: c.id,
+                            isLiked: c.isLiked,
+                            likes: c.likes,
                           ),
                           const SizedBox(width: 16),
                           GestureDetector(
@@ -1086,6 +1282,89 @@ class _CommentTileState extends State<_CommentTile> {
   }
 }
 
+// ── Comment like button (red when liked) ─────────────────────────────────────
+
+class _CommentLikeButton extends StatefulWidget {
+  final String commentId;
+  final bool isLiked;
+  final int likes;
+
+  const _CommentLikeButton({
+    required this.commentId,
+    required this.isLiked,
+    required this.likes,
+  });
+
+  @override
+  State<_CommentLikeButton> createState() => _CommentLikeButtonState();
+}
+
+class _CommentLikeButtonState extends State<_CommentLikeButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+    lowerBound: 0.7,
+    upperBound: 1.0,
+    value: 1.0,
+  );
+
+  Future<void> _handleTap() async {
+    await _ctrl.animateTo(
+      0.7,
+      duration: const Duration(milliseconds: 80),
+      curve: Curves.easeIn,
+    );
+    await _ctrl.animateTo(
+      1.0,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.elasticOut,
+    );
+    if (mounted) {
+      context.read<PostCubit>().toggleCommentLike(widget.commentId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.isLiked ? _kLikedColor : Colors.white54;
+    return GestureDetector(
+      onTap: _handleTap,
+      child: ScaleTransition(
+        scale: _ctrl,
+        child: Row(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
+              child: Icon(
+                widget.isLiked ? Icons.favorite : Icons.favorite_border,
+                key: ValueKey(widget.isLiked),
+                size: 16,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${widget.likes}',
+              style: AppTextStyles.small.copyWith(color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Reply tile ────────────────────────────────────────────────────────────────
+
 class _ReplyTile extends StatelessWidget {
   final Comment reply;
   final Function(String, String) onEditComment;
@@ -1097,13 +1376,11 @@ class _ReplyTile extends StatelessWidget {
     required this.onDeleteComment,
   });
 
-  bool _isCurrentUserReply(BuildContext context) {
-    return UserHelper.isCommentOwner(context, reply);
-  }
+  bool _isCurrentUserReply(BuildContext context) =>
+      UserHelper.isCommentOwner(context, reply);
 
   void _showReplyMenu(BuildContext context) {
     final postCubit = context.read<PostCubit>();
-
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.navyDark,
@@ -1133,7 +1410,7 @@ class _ReplyTile extends StatelessWidget {
                     isDestructive: true,
                     onTap: () {
                       Navigator.pop(menuContext);
-                      onDeleteComment(reply.id); // route to confirm
+                      onDeleteComment(reply.id);
                     },
                   ),
                   const Divider(color: AppColors.divider),
@@ -1219,30 +1496,18 @@ class _ReplyTile extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        timeAgo(DateTime.now().difference(reply.createdAt)),
+                        timeAgoFrom(reply.createdAt),
                         style: AppTextStyles.small.copyWith(
                           color: Colors.white54,
                           fontSize: 12,
                         ),
                       ),
                       const SizedBox(width: 12),
-                      GestureDetector(
-                        onTap: () => context
-                            .read<PostCubit>()
-                            .toggleCommentLike(reply.id),
-                        child: const Icon(
-                          Icons.favorite_border,
-                          size: 14,
-                          color: Colors.white54,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${reply.likes}',
-                        style: AppTextStyles.small.copyWith(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
+                      // ── Reply like with red state ─────────────────────
+                      _CommentLikeButton(
+                        commentId: reply.id,
+                        isLiked: reply.isLiked,
+                        likes: reply.likes,
                       ),
                     ],
                   ),
@@ -1255,6 +1520,8 @@ class _ReplyTile extends StatelessWidget {
     );
   }
 }
+
+// ── Shared menu option ────────────────────────────────────────────────────────
 
 class _MenuOption extends StatelessWidget {
   final IconData icon;
@@ -1283,6 +1550,8 @@ class _MenuOption extends StatelessWidget {
     );
   }
 }
+
+// ── Post menu button ──────────────────────────────────────────────────────────
 
 class _PostMenuButton extends StatelessWidget {
   final bool isOwner;
@@ -1446,7 +1715,7 @@ class _PostMenuButton extends StatelessWidget {
                     maxLines: 4,
                     style: AppTextStyles.body.copyWith(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'What\'s on your mind?',
+                      hintText: "What's on your mind?",
                       hintStyle: AppTextStyles.body.copyWith(
                         color: Colors.white54,
                       ),
@@ -1512,7 +1781,6 @@ class _PostMenuButton extends StatelessWidget {
 
   void _deletePost(BuildContext context) {
     final postCubit = context.read<PostCubit>();
-
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.navyDark,
@@ -1540,13 +1808,10 @@ class _PostMenuButton extends StatelessWidget {
     final postCubit = context.read<PostCubit>();
     final reason = await pickReason(context);
     if (reason == null) return;
-
     try {
       await postCubit.repo.report(postCubit.postId, reason);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Thanks for reporting. We\'ll review it.'),
-        ),
+        const SnackBar(content: Text("Thanks for reporting. We'll review it.")),
       );
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1555,6 +1820,8 @@ class _PostMenuButton extends StatelessWidget {
     }
   }
 }
+
+// ── Confirm delete sheet ──────────────────────────────────────────────────────
 
 class _ConfirmDeleteSheet extends StatelessWidget {
   final String title;
@@ -1646,6 +1913,8 @@ class _ConfirmDeleteSheet extends StatelessWidget {
     );
   }
 }
+
+// ── Comment input bar ─────────────────────────────────────────────────────────
 
 class _CommentInputBar extends StatelessWidget {
   final TextEditingController controller;
@@ -1773,11 +2042,14 @@ class _CommentInputBar extends StatelessWidget {
   }
 }
 
+// ── Icon stat (non-like) ──────────────────────────────────────────────────────
+
 class _IconStat extends StatelessWidget {
   final IconData icon;
   final String value;
   final VoidCallback onTap;
   final bool active;
+
   const _IconStat({
     required this.icon,
     required this.value,
@@ -1799,6 +2071,8 @@ class _IconStat extends StatelessWidget {
     );
   }
 }
+
+// ── Shimmer ───────────────────────────────────────────────────────────────────
 
 class _PostViewShimmer extends StatelessWidget {
   const _PostViewShimmer();
@@ -1912,16 +2186,18 @@ class _PostViewShimmer extends StatelessWidget {
   }
 }
 
+// ── Safe circle avatar ────────────────────────────────────────────────────────
+
 class SafeCircleAvatar extends StatelessWidget {
   final String imageUrl;
   final double radius;
-  final VoidCallback? onTap; // <-- ADDED
+  final VoidCallback? onTap;
 
   const SafeCircleAvatar({
     super.key,
     required this.imageUrl,
     required this.radius,
-    this.onTap, // <-- ADDED
+    this.onTap,
   });
 
   bool _isValidUrl(String? url) {

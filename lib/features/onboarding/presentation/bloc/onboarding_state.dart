@@ -5,16 +5,22 @@ class OnboardingState extends Equatable {
   final bool isFirstLaunch;
   final List<OnboardingPageEntity> pages;
 
+  /// True once the user has successfully submitted ProfileSetupScreen.
+  /// Persisted in SharedPreferences under the key 'hasCompletedProfile'.
+  final bool hasCompletedProfile;
+
   const OnboardingState({
     required this.currentPage,
     required this.isFirstLaunch,
     required this.pages,
+    this.hasCompletedProfile = false,
   });
 
   factory OnboardingState.initial() {
     return OnboardingState(
       currentPage: 0,
       isFirstLaunch: true,
+      hasCompletedProfile: false,
       pages: [
         OnboardingPageEntity(
           imagePath: AssetPaths.onboard_1,
@@ -41,7 +47,7 @@ class OnboardingState extends Equatable {
         ),
         OnboardingPageEntity(
           imagePath: AssetPaths.onboard_3,
-          title: 'You\'re not Alone',
+          title: "You're not Alone",
           description: 'Join a global family of creators',
           stats: {'1M+': 'Active Users', '50K+': 'Live Clubs'},
         ),
@@ -53,14 +59,21 @@ class OnboardingState extends Equatable {
     int? currentPage,
     bool? isFirstLaunch,
     List<OnboardingPageEntity>? pages,
+    bool? hasCompletedProfile,
   }) {
     return OnboardingState(
       currentPage: currentPage ?? this.currentPage,
       isFirstLaunch: isFirstLaunch ?? this.isFirstLaunch,
       pages: pages ?? this.pages,
+      hasCompletedProfile: hasCompletedProfile ?? this.hasCompletedProfile,
     );
   }
 
   @override
-  List<Object> get props => [currentPage, isFirstLaunch, pages];
+  List<Object> get props => [
+    currentPage,
+    isFirstLaunch,
+    pages,
+    hasCompletedProfile,
+  ];
 }

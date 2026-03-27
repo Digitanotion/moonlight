@@ -1,11 +1,26 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
-import 'package:moonlight/core/theme/app_theme.dart';
+import 'package:moonlight/core/widgets/web_view_screen.dart';
 
 class TermsAndPolicyText extends StatelessWidget {
   const TermsAndPolicyText({super.key});
+
+  static const _termsUrl = 'https://moonlightstream.app/terms';
+  static const _privacyUrl = 'https://moonlightstream.app/privacy-policy';
+
+  void _openWebView(
+    BuildContext context, {
+    required String title,
+    required String url,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WebViewScreen(title: title, url: url),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +39,14 @@ class TermsAndPolicyText extends StatelessWidget {
               style: const TextStyle(
                 color: AppColors.primary,
                 decoration: TextDecoration.underline,
+                fontWeight: FontWeight.w600,
               ),
               recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  // Navigate to terms screen
-                  // Navigator.pushNamed(context, RouteNames.terms);
-                  // Navigator.pushReplacementNamed(context, RouteNames.interests);
-                },
+                ..onTap = () => _openWebView(
+                  context,
+                  title: 'Terms of Service',
+                  url: _termsUrl,
+                ),
             ),
             const TextSpan(text: ' and '),
             TextSpan(
@@ -38,12 +54,14 @@ class TermsAndPolicyText extends StatelessWidget {
               style: const TextStyle(
                 color: AppColors.primary,
                 decoration: TextDecoration.underline,
+                fontWeight: FontWeight.w600,
               ),
               recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  // Navigate to privacy policy screen
-                  // Navigator.pushNamed(context, RouteNames.privacy);
-                },
+                ..onTap = () => _openWebView(
+                  context,
+                  title: 'Privacy Policy',
+                  url: _privacyUrl,
+                ),
             ),
           ],
         ),

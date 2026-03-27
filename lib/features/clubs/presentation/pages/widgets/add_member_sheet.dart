@@ -1,3 +1,5 @@
+// lib/features/clubs/presentation/pages/widgets/add_member_sheet.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -24,7 +26,7 @@ Future<bool?> showAddMemberSheet(BuildContext context, String club) {
 }
 
 class _AddMemberSheet extends StatefulWidget {
-final String club;
+  final String club;
   const _AddMemberSheet(this.club);
 
   @override
@@ -34,18 +36,21 @@ final String club;
 class _AddMemberSheetState extends State<_AddMemberSheet> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focus = FocusNode();
+  final ScrollController _scrollController = ScrollController();
 
   Timer? _debounce;
   bool _loading = false;
+  bool _addingMembers = false;
 
   List<UserSearchResult> _results = [];
-  UserSearchResult? _selected;
+  final List<UserSearchResult> _selectedUsers = [];
 
   @override
   void dispose() {
     _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -59,32 +64,101 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
 
     _debounce = Timer(const Duration(milliseconds: 350), () async {
       final repo = context.read<ClubsRepository>();
-      final users = await repo.searchUsers(value.trim());
-      if (mounted) {
-        setState(() => _results = users);
+      try {
+        final users = await repo.searchUsers(value.trim());
+        if (mounted) {
+          // Filter out already selected users
+          final filteredUsers = users.where((user) {
+            return !_selectedUsers.any(
+              (selected) => selected.uuid == user.uuid,
+            );
+          }).toList();
+          setState(() => _results = filteredUsers);
+        }
+      } catch (e) {
+        if (mounted) {
+          TopSnack.error(context, 'Failed to search users');
+        }
       }
     });
   }
 
-  Future<void> _addMember() async {
-    if (_selected == null) return;
+  void _selectUser(UserSearchResult user) {
+    setState(() {
+      _selectedUsers.add(user);
+      _results.remove(user);
+      _controller.clear();
+      _focus.requestFocus();
+    });
+  }
 
-    setState(() => _loading = true);
+  void _removeSelectedUser(UserSearchResult user) {
+    setState(() {
+      _selectedUsers.remove(user);
+    });
+  }
+
+  Future<void> _addMembers() async {
+    if (_selectedUsers.isEmpty) return;
+
+    setState(() => _addingMembers = true);
+
     final repo = context.read<ClubsRepository>();
 
+    // Prepare bulk member data
+    final members = _selectedUsers.map((user) {
+      return BulkMember(
+        identifier: user.slug, // Use user_slug as identifier
+        role: 'member',
+      );
+    }).toList();
+
     try {
-      await repo.addMember(club: widget.club, identifier: _selected!.slug);
+      final result = await repo.bulkAddMembers(
+        club: widget.club,
+        members: members,
+      );
 
       if (!mounted) return;
 
-      Navigator.pop(context, true);
+      setState(() => _addingMembers = false);
 
-      TopSnack.success(context, 'Added ${_selected!.fullname} to club');
+      // Show results
+      if (result.failed.isEmpty) {
+        // All succeeded
+        TopSnack.success(
+          context,
+          result.success.length == 1
+              ? 'Added ${result.success.first.fullname} to club'
+              : 'Added ${result.success.length} members to club',
+        );
+        Navigator.pop(context, true);
+      } else if (result.success.isNotEmpty && result.failed.isNotEmpty) {
+        // Partial success
+        final failedNames = result.failed.map((f) => f.identifier).join(', ');
+        TopSnack.warning(
+          context,
+          'Added ${result.success.length} members, failed to add ${result.failed.length}: $failedNames',
+          duration: const Duration(seconds: 5),
+        );
+        // Keep sheet open and clear successful ones
+        setState(() {
+          _selectedUsers.removeWhere((user) {
+            return result.success.any((s) => s.identifier == user.slug);
+          });
+        });
+      } else {
+        // All failed
+        TopSnack.error(
+          context,
+          'Failed to add members: ${result.failed.first.error}',
+        );
+      }
     } catch (e) {
-      if (!mounted) return;
-      TopSnack.error(context, 'Failed to add member');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _addingMembers = false);
+        TopSnack.error(context, 'Failed to add members: $e');
+      }
     }
   }
 
@@ -98,24 +172,53 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'Add Member',
+            'Add Members',
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Search and select users to add',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
           const SizedBox(height: 16),
+
+          /// ───── Selected Users Preview ─────
+          if (_selectedUsers.isNotEmpty)
+            Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.3,
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                controller: _scrollController,
+                itemCount: _selectedUsers.length,
+                itemBuilder: (_, index) {
+                  final user = _selectedUsers[index];
+                  return _SelectedUserCard(
+                    user: user,
+                    onClear: () => _removeSelectedUser(user),
+                  );
+                },
+              ),
+            ),
+
+          const SizedBox(height: 12),
 
           /// ───── Search Input ─────
           TextField(
             controller: _controller,
             focusNode: _focus,
-            enabled: _selected == null,
+            enabled: !_addingMembers,
             style: const TextStyle(color: Colors.white),
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
-              hintText: 'Search by username or email',
+              hintText: _selectedUsers.isEmpty
+                  ? 'Search by username or email'
+                  : 'Search another member...',
               hintStyle: const TextStyle(color: Colors.white54),
               filled: true,
               fillColor: const Color(0xFF121A4A),
@@ -129,38 +232,23 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
 
           const SizedBox(height: 12),
 
-          /// ───── Selected User Preview ─────
-          if (_selected != null)
-            _SelectedUserCard(
-              user: _selected!,
-              onClear: () {
-                setState(() {
-                  _selected = null;
-                  _controller.clear();
-                  _results = [];
-                  _focus.requestFocus();
-                });
-              },
-            ),
-
-          /// ───── Suggestions ─────
-          if (_selected == null && _results.isNotEmpty)
-            ListView.builder(
-              shrinkWrap: true,
-              itemCount: _results.length,
-              itemBuilder: (_, i) {
-                final user = _results[i];
-                return _UserSuggestionTile(
-                  user: user,
-                  onTap: () {
-                    setState(() {
-                      _selected = user;
-                      _results = [];
-                      _focus.unfocus();
-                    });
-                  },
-                );
-              },
+          /// ───── Search Results ─────
+          if (_results.isNotEmpty && !_addingMembers)
+            Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.3,
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _results.length,
+                itemBuilder: (_, i) {
+                  final user = _results[i];
+                  return _UserSuggestionTile(
+                    user: user,
+                    onTap: () => _selectUser(user),
+                  );
+                },
+              ),
             ),
 
           const SizedBox(height: 20),
@@ -170,17 +258,26 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
-              onPressed: _loading ? null : _addMember,
+              onPressed: (_addingMembers || _selectedUsers.isEmpty)
+                  ? null
+                  : _addMembers,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF7A00),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              child: _loading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text(
-                      'Add to Club',
+              child: _addingMembers
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      'Add ${_selectedUsers.isEmpty ? '' : '(${_selectedUsers.length})'} to Club',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -209,7 +306,10 @@ class _UserSuggestionTile extends StatelessWidget {
             ? NetworkImage(user.avatarUrl!)
             : null,
       ),
-      title: Text(user.fullname, style: const TextStyle(color: Colors.white)),
+      title: Text(
+        user.fullname ?? user.email.split('@').first,
+        style: const TextStyle(color: Colors.white),
+      ),
       subtitle: Text(
         '@${user.slug}',
         style: const TextStyle(color: Colors.white60),

@@ -46,9 +46,11 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
   dateOfBirth: json['date_of_birth'] as String?,
   createdAt: json['created_at'] as String?,
   updatedAt: json['updated_at'] as String?,
-  authToken: json['access_token'] as String?, // ✅ THIS LINE IS CRITICAL
-  tokenType: json['token_type'] as String?, // ✅ THIS LINE IS CRITICAL
-  expiresIn: json['expires_in'] as String?, // ✅ THIS LINE IS CRITICAL
+  authToken: json['authToken'] as String?,
+  tokenType: json['tokenType'] as String?,
+  expiresIn: json['expiresIn'] as String?,
+  followersCount: (json['followers_count'] as num?)?.toInt(),
+  followingCount: (json['following_count'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
@@ -73,7 +75,9 @@ Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
   'date_of_birth': instance.dateOfBirth,
   'created_at': instance.createdAt,
   'updated_at': instance.updatedAt,
-  'access_token': instance.authToken, // ✅ THIS LINE IS CRITICAL
-  'token_type': instance.tokenType, // ✅ THIS LINE IS CRITICAL
-  'expires_in': instance.expiresIn, // ✅ THIS LINE IS CRITICAL
+  'followers_count': instance.followersCount,
+  'following_count': instance.followingCount,
+  'authToken': instance.authToken,
+  'tokenType': instance.tokenType,
+  'expiresIn': instance.expiresIn,
 };

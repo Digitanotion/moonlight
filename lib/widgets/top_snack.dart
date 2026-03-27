@@ -68,7 +68,7 @@ class TopSnack {
     } catch (_) {}
   }
 
-  // Convenience variants
+  // Success variant
   static void success(
     BuildContext ctx,
     String msg, {
@@ -85,6 +85,7 @@ class TopSnack {
     onAction: onAction,
   );
 
+  // Error variant
   static void error(
     BuildContext ctx,
     String msg, {
@@ -101,6 +102,7 @@ class TopSnack {
     onAction: onAction,
   );
 
+  // Info variant
   static void info(
     BuildContext ctx,
     String msg, {
@@ -114,6 +116,23 @@ class TopSnack {
     bgStart: const Color(0xFF16304A),
     bgEnd: const Color(0xFF0B1B2A),
     accent: const Color(0xFF2196F3),
+    onAction: onAction,
+  );
+
+  // Warning variant (NEW)
+  static void warning(
+    BuildContext ctx,
+    String msg, {
+    Duration duration = const Duration(seconds: 4),
+    VoidCallback? onAction,
+  }) => show(
+    ctx,
+    msg,
+    icon: Icons.warning_amber_rounded,
+    duration: duration,
+    bgStart: const Color(0xFF4A3A0F),
+    bgEnd: const Color(0xFF2F260A),
+    accent: const Color(0xFFFFA726),
     onAction: onAction,
   );
 }
