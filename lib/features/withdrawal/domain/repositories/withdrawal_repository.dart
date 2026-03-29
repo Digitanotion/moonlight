@@ -55,4 +55,10 @@ abstract class WithdrawalRepository {
     required String pin,
     String? idempotencyKey,
   });
+
+  /// Get FX rate preview for USD to local currency
+  Future<Map<String, dynamic>> getFxPreview({
+    required double amountUsd,
+    required String country,
+  });
 }

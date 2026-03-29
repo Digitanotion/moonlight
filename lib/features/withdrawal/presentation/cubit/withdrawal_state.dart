@@ -67,3 +67,43 @@ class WithdrawalAccountNameError extends WithdrawalState {
   @override
   List<Object?> get props => [message];
 }
+
+class WithdrawalFxPreviewLoading extends WithdrawalState {
+  const WithdrawalFxPreviewLoading();
+}
+
+class WithdrawalFxPreviewLoaded extends WithdrawalState {
+  final double amountUsd;
+  final String country;
+  final double localAmount;
+  final String localCurrency;
+  final double rate;
+  final String note;
+
+  const WithdrawalFxPreviewLoaded({
+    required this.amountUsd,
+    required this.country,
+    required this.localAmount,
+    required this.localCurrency,
+    required this.rate,
+    required this.note,
+  });
+
+  @override
+  List<Object?> get props => [
+    amountUsd,
+    country,
+    localAmount,
+    localCurrency,
+    rate,
+    note,
+  ];
+}
+
+class WithdrawalFxPreviewError extends WithdrawalState {
+  final String message;
+  const WithdrawalFxPreviewError(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}

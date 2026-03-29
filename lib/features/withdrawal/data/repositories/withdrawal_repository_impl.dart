@@ -76,4 +76,12 @@ class WithdrawalRepositoryImpl implements WithdrawalRepository {
       idempotencyKey: idempotencyKey ?? const Uuid().v4(),
     );
   }
+
+  @override
+  Future<Map<String, dynamic>> getFxPreview({
+    required double amountUsd,
+    required String country,
+  }) {
+    return remote.getFxPreview(amountUsd: amountUsd, country: country);
+  }
 }

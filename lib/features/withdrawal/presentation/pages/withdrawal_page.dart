@@ -8,6 +8,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/utils/formatting.dart';
 import '../cubit/withdrawal_cubit.dart';
 import 'withdrawal_pin_page.dart';
+import 'package:intl/intl.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Nigeria NUBAN is always exactly 10 digits → resolve immediately on hit.
@@ -637,7 +638,18 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     contentPadding: EdgeInsets.symmetric(vertical: 14),
                     errorStyle: TextStyle(color: Colors.redAccent),
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (value) {
+                    setState(() {});
+                    // Trigger FX preview when amount changes and we have a country selected
+                    final dollars = double.tryParse(value.trim()) ?? 0.0;
+                    if (dollars >= 100 &&
+                        _selectedMethod == _PaymentMethod.flutterwave) {
+                      context.read<WithdrawalCubit>().loadFxPreview(
+                        amountUsd: dollars,
+                        country: _selectedCountry,
+                      );
+                    }
+                  },
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Enter an amount';
                     final dollars = double.tryParse(v) ?? 0.0;
@@ -676,6 +688,17 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
         _buildBankSelector(),
         _buildAccountNumberField(),
         _buildAccountNameField(),
+
+        // FX Preview - shows estimated local currency amount
+        _FxPreviewWidget(
+          amountUsd: _enteredDollars,
+          country: _selectedCountry,
+          enabled:
+              _selectedMethod == _PaymentMethod.flutterwave &&
+              _enteredDollars >= 100 &&
+              _selectedBank != null,
+        ),
+
         _buildInputField(
           label: 'Email (Optional)',
           controller: _emailController,
@@ -1007,6 +1030,16 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                 _accountNameError = null;
               });
               _fetchBanks(val);
+
+              // Trigger FX preview when country changes
+              final dollars =
+                  double.tryParse(_amountController.text.trim()) ?? 0.0;
+              if (dollars >= 100) {
+                context.read<WithdrawalCubit>().loadFxPreview(
+                  amountUsd: dollars,
+                  country: val,
+                );
+              }
             },
             decoration: const InputDecoration(
               border: InputBorder.none,
@@ -1576,4 +1609,203 @@ class _MethodCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FX Preview Widget - shows estimated local currency amount
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FxPreviewWidget extends StatelessWidget {
+  final double amountUsd;
+  final String country;
+  final bool enabled;
+
+  const _FxPreviewWidget({
+    required this.amountUsd,
+    required this.country,
+    required this.enabled,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<WithdrawalCubit, WithdrawalState>(
+      builder: (ctx, state) {
+        // Don't show preview if amount is less than minimum or method is PayPal
+        if (!enabled || amountUsd < 100) {
+          return const SizedBox.shrink();
+        }
+
+        if (state is WithdrawalFxPreviewLoading) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Fetching exchange rate...',
+                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (state is WithdrawalFxPreviewLoaded) {
+          final localAmountFormatted = _formatLocalAmount(
+            state.localAmount,
+            state.localCurrency,
+          );
+
+          return Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.deepOrangeAccent.withOpacity(0.15),
+                  Colors.deepPurple.withOpacity(0.15),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.deepOrangeAccent.withOpacity(0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.currency_exchange,
+                      color: Colors.deepOrangeAccent,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'You will receive approximately:',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  localAmountFormatted,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Rate: 1 USD = ${state.rate.toStringAsFixed(2)} ${state.localCurrency}',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  state.note,
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (state is WithdrawalFxPreviewError && state.message.isNotEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orangeAccent,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    state.message,
+                    style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  String _formatLocalAmount(double amount, String currencyCode) {
+    final symbol = _getCurrencySymbol(currencyCode);
+    final formatter = NumberFormat.currency(
+      symbol: symbol,
+      decimalDigits: 2,
+      name:
+          currencyCode, // 'name' is used for the currency code (e.g., 'USD', 'NGN')
+    );
+    return formatter.format(amount);
+  }
+
+  String _getCurrencySymbol(String currencyCode) {
+    switch (currencyCode.toUpperCase()) {
+      case 'NGN':
+        return '₦';
+      case 'GHS':
+        return '₵';
+      case 'KES':
+        return 'KSh';
+      case 'ZAR':
+        return 'R';
+      case 'UGX':
+        return 'USh';
+      case 'TZS':
+        return 'TSh';
+      case 'XAF':
+      case 'XOF':
+        return 'CFA';
+      default:
+        return currencyCode;
+    }
+  }
+
+  // String _getCurrencySymbol(String currencyCode) {
+  //   switch (currencyCode.toUpperCase()) {
+  //     case 'NGN':
+  //       return '₦';
+  //     case 'GHS':
+  //       return '₵';
+  //     case 'KES':
+  //       return 'KSh';
+  //     case 'ZAR':
+  //       return 'R';
+  //     case 'UGX':
+  //       return 'USh';
+  //     case 'TZS':
+  //       return 'TSh';
+  //     case 'XAF':
+  //     case 'XOF':
+  //       return 'CFA';
+  //     default:
+  //       return currencyCode;
+  //   }
+  // }
 }

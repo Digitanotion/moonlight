@@ -182,4 +182,32 @@ class WithdrawalRemoteDataSource {
     if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
     return Map<String, dynamic>.from(jsonDecode(res.data as String) as Map);
   }
+
+  /// Get FX rate preview for USD to target currency
+  Future<Map<String, dynamic>> getFxPreview({
+    required double amountUsd,
+    required String country,
+  }) async {
+    try {
+      final res = await http.dio.get(
+        '/api/v1/wallet/fx-preview',
+        queryParameters: {'amount_usd': amountUsd, 'country': country},
+      );
+
+      final data = _extract(res);
+      if ((res.statusCode ?? 0) == 200 && data['status'] == 'success') {
+        return data['data'] as Map<String, dynamic>;
+      }
+
+      throw Exception(
+        data['message']?.toString() ?? 'Failed to get exchange rate',
+      );
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final msg =
+          (body is Map ? body['message'] : null) ??
+          'Could not fetch exchange rate';
+      throw Exception(msg.toString());
+    }
+  }
 }

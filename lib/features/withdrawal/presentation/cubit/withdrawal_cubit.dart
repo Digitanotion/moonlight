@@ -29,6 +29,49 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     }
   }
 
+  Future<void> loadFxPreview({
+    required double amountUsd,
+    required String country,
+  }) async {
+    if (amountUsd < 100) {
+      emit(
+        WithdrawalFxPreviewLoaded(
+          amountUsd: amountUsd,
+          country: country,
+          localAmount: 0,
+          localCurrency: 'USD',
+          rate: 0,
+          note: 'Minimum withdrawal is \$100.00',
+        ),
+      );
+      return;
+    }
+
+    emit(const WithdrawalFxPreviewLoading());
+
+    try {
+      final result = await repository.getFxPreview(
+        amountUsd: amountUsd,
+        country: country,
+      );
+
+      emit(
+        WithdrawalFxPreviewLoaded(
+          amountUsd: amountUsd,
+          country: country,
+          localAmount: (result['they_receive']['amount'] as num).toDouble(),
+          localCurrency: result['they_receive']['currency'] as String,
+          rate: (result['rate'] as num).toDouble(),
+          note:
+              result['note'] as String? ??
+              'Rate is indicative. Final amount set at transfer time.',
+        ),
+      );
+    } catch (e) {
+      emit(WithdrawalFxPreviewError(e.toString()));
+    }
+  }
+
   // ── Banks ──────────────────────────────────────────────────────────────────
 
   /// Fetch Flutterwave bank list for a given country name (e.g. "Nigeria").
