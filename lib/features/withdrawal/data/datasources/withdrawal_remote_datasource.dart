@@ -13,7 +13,6 @@ class WithdrawalRemoteDataSource {
   Future<int> getWithdrawableBalance() async {
     final res = await http.dio.get('/api/v1/wallet');
     final data = _extract(res);
-    // withdrawable_cents is the server-authoritative withdrawable amount.
     return (data['data']['balance'] as num).toInt();
   }
 
@@ -42,8 +41,6 @@ class WithdrawalRemoteDataSource {
 
   // ── Account name resolution (Flutterwave) ─────────────────────────────────
 
-  /// Calls GET /api/v1/wallet/resolve-account and returns the account name.
-  /// Throws a human-readable [Exception] on failure.
   Future<String> resolveAccountName({
     required String accountNumber,
     required String bankCode,
@@ -73,6 +70,63 @@ class WithdrawalRemoteDataSource {
       final msg =
           (body is Map ? body['message'] : null) ??
           'Could not verify account. Check number and bank.';
+      throw Exception(msg.toString());
+    }
+  }
+
+  // ── FX rate preview ────────────────────────────────────────────────────────
+  //
+  // The server returns BOTH flat root fields AND a nested `data` object:
+  //
+  //   {
+  //     "status": "success",
+  //     "rate": 1583.22,           ← flat (authoritative)
+  //     "local_amount": 158322.0,  ← flat (authoritative)
+  //     "local_currency": "NGN",   ← flat (authoritative)
+  //     "note": "Rate is indicative...",
+  //     "data": { ... }            ← nested (backward compat, may differ)
+  //   }
+  //
+  // Always read the FLAT root fields — they are set after the correct
+  // conversion logic and are what the cubit expects.
+  // The old code read `data['data']` which returned the nested object and
+  // caused mismatches for non-NGN currencies.
+
+  Future<Map<String, dynamic>> getFxPreview({
+    required double amountUsd,
+    required String country,
+  }) async {
+    try {
+      final res = await http.dio.get(
+        '/api/v1/wallet/fx-preview',
+        queryParameters: {'amount_usd': amountUsd, 'country': country},
+      );
+
+      final body = _extract(res);
+
+      if ((res.statusCode ?? 0) == 200 && body['status'] == 'success') {
+        // Return the flat root fields the cubit reads.
+        // Fall back to nested data fields if a flat field is missing
+        // (defensive — should not happen with the current server).
+        final nested = (body['data'] as Map<String, dynamic>?) ?? {};
+
+        return {
+          'rate': body['rate'] ?? nested['rate'] ?? 0.0,
+          'local_amount': body['local_amount'] ?? nested['local_amount'] ?? 0.0,
+          'local_currency':
+              body['local_currency'] ?? nested['local_currency'] ?? 'USD',
+          'note': body['note'] ?? nested['note'] ?? '',
+        };
+      }
+
+      throw Exception(
+        body['message']?.toString() ?? 'Failed to get exchange rate.',
+      );
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final msg =
+          (body is Map ? body['message'] : null) ??
+          'Could not fetch exchange rate.';
       throw Exception(msg.toString());
     }
   }
@@ -145,7 +199,6 @@ class WithdrawalRemoteDataSource {
         '/api/v1/wallet/withdraw-request',
         data: body,
       );
-
       final statusCode = res.statusCode ?? 0;
       final data = _extract(res);
 
@@ -153,9 +206,9 @@ class WithdrawalRemoteDataSource {
 
       if (statusCode == 422) {
         final errors = data['errors'] as Map?;
-        final firstError = errors?.values.first;
+        final first = errors?.values.first;
         final msg =
-            (firstError is List ? firstError.first : firstError)?.toString() ??
+            (first is List ? first.first : first)?.toString() ??
             data['message']?.toString() ??
             'Validation error.';
         throw Exception(msg);
@@ -166,7 +219,6 @@ class WithdrawalRemoteDataSource {
 
       throw Exception(data['message']?.toString() ?? 'Withdrawal failed.');
     } on DioException catch (e) {
-      // Surface the server error message when available
       final responseData = e.response?.data;
       String msg = 'Network error. Please try again.';
       if (responseData is Map) {
@@ -181,33 +233,5 @@ class WithdrawalRemoteDataSource {
   Map<String, dynamic> _extract(Response res) {
     if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
     return Map<String, dynamic>.from(jsonDecode(res.data as String) as Map);
-  }
-
-  /// Get FX rate preview for USD to target currency
-  Future<Map<String, dynamic>> getFxPreview({
-    required double amountUsd,
-    required String country,
-  }) async {
-    try {
-      final res = await http.dio.get(
-        '/api/v1/wallet/fx-preview',
-        queryParameters: {'amount_usd': amountUsd, 'country': country},
-      );
-
-      final data = _extract(res);
-      if ((res.statusCode ?? 0) == 200 && data['status'] == 'success') {
-        return data['data'] as Map<String, dynamic>;
-      }
-
-      throw Exception(
-        data['message']?.toString() ?? 'Failed to get exchange rate',
-      );
-    } on DioException catch (e) {
-      final body = e.response?.data;
-      final msg =
-          (body is Map ? body['message'] : null) ??
-          'Could not fetch exchange rate';
-      throw Exception(msg.toString());
-    }
   }
 }

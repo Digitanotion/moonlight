@@ -14,25 +14,68 @@ class RuntimeConfigCache {
 
   RuntimeConfigCache(this._prefs);
 
-  /// Load config with cache-first strategy
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEW: Read from disk only — zero network, called before runApp()
+  //
+  // This is the key method that lets Phase 1 of SplashOptimizer populate
+  // RuntimeConfig instantly from the previous session's cached values,
+  // avoiding any network call before the UI is rendered.
+  // ─────────────────────────────────────────────────────────────────────────
+  Future<RuntimeConfig?> loadFromCacheOnly() async {
+    try {
+      final jsonStr = _prefs.getString(_configKey);
+      if (jsonStr == null || jsonStr.isEmpty) {
+        debugPrint('📭 RuntimeConfigCache: No disk cache found');
+        return null;
+      }
+
+      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      final apiBaseUrl = json['apiBaseUrl'] as String? ?? '';
+      if (apiBaseUrl.isEmpty) {
+        debugPrint('📭 RuntimeConfigCache: Cached apiBaseUrl is empty');
+        return null;
+      }
+
+      final config = RuntimeConfig(
+        agoraAppId: json['agoraAppId'] as String? ?? '',
+        apiBaseUrl: apiBaseUrl,
+        pusherKey: json['pusherKey'] as String? ?? '',
+        pusherCluster: json['pusherCluster'] as String? ?? 'mt1',
+      );
+
+      debugPrint(
+        '✅ RuntimeConfigCache: Loaded from disk (no network) — '
+        'api=${config.apiBaseUrl} '
+        'pusher=${config.pusherKey.isEmpty ? "EMPTY" : "SET"}',
+      );
+
+      return config;
+    } catch (e) {
+      debugPrint('⚠️ RuntimeConfigCache: loadFromCacheOnly error: $e');
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Cache-first strategy (used by Phase 2 / _loadRuntimeConfig)
+  // ─────────────────────────────────────────────────────────────────────────
   Future<RuntimeConfig> loadWithCache({
     required Future<RuntimeConfig> Function() fetchFresh,
     bool forceRefresh = false,
   }) async {
     debugPrint('🔧 RuntimeConfigCache: Loading with cache-first strategy');
 
-    // 1. Try to load from cache first (if not forcing refresh)
     if (!forceRefresh) {
       final cachedConfig = await getCachedConfig();
       if (cachedConfig != null && _isCacheValid()) {
         debugPrint('✅ RuntimeConfigCache: Using valid cached config');
-        // Start background refresh without waiting
+        // Refresh in background without blocking
         unawaited(_refreshInBackground(fetchFresh));
         return cachedConfig;
       }
     }
 
-    // 2. If no valid cache, fetch fresh
     debugPrint('🔄 RuntimeConfigCache: Fetching fresh config');
     try {
       final freshConfig = await fetchFresh();
@@ -40,8 +83,7 @@ class RuntimeConfigCache {
       debugPrint('✅ RuntimeConfigCache: Fresh config loaded and cached');
       return freshConfig;
     } catch (e) {
-      // 3. If fetch fails, try cache as fallback
-      debugPrint('⚠️ RuntimeConfigCache: Fresh fetch failed, trying cache: $e');
+      debugPrint('⚠️ RuntimeConfigCache: Fetch failed, trying cache: $e');
       final cachedConfig = await getCachedConfig();
       if (cachedConfig != null) {
         debugPrint('✅ RuntimeConfigCache: Using stale cache as fallback');
@@ -51,13 +93,10 @@ class RuntimeConfigCache {
     }
   }
 
-  /// Get cached config
   Future<RuntimeConfig?> getCachedConfig() async {
     try {
       final jsonStr = _prefs.getString(_configKey);
-      if (jsonStr == null || jsonStr.isEmpty) {
-        return null;
-      }
+      if (jsonStr == null || jsonStr.isEmpty) return null;
 
       final json = jsonDecode(jsonStr) as Map<String, dynamic>;
       return RuntimeConfig(
@@ -72,7 +111,6 @@ class RuntimeConfigCache {
     }
   }
 
-  /// Cache the config
   Future<void> cacheConfig(RuntimeConfig config) async {
     try {
       final json = {
@@ -94,38 +132,32 @@ class RuntimeConfigCache {
     }
   }
 
-  /// Check if cache is still valid
   bool _isCacheValid() {
     try {
-      final cachedTimestamp = _prefs.getInt(_cacheTimestampKey) ?? 0;
-      if (cachedTimestamp == 0) return false;
-
-      final cachedTime = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-      final now = DateTime.now();
-      final age = now.difference(cachedTime);
-
+      final ts = _prefs.getInt(_cacheTimestampKey) ?? 0;
+      if (ts == 0) return false;
+      final age = DateTime.now().difference(
+        DateTime.fromMillisecondsSinceEpoch(ts),
+      );
       return age < _cacheValidityDuration;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
-  /// Refresh config in background
   Future<void> _refreshInBackground(
     Future<RuntimeConfig> Function() fetchFresh,
   ) async {
     try {
-      debugPrint('🔄 RuntimeConfigCache: Starting background refresh');
+      debugPrint('🔄 RuntimeConfigCache: Background refresh starting');
       final freshConfig = await fetchFresh();
       await cacheConfig(freshConfig);
-      debugPrint('✅ RuntimeConfigCache: Background refresh completed');
+      debugPrint('✅ RuntimeConfigCache: Background refresh complete');
     } catch (e) {
       debugPrint('⚠️ RuntimeConfigCache: Background refresh failed: $e');
-      // Silently fail - we already have cached config
     }
   }
 
-  /// Clear cache (for debugging or force refresh)
   Future<void> clearCache() async {
     await _prefs.remove(_configKey);
     await _prefs.remove(_cacheTimestampKey);

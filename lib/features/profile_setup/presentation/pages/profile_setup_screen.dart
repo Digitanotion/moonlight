@@ -6,7 +6,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
 import 'package:moonlight/widgets/moon_snack.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // keep if you have it
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -311,12 +311,30 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ),
                     const SizedBox(height: 10),
 
+                    // ✅ MODIFIED SKIP BUTTON
                     Center(
                       child: TextButton(
-                        onPressed: () => Navigator.pushReplacementNamed(
-                          context,
-                          RouteNames.home,
-                        ),
+                        onPressed: () async {
+                          // Set hasCompletedProfile to true before navigating
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool('hasCompletedProfile', true);
+
+                          // Optional: Show a brief message
+                          if (mounted) {
+                            MoonSnack.warning(
+                              context,
+                              "You can complete your profile later in settings",
+                            );
+                          }
+
+                          // Navigate to home
+                          if (mounted) {
+                            Navigator.pushReplacementNamed(
+                              context,
+                              RouteNames.home,
+                            );
+                          }
+                        },
                         child: const Text(
                           'Skip for now',
                           style: TextStyle(color: Color(0xFF19D85E)),

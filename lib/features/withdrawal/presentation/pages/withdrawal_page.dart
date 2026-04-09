@@ -19,6 +19,80 @@ const int _kNubanLength = 10;
 enum _PaymentMethod { flutterwave, paypal }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// All Flutterwave-supported countries with their currency codes.
+// Kept here so no API call is needed to populate the dropdown.
+// Source: Flutterwave payout documentation (April 2026).
+// ─────────────────────────────────────────────────────────────────────────────
+class _CountryInfo {
+  final String name;
+  final String currency;
+  const _CountryInfo(this.name, this.currency);
+}
+
+const List<_CountryInfo> _kSupportedCountries = [
+  // Africa
+  _CountryInfo('Nigeria', 'NGN'),
+  _CountryInfo('Ghana', 'GHS'),
+  _CountryInfo('Kenya', 'KES'),
+  _CountryInfo('South Africa', 'ZAR'),
+  _CountryInfo('Uganda', 'UGX'),
+  _CountryInfo('Tanzania', 'TZS'),
+  _CountryInfo('Rwanda', 'RWF'),
+  _CountryInfo('Zambia', 'ZMW'),
+  _CountryInfo('Cameroon', 'XAF'),
+  _CountryInfo('Chad', 'XAF'),
+  _CountryInfo('Congo', 'XAF'),
+  _CountryInfo('Gabon', 'XAF'),
+  _CountryInfo('Senegal', 'XOF'),
+  _CountryInfo('Ivory Coast', 'XOF'),
+  _CountryInfo('Malawi', 'MWK'),
+  _CountryInfo('Sierra Leone', 'SLL'),
+  _CountryInfo('Ethiopia', 'ETB'),
+  // Europe — EUR bloc
+  _CountryInfo('Austria', 'EUR'),
+  _CountryInfo('Belgium', 'EUR'),
+  _CountryInfo('Bulgaria', 'EUR'),
+  _CountryInfo('Croatia', 'EUR'),
+  _CountryInfo('Cyprus', 'EUR'),
+  _CountryInfo('Czech Republic', 'EUR'),
+  _CountryInfo('Denmark', 'EUR'),
+  _CountryInfo('Estonia', 'EUR'),
+  _CountryInfo('Finland', 'EUR'),
+  _CountryInfo('Germany', 'EUR'),
+  _CountryInfo('Greece', 'EUR'),
+  _CountryInfo('Hungary', 'EUR'),
+  _CountryInfo('Ireland', 'EUR'),
+  _CountryInfo('Italy', 'EUR'),
+  _CountryInfo('Latvia', 'EUR'),
+  _CountryInfo('Lithuania', 'EUR'),
+  _CountryInfo('Luxembourg', 'EUR'),
+  _CountryInfo('Malta', 'EUR'),
+  _CountryInfo('Netherlands', 'EUR'),
+  _CountryInfo('Poland', 'EUR'),
+  _CountryInfo('Slovakia', 'EUR'),
+  _CountryInfo('Slovenia', 'EUR'),
+  _CountryInfo('Spain', 'EUR'),
+  _CountryInfo('Sweden', 'EUR'),
+  // Europe — non-EUR
+  _CountryInfo('UK', 'GBP'),
+  // Americas
+  _CountryInfo('US', 'USD'),
+  // Asia-Pacific
+  _CountryInfo('Australia', 'AUD'),
+  _CountryInfo('India', 'INR'),
+  // Middle East
+  _CountryInfo('UAE', 'AED'),
+];
+
+// Quick lookup: country name → currency code
+String _currencyFor(String country) => _kSupportedCountries
+    .firstWhere(
+      (c) => c.name == country,
+      orElse: () => const _CountryInfo('', 'USD'),
+    )
+    .currency;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,14 +132,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
 
   _PaymentMethod _selectedMethod = _PaymentMethod.flutterwave;
   String _selectedCountry = 'Nigeria';
-  final List<String> _countries = [
-    'Nigeria',
-    'Ghana',
-    'Kenya',
-    'South Africa',
-    'Uganda',
-    'Tanzania',
-  ];
 
   List<Map<String, dynamic>> _banks = [];
   Map<String, dynamic>? _selectedBank;
@@ -137,7 +203,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     final number = value.trim();
     final bank = _selectedBank;
 
-    // Always clear previous result when number changes
     setState(() {
       _accountNameController.clear();
       _accountNameError = null;
@@ -147,13 +212,11 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
 
     if (bank == null || number.length < _kNubanLength) return;
 
-    // Nigeria (NUBAN): exactly 10 digits → fire immediately, no debounce
     if (number.length == _kNubanLength) {
       _triggerResolution(number, bank);
       return;
     }
 
-    // Other countries (>10 digits): debounce 600 ms after user stops typing
     setState(() => _resolvingAccountName = true);
     _accountResolutionTimer = Timer(const Duration(milliseconds: 600), () {
       if (!mounted) return;
@@ -290,21 +353,13 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
-  void _showSuccessDialog(Map<String, dynamic> data) {
-    final method = data['data']?['method']?.toString() ?? 'bank transfer';
-    final flwStatus = (data['data']?['flw_status'] ?? '')
-        .toString()
-        .toUpperCase();
-    final ppStatus = (data['data']?['paypal_status'] ?? '')
-        .toString()
-        .toUpperCase();
-    final statusLabel = method == 'paypal'
-        ? (ppStatus.isNotEmpty ? ppStatus : 'PROCESSING')
-        : (flwStatus.isNotEmpty ? flwStatus : 'PENDING');
-
+  void _showPendingDialog() {
+    final method = _selectedMethod == _PaymentMethod.paypal
+        ? 'PayPal'
+        : 'bank transfer';
     final recipientLabel = _selectedMethod == _PaymentMethod.paypal
-        ? _paypalEmailController.text
-        : '${_accountNameController.text}'
+        ? _paypalEmailController.text.trim()
+        : '${_accountNameController.text.trim()}'
               '${_selectedBank != null ? " — ${_selectedBank!['name']}" : ""}';
 
     showDialog(
@@ -313,12 +368,16 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1C1533),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Icon(Icons.check_circle, color: Colors.green, size: 64),
+        title: const Icon(
+          Icons.hourglass_top_rounded,
+          color: Colors.orangeAccent,
+          size: 64,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Withdrawal Initiated!',
+              'Withdrawal Processing',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -328,21 +387,15 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              '\$${_enteredDollars.toStringAsFixed(2)} is being transferred to $recipientLabel.',
+              '\$${_enteredDollars.toStringAsFixed(2)} via $method is being '
+              'transferred to $recipientLabel.',
               style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Status: $statusLabel',
-              style: const TextStyle(
-                color: Colors.deepOrangeAccent,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             const Text(
-              'Funds are typically delivered within minutes.',
+              'You will receive a notification once the transfer is complete. '
+              'If anything goes wrong your coins will be returned automatically.',
               style: TextStyle(color: Colors.white54, fontSize: 12),
               textAlign: TextAlign.center,
             ),
@@ -453,7 +506,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       }
       if (_accountNameController.text.trim().isEmpty) {
         _showErrorDialog(
-          'Account name could not be verified. Please check your account number and bank.',
+          'Account name could not be verified. '
+          'Please check your account number and bank.',
         );
         return;
       }
@@ -640,7 +694,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                   ),
                   onChanged: (value) {
                     setState(() {});
-                    // Trigger FX preview when amount changes and we have a country selected
                     final dollars = double.tryParse(value.trim()) ?? 0.0;
                     if (dollars >= 100 &&
                         _selectedMethod == _PaymentMethod.flutterwave) {
@@ -654,7 +707,9 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     if (v == null || v.isEmpty) return 'Enter an amount';
                     final dollars = double.tryParse(v) ?? 0.0;
                     final cents = (dollars * 100).round();
-                    if (cents < 10000) return 'Minimum withdrawal is \$100.00';
+                    if (cents < 10000) {
+                      return 'Minimum withdrawal is \$100.00';
+                    }
                     if (cents > _withdrawableCents) {
                       return 'Exceeds your available balance of '
                           '\$${_withdrawableDollars.toStringAsFixed(2)}';
@@ -688,8 +743,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
         _buildBankSelector(),
         _buildAccountNumberField(),
         _buildAccountNameField(),
-
-        // FX Preview - shows estimated local currency amount
         _FxPreviewWidget(
           amountUsd: _enteredDollars,
           country: _selectedCountry,
@@ -698,7 +751,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
               _enteredDollars >= 100 &&
               _selectedBank != null,
         ),
-
         _buildInputField(
           label: 'Email (Optional)',
           controller: _emailController,
@@ -711,6 +763,75 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           keyboardType: TextInputType.phone,
           validator: (_) => null,
         ),
+      ],
+    );
+  }
+
+  // ── Country dropdown ───────────────────────────────────────────────────────
+
+  Widget _buildCountryDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Country',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF141433),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: _selectedCountry,
+            isExpanded: true,
+            items: _kSupportedCountries
+                .map(
+                  (c) => DropdownMenuItem(
+                    value: c.name,
+                    child: Text(
+                      '${c.name}  (${c.currency})',
+                      style: const TextStyle(color: Colors.white),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (val) {
+              if (val == null) return;
+              setState(() {
+                _selectedCountry = val;
+                _selectedBank = null;
+                _accountNameController.clear();
+                _accountNameError = null;
+              });
+              _fetchBanks(val);
+              final dollars =
+                  double.tryParse(_amountController.text.trim()) ?? 0.0;
+              if (dollars >= 100) {
+                context.read<WithdrawalCubit>().loadFxPreview(
+                  amountUsd: dollars,
+                  country: val,
+                );
+              }
+            },
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+            ),
+            dropdownColor: const Color(0xFF1C1533),
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -730,8 +851,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           ),
         ),
         const SizedBox(height: 8),
-
-        // Tappable pill that opens the search sheet
         GestureDetector(
           onTap: _loadingBanks || _banks.isEmpty ? null : _openBankSearchSheet,
           child: Container(
@@ -808,8 +927,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             ),
           ),
         ),
-
-        // Hidden FormField for validation wiring
         FormField<Map<String, dynamic>>(
           initialValue: _selectedBank,
           validator: (_) =>
@@ -827,7 +944,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                 )
               : const SizedBox.shrink(),
         ),
-
         const SizedBox(height: 16),
       ],
     );
@@ -874,8 +990,9 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             onChanged: _onAccountNumberChanged,
             validator: (v) {
               if (v == null || v.isEmpty) return 'Enter account number';
-              if (v.length < _kNubanLength)
+              if (v.length < _kNubanLength) {
                 return 'Enter a valid account number';
+              }
               return null;
             },
           ),
@@ -941,8 +1058,9 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     ),
                   ),
                   validator: (_) {
-                    if (_selectedMethod != _PaymentMethod.flutterwave)
+                    if (_selectedMethod != _PaymentMethod.flutterwave) {
                       return null;
+                    }
                     if (_accountNameController.text.trim().isEmpty) {
                       return 'Account name could not be verified';
                     }
@@ -988,70 +1106,6 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
               style: const TextStyle(color: Colors.redAccent, fontSize: 12),
             ),
           ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildCountryDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Country',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF141433),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: DropdownButtonFormField<String>(
-            value: _selectedCountry,
-            items: _countries
-                .map(
-                  (c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c, style: const TextStyle(color: Colors.white)),
-                  ),
-                )
-                .toList(),
-            onChanged: (val) {
-              if (val == null) return;
-              setState(() {
-                _selectedCountry = val;
-                _selectedBank = null;
-                _accountNameController.clear();
-                _accountNameError = null;
-              });
-              _fetchBanks(val);
-
-              // Trigger FX preview when country changes
-              final dollars =
-                  double.tryParse(_amountController.text.trim()) ?? 0.0;
-              if (dollars >= 100) {
-                context.read<WithdrawalCubit>().loadFxPreview(
-                  amountUsd: dollars,
-                  country: val,
-                );
-              }
-            },
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-            ),
-            dropdownColor: const Color(0xFF1C1533),
-            style: const TextStyle(color: Colors.white),
-          ),
-        ),
         const SizedBox(height: 16),
       ],
     );
@@ -1109,8 +1163,9 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           controller: _paypalEmailConfirmController,
           keyboardType: TextInputType.emailAddress,
           validator: (v) {
-            if (v == null || v.isEmpty)
+            if (v == null || v.isEmpty) {
               return 'Please confirm your PayPal email';
+            }
             if (v.trim() != _paypalEmailController.text.trim()) {
               return 'Emails do not match';
             }
@@ -1221,8 +1276,15 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       ),
       body: BlocConsumer<WithdrawalCubit, WithdrawalState>(
         listener: (ctx, state) {
-          if (state is WithdrawalSuccess) {
-            _showSuccessDialog(state.transactionData);
+          // ── WithdrawalPending: show processing dialog, NOT success ──────────
+          // The transfer is queued but not yet settled. The user will be
+          // notified via push notification when it completes or fails.
+          if (state is WithdrawalPending) {
+            _showPendingDialog();
+          } else if (state is WithdrawalSuccess) {
+            // Reserved — not currently emitted by submitWithdrawal.
+            // Kept for future confirmed-success signal (e.g. WebSocket).
+            _showPendingDialog();
           } else if (state is WithdrawalError) {
             _showErrorDialog(
               state.message,
@@ -1294,13 +1356,10 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           );
         },
       ),
-
-      // ── Bottom bar ─────────────────────────────────────────────────────────
       bottomNavigationBar: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Progress banner — slides in while request is in flight
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               child: _isSubmitting
@@ -1361,7 +1420,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bank search bottom sheet  (self-contained, stateful)
+// Bank search bottom sheet
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _BankSearchSheet extends StatefulWidget {
@@ -1419,7 +1478,6 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
       constraints: BoxConstraints(maxHeight: maxHeight),
       child: Column(
         children: [
-          // Drag handle
           Padding(
             padding: const EdgeInsets.only(top: 12, bottom: 8),
             child: Container(
@@ -1431,8 +1489,6 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
               ),
             ),
           ),
-
-          // Header
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
@@ -1448,8 +1504,6 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
               ],
             ),
           ),
-
-          // Search field
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Container(
@@ -1475,8 +1529,6 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
               ),
             ),
           ),
-
-          // Result count
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             child: Align(
@@ -1487,10 +1539,7 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
               ),
             ),
           ),
-
           const Divider(color: Colors.white12, height: 1),
-
-          // Results list
           Expanded(
             child: _filtered.isEmpty
                 ? const Center(
@@ -1522,8 +1571,6 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
                     },
                   ),
           ),
-
-          // Keyboard clearance
           SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
         ],
       ),
@@ -1612,7 +1659,7 @@ class _MethodCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FX Preview Widget - shows estimated local currency amount
+// FX Preview Widget
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _FxPreviewWidget extends StatelessWidget {
@@ -1629,19 +1676,16 @@ class _FxPreviewWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!enabled || amountUsd < 100) return const SizedBox.shrink();
+
     return BlocBuilder<WithdrawalCubit, WithdrawalState>(
       builder: (ctx, state) {
-        // Don't show preview if amount is less than minimum or method is PayPal
-        if (!enabled || amountUsd < 100) {
-          return const SizedBox.shrink();
-        }
-
         if (state is WithdrawalFxPreviewLoading) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 8),
+          return const Padding(
+            padding: EdgeInsets.only(top: 8, bottom: 8),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
@@ -1649,9 +1693,9 @@ class _FxPreviewWidget extends StatelessWidget {
                     valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Text(
-                  'Fetching exchange rate...',
+                  'Fetching exchange rate…',
                   style: TextStyle(color: Colors.white54, fontSize: 13),
                 ),
               ],
@@ -1660,10 +1704,8 @@ class _FxPreviewWidget extends StatelessWidget {
         }
 
         if (state is WithdrawalFxPreviewLoaded) {
-          final localAmountFormatted = _formatLocalAmount(
-            state.localAmount,
-            state.localCurrency,
-          );
+          final currency = state.localCurrency;
+          final formatted = _formatLocalAmount(state.localAmount, currency);
 
           return Container(
             margin: const EdgeInsets.only(top: 8, bottom: 12),
@@ -1685,15 +1727,15 @@ class _FxPreviewWidget extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                const Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.currency_exchange,
                       color: Colors.deepOrangeAccent,
                       size: 20,
                     ),
-                    const SizedBox(width: 8),
-                    const Text(
+                    SizedBox(width: 8),
+                    Text(
                       'You will receive approximately:',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
@@ -1701,7 +1743,7 @@ class _FxPreviewWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  localAmountFormatted,
+                  formatted,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -1710,13 +1752,13 @@ class _FxPreviewWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Rate: 1 USD = ${state.rate.toStringAsFixed(2)} ${state.localCurrency}',
-                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                  'Rate: 1 USD = ${state.rate.toStringAsFixed(4)} $currency',
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   state.note,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white38,
                     fontSize: 10,
                     fontStyle: FontStyle.italic,
@@ -1732,7 +1774,7 @@ class _FxPreviewWidget extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8, bottom: 8),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.warning_amber_rounded,
                   color: Colors.orangeAccent,
                   size: 16,
@@ -1741,7 +1783,10 @@ class _FxPreviewWidget extends StatelessWidget {
                 Expanded(
                   child: Text(
                     state.message,
-                    style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -1754,58 +1799,59 @@ class _FxPreviewWidget extends StatelessWidget {
     );
   }
 
-  String _formatLocalAmount(double amount, String currencyCode) {
-    final symbol = _getCurrencySymbol(currencyCode);
-    final formatter = NumberFormat.currency(
-      symbol: symbol,
-      decimalDigits: 2,
-      name:
-          currencyCode, // 'name' is used for the currency code (e.g., 'USD', 'NGN')
-    );
-    return formatter.format(amount);
+  String _formatLocalAmount(double amount, String currency) {
+    final symbol = _symbolFor(currency);
+    // Use compact formatting for very large numbers (e.g. UGX, SLL)
+    if (amount >= 1000000) {
+      return '$symbol${NumberFormat('#,##0.##').format(amount)} $currency';
+    }
+    return '$symbol${NumberFormat('#,##0.00').format(amount)}';
   }
 
-  String _getCurrencySymbol(String currencyCode) {
-    switch (currencyCode.toUpperCase()) {
+  /// Returns the display symbol for a currency code.
+  /// Falls back to the code itself for currencies without a unique symbol.
+  static String _symbolFor(String code) {
+    switch (code.toUpperCase()) {
       case 'NGN':
         return '₦';
       case 'GHS':
         return '₵';
       case 'KES':
-        return 'KSh';
-      case 'ZAR':
-        return 'R';
+        return 'KSh ';
       case 'UGX':
-        return 'USh';
+        return 'USh ';
       case 'TZS':
-        return 'TSh';
+        return 'TSh ';
+      case 'RWF':
+        return 'RF ';
+      case 'ZMW':
+        return 'ZK ';
+      case 'ZAR':
+        return 'R ';
+      case 'MWK':
+        return 'MK ';
+      case 'SLL':
+        return 'Le ';
+      case 'ETB':
+        return 'Br ';
       case 'XAF':
+        return 'FCFA ';
       case 'XOF':
-        return 'CFA';
+        return 'CFA ';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      case 'USD':
+        return '\$';
+      case 'AUD':
+        return 'A\$';
+      case 'INR':
+        return '₹';
+      case 'AED':
+        return 'AED ';
       default:
-        return currencyCode;
+        return '$code ';
     }
   }
-
-  // String _getCurrencySymbol(String currencyCode) {
-  //   switch (currencyCode.toUpperCase()) {
-  //     case 'NGN':
-  //       return '₦';
-  //     case 'GHS':
-  //       return '₵';
-  //     case 'KES':
-  //       return 'KSh';
-  //     case 'ZAR':
-  //       return 'R';
-  //     case 'UGX':
-  //       return 'USh';
-  //     case 'TZS':
-  //       return 'TSh';
-  //     case 'XAF':
-  //     case 'XOF':
-  //       return 'CFA';
-  //     default:
-  //       return currencyCode;
-  //   }
-  // }
 }

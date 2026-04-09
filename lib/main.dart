@@ -21,16 +21,14 @@ import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Background message handler
+// Background message handler — must be top-level
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print("📱 Handling a background message: ${message.messageId}");
-  print("📱 Notification data: ${message.data}");
-
+  debugPrint('📱 Background message: ${message.messageId}');
   if (message.notification != null) {
-    print(
-      "📱 Notification: ${message.notification!.title} - ${message.notification!.body}",
+    debugPrint(
+      '📱 Notification: ${message.notification!.title} - ${message.notification!.body}',
     );
   }
 }
@@ -38,62 +36,73 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  debugPrint('🚀 App starting with fast splash...');
+  debugPrint('🚀 App starting...');
 
-  // Initialize Firebase
-  final firebaseFuture = Firebase.initializeApp();
+  // ─── PHASE 1: Only what's needed to render the first frame ───
+  // SharedPreferences (local disk, ~5ms) + blocs + cached config.
+  // NO network calls here. NO Firebase. NO heavy interceptors.
+  await SplashOptimizer.registerRenderEssentials();
 
-  // Load absolute minimum essentials (cached)
-  await SplashOptimizer.loadEssentialsOnly();
-
-  // Wait for Firebase
-  await firebaseFuture;
-  debugPrint('✅ Firebase initialized');
-
-  // ✅ CRITICAL: Set up Firebase messaging handlers BEFORE anything else
-  await _setupFirebaseMessaging();
-
-  // Initialize Notification Services (local notifications only)
-  await NotificationService().initialize();
-
-  // Get the TokenRegistrationService from GetIt
-  final tokenService = sl<TokenRegistrationService>();
-
-  // Set dependencies with proper API base URL
-  await tokenService.setDependencies(
-    apiBaseUrl: sl<RuntimeConfig>().apiBaseUrl,
-  );
-
-  // Start connection monitoring
-  await ConnectionMonitor().startMonitoring();
-
-  // Run app IMMEDIATELY
+  // ─── Show the UI immediately ───
+  // The splash screen will appear right away while everything
+  // else loads in the background below.
   runApp(const MyApp());
 
-  // Start background service loading AFTER app is running
-  Future(() async {
-    try {
-      debugPrint('🔄 Starting background service initialization...');
-      await SplashOptimizer.loadRemainingDependencies();
-      debugPrint('🎉 All background services loaded');
-
-      await RuntimeConfigRefreshService().startMonitoring();
-    } catch (e) {
-      debugPrint('⚠️ Background service loading error: $e (app continues)');
-    }
-  });
+  // ─── PHASE 2 & 3: Everything else, after the UI is visible ───
+  unawaited(_initializeInBackground());
 }
 
-// ✅ CRITICAL: UPDATED Firebase Messaging Setup
+/// All heavy initialization runs here, AFTER runApp().
+/// The splash screen is already visible to the user at this point.
+Future<void> _initializeInBackground() async {
+  try {
+    debugPrint('🔄 Background init starting...');
+
+    // Firebase and config fetch can run in parallel
+    await Future.wait([
+      _initFirebase(),
+      SplashOptimizer.loadConfigAndDependencies(),
+    ]);
+
+    // After config is ready, update the TokenRegistrationService base URL
+    final tokenService = sl<TokenRegistrationService>();
+    await tokenService.setDependencies(
+      apiBaseUrl: sl<RuntimeConfig>().apiBaseUrl,
+    );
+
+    // Start connection monitoring
+    await ConnectionMonitor().startMonitoring();
+
+    // Load all remaining dependencies (DioClient, Pusher, all features)
+    await SplashOptimizer.loadRemainingDependencies();
+
+    // Start config refresh monitoring last
+    await RuntimeConfigRefreshService().startMonitoring();
+
+    debugPrint('🎉 Background init complete');
+  } catch (e) {
+    debugPrint('⚠️ Background init error: $e (app continues)');
+  }
+}
+
+Future<void> _initFirebase() async {
+  try {
+    await Firebase.initializeApp();
+    debugPrint('✅ Firebase initialized');
+    await _setupFirebaseMessaging();
+    await NotificationService().initialize();
+  } catch (e) {
+    debugPrint('⚠️ Firebase init error: $e');
+  }
+}
+
 Future<void> _setupFirebaseMessaging() async {
   try {
     final messaging = FirebaseMessaging.instance;
 
-    // ✅ CRITICAL: Set background handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Request permissions
-    NotificationSettings settings = await messaging.requestPermission(
+    final settings = await messaging.requestPermission(
       alert: true,
       announcement: false,
       badge: true,
@@ -102,17 +111,10 @@ Future<void> _setupFirebaseMessaging() async {
       provisional: false,
       sound: true,
     );
+    debugPrint('📱 Notification permission: ${settings.authorizationStatus}');
 
-    print('📱 Notification permission status: ${settings.authorizationStatus}');
-
-    // ✅ CRITICAL: Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('📱 FOREGROUND MESSAGE RECEIVED!');
-      print('Title: ${message.notification?.title}');
-      print('Body: ${message.notification?.body}');
-      print('Data: ${message.data}');
-
-      // Show local notification when app is in foreground
+      debugPrint('📱 Foreground message: ${message.notification?.title}');
       if (message.notification != null) {
         NotificationService().showNotification(
           title: message.notification!.title!,
@@ -122,55 +124,42 @@ Future<void> _setupFirebaseMessaging() async {
       }
     });
 
-    // ✅ CRITICAL: Handle when app is opened from terminated/background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('📱 APP OPENED FROM NOTIFICATION (background/terminated)');
-      print('Data: ${message.data}');
-
-      // Handle navigation based on notification type
+      debugPrint('📱 App opened from notification');
       _handleNotificationTap(message.data);
     });
 
-    // ✅ CRITICAL: Check if app was opened from terminated state
-    RemoteMessage? initialMessage = await messaging.getInitialMessage();
+    final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
-      print('📱 APP OPENED FROM TERMINATED STATE WITH NOTIFICATION');
+      debugPrint('📱 App opened from terminated state via notification');
       _handleNotificationTap(initialMessage.data);
     }
 
-    // Get token
     final token = await messaging.getToken();
-    print('📱 FCM Token: $token');
+    debugPrint('📱 FCM Token: ${token != null ? "obtained" : "null"}');
 
-    // Store token in local storage
     final prefs = await SharedPreferences.getInstance();
     if (token != null) {
       await prefs.setString('fcm_token', token);
-      print('✅ FCM token stored locally');
 
-      // Check if user is already logged in
+      // Auto-register token if user is already logged in
       try {
-        final authToken = await prefs.getString('auth_token');
+        final authToken = prefs.getString('auth_token');
         if (authToken != null && authToken.isNotEmpty) {
-          print('📱 User logged in, attempting token registration...');
           await TokenRegistrationService(
             authLocalDataSource: sl<AuthLocalDataSource>(),
             runtimeConfig: sl<RuntimeConfig>(),
           ).registerTokenManually();
         }
       } catch (e) {
-        print('⚠️ Auto-token registration check failed: $e');
+        debugPrint('⚠️ Auto token registration failed: $e');
       }
     }
 
-    // Listen for token refresh
     messaging.onTokenRefresh.listen((newToken) async {
-      print('📱 FCM Token refreshed: $newToken');
       await prefs.setString('fcm_token', newToken);
-
-      // Try to register new token if user is logged in
       try {
-        final authToken = await prefs.getString('auth_token');
+        final authToken = prefs.getString('auth_token');
         if (authToken != null && authToken.isNotEmpty) {
           await TokenRegistrationService(
             authLocalDataSource: sl<AuthLocalDataSource>(),
@@ -178,37 +167,30 @@ Future<void> _setupFirebaseMessaging() async {
           ).registerTokenManually();
         }
       } catch (e) {
-        print('⚠️ Token refresh registration failed: $e');
+        debugPrint('⚠️ Token refresh registration failed: $e');
       }
     });
 
-    print('✅ Firebase Messaging setup complete');
+    debugPrint('✅ Firebase Messaging setup complete');
   } catch (e) {
-    print('❌ Firebase Messaging setup error: $e');
+    debugPrint('❌ Firebase Messaging setup error: $e');
   }
 }
 
-// When user clicks on a push notification
 void _handleNotificationTap(Map<String, dynamic> data) {
-  print('📱 Notification tap received: $data');
-
-  // Ensure we have a valid payload with a type
+  debugPrint('📱 Notification tapped: $data');
   if (data.containsKey('type')) {
     NotificationHandlerService().handleNotificationClick(data);
   } else if (data.containsKey('data') && data['data'] is Map) {
-    // Handle nested data structure
     NotificationHandlerService().handleNotificationClick(
       data['data'] as Map<String, dynamic>,
     );
-  } else {
-    print('⚠️ Notification payload missing type field');
   }
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // ✅ ADD THIS: Global key for navigation from notifications
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -238,11 +220,7 @@ class MyApp extends StatelessWidget {
         theme: buildAppTheme(),
         onGenerateRoute: AppRouter.generateRoute,
         initialRoute: RouteNames.splash,
-
-        // ✅ ADD THIS: Navigator key for notification navigation
         navigatorKey: navigatorKey,
-
-        // SIMPLIFIED: Just wrap the child with ConnectionToast
         builder: (context, child) {
           return SimpleConnectionToast(child: child!);
         },

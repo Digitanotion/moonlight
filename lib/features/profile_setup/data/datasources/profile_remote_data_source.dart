@@ -142,34 +142,45 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
     String? phone,
     String? avatarPath,
     bool removeAvatar = false,
-    String? dateOfBirth, // <-- add
+    String? dateOfBirth,
   }) async {
     final payload = <String, dynamic>{
-      if (fullname?.trim().isNotEmpty == true) 'fullname': fullname!.trim(),
-      if (gender?.isNotEmpty == true) 'gender': gender,
-      if (country?.isNotEmpty == true) 'country': country,
-      if (bio?.trim().isNotEmpty == true) 'bio': bio!.trim(),
-      if (phone?.trim().isNotEmpty == true) 'phone': phone!.trim(),
-      if (interests != null && interests.isNotEmpty)
-        'user_interests': interests,
-      if (removeAvatar) 'remove_avatar': true,
-      if (dateOfBirth?.isNotEmpty == true)
-        'date_of_birth': dateOfBirth, // <-- NEW
+      '_method': 'PUT', // ✅ Tell Laravel this is really a PUT request
     };
 
+    // Only include fields that should be updated
+    _addIfPresent(payload, 'fullname', fullname);
+    _addIfPresent(payload, 'gender', gender);
+    _addIfPresent(payload, 'country', country);
+    _addIfPresent(payload, 'bio', bio);
+    _addIfPresent(payload, 'phone', phone);
+
+    if (interests != null && interests.isNotEmpty) {
+      payload['user_interests'] = interests;
+    }
+
+    if (removeAvatar) {
+      payload['remove_avatar'] = true;
+    }
+
+    _addIfPresent(payload, 'date_of_birth', dateOfBirth);
+
     Response res;
+
     if (avatarPath != null && avatarPath.isNotEmpty) {
-      final form = FormData.fromMap(payload)
-        ..files.add(
-          MapEntry(
-            'avatar',
-            await MultipartFile.fromFile(
-              avatarPath,
-              filename: avatarPath.split('/').last,
-            ),
+      // ✅ With file: Use POST + multipart/form-data
+      final form = FormData.fromMap(payload);
+      form.files.add(
+        MapEntry(
+          'avatar',
+          await MultipartFile.fromFile(
+            avatarPath,
+            filename: avatarPath.split('/').last,
           ),
-        );
-      res = await dio.put(
+        ),
+      );
+
+      res = await dio.post(
         '/api/v1/profile/update',
         data: form,
         options: Options(
@@ -178,23 +189,21 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         ),
       );
     } else {
+      // ✅ Without file: Use normal PUT
       res = await dio.put(
         '/api/v1/profile/update',
         data: payload,
-        options: Options(
-          contentType: Headers.jsonContentType,
-          listFormat: ListFormat.multiCompatible,
-        ),
+        options: Options(contentType: Headers.jsonContentType),
       );
     }
 
-    final data = (res.data is Map<String, dynamic>)
-        ? res.data as Map<String, dynamic>
-        : <String, dynamic>{};
-    final user = (data['user'] is Map<String, dynamic>)
-        ? data['user'] as Map<String, dynamic>
-        : <String, dynamic>{};
-    return user;
+    return (res.data as Map<String, dynamic>)['user'] ?? {};
+  }
+
+  void _addIfPresent(Map<String, dynamic> map, String key, String? value) {
+    if (value != null && value.trim().isNotEmpty && value != 'null') {
+      map[key] = value.trim();
+    }
   }
 
   // NEW: GET /api/v1/me  -> returns { data: UserResource }

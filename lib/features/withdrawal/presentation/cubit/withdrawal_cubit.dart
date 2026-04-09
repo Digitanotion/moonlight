@@ -1,4 +1,15 @@
+// ============================================================================
 // lib/features/withdrawal/presentation/cubit/withdrawal_cubit.dart
+//
+// Fix: submitWithdrawal() and submitPayPalWithdrawal() now emit
+// WithdrawalPending (not WithdrawalSuccess) because the API returning 201
+// only means Flutterwave *queued* the transfer. The real outcome is async.
+//
+// Your UI should:
+//   WithdrawalPending  → show "Processing" screen, NOT a success dialog
+//   WithdrawalSuccess  → reserved for future confirmed-success webhook signal
+//   WithdrawalError    → show error + refund message (coins already returned)
+// ============================================================================
 
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -10,7 +21,6 @@ part 'withdrawal_state.dart';
 class WithdrawalCubit extends Cubit<WithdrawalState> {
   final WithdrawalRepository repository;
 
-  // ── Retry cache ────────────────────────────────────────────────────────────
   Map<String, dynamic>? _lastWithdrawalData;
   String? _lastPin;
 
@@ -18,7 +28,6 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
 
   // ── Balance ────────────────────────────────────────────────────────────────
 
-  /// Load the user's current withdrawable balance.
   Future<void> loadBalance() async {
     emit(WithdrawalLoading());
     try {
@@ -29,23 +38,13 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     }
   }
 
+  // ── FX preview ─────────────────────────────────────────────────────────────
+
   Future<void> loadFxPreview({
     required double amountUsd,
     required String country,
   }) async {
-    if (amountUsd < 100) {
-      emit(
-        WithdrawalFxPreviewLoaded(
-          amountUsd: amountUsd,
-          country: country,
-          localAmount: 0,
-          localCurrency: 'USD',
-          rate: 0,
-          note: 'Minimum withdrawal is \$100.00',
-        ),
-      );
-      return;
-    }
+    if (amountUsd < 100) return;
 
     emit(const WithdrawalFxPreviewLoading());
 
@@ -55,45 +54,42 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
         country: country,
       );
 
+      final localAmount = (result['local_amount'] as num?)?.toDouble() ?? 0.0;
+      final localCurrency = (result['local_currency'] as String?) ?? 'USD';
+      final rate = (result['rate'] as num?)?.toDouble() ?? 0.0;
+      final note =
+          (result['note'] as String?) ??
+          'Rate is indicative. Final amount set at transfer time.';
+
       emit(
         WithdrawalFxPreviewLoaded(
           amountUsd: amountUsd,
           country: country,
-          localAmount: (result['they_receive']['amount'] as num).toDouble(),
-          localCurrency: result['they_receive']['currency'] as String,
-          rate: (result['rate'] as num).toDouble(),
-          note:
-              result['note'] as String? ??
-              'Rate is indicative. Final amount set at transfer time.',
+          localAmount: localAmount,
+          localCurrency: localCurrency,
+          rate: rate,
+          note: note,
         ),
       );
     } catch (e) {
-      emit(WithdrawalFxPreviewError(e.toString()));
+      emit(WithdrawalFxPreviewError(_clean(e.toString())));
     }
   }
 
   // ── Banks ──────────────────────────────────────────────────────────────────
 
-  /// Fetch Flutterwave bank list for a given country name (e.g. "Nigeria").
   Future<List<Map<String, dynamic>>> fetchBanks(String country) {
     return repository.fetchBanks(country);
   }
 
-  // ── Account name resolution (Flutterwave) ──────────────────────────────────
+  // ── Account name resolution ────────────────────────────────────────────────
 
-  /// Resolve the account holder name for [accountNumber] at [bankCode].
-  /// Emits [WithdrawalAccountNameLoading] → [WithdrawalAccountNameLoaded] or
-  /// [WithdrawalAccountNameError].
-  /// The previous balance state is preserved; the page re-syncs it via the
-  /// builder, so this does not overwrite [WithdrawalBalanceLoaded].
   Future<void> resolveAccountName({
     required String accountNumber,
     required String bankCode,
   }) async {
     if (accountNumber.length < 8 || bankCode.isEmpty) return;
-
     emit(WithdrawalAccountNameLoading());
-
     try {
       final name = await repository.resolveAccountName(
         accountNumber: accountNumber,
@@ -107,7 +103,6 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
 
   // ── Flutterwave withdrawal ─────────────────────────────────────────────────
 
-  /// Submit a Flutterwave bank-transfer withdrawal.
   Future<void> submitWithdrawal({
     required double amountUsdCents,
     required String bankAccountName,
@@ -154,15 +149,31 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
       );
 
       _clearRetryCache();
-      emit(WithdrawalSuccess(transactionData: result));
+
+      // ── FIX: Emit Pending, NOT Success ────────────────────────────────────
+      // The server returns 201 when Flutterwave *queues* the transfer.
+      // The transfer may still fail (e.g. insufficient NGN balance).
+      // The user will be notified via push notification when the outcome is known.
+      // Show a "Processing" screen — never a success dialog at this point.
+      final reference = (result['reference'] as String?) ?? '';
+      emit(
+        WithdrawalPending(
+          reference: reference,
+          amountUsd: amountUsdCents,
+          method: 'flutterwave',
+          transactionData: result,
+        ),
+      );
     } catch (e) {
+      // The server already refunded the coins before returning this error.
+      // Show the error message directly — it will mention that coins were returned.
+      _lastPin = null;
       emit(WithdrawalError(message: _clean(e.toString())));
     }
   }
 
   // ── PayPal withdrawal ──────────────────────────────────────────────────────
 
-  /// Submit a PayPal payout withdrawal.
   Future<void> submitPayPalWithdrawal({
     required double amountUsd,
     required String paypalEmail,
@@ -191,8 +202,18 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
       );
 
       _clearRetryCache();
-      emit(WithdrawalSuccess(transactionData: result));
+
+      final reference = (result['reference'] as String?) ?? '';
+      emit(
+        WithdrawalPending(
+          reference: reference,
+          amountUsd: amountUsd,
+          method: 'paypal',
+          transactionData: result,
+        ),
+      );
     } catch (e) {
+      _lastPin = null;
       emit(WithdrawalError(message: _clean(e.toString())));
     }
   }
@@ -200,30 +221,37 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
   // ── Retry ──────────────────────────────────────────────────────────────────
 
   Future<void> retryWithdrawal() async {
-    if (_lastWithdrawalData == null || _lastPin == null) return;
-    final d = _lastWithdrawalData!;
+    final data = _lastWithdrawalData;
+    final pin = _lastPin;
 
-    if (d['type'] == 'paypal') {
+    if (data == null || pin == null) {
+      emit(
+        const WithdrawalError(message: 'Please re-enter your PIN to retry.'),
+      );
+      return;
+    }
+
+    if (data['type'] == 'paypal') {
       await submitPayPalWithdrawal(
-        amountUsd: d['amountUsd'],
-        paypalEmail: d['paypalEmail'],
-        paypalEmailConfirm: d['paypalEmailConfirm'],
-        reason: d['reason'],
-        pin: _lastPin!,
+        amountUsd: data['amountUsd'] as double,
+        paypalEmail: data['paypalEmail'] as String,
+        paypalEmailConfirm: data['paypalEmailConfirm'] as String,
+        reason: data['reason'] as String?,
+        pin: pin,
       );
     } else {
       await submitWithdrawal(
-        amountUsdCents: d['amountUsdCents'],
-        bankAccountName: d['bankAccountName'],
-        bankAccountNumber: d['bankAccountNumber'],
-        bankName: d['bankName'],
-        bankCode: d['bankCode'],
-        country: d['country'],
-        swift: d['swift'],
-        email: d['email'],
-        phone: d['phone'],
-        reason: d['reason'],
-        pin: _lastPin!,
+        amountUsdCents: data['amountUsdCents'] as double,
+        bankAccountName: data['bankAccountName'] as String,
+        bankAccountNumber: data['bankAccountNumber'] as String,
+        bankName: data['bankName'] as String,
+        bankCode: data['bankCode'] as String,
+        country: data['country'] as String,
+        swift: data['swift'] as String?,
+        email: data['email'] as String?,
+        phone: data['phone'] as String?,
+        reason: data['reason'] as String?,
+        pin: pin,
       );
     }
   }
@@ -242,10 +270,7 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
     _lastPin = null;
   }
 
-  String _clean(String s) {
-    return s
-        .replaceFirst(RegExp(r'^Exception:\s*'), '')
-        .replaceFirst(RegExp(r'^exception:\s*'), '')
-        .trim();
-  }
+  String _clean(String s) => s
+      .replaceFirst(RegExp(r'^Exception:\s*', caseSensitive: false), '')
+      .trim();
 }

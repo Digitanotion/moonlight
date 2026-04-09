@@ -2,7 +2,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/utils/asset_paths.dart';
@@ -16,105 +15,183 @@ class SplashScreen extends StatefulWidget {
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
-  bool _showUI = false;
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+
   bool _minimalTimePassed = false;
-  Timer? _minimalTimer;
-  Timer? _loadingTimer;
   bool _navigationTriggered = false;
+  Timer? _minimalTimer;
+  Timer? _safetyTimer;
+
+  // Debug counters
+  int _tryNavigationCallCount = 0;
+  int _authStateChanges = 0;
+  int _onboardingStateChanges = 0;
 
   @override
   void initState() {
     super.initState();
+    debugPrint('🎬 [Splash] initState called');
+
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
+    _animController.forward();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() => _showUI = true);
+      debugPrint('📞 [Splash] Post-frame callback - firing events');
 
-      _minimalTimer = Timer(const Duration(milliseconds: 2000), () {
-        setState(() => _minimalTimePassed = true);
-        _tryNavigation();
-      });
-
-      _startBackgroundLoading();
-      _triggerQuickAuthCheck();
-    });
-  }
-
-  void _startBackgroundLoading() {
-    Future(() async {
-      try {
-        await SplashOptimizer.loadRemainingDependencies();
-        debugPrint('✅ Background dependencies loaded');
-      } catch (e) {
-        debugPrint('⚠️ Background loading error: $e (non-critical)');
-      }
-    });
-  }
-
-  void _triggerQuickAuthCheck() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Fire events
       context.read<AuthBloc>().add(CheckAuthStatusEvent());
       context.read<OnboardingBloc>().add(const CheckFirstLaunchStatus());
 
-      _loadingTimer = Timer(const Duration(milliseconds: 2500), () {
+      // Check current states immediately
+      _checkCurrentStates();
+
+      // Set timers
+      _minimalTimer = Timer(const Duration(milliseconds: 1800), () {
+        debugPrint('⏰ [Splash] Minimal timer (1800ms) FIRED');
+        _minimalTimePassed = true;
+        _tryNavigation(reason: 'minimal_timer');
+      });
+
+      _safetyTimer = Timer(const Duration(milliseconds: 10000), () {
         if (!_navigationTriggered) {
-          debugPrint('⏱️ Loading timer expired, forcing navigation');
-          _navigateToAppropriateScreen();
+          debugPrint(
+            '🚨 [Splash] SAFETY TIMER FIRED - forcing navigation after 10 seconds',
+          );
+          _navigateToAppropriateScreen(force: true);
         }
       });
     });
   }
 
-  void _tryNavigation() {
-    if (!_minimalTimePassed || _navigationTriggered) return;
+  void _checkCurrentStates() {
+    debugPrint('🔍 [Splash] Checking current states');
 
     final authState = context.read<AuthBloc>().state;
     final onboardingState = context.read<OnboardingBloc>().state;
 
-    if (authState is AuthAuthenticated || authState is AuthUnauthenticated) {
-      _navigateToAppropriateScreen();
+    debugPrint('   Current AuthState: ${authState.runtimeType}');
+    debugPrint('   Current OnboardingState: ${onboardingState.runtimeType}');
+    debugPrint(
+      '   onboardingState.isFirstLaunch: ${onboardingState.isFirstLaunch}',
+    );
+    debugPrint(
+      '   onboardingState.hasCompletedProfile: ${onboardingState.hasCompletedProfile}',
+    );
+
+    final authResolved =
+        authState is AuthAuthenticated || authState is AuthUnauthenticated;
+    final onboardingResolved = onboardingState.isFirstLaunch != null;
+
+    debugPrint('   authResolved: $authResolved');
+    debugPrint('   onboardingResolved: $onboardingResolved');
+
+    if (authResolved && onboardingResolved) {
+      debugPrint('✅ States already resolved - will try navigation');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _tryNavigation(reason: 'initial_check');
+      });
     } else {
-      // Auth state not resolved yet — retry shortly
-      Future.delayed(const Duration(milliseconds: 500), _tryNavigation);
+      debugPrint('⏳ States not yet resolved - waiting for BLoC listeners');
     }
   }
 
-  void _navigateToAppropriateScreen() {
-    if (_navigationTriggered) return;
+  void _tryNavigation({required String reason}) {
+    _tryNavigationCallCount++;
+    debugPrint(
+      '🔁 [_tryNavigation #$_tryNavigationCallCount] Called from: $reason',
+    );
+    debugPrint('   _navigationTriggered: $_navigationTriggered');
+    debugPrint('   _minimalTimePassed: $_minimalTimePassed');
 
+    if (_navigationTriggered) {
+      debugPrint('   ⏭️ Navigation already triggered, skipping');
+      return;
+    }
+
+    if (!_minimalTimePassed) {
+      debugPrint('   ⏳ Minimal time not passed yet, waiting...');
+      return;
+    }
+
+    final authState = context.read<AuthBloc>().state;
+    final onboardingState = context.read<OnboardingBloc>().state;
+
+    debugPrint('   Current AuthState: ${authState.runtimeType}');
+    debugPrint('   Current OnboardingState: ${onboardingState.runtimeType}');
+    debugPrint(
+      '   onboardingState.isFirstLaunch: ${onboardingState.isFirstLaunch}',
+    );
+
+    final authResolved =
+        authState is AuthAuthenticated || authState is AuthUnauthenticated;
+    final onboardingResolved = onboardingState.isFirstLaunch != null;
+
+    debugPrint('   authResolved: $authResolved');
+    debugPrint('   onboardingResolved: $onboardingResolved');
+
+    if (authResolved && onboardingResolved) {
+      debugPrint('✅ ALL CONDITIONS MET - navigating!');
+      _navigateToAppropriateScreen(force: false);
+    } else {
+      debugPrint('❌ CONDITIONS NOT MET - waiting for BLoC updates');
+      debugPrint(
+        '   Missing: ${!authResolved ? "Auth" : ""} ${!onboardingResolved ? "Onboarding" : ""}',
+      );
+    }
+  }
+
+  void _navigateToAppropriateScreen({required bool force}) {
+    if (_navigationTriggered && !force) {
+      debugPrint('   Navigation already triggered, skipping');
+      return;
+    }
+
+    debugPrint('🚀 [_navigateToAppropriateScreen] force=$force');
     _navigationTriggered = true;
+
     _minimalTimer?.cancel();
-    _loadingTimer?.cancel();
+    _safetyTimer?.cancel();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        debugPrint('   Widget not mounted, cannot navigate');
+        return;
+      }
+
       try {
         final authState = context.read<AuthBloc>().state;
         final onboardingState = context.read<OnboardingBloc>().state;
         final isFirstLaunch = onboardingState.isFirstLaunch;
         final hasCompletedProfile = onboardingState.hasCompletedProfile;
 
-        debugPrint('🚀 Navigating from splash:');
-        debugPrint('   Auth state     : ${authState.runtimeType}');
-        debugPrint('   First launch   : $isFirstLaunch');
-        debugPrint('   Profile done   : $hasCompletedProfile');
+        debugPrint('📊 Final state for navigation:');
+        debugPrint('   auth: ${authState.runtimeType}');
+        debugPrint('   isFirstLaunch: $isFirstLaunch');
+        debugPrint('   hasCompletedProfile: $hasCompletedProfile');
 
-        if (isFirstLaunch) {
-          // Brand-new install — show onboarding slides first.
-          Navigator.pushReplacementNamed(context, RouteNames.onboarding);
+        String route;
+        if (isFirstLaunch == true) {
+          route = RouteNames.onboarding;
         } else if (authState is AuthAuthenticated) {
-          if (!hasCompletedProfile) {
-            // Returning user who skipped profile setup — send them there once.
-            Navigator.pushReplacementNamed(context, RouteNames.profile_setup);
-          } else {
-            // Fully set-up returning user — go straight to home.
-            Navigator.pushReplacementNamed(context, RouteNames.home);
-          }
+          route = hasCompletedProfile == true
+              ? RouteNames.home
+              : RouteNames.profile_setup;
         } else {
-          // Not authenticated — go to login.
-          Navigator.pushReplacementNamed(context, RouteNames.login);
+          route = RouteNames.login;
         }
-      } catch (e) {
+
+        debugPrint('➡️ Navigating to: $route');
+        Navigator.pushReplacementNamed(context, route);
+      } catch (e, stack) {
         debugPrint('❌ Navigation error: $e');
+        debugPrint('Stack trace: $stack');
         Navigator.pushReplacementNamed(context, RouteNames.login);
       }
     });
@@ -122,87 +199,79 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   void dispose() {
+    debugPrint('🧹 [Splash] dispose called');
+    _animController.dispose();
     _minimalTimer?.cancel();
-    _loadingTimer?.cancel();
+    _safetyTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      body: AnimatedOpacity(
-        opacity: _showUI ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                AssetPaths.logo,
-                width: 150,
-                height: 150,
-                filterQuality: FilterQuality.high,
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'Moonlight',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
+    debugPrint('🏗️ [Splash] build called');
+
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<AuthBloc, AuthState>(
+          listener: (context, state) {
+            _authStateChanges++;
+            debugPrint(
+              '🔔 [AuthBloc] State changed #$_authStateChanges: ${state.runtimeType}',
+            );
+            if (state is AuthAuthenticated || state is AuthUnauthenticated) {
+              debugPrint('   ✅ Auth resolved!');
+              _tryNavigation(reason: 'auth_listener');
+            }
+          },
+        ),
+        BlocListener<OnboardingBloc, OnboardingState>(
+          listener: (context, state) {
+            _onboardingStateChanges++;
+            debugPrint(
+              '🔔 [OnboardingBloc] State changed #$_onboardingStateChanges:',
+            );
+            debugPrint('   isFirstLaunch: ${state.isFirstLaunch}');
+            debugPrint('   hasCompletedProfile: ${state.hasCompletedProfile}');
+            if (state.isFirstLaunch != null) {
+              debugPrint('   ✅ Onboarding resolved!');
+              _tryNavigation(reason: 'onboarding_listener');
+            }
+          },
+        ),
+      ],
+      child: Scaffold(
+        backgroundColor: AppColors.primary,
+        body: FadeTransition(
+          opacity: _fadeAnim,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  AssetPaths.logo,
+                  width: 150,
+                  height: 150,
+                  filterQuality: FilterQuality.high,
                 ),
-              ),
-            ],
+                const SizedBox(height: 32),
+                const Text(
+                  'Moonlight',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                // Add a loading indicator for debugging
+                const SizedBox(height: 32),
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      // bottomNavigationBar: _buildBottomBar(),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Center(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildLoadingIndicator(),
-          const SizedBox(width: 16),
-          _buildReadyIndicator(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        valueColor: AlwaysStoppedAnimation<Color>(
-          Colors.white.withOpacity(0.8),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReadyIndicator() {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.green,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.green.withOpacity(0.5),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: const Icon(Icons.check, color: Colors.white, size: 20),
     );
   }
 }

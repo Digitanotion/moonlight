@@ -116,8 +116,8 @@ import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
-
 import 'package:moonlight/core/services/google_signin_service.dart';
+
 // ✅ Profile View
 import 'package:moonlight/features/profile_view/data/datasources/profile_remote_datasource.dart'
     as view_ds;
@@ -195,74 +195,76 @@ import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.
 
 final sl = GetIt.instance;
 
-/// Used ONLY to bootstrap `/api/config` before we know the real base URL.
-/// Must be your final host (no trailing slash).
+/// Fallback host — used only when cache is empty and network hasn't responded yet.
 const _fallbackHost = 'https://svc.moonlightstream.app';
 
-// ======= SPLASH OPTIMIZER (CRITICAL: REPLACE YOUR CURRENT ONE) =======
+// ─────────────────────────────────────────────────────────────────────────────
+// SPLASH OPTIMIZER  — 3-phase lazy initialization
+//
+//  Phase 1 │ registerRenderEssentials()   — called BEFORE runApp()
+//           │ Local disk only (~5–10 ms). Registers everything needed to
+//           │ render the widget tree: SharedPrefs, cached config, auth blocs.
+//           │ NO network, NO Firebase, NO heavy interceptors.
+//
+//  Phase 2 │ loadConfigAndDependencies()  — called AFTER runApp(), parallel
+//           │ with Firebase init. Fetches live RuntimeConfig from server and
+//           │ hot-swaps it in GetIt. Updates authDio base URL if it changed.
+//
+//  Phase 3 │ loadRemainingDependencies()  — called AFTER phase 2 completes.
+//           │ Initialises DioClient, all interceptors, Pusher, every feature
+//           │ module. Signals DependencyManager when done.
+// ─────────────────────────────────────────────────────────────────────────────
 class SplashOptimizer {
-  static final Completer<void> _essentialsLoaded = Completer<void>();
-  static bool _isInitializing = false;
-  static bool _isBackgroundLoadingStarted = false;
+  // Completers to coordinate between phases
+  static final Completer<void> _renderReady = Completer<void>();
+  static final Completer<void> _configReady = Completer<void>();
 
-  static Future<void> loadEssentialsOnly() async {
-    if (_isInitializing) {
-      return _essentialsLoaded.future;
-    }
+  // Guards so each phase runs at most once
+  static bool _renderDone = false;
+  static bool _configDone = false;
+  static bool _backgroundDone = false;
 
-    _isInitializing = true;
-    debugPrint('🚀 [SPLASH] Loading essential dependencies only...');
+  // ───────────────────────────── PHASE 1 ─────────────────────────────────────
+  /// Register the bare minimum so Flutter can build the widget tree.
+  /// Must complete in well under 100 ms — no network calls allowed here.
+  static Future<void> registerRenderEssentials() async {
+    if (_renderDone) return _renderReady.future;
+    _renderDone = true;
+
+    debugPrint('🚀 [PHASE 1] Registering render essentials (no network)...');
 
     try {
-      // --------- Core essentials ONLY ---------
+      // SharedPreferences — local disk, typically <10 ms
       final prefs = await SharedPreferences.getInstance();
       sl.registerLazySingleton<SharedPreferences>(() => prefs);
-
-      // Device info (lightweight)
       sl.registerLazySingleton<DeviceInfoPlugin>(() => DeviceInfoPlugin());
 
-      // --------- Bootstrap RuntimeConfig ---------
-      debugPrint('🔄 [SPLASH] Loading RuntimeConfig...');
-
-      RuntimeConfig cfg;
-      try {
-        // Try to load from environment or your config service
-        cfg = await _loadRuntimeConfig();
-      } catch (e) {
-        debugPrint('⚠️ [SPLASH] RuntimeConfig fallback: $e');
-        cfg = RuntimeConfig(
-          agoraAppId: '',
-          apiBaseUrl: _fallbackHost,
-          pusherKey: '', // This is why it's empty!
-          pusherCluster: 'mt1',
-        );
-      }
-
-      sl.registerLazySingleton<RuntimeConfig>(() => cfg);
-
-      sl.registerLazySingleton<TokenRegistrationService>(() {
-        return TokenRegistrationService(
-          authLocalDataSource: sl<AuthLocalDataSource>(),
-          runtimeConfig: cfg,
-        );
-      });
-
-      // Auth essentials
+      // ── Auth local datasource (reads cached token from disk) ──
       sl.registerLazySingleton<AuthLocalDataSource>(
         () => AuthLocalDataSourceImpl(sharedPreferences: prefs),
       );
 
-      // Minimal Dio client for auth (WITHOUT heavy interceptors)
+      // ── RuntimeConfig: try disk cache first, fall back to constants ──
+      final cachedConfig = await _loadCachedOrFallbackConfig(prefs);
+      sl.registerLazySingleton<RuntimeConfig>(() => cachedConfig);
+
+      // ── TokenRegistrationService (AuthBloc needs this) ──
+      sl.registerLazySingleton<TokenRegistrationService>(
+        () => TokenRegistrationService(
+          authLocalDataSource: sl<AuthLocalDataSource>(),
+          runtimeConfig: sl<RuntimeConfig>(),
+        ),
+      );
+
+      // ── Minimal Dio — auth header only, no heavy interceptors ──
       final basicDio = Dio(
         BaseOptions(
-          baseUrl: cfg.apiBaseUrl,
+          baseUrl: cachedConfig.apiBaseUrl,
           connectTimeout: const Duration(seconds: 8),
           receiveTimeout: const Duration(seconds: 8),
           headers: {'Accept': 'application/json'},
         ),
       );
-
-      // Simple auth interceptor ONLY
       basicDio.interceptors.add(
         InterceptorsWrapper(
           onRequest: (options, handler) async {
@@ -274,17 +276,15 @@ class SplashOptimizer {
           },
         ),
       );
-
       sl.registerLazySingleton<Dio>(() => basicDio, instanceName: 'authDio');
 
-      // Essential repositories for auth
+      // ── Auth data source + repository ──
       sl.registerLazySingleton<AuthRemoteDataSource>(
         () => AuthRemoteDataSourceImpl(
           client: sl<Dio>(instanceName: 'authDio'),
           prefs: prefs,
         ),
       );
-
       sl.registerLazySingleton<AuthRepository>(
         () => AuthRepositoryImpl(
           localDataSource: sl(),
@@ -294,31 +294,27 @@ class SplashOptimizer {
         ),
       );
 
-      // Essential use cases
+      // ── Use cases ──
       sl.registerLazySingleton<GetCurrentUser>(() => GetCurrentUser(sl()));
       sl.registerLazySingleton<CheckAuthStatus>(() => CheckAuthStatus(sl()));
       sl.registerLazySingleton<Logout>(() => Logout(sl()));
       sl.registerLazySingleton<LoginWithEmail>(() => LoginWithEmail(sl()));
       sl.registerLazySingleton<SignUpWithEmail>(() => SignUpWithEmail(sl()));
       sl.registerLazySingleton<SocialLogin>(() => SocialLogin(sl()));
+      sl.registerLazySingleton(() => CurrentUserService());
 
-      // Onboarding essentials
+      // ── Onboarding ──
       sl.registerLazySingleton<OnboardingLocalDataSource>(
         () => OnboardingLocalDataSourceImpl(sharedPreferences: sl()),
       );
-
       sl.registerLazySingleton<OnboardingRepository>(
         () => OnboardingRepositoryImpl(localDataSource: sl()),
       );
 
-      // Current user service
-      sl.registerLazySingleton(() => CurrentUserService());
-
-      // Essential blocs (register but don't create yet)
+      // ── Blocs — registered as factories, instantiated on demand ──
       sl.registerFactory<OnboardingBloc>(
         () => OnboardingBloc(repository: sl()),
       );
-
       sl.registerFactory<AuthBloc>(
         () => AuthBloc(
           loginWithEmail: sl(),
@@ -333,77 +329,136 @@ class SplashOptimizer {
         ),
       );
 
-      debugPrint('✅ [SPLASH] Essential dependencies loaded');
-      _essentialsLoaded.complete();
+      _renderReady.complete();
+      debugPrint('✅ [PHASE 1] Render essentials ready — runApp() unblocked');
     } catch (e, stack) {
-      debugPrint('❌ [SPLASH] Error loading essentials: $e');
-      debugPrint('Stack: $stack');
-      _essentialsLoaded.completeError(e);
+      debugPrint('❌ [PHASE 1] Error: $e\n$stack');
+      _renderReady.completeError(e);
       rethrow;
     }
   }
 
-  static Future<void> loadRemainingDependencies() async {
-    if (_isBackgroundLoadingStarted) {
-      debugPrint('⚠️ [BACKGROUND] Already loading remaining dependencies');
-      return;
-    }
+  // ───────────────────────────── PHASE 2 ─────────────────────────────────────
+  /// Fetch live config from server. Runs after runApp(), in parallel with
+  /// Firebase init. Hot-swaps RuntimeConfig in GetIt when done.
+  static Future<void> loadConfigAndDependencies() async {
+    if (_configDone) return _configReady.future;
+    _configDone = true;
 
-    _isBackgroundLoadingStarted = true;
-    debugPrint('🔄 [BACKGROUND] Loading remaining dependencies...');
+    // Phase 1 must be done before we touch GetIt
+    await _renderReady.future;
+
+    debugPrint('🌐 [PHASE 2] Fetching live RuntimeConfig from server...');
 
     try {
-      // Wait for essentials to be ready
-      await _essentialsLoaded.future;
+      final freshConfig = await _loadRuntimeConfig();
 
-      // Initialize the rest of the app
-      await initRemainingDependencies();
-
-      debugPrint('✅ [BACKGROUND] All dependencies loaded successfully');
-    } catch (e) {
-      debugPrint('⚠️ [BACKGROUND] Error loading remaining dependencies: $e');
-      // Don't crash the app
-    }
-  }
-
-  static Future<RuntimeConfig> reloadRuntimeConfig() async {
-    debugPrint('🔄 [SPLASH] Reloading RuntimeConfig from server...');
-    try {
-      final cfg = await _loadRuntimeConfig();
-
-      // Update GetIt with the new config
+      // Hot-swap: unregister stale instance, register fresh one
       if (sl.isRegistered<RuntimeConfig>()) {
         sl.unregister<RuntimeConfig>();
       }
+      sl.registerLazySingleton<RuntimeConfig>(() => freshConfig);
+
+      // Keep authDio base URL in sync
+      final authDio = sl<Dio>(instanceName: 'authDio');
+      authDio.options.baseUrl = freshConfig.apiBaseUrl;
+
+      debugPrint(
+        '✅ [PHASE 2] Live config applied — '
+        'pusherKey=${freshConfig.pusherKey.isEmpty ? "EMPTY" : "SET"}',
+      );
+    } catch (e) {
+      // Non-fatal: we already have a cached/fallback config from Phase 1
+      debugPrint(
+        '⚠️ [PHASE 2] Live config fetch failed, using Phase 1 config: $e',
+      );
+    } finally {
+      // Always unblock Phase 3, even on error
+      if (!_configReady.isCompleted) _configReady.complete();
+    }
+  }
+
+  // ───────────────────────────── PHASE 3 ─────────────────────────────────────
+  /// Register everything else. Runs entirely in the background after runApp().
+  static Future<void> loadRemainingDependencies() async {
+    if (_backgroundDone) return;
+    _backgroundDone = true;
+
+    // Wait for config before standing up DioClient, Pusher, etc.
+    await _configReady.future;
+
+    debugPrint('🔄 [PHASE 3] Loading remaining dependencies...');
+
+    try {
+      await initRemainingDependencies();
+      DependencyManager.markAllDependenciesReady();
+      debugPrint('✅ [PHASE 3] All dependencies ready');
+    } catch (e) {
+      debugPrint('⚠️ [PHASE 3] Error: $e (app continues)');
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /// Read config from SharedPreferences disk cache — zero network latency.
+  /// Falls back to compile-time constants if cache is empty or corrupt.
+  static Future<RuntimeConfig> _loadCachedOrFallbackConfig(
+    SharedPreferences prefs,
+  ) async {
+    try {
+      final cache = RuntimeConfigCache(prefs);
+      final cached = await cache.loadFromCacheOnly();
+      if (cached != null && cached.apiBaseUrl.isNotEmpty) {
+        debugPrint('✅ [PHASE 1] Using disk-cached RuntimeConfig');
+        return cached;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [PHASE 1] Cache read failed: $e');
+    }
+
+    debugPrint('⚠️ [PHASE 1] No cache — using fallback RuntimeConfig');
+    return RuntimeConfig(
+      agoraAppId: '',
+      apiBaseUrl: _fallbackHost,
+      pusherKey: '',
+      pusherCluster: 'mt1',
+    );
+  }
+
+  /// Public helper kept for compatibility (RuntimeConfigRefreshService uses it)
+  static Future<RuntimeConfig> reloadRuntimeConfig() async {
+    debugPrint('🔄 [SplashOptimizer] Reloading RuntimeConfig from server...');
+    try {
+      final cfg = await _loadRuntimeConfig();
+      if (sl.isRegistered<RuntimeConfig>()) sl.unregister<RuntimeConfig>();
       sl.registerLazySingleton<RuntimeConfig>(() => cfg);
-
-      debugPrint('✅ [SPLASH] RuntimeConfig reloaded successfully');
-      debugPrint('   Pusher Key: ${cfg.pusherKey.isEmpty ? "EMPTY" : "SET"}');
-
+      debugPrint('✅ [SplashOptimizer] RuntimeConfig reloaded');
       return cfg;
-    } catch (e, stack) {
-      debugPrint('❌ [SPLASH] Failed to reload RuntimeConfig: $e');
-      debugPrint('Stack: $stack');
+    } catch (e) {
+      debugPrint('❌ [SplashOptimizer] Reload failed: $e');
       rethrow;
     }
   }
 }
 
-// In _loadRuntimeConfig() - ADD debug logging:
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG LOADER
+// ─────────────────────────────────────────────────────────────────────────────
+
 Future<RuntimeConfig> _loadRuntimeConfig() async {
-  debugPrint('🔧 Loading RuntimeConfig with caching...');
+  debugPrint('🔧 Loading RuntimeConfig with cache strategy...');
 
   final prefs = await SharedPreferences.getInstance();
   final cache = RuntimeConfigCache(prefs);
 
-  return await cache.loadWithCache(
+  return cache.loadWithCache(
     fetchFresh: () async {
       debugPrint('🌐 Fetching RuntimeConfig from server...');
 
       final bootstrapDio = Dio(
         BaseOptions(
           baseUrl: '$_fallbackHost/api',
-          connectTimeout: const Duration(seconds: 8), // Reduced timeout
+          connectTimeout: const Duration(seconds: 8),
           receiveTimeout: const Duration(seconds: 8),
         ),
       );
@@ -412,35 +467,31 @@ Future<RuntimeConfig> _loadRuntimeConfig() async {
         final response = await bootstrapDio.get('/v1/config');
         final data = response.data as Map<String, dynamic>;
 
-        debugPrint('📋 Config response keys: ${data.keys.toList()}');
-
         final cfg = RuntimeConfig(
           agoraAppId:
-              data['agora_app_id'] ??
+              data['agora_app_id']?.toString() ??
               const String.fromEnvironment('AGORA_APP_ID', defaultValue: ''),
-          apiBaseUrl: data['api_base_url'] ?? _fallbackHost,
+          apiBaseUrl: (data['api_base_url']?.toString() ?? _fallbackHost)
+              .replaceAll(RegExp(r'/+$'), ''),
           pusherKey:
-              data['pusher_key'] ??
+              data['pusher_key']?.toString() ??
               const String.fromEnvironment('PUSHER_KEY', defaultValue: ''),
           pusherCluster:
-              data['pusher_cluster'] ??
+              data['pusher_cluster']?.toString() ??
               const String.fromEnvironment(
                 'PUSHER_CLUSTER',
                 defaultValue: 'mt1',
               ),
         );
 
-        debugPrint('✅ RuntimeConfig fetched from server:');
-        debugPrint('   API Base URL: ${cfg.apiBaseUrl}');
-        debugPrint('   Pusher Key: ${cfg.pusherKey.isEmpty ? "EMPTY" : "SET"}');
-        debugPrint('   Pusher Cluster: ${cfg.pusherCluster}');
+        debugPrint('✅ RuntimeConfig from server:');
+        debugPrint('   API: ${cfg.apiBaseUrl}');
+        debugPrint('   Pusher: ${cfg.pusherKey.isEmpty ? "EMPTY" : "SET"}');
 
         return cfg;
       } catch (e) {
-        debugPrint('❌ Failed to load config from API: $e');
-
-        // Fallback to environment variables
-        final envCfg = RuntimeConfig(
+        debugPrint('❌ Config fetch failed, using env fallback: $e');
+        return RuntimeConfig(
           agoraAppId: const String.fromEnvironment(
             'AGORA_APP_ID',
             defaultValue: '',
@@ -455,126 +506,359 @@ Future<RuntimeConfig> _loadRuntimeConfig() async {
             defaultValue: 'mt1',
           ),
         );
-
-        debugPrint('⚠️ Using environment config:');
-        debugPrint(
-          '   Pusher Key from env: ${envCfg.pusherKey.isEmpty ? "EMPTY" : "SET"}',
-        );
-
-        return envCfg;
       }
     },
     forceRefresh: false,
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 3 — FULL DEPENDENCY GRAPH
+// ─────────────────────────────────────────────────────────────────────────────
+
+Future<void> initRemainingDependencies() async {
+  debugPrint('🏗️ [INIT] Starting full dependency initialization...');
+
+  final prefs = sl<SharedPreferences>();
+  final cfg = sl<RuntimeConfig>();
+
+  // ── Main DioClient ──────────────────────────────────────────────────────────
+  final dioClient = DioClient(cfg.apiBaseUrl, sl<AuthLocalDataSource>());
+  sl.registerLazySingleton<DioClient>(() => dioClient);
+  sl.registerLazySingleton<Dio>(() => dioClient.dio, instanceName: 'mainDio');
+
+  final mainDio = sl<Dio>(instanceName: 'mainDio');
+
+  // Interceptors (registered as factories so they can be recreated if needed)
+  sl.registerFactory<RequestIdInterceptor>(() => RequestIdInterceptor());
+  sl.registerFactory<IdempotencyInterceptor>(
+    () => IdempotencyInterceptor(prefs),
+  );
+  sl.registerFactory<ErrorNormalizerInterceptor>(
+    () => ErrorNormalizerInterceptor(),
+  );
+  sl.registerFactory<RetryInterceptor>(() => RetryInterceptor(maxRetries: 3));
+  sl.registerFactory<AuthInterceptor>(
+    () =>
+        AuthInterceptor(sl<AuthLocalDataSource>(), sl<AuthRemoteDataSource>()),
+  );
+  sl.registerFactory<DioExtraHook>(() => DioExtraHook(mainDio));
+
+  mainDio.interceptors
+    ..add(sl<DioExtraHook>())
+    ..add(sl<RequestIdInterceptor>())
+    ..add(sl<AuthInterceptor>())
+    ..add(sl<IdempotencyInterceptor>())
+    ..add(sl<ErrorNormalizerInterceptor>())
+    ..add(sl<RetryInterceptor>());
+
+  // ── Data sources ────────────────────────────────────────────────────────────
+  sl.registerLazySingleton<ProfileRemoteDataSource>(
+    () => ProfileRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
+  );
+  sl.registerLazySingleton<CountryLocalDataSource>(
+    () => CountryLocalDataSourceImpl(),
+  );
+  sl.registerLazySingleton<AccountRemoteDataSource>(
+    () => AccountRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
+  );
+  sl.registerLazySingleton<SearchRemoteDataSource>(
+    () => SearchRemoteDataSourceImpl(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<NotificationsRemoteDataSource>(
+    () => NotificationsRemoteDataSource(sl<DioClient>()),
+  );
+
+  // ── Repositories ────────────────────────────────────────────────────────────
+  sl.registerLazySingleton<AccountRepository>(
+    () => AccountRepositoryImpl(sl<AccountRemoteDataSource>()),
+  );
+  sl.registerLazySingleton<SearchRepository>(
+    () => SearchRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<ProfileRepository>(
+    () => ProfileRepositoryImpl(
+      remote: sl(),
+      countryLocal: sl(),
+      local: sl<AuthLocalDataSource>(),
+    ),
+  );
+  sl.registerLazySingleton<NotificationsRepository>(
+    () => NotificationsRepositoryImpl(sl<NotificationsRemoteDataSource>()),
+  );
+
+  // ── Use cases ───────────────────────────────────────────────────────────────
+  sl.registerLazySingleton(() => UpdateNotificationSettings(sl()));
+  sl.registerLazySingleton(() => GetNotificationSettings(sl()));
+  sl.registerLazySingleton(() => DeactivateAccount(sl()));
+  sl.registerLazySingleton(() => ReactivateAccount(sl()));
+  sl.registerLazySingleton(() => DeleteAccount(sl()));
+  sl.registerLazySingleton<SearchContent>(() => SearchContent(sl()));
+  sl.registerLazySingleton<GetTrendingTags>(() => GetTrendingTags(sl()));
+  sl.registerLazySingleton<GetSuggestedUsers>(() => GetSuggestedUsers(sl()));
+  sl.registerLazySingleton<GetPopularClubs>(() => GetPopularClubs(sl()));
+  sl.registerLazySingleton(() => SetupProfile(sl()));
+  sl.registerLazySingleton(() => UpdateInterests(sl()));
+  sl.registerLazySingleton(() => UpdateProfile(sl()));
+  sl.registerLazySingleton(() => FetchMyProfile(sl()));
+
+  // ── Blocs / Cubits ──────────────────────────────────────────────────────────
+  sl.registerFactory<SearchBloc>(
+    () => SearchBloc(
+      searchContent: sl(),
+      getTrendingTags: sl(),
+      getSuggestedUsers: sl(),
+      getPopularClubs: sl(),
+    ),
+  );
+  sl.registerFactory<NotificationsBloc>(
+    () => NotificationsBloc(sl<NotificationsRepository>()),
+  );
+  sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
+  sl.registerFactory(() => UserInterestCubit(sl()));
+  sl.registerFactory(() => SearchClubsCubit(sl()));
+
+  sl.registerFactory<AccountSettingsCubit>(
+    () => AccountSettingsCubit(
+      repository: sl<AccountRepository>(),
+      prefs: sl<SharedPreferences>(),
+    ),
+  );
+
+  sl.registerFactory(
+    () => ProfilePageCubit(
+      fetchMyProfile: sl(),
+      fetchMyPosts:
+          ({required String userUuid, int page = 1, int perPage = 50}) async {
+            final paginated = await sl<view_repo.ProfileRepository>()
+                .getUserPosts(userUuid, page: page, perPage: perPage);
+            return paginated.data;
+          },
+    ),
+  );
+
+  sl.registerFactory(
+    () => EditProfileCubit(
+      fetchMyProfile: sl(),
+      updateProfile: sl(),
+      profileRepo: sl(),
+      authLocal: sl(),
+      getCurrentUser: sl(),
+    ),
+  );
+
+  // Settings
+  sl.registerLazySingleton<BlockedUsersRemoteDataSource>(
+    () => BlockedUsersRemoteDataSource(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<ChangeEmailRemoteDataSource>(
+    () => ChangeEmailRemoteDataSource(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<ChangeUsernameRemoteDataSource>(
+    () => ChangeUsernameRemoteDataSource(sl<DioClient>()),
+  );
+  sl.registerLazySingleton<BlockedUsersRepository>(
+    () => BlockedUsersRepositoryImpl(sl<BlockedUsersRemoteDataSource>()),
+  );
+  sl.registerLazySingleton<ChangeEmailRepository>(
+    () => ChangeEmailRepositoryImpl(sl<ChangeEmailRemoteDataSource>()),
+  );
+  sl.registerLazySingleton<ChangeUsernameRepository>(
+    () => ChangeUsernameRepositoryImpl(sl<ChangeUsernameRemoteDataSource>()),
+  );
+  sl.registerFactory<BlockedUsersCubit>(
+    () => BlockedUsersCubit(sl<BlockedUsersRepository>()),
+  );
+  sl.registerFactory<ChangeEmailCubit>(
+    () => ChangeEmailCubit(sl<ChangeEmailRepository>()),
+  );
+  sl.registerFactory<ChangeUsernameCubit>(
+    () => ChangeUsernameCubit(sl<ChangeUsernameRepository>()),
+  );
+
+  // Wallet
+  sl.registerFactory(() => ResetPinCubit(sl<PinRepository>()));
+  sl.registerFactory<SetNewPinCubit>(() => SetNewPinCubit(sl<PinRepository>()));
+
+  // ── Feature modules ─────────────────────────────────────────────────────────
+  _initializeClubsModule();
+  _initializeLiveModule();
+  registerProfileView();
+  registerChat();
+  wallet();
+  setWalletPin();
+  transfercoin();
+  withdrawal();
+  registerPosts();
+  creatPost();
+  liveFeeds();
+
+  // ── Pusher (after all other deps, graceful) ─────────────────────────────────
+  await _initializePusherService();
+
+  // ── Play Billing (non-blocking) ─────────────────────────────────────────────
+  unawaited(
+    sl<PlayBillingService>().init().catchError(
+      (e) => debugPrint('⚠️ PlayBilling init error (non-fatal): $e'),
+    ),
+  );
+
+  // ── Realtime unread + Live viewer ───────────────────────────────────────────
+  _registerRealtimeUnreadServices();
+  _initializeLiveViewerServices();
+
+  // ── Like memory + Feed ──────────────────────────────────────────────────────
+  sl.registerLazySingleton<LikeMemory>(() => LikeMemory(prefs));
+
+  sl.registerLazySingleton(() => FeedRemoteDataSource(sl<DioClient>()));
+  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl()));
+  sl.registerFactory(() => FeedCubit(sl()));
+
+  debugPrint('✅ [INIT] Full dependency initialization complete');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUSHER — graceful init with proper bad-state handling
+// ─────────────────────────────────────────────────────────────────────────────
+
+Future<void> ensurePusherInitialized() async {
+  await _initializePusherService();
+}
+
+Future<void> _initializePusherService() async {
+  debugPrint('🔧 [PUSHER] Initializing Pusher service...');
+
+  try {
+    if (!sl.isRegistered<PusherService>()) {
+      sl.registerLazySingleton<PusherService>(() => PusherService());
+    }
+
+    final pusher = sl<PusherService>();
+    final cfg = sl<RuntimeConfig>();
+
+    // Already properly initialized — just ensure connected
+    if (pusher.isInitialized &&
+        !pusher.isInBadState &&
+        cfg.pusherKey.isNotEmpty &&
+        cfg.pusherKey != 'disabled') {
+      debugPrint('✅ [PUSHER] Already initialized');
+      if (!pusher.isConnected) await pusher.connect();
+      return;
+    }
+
+    // Bad state + valid key — let RuntimeConfigRefreshService fix it
+    if (pusher.isInitialized && pusher.isInBadState) {
+      debugPrint('⚠️ [PUSHER] Bad state — will be fixed by refresh service');
+      return;
+    }
+
+    // No valid key — init in disabled state so the object exists
+    if (cfg.pusherKey.isEmpty || cfg.pusherKey == 'disabled') {
+      debugPrint(
+        '⚠️ [PUSHER] Key empty/disabled — initializing in disabled state',
+      );
+      await pusher.initialize(
+        apiKey: 'disabled',
+        cluster: 'mt1',
+        authEndpoint: null,
+        authCallback: null,
+      );
+      // RuntimeConfigRefreshService will reinitialize once a valid key arrives
+      await RuntimeConfigRefreshService().startMonitoring();
+      return;
+    }
+
+    // Happy path — full init
+    debugPrint('🔧 [PUSHER] Full initialization...');
+    await pusher.initialize(
+      apiKey: cfg.pusherKey,
+      cluster: cfg.pusherCluster,
+      authEndpoint: '${cfg.apiBaseUrl}/broadcasting/auth',
+      authCallback: (channelName, socketId, options) async {
+        try {
+          final token = await sl<AuthLocalDataSource>().readToken();
+          if (token == null || token.isEmpty) {
+            throw Exception('No auth token for Pusher');
+          }
+          final response = await sl<Dio>(instanceName: 'mainDio').post(
+            '/broadcasting/auth',
+            data: {'socket_id': socketId, 'channel_name': channelName},
+            options: Options(
+              headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+            ),
+          );
+          return response.data;
+        } catch (e) {
+          debugPrint('❌ [PUSHER] Auth callback failed: $e');
+          rethrow;
+        }
+      },
+    );
+
+    debugPrint('✅ [PUSHER] Initialized successfully');
+    await RuntimeConfigRefreshService().startMonitoring();
+  } catch (e) {
+    debugPrint('⚠️ [PUSHER] Init failed (non-fatal): $e');
+    // App continues — chat real-time will be degraded but app won't crash
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE VIEWER SERVICES
+// ─────────────────────────────────────────────────────────────────────────────
+
 void _initializeLiveViewerServices() {
   debugPrint('🔧 Initializing Live Viewer Services...');
 
-  // Register AgoraViewerService
-  // sl.registerLazySingleton<AgoraViewerService>(() {
-  //   return AgoraViewerService(
-  //     onTokenRefresh: (role) async {
-  //       // Get current livestream ID from somewhere - you'll need to pass this
-  //       final livestreamId = ''; // You need to get this dynamically
-  //       final token = await sl<AuthLocalDataSource>().readToken();
-  //       final dio = sl<Dio>(instanceName: 'mainDio');
-
-  //       final response = await dio.get(
-  //         '/api/v1/live/$livestreamId/rtc',
-  //         queryParameters: {'role': role},
-  //         options: Options(headers: {'Authorization': 'Bearer $token'}),
-  //       );
-
-  //       final data = response.data as Map<String, dynamic>;
-  //       return data['rtc_token'] as String;
-  //     },
-  //   );
-  // });
-
-  // Register AgoraViewerService with PROPER token refresh
   sl.registerLazySingleton<AgoraViewerService>(() {
     debugPrint('🎯 Creating AgoraViewerService instance');
-
     return AgoraViewerService(
       onTokenRefresh: (role) async {
         debugPrint('🔄 Token refresh requested for role: $role');
-
-        // We can't know livestreamId here - this is a design flaw
-        // For now, we'll need to fetch a new token differently
-        // Let's create a simple token refresh that uses current channel
         try {
           final agoraService = sl<AgoraViewerService>();
           final currentChannel = agoraService.channelId;
-
           if (currentChannel == null || currentChannel.isEmpty) {
             throw Exception('No current channel to refresh token for');
           }
-
-          // Extract livestream ID from channel name
-          // Assuming channel format: "live_abc123" or similar
-          final channelPrefix = 'live_';
-          String? livestreamId;
-
-          if (currentChannel.startsWith(channelPrefix)) {
-            // If channel is like "live_abc123", we need the actual livestream ID
-            // This is a hack - you need to store livestream ID somewhere
-            debugPrint(
-              '⚠️ Need livestream ID for token refresh, using channel: $currentChannel',
-            );
-
-            // For testing, just get a fresh token from server
-            final authLocal = sl<AuthLocalDataSource>();
-            final token = await authLocal.readToken();
-            final dio = sl<Dio>(instanceName: 'mainDio');
-
-            // Call a generic token refresh endpoint
-            final response = await dio.post(
-              '/api/v1/live/refresh-token',
-              data: {'role': role, 'channel': currentChannel},
-              options: Options(headers: {'Authorization': 'Bearer $token'}),
-            );
-
-            final data = response.data as Map<String, dynamic>;
-            return data['token'] as String;
-          } else {
-            throw Exception(
-              'Cannot determine livestream ID from channel: $currentChannel',
-            );
-          }
+          final token = await sl<AuthLocalDataSource>().readToken();
+          final response = await sl<Dio>(instanceName: 'mainDio').post(
+            '/api/v1/live/refresh-token',
+            data: {'role': role, 'channel': currentChannel},
+            options: Options(headers: {'Authorization': 'Bearer $token'}),
+          );
+          final data = response.data as Map<String, dynamic>;
+          return data['token'] as String;
         } catch (e) {
           debugPrint('❌ Token refresh failed: $e');
-          // For now, return empty string so at least the service initializes
           return '';
         }
       },
     );
   });
 
-  // Register LiveStreamService
-  sl.registerLazySingleton<LiveStreamService>(() {
-    return LiveStreamService(
+  sl.registerLazySingleton<LiveStreamService>(
+    () => LiveStreamService(
       agoraService: sl<AgoraViewerService>(),
       tokenRefresher: sl<AgoraViewerService>().onTokenRefresh,
-    );
-  });
+    ),
+  );
 
-  // Register NetworkMonitorService
-  sl.registerLazySingleton<NetworkMonitorService>(() {
-    return NetworkMonitorService(sl<LiveStreamService>());
-  });
+  sl.registerLazySingleton<NetworkMonitorService>(
+    () => NetworkMonitorService(sl<LiveStreamService>()),
+  );
 
-  // Register ReconnectionService
-  sl.registerLazySingleton<ReconnectionService>(() {
-    return ReconnectionService(sl<LiveStreamService>());
-  });
+  sl.registerLazySingleton<ReconnectionService>(
+    () => ReconnectionService(sl<LiveStreamService>()),
+  );
 
-  // Register RoleChangeService
-  sl.registerLazySingleton<RoleChangeService>(() {
-    return RoleChangeService(sl<LiveStreamService>());
-  });
+  sl.registerLazySingleton<RoleChangeService>(
+    () => RoleChangeService(sl<LiveStreamService>()),
+  );
 
-  // Register ViewerBloc factory with services
   sl.registerFactoryParam<ViewerBloc, ViewerRepositoryImpl, void>((repo, _) {
     return ViewerBloc(
       repo,
@@ -601,7 +885,7 @@ ViewerRepositoryImpl createViewerRepository({
     http: sl<DioClient>(),
     pusher: sl<PusherService>(),
     authLocalDataSource: sl<AuthLocalDataSource>(),
-    agoraViewerService: sl<AgoraViewerService>(), // Important!
+    agoraViewerService: sl<AgoraViewerService>(),
     livestreamParam: livestreamParam,
     livestreamIdNumeric: livestreamIdNumeric,
     channelName: channelName,
@@ -611,425 +895,17 @@ ViewerRepositoryImpl createViewerRepository({
   );
 }
 
-// ======= MAIN INITIALIZATION (RUNS IN BACKGROUND) =======
-Future<void> initRemainingDependencies() async {
-  debugPrint('🏗️ [INIT] Starting full dependency initialization...');
-
-  final prefs = sl<SharedPreferences>();
-  final cfg = sl<RuntimeConfig>();
-
-  // --------- Create main DioClient ---------
-  final dioClient = DioClient(cfg.apiBaseUrl, sl<AuthLocalDataSource>());
-  sl.registerLazySingleton<DioClient>(() => dioClient);
-
-  // Register the Dio from DioClient as the main instance
-  sl.registerLazySingleton<Dio>(() => dioClient.dio, instanceName: 'mainDio');
-
-  // Attach interceptors to the main Dio instance
-  final mainDio = sl<Dio>(instanceName: 'mainDio');
-
-  // Register and attach interceptors
-  sl.registerFactory<RequestIdInterceptor>(() => RequestIdInterceptor());
-  sl.registerFactory<IdempotencyInterceptor>(
-    () => IdempotencyInterceptor(prefs),
-  );
-  sl.registerFactory<ErrorNormalizerInterceptor>(
-    () => ErrorNormalizerInterceptor(),
-  );
-  sl.registerFactory<RetryInterceptor>(() => RetryInterceptor(maxRetries: 3));
-  sl.registerFactory<AuthInterceptor>(
-    () =>
-        AuthInterceptor(sl<AuthLocalDataSource>(), sl<AuthRemoteDataSource>()),
-  );
-  sl.registerFactory<DioExtraHook>(() => DioExtraHook(mainDio));
-
-  // Attach interceptors in order
-  mainDio.interceptors.add(sl<DioExtraHook>());
-  mainDio.interceptors.add(sl<RequestIdInterceptor>());
-  mainDio.interceptors.add(sl<AuthInterceptor>());
-  mainDio.interceptors.add(sl<IdempotencyInterceptor>());
-  mainDio.interceptors.add(sl<ErrorNormalizerInterceptor>());
-  mainDio.interceptors.add(sl<RetryInterceptor>());
-
-  // --------- Register remaining data sources ---------
-  sl.registerLazySingleton<ProfileRemoteDataSource>(
-    () => ProfileRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
-  );
-  sl.registerLazySingleton<CountryLocalDataSource>(
-    () => CountryLocalDataSourceImpl(),
-  );
-  sl.registerLazySingleton<AccountRemoteDataSource>(
-    () => AccountRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
-  );
-  sl.registerLazySingleton<SearchRemoteDataSource>(
-    () => SearchRemoteDataSourceImpl(sl<DioClient>()),
-  );
-  sl.registerLazySingleton<NotificationsRemoteDataSource>(
-    () => NotificationsRemoteDataSource(sl<DioClient>()),
-  );
-  // Register TokenRegistrationService
-  // sl.registerLazySingleton<TokenRegistrationService>(() {
-  //   return TokenRegistrationService(
-  //     authLocalDataSource: sl<AuthLocalDataSource>(),
-  //     runtimeConfig: sl<RuntimeConfig>(),
-  //   );
-  // });
-  // --------- Register remaining repositories ---------
-  sl.registerLazySingleton<AccountRepository>(
-    () => AccountRepositoryImpl(sl<AccountRemoteDataSource>()), // ✅
-  );
-
-  sl.registerFactory(() => SearchClubsCubit(sl()));
-
-  // Register the new usecases
-  sl.registerLazySingleton(() => UpdateNotificationSettings(sl()));
-  sl.registerLazySingleton(() => GetNotificationSettings(sl()));
-
-  // Register AccountSettingsCubit as a factory
-  sl.registerFactory<AccountSettingsCubit>(() {
-    return AccountSettingsCubit(
-      repository: sl<AccountRepository>(), // ✅ Direct repository
-      prefs: sl<SharedPreferences>(),
-    );
-  });
-
-  sl.registerLazySingleton<SearchRepository>(
-    () => SearchRepositoryImpl(remoteDataSource: sl()),
-  );
-  sl.registerLazySingleton<ProfileRepository>(
-    () => ProfileRepositoryImpl(
-      remote: sl(),
-      countryLocal: sl(),
-      local: sl<AuthLocalDataSource>(),
-    ),
-  );
-  sl.registerLazySingleton<NotificationsRepository>(
-    () => NotificationsRepositoryImpl(sl<NotificationsRemoteDataSource>()),
-  );
-
-  // --------- Register remaining use cases ---------
-  sl.registerLazySingleton(() => DeactivateAccount(sl()));
-  sl.registerLazySingleton(() => ReactivateAccount(sl()));
-  sl.registerLazySingleton(() => DeleteAccount(sl()));
-  sl.registerLazySingleton<SearchContent>(() => SearchContent(sl()));
-  sl.registerLazySingleton<GetTrendingTags>(() => GetTrendingTags(sl()));
-  sl.registerLazySingleton<GetSuggestedUsers>(() => GetSuggestedUsers(sl()));
-  sl.registerLazySingleton<GetPopularClubs>(() => GetPopularClubs(sl()));
-  sl.registerLazySingleton(() => SetupProfile(sl()));
-  sl.registerLazySingleton(() => UpdateInterests(sl()));
-  sl.registerLazySingleton(() => UpdateProfile(sl()));
-  sl.registerLazySingleton(() => FetchMyProfile(sl()));
-
-  // --------- Register remaining blocs/cubits ---------
-  sl.registerFactory<SearchBloc>(
-    () => SearchBloc(
-      searchContent: sl(),
-      getTrendingTags: sl(),
-      getSuggestedUsers: sl(),
-      getPopularClubs: sl(),
-    ),
-  );
-  sl.registerFactory<NotificationsBloc>(
-    () => NotificationsBloc(sl<NotificationsRepository>()),
-  );
-  sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
-  sl.registerFactory(() => UserInterestCubit(sl()));
-
-  // Settings DataSources
-  sl.registerLazySingleton<BlockedUsersRemoteDataSource>(
-    () => BlockedUsersRemoteDataSource(sl<DioClient>()),
-  );
-
-  sl.registerLazySingleton<ChangeEmailRemoteDataSource>(
-    () => ChangeEmailRemoteDataSource(sl<DioClient>()),
-  );
-
-  // sl.registerFactory<ChangeEmailCubit>(
-  //   () => ChangeEmailCubit(sl<ChangeEmailRepository>()),
-  // );
-
-  sl.registerLazySingleton<ChangeUsernameRemoteDataSource>(
-    () => ChangeUsernameRemoteDataSource(sl<DioClient>()),
-  );
-
-  // Settings Repositories
-  sl.registerLazySingleton<BlockedUsersRepository>(
-    () => BlockedUsersRepositoryImpl(sl<BlockedUsersRemoteDataSource>()),
-  );
-
-  sl.registerLazySingleton<ChangeEmailRepository>(
-    () => ChangeEmailRepositoryImpl(sl<ChangeEmailRemoteDataSource>()),
-  );
-
-  sl.registerLazySingleton<ChangeUsernameRepository>(
-    () => ChangeUsernameRepositoryImpl(sl<ChangeUsernameRemoteDataSource>()),
-  );
-
-  // Update the cubit registrations to use repositories
-  sl.registerFactory<BlockedUsersCubit>(
-    () => BlockedUsersCubit(sl<BlockedUsersRepository>()),
-  );
-
-  sl.registerFactory<ChangeEmailCubit>(
-    () => ChangeEmailCubit(sl<ChangeEmailRepository>()),
-  );
-
-  sl.registerFactory<ChangeUsernameCubit>(
-    () => ChangeUsernameCubit(sl<ChangeUsernameRepository>()),
-  );
-
-  // Wallet cubits
-  sl.registerFactory(() => ResetPinCubit(sl<PinRepository>()));
-  // ADD SetNewPinCubit registration
-  sl.registerFactory<SetNewPinCubit>(() => SetNewPinCubit(sl<PinRepository>()));
-  // ======= END OF NEW CUBITS =======
-
-  sl.registerFactory(
-    () => ProfilePageCubit(
-      fetchMyProfile: sl(),
-      fetchMyPosts:
-          ({required String userUuid, int page = 1, int perPage = 50}) async {
-            final paginated = await sl<view_repo.ProfileRepository>()
-                .getUserPosts(userUuid, page: page, perPage: perPage);
-            return paginated.data;
-          },
-    ),
-  );
-
-  sl.registerFactory(
-    () => EditProfileCubit(
-      fetchMyProfile: sl(),
-      updateProfile: sl(),
-      profileRepo: sl(),
-      authLocal: sl(),
-      getCurrentUser: sl(),
-    ),
-  );
-
-  // --------- Initialize feature modules ---------
-  _initializeClubsModule();
-  _initializeLiveModule();
-  registerProfileView();
-  registerChat();
-  wallet();
-  setWalletPin();
-  transfercoin();
-  withdrawal();
-  registerPosts();
-  creatPost();
-  liveFeeds();
-  await _initializePusherService();
-  // ✅ Initialize Play Billing in background, don't block app startup
-  unawaited(
-    sl<PlayBillingService>().init().catchError(
-      (e) => debugPrint('⚠️ PlayBilling init error (non-fatal): $e'),
-    ),
-  );
-  // --------- Register Realtime Unread Services ---------
-  _registerRealtimeUnreadServices();
-
-  _initializeLiveViewerServices();
-  // Like memory
-  sl.registerLazySingleton<LikeMemory>(() => LikeMemory(prefs));
-
-  // Feed
-  sl.registerLazySingleton(() => FeedRemoteDataSource(sl<DioClient>()));
-  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl()));
-  sl.registerFactory(() => FeedCubit(sl()));
-
-  // --------- Initialize Pusher LAST (after all dependencies are registered) ---------
-  // await _initializePusher();
-
-  debugPrint('✅ [INIT] Full dependency initialization complete');
-
-  DependencyManager.markAllDependenciesReady();
-}
-
-// REPLACE THE _initializePusherWithOtherServices FUNCTION WITH THIS:
-// Future<void> _initializePusher() async {
-//   debugPrint('🔧 [INIT] Initializing Pusher service...');
-
-//   // Register PusherService first
-//   if (!sl.isRegistered<PusherService>()) {
-//     sl.registerLazySingleton<PusherService>(() {
-//       debugPrint('🎯 Creating PusherService instance');
-//       return PusherService();
-//     });
-//   }
-
-//   // Now initialize Pusher
-//   try {
-//     final pusher = sl<PusherService>();
-//     if (pusher.isInitialized) {
-//       debugPrint('✅ Pusher already initialized');
-//       return;
-//     }
-
-//     final cfg = sl<RuntimeConfig>();
-//     if (cfg.pusherKey.isEmpty) {
-//       debugPrint(
-//         '⚠️ Pusher key empty, skipping initialization (check your environment)',
-//       );
-//       return;
-//     }
-
-//     debugPrint('🔧 Initializing PusherService with configuration...');
-
-//     // Get auth token for callback
-//     final authLocal = sl<AuthLocalDataSource>();
-//     final dio = sl<Dio>(instanceName: 'mainDio');
-
-//     await pusher.initialize(
-//       apiKey: cfg.pusherKey,
-//       cluster: cfg.pusherCluster,
-//       authEndpoint: '${cfg.apiBaseUrl}/broadcasting/auth',
-//       authCallback: (channelName, socketId, options) async {
-//         final token = await authLocal.readToken();
-//         if (token == null || token.isEmpty) {
-//           throw Exception('No auth token');
-//         }
-
-//         final response = await dio.post(
-//           '/broadcasting/auth',
-//           data: {'socket_id': socketId, 'channel_name': channelName},
-//           options: Options(
-//             headers: {
-//               'Accept': 'application/json',
-//               'Authorization': 'Bearer $token',
-//             },
-//           ),
-//         );
-//         return response.data;
-//       },
-//     );
-
-//     debugPrint('✅ PusherService initialized successfully');
-//   } catch (e) {
-//     debugPrint('⚠️ Pusher initialization failed (non-critical): $e');
-//     // Don't throw - Pusher is optional for ap
-//     //p startup
-//   }
-// }
-
-Future<void> ensurePusherInitialized() async {
-  await _initializePusherService();
-}
-
-Future<void> _initializePusherService() async {
-  debugPrint('🔧 [INIT] Initializing Pusher service...');
-
-  try {
-    // 1. Register PusherService if not already registered
-    if (!sl.isRegistered<PusherService>()) {
-      sl.registerLazySingleton<PusherService>(() {
-        debugPrint('🎯 Creating PusherService instance');
-        return PusherService();
-      });
-    }
-
-    final pusher = sl<PusherService>();
-    final cfg = sl<RuntimeConfig>();
-
-    // 2. If Pusher is already initialized in bad state, we need to fix it
-    if (pusher.isInitialized && pusher.isInBadState) {
-      debugPrint(
-        '⚠️ Pusher is in bad state (disabled key), will fix when config is ready',
-      );
-
-      // Don't try to initialize with bad config
-      // It will be fixed by RuntimeConfigRefreshService
-      return;
-    }
-
-    // 3. Skip if already initialized with proper keys
-    if (pusher.isInitialized &&
-        cfg.pusherKey.isNotEmpty &&
-        cfg.pusherKey != 'disabled') {
-      debugPrint('✅ Pusher already properly initialized');
-
-      // Just ensure it's connected
-      if (!pusher.isConnected) {
-        await pusher.connect();
-      }
-      return;
-    }
-
-    // 4. Check if we have valid Pusher configuration
-    if (cfg.pusherKey.isEmpty || cfg.pusherKey == 'disabled') {
-      debugPrint(
-        '⚠️ Pusher key empty or disabled - chat real-time features disabled',
-      );
-      debugPrint(
-        '   To enable real-time chat, add PUSHER_KEY to your .env file',
-      );
-
-      // Initialize with disabled state (temporary)
-      await pusher.initialize(
-        apiKey: 'disabled',
-        cluster: 'mt1',
-        authEndpoint: null,
-        authCallback: null,
-      );
-
-      debugPrint('✅ Pusher initialized in disabled state');
-      return;
-    }
-
-    // 5. Initialize with proper configuration
-    debugPrint('🔧 Initializing Pusher with proper configuration...');
-
-    await pusher.initialize(
-      apiKey: cfg.pusherKey,
-      cluster: cfg.pusherCluster,
-      authEndpoint: '${cfg.apiBaseUrl}/broadcasting/auth',
-      authCallback: (channelName, socketId, options) async {
-        try {
-          final token = await sl<AuthLocalDataSource>().readToken();
-          if (token == null || token.isEmpty) {
-            throw Exception('No auth token for Pusher');
-          }
-
-          final dio = sl<Dio>(instanceName: 'mainDio');
-          final response = await dio.post(
-            '/broadcasting/auth',
-            data: {'socket_id': socketId, 'channel_name': channelName},
-            options: Options(
-              headers: {
-                'Accept': 'application/json',
-                'Authorization': 'Bearer $token',
-              },
-            ),
-          );
-          return response.data;
-        } catch (e) {
-          debugPrint('❌ Pusher auth failed: $e');
-          rethrow;
-        }
-      },
-    );
-
-    debugPrint('✅ PusherService initialized successfully');
-
-    // 6. Start the refresh service
-    await RuntimeConfigRefreshService().startMonitoring();
-  } catch (e) {
-    debugPrint('⚠️ Pusher initialization failed: $e');
-    // Don't throw - allow app to continue without Pusher
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE MODULES
+// ─────────────────────────────────────────────────────────────────────────────
 
 void _initializeClubsModule() {
-  // Clubs data source
   sl.registerLazySingleton<ClubsRemoteDataSource>(
     () => ClubsRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
   );
-
-  // Clubs repository
   sl.registerLazySingleton<ClubsRepository>(
     () => ClubsRepositoryImpl(sl<ClubsRemoteDataSource>()),
   );
-
-  // Clubs cubits
   sl.registerFactory<MyClubsCubit>(() => MyClubsCubit(sl<ClubsRepository>()));
   sl.registerFactory<DiscoverClubsCubit>(
     () => DiscoverClubsCubit(sl<ClubsRepository>()),
@@ -1040,69 +916,53 @@ void _initializeClubsModule() {
   sl.registerFactory<SuggestedClubsCubit>(
     () => SuggestedClubsCubit(sl<ClubsRepository>()),
   );
-
-  // Club income
   sl.registerLazySingleton<ClubIncomeRemoteDataSource>(
     () => ClubIncomeRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
   );
-
   sl.registerLazySingleton<ClubIncomeRepository>(
     () => ClubIncomeRepositoryImpl(sl<ClubIncomeRemoteDataSource>()),
   );
-
   sl.registerFactory<ClubIncomeCubit>(
     () => ClubIncomeCubit(sl<ClubIncomeRepository>(), ''),
   );
-
   sl.registerFactory<CreateClubCubit>(
     () => CreateClubCubit(sl<ClubsRepository>()),
   );
-
   sl.registerFactoryParam<EditClubCubit, String, void>(
     (clubUuid, _) =>
         EditClubCubit(repository: sl<ClubsRepository>(), clubUuid: clubUuid),
   );
-
   sl.registerFactoryParam<ClubMembersCubit, String, void>(
     (clubSlug, _) =>
         ClubMembersCubit(repo: sl<ClubsRepository>(), club: clubSlug),
   );
-
   sl.registerFactoryParam<DonateClubCubit, String, void>(
     (club, _) => DonateClubCubit(repository: sl<ClubsRepository>(), club: club),
   );
 }
 
 void _initializeLiveModule() {
-  // Agora service
   if (!sl.isRegistered<AgoraService>()) {
     sl.registerLazySingleton<AgoraService>(() => AgoraService());
   }
-
-  // Camera and audio services
   sl.registerLazySingleton<CameraService>(() => RealCameraService());
   sl.registerLazySingleton<AudioTestService>(() => RecordAudioTestService());
 
-  // Live session tracker
   if (!sl.isRegistered<LiveSessionTracker>()) {
     sl.registerLazySingleton<LiveSessionTracker>(() => LiveSessionTracker());
   }
 
-  // Live repositories
   sl.registerLazySingleton<GoLiveRepository>(
     () => GoLiveRepositoryImpl(sl<DioClient>()),
   );
-
   sl.registerLazySingleton<LiveSessionRepository>(
     () => LiveSessionRepositoryImpl(
       sl<DioClient>(),
-      sl<PusherService>(), // Will be initialized lazily
+      sl<PusherService>(),
       sl<AgoraService>(),
       sl<LiveSessionTracker>(),
     ),
   );
-
-  // Live cubits/blocs
   sl.registerFactory<GoLiveCubit>(
     () => GoLiveCubit(
       sl<GoLiveRepository>(),
@@ -1110,32 +970,13 @@ void _initializeLiveModule() {
       sl<AudioTestService>(),
     ),
   );
-
   sl.registerFactory<LiveHostBloc>(
     () => LiveHostBloc(sl<LiveSessionRepository>(), sl<AgoraService>()),
   );
-
-  // Participants (will be registered per session)
   sl.registerFactory<ParticipantsBloc>(
     () => ParticipantsBloc(sl<ParticipantsRepository>()),
   );
 }
-
-// void _registerPusherLazy() {
-//   if (sl.isRegistered<PusherService>()) {
-//     debugPrint('⚠️ PusherService already registered');
-//     return;
-//   }
-
-//   // Register as LazySingleton
-//   sl.registerLazySingleton<PusherService>(() {
-//     debugPrint('🎯 Creating PusherService instance (lazy)...');
-//     return PusherService();
-//   });
-
-//   // DON'T wait 3 seconds - initialize immediately after auth
-//   // Remove the Future.delayed and initialize when Chat might be accessed
-// }
 
 void registerProfileView() {
   sl.registerLazySingleton<view_ds.ProfileRemoteDataSource>(
@@ -1150,10 +991,8 @@ void registerProfileView() {
     () => ProfileCubit(sl<view_repo.ProfileRepository>()),
   );
 
-  // Register UnreadBadgeService as singleton (for easy widget access)
   if (!sl.isRegistered<UnreadBadgeService>()) {
     sl.registerSingleton<UnreadBadgeService>(UnreadBadgeService());
-    debugPrint('✅ UnreadBadgeService registered');
   }
 
   sl.registerLazySingleton<FollowListRemoteDataSource>(
@@ -1164,32 +1003,22 @@ void registerProfileView() {
 void _registerRealtimeUnreadServices() {
   debugPrint('🔔 Registering Realtime Unread Services...');
 
-  // Register RealtimeUnreadService as singleton
   if (!sl.isRegistered<RealtimeUnreadService>()) {
     sl.registerSingleton<RealtimeUnreadService>(RealtimeUnreadService());
-    debugPrint('✅ RealtimeUnreadService registered');
   }
-
-  // Register UnreadBadgeService as singleton (for easy widget access)
   if (!sl.isRegistered<UnreadBadgeService>()) {
     sl.registerSingleton<UnreadBadgeService>(UnreadBadgeService());
-    debugPrint('✅ UnreadBadgeService registered');
   }
 }
 
-// In injection_container.dart, update the registerChat() function:
-
 void registerChat() {
-  sl.registerLazySingleton<ChatRepository>(() {
-    final repo = ChatRepositoryImpl(
+  sl.registerLazySingleton<ChatRepository>(
+    () => ChatRepositoryImpl(
       sl<DioClient>(),
       sl<PusherService>(),
       sl<AuthLocalDataSource>(),
-    );
-
-    return repo;
-  });
-
+    ),
+  );
   sl.registerFactory<ChatCubit>(
     () => ChatCubit(sl<ChatRepository>(), sl<CurrentUserService>()),
   );
@@ -1199,52 +1028,29 @@ void wallet() {
   sl.registerLazySingleton<RemoteWalletDataSource>(
     () => RemoteWalletDataSource(client: sl<Dio>(instanceName: 'mainDio')),
   );
-
-  // Register the concrete impl separately so PlayBillingService can use it directly
   sl.registerLazySingleton<WalletRepositoryImpl>(
     () => WalletRepositoryImpl(remote: sl<RemoteWalletDataSource>()),
   );
-
-  // Keep the abstract registration pointing to the same instance
   sl.registerLazySingleton<WalletRepository>(() => sl<WalletRepositoryImpl>());
-
   sl.registerFactory<WalletCubit>(() => WalletCubit(sl<WalletRepository>()));
-
   sl.registerLazySingleton<IdempotencyHelper>(
     () => IdempotencyHelper(sl<SharedPreferences>()),
   );
-
   sl.registerLazySingleton<PlayBillingService>(
     () => PlayBillingService(
-      repo: sl<WalletRepositoryImpl>(), // ✅ No cast needed
+      repo: sl<WalletRepositoryImpl>(),
       idem: sl<IdempotencyHelper>(),
     ),
   );
 }
 
-// Update the setWalletPin() function
 void setWalletPin() {
   sl.registerLazySingleton<PinRemoteDataSource>(
     () => PinRemoteDataSource(sl<DioClient>()),
   );
-
-  // Keep existing PinRepository registration
   sl.registerLazySingleton<PinRepository>(
     () => PinRepositoryImpl(sl<PinRemoteDataSource>()),
   );
-
-  // sl.registerLazySingleton<SetPin>(() => SetPin(sl<PinRepository>()));
-
-  // // Register new PIN cubits
-  // sl.registerFactory<SetPinCubit>(
-  //   () => SetPinCubit(setPinUsecase: sl<SetPin>()),
-  // );
-
-  // sl.registerFactory<ResetPinCubit>(() => ResetPinCubit(sl<PinRepository>()));
-
-  // sl.registerFactory<SetNewPinCubit>(
-  //   () => SetNewPinCubit(pinRepository: sl<PinRepository>()),
-  // );
 }
 
 void transfercoin() {
@@ -1272,62 +1078,37 @@ void withdrawal() {
 }
 
 void liveFeeds() {
-  // Check if already registered
-  if (sl.isRegistered<LiveFeedBloc>()) {
-    debugPrint('⚠️ LiveFeedBloc already registered');
-    return;
-  }
-
-  // Make sure DioClient is registered first
+  if (sl.isRegistered<LiveFeedBloc>()) return;
   if (!sl.isRegistered<DioClient>()) {
-    debugPrint('❌ DioClient not registered for LiveFeedRemoteDataSource');
+    debugPrint('❌ DioClient not ready for LiveFeed');
     return;
   }
-
-  debugPrint('📡 Registering LiveFeed dependencies...');
 
   try {
-    // ✅ FIXED: Use the factory constructor that accepts DioClient
-    sl.registerLazySingleton<LiveFeedRemoteDataSource>(() {
-      debugPrint('🔄 Creating LiveFeedRemoteDataSource');
-      final dioClient = sl<DioClient>();
-      return LiveFeedRemoteDataSourceImpl.fromDioClient(dioClient);
-    });
-
-    // Register repository
-    sl.registerLazySingleton<LiveFeedRepository>(() {
-      debugPrint('🔄 Creating LiveFeedRepository');
-      final dataSource = sl<LiveFeedRemoteDataSource>();
-      return LiveFeedRepositoryImpl(dataSource);
-    });
-
-    // Register bloc (FACTORY - creates new instance each time)
-    sl.registerFactory<LiveFeedBloc>(() {
-      debugPrint('🔄 Creating LiveFeedBloc');
-      final repository = sl<LiveFeedRepository>();
-      return LiveFeedBloc(repository);
-    });
-
-    debugPrint('✅ LiveFeed dependencies registered successfully');
+    sl.registerLazySingleton<LiveFeedRemoteDataSource>(
+      () => LiveFeedRemoteDataSourceImpl.fromDioClient(sl<DioClient>()),
+    );
+    sl.registerLazySingleton<LiveFeedRepository>(
+      () => LiveFeedRepositoryImpl(sl<LiveFeedRemoteDataSource>()),
+    );
+    sl.registerFactory<LiveFeedBloc>(
+      () => LiveFeedBloc(sl<LiveFeedRepository>()),
+    );
   } catch (e, stack) {
-    debugPrint('❌ Error registering LiveFeed dependencies: $e');
-    debugPrint('Stack: $stack');
+    debugPrint('❌ Error registering LiveFeed: $e\n$stack');
   }
 }
 
 void registerPosts() {
-  // Add cache interceptor if needed
-  // sl<Dio>(instanceName: 'mainDio').interceptors.add(EtagCacheInterceptor());
-
   sl.registerLazySingleton<PostRemoteDataSource>(
     () => PostRemoteDataSource(sl<DioClient>()),
   );
   sl.registerLazySingleton<PostRepository>(
     () => PostRepositoryImpl(sl<PostRemoteDataSource>()),
   );
-  sl.registerFactoryParam<PostCubit, String, void>((postId, _) {
-    return PostCubit(sl<PostRepository>(), postId);
-  });
+  sl.registerFactoryParam<PostCubit, String, void>(
+    (postId, _) => PostCubit(sl<PostRepository>(), postId),
+  );
 }
 
 void creatPost() {
@@ -1342,21 +1123,24 @@ void creatPost() {
   );
 }
 
-// Add this to injection_container.dart, near the top
+// ─────────────────────────────────────────────────────────────────────────────
+// DEPENDENCY MANAGER
+// ─────────────────────────────────────────────────────────────────────────────
+
 class DependencyManager {
-  static final Completer<void> _allDependenciesReady = Completer<void>();
+  static final Completer<void> _allReady = Completer<void>();
   static bool _isInitialized = false;
 
   static Future<void> waitForAllDependencies() async {
     if (_isInitialized) return;
-    return _allDependenciesReady.future;
+    return _allReady.future;
   }
 
   static void markAllDependenciesReady() {
-    if (!_allDependenciesReady.isCompleted) {
+    if (!_allReady.isCompleted) {
       _isInitialized = true;
-      _allDependenciesReady.complete();
-      debugPrint('✅ All dependencies are ready');
+      _allReady.complete();
+      debugPrint('✅ DependencyManager: all dependencies ready');
     }
   }
 
