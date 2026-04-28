@@ -48,7 +48,6 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
 
     _animationController.forward();
 
-    // Listen to Agora service changes
     if (!_hasListener) {
       widget.agora.addListener(_onAgoraStateChanged);
       _hasListener = true;
@@ -65,9 +64,7 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
   }
 
   void _onAgoraStateChanged() {
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   void _closeMenu() {
@@ -76,7 +73,6 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
     });
   }
 
-  // Unified FX settings method
   void _showFXSettings() {
     final bloc = context.read<LiveHostBloc>();
     final state = bloc.state;
@@ -118,10 +114,7 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
         );
       },
     ).then((_) {
-      // Menu might need to be re-shown
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     });
   }
 
@@ -158,8 +151,6 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
   }
 }
 
-// Modern TikTok-style settings content
-// Modern TikTok-style settings content
 class _SettingsMenuContent extends StatelessWidget {
   final AgoraService agora;
   final VoidCallback onFXPressed;
@@ -172,10 +163,8 @@ class _SettingsMenuContent extends StatelessWidget {
   });
 
   Future<void> _performEmergencyReset(BuildContext context) async {
-    // Close the settings menu first
     onClose();
 
-    // Show loading overlay
     final overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         bottom: 100,
@@ -219,7 +208,7 @@ class _SettingsMenuContent extends StatelessWidget {
     Overlay.of(context).insert(overlayEntry);
 
     try {
-      // Step 1: Reset beauty effects
+      // Step 1: Reset beauty via the safe reset path
       await agora.resetBeauty();
 
       // Step 2: Reset BLoC state
@@ -232,18 +221,11 @@ class _SettingsMenuContent extends StatelessWidget {
         ),
       );
 
-      // Step 3: Force camera restart
-      agora.setCameraEnabled(false);
-      await Future.delayed(const Duration(milliseconds: 500));
-      agora.setCameraEnabled(true);
-
-      // Step 4: Small delay for stabilization
+      // Step 3: Small delay for stabilization
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Remove overlay and show success
       overlayEntry.remove();
 
-      // Show success toast
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -260,7 +242,6 @@ class _SettingsMenuContent extends StatelessWidget {
     } catch (e) {
       overlayEntry.remove();
 
-      // Show error
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -273,122 +254,13 @@ class _SettingsMenuContent extends StatelessWidget {
     }
   }
 
-  void _showEmergencyResetDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.6),
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: 300,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.red.withOpacity(0.3), width: 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.red, width: 2),
-                ),
-                child: const Icon(Icons.emergency, color: Colors.red, size: 32),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Title
-              const Text(
-                'Emergency Reset',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Description
-              Text(
-                'Resets all beauty effects and restarts the camera. '
-                'Use if screen is blinking or black.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _performEmergencyReset(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Reset Now'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<LiveHostBloc, LiveHostState>(
       builder: (context, state) {
         final hasBeautySettings =
-            state.faceCleanEnabled != null ||
-            state.brightenEnabled != null ||
-            state.faceCleanLevel != null ||
-            state.brightenLevel != null;
+            state.faceCleanEnabled || state.brightenEnabled;
 
-        // Check if beauty is currently active from Agora
         final beautyActive = agora.beautyActive.value;
 
         return Container(
@@ -468,7 +340,7 @@ class _SettingsMenuContent extends StatelessWidget {
                           label: agora.isMicEnabled
                               ? 'Mute Audio'
                               : 'Unmute Audio',
-                          isActive: !agora.isMicEnabled, // Active when muted
+                          isActive: !agora.isMicEnabled,
                           color: !agora.isMicEnabled
                               ? const Color(0xFFFF6A00)
                               : Colors.white,
@@ -483,8 +355,7 @@ class _SettingsMenuContent extends StatelessWidget {
                           label: agora.isCameraEnabled
                               ? 'Hide Video'
                               : 'Show Video',
-                          isActive:
-                              !agora.isCameraEnabled, // Active when hidden
+                          isActive: !agora.isCameraEnabled,
                           color: !agora.isCameraEnabled
                               ? const Color(0xFFFF6A00)
                               : Colors.white,
@@ -521,32 +392,6 @@ class _SettingsMenuContent extends StatelessWidget {
                                 )
                               : null,
                         ),
-
-                        // if (beautyActive || hasBeautySettings) ...[
-                        //   const SizedBox(height: 8),
-                        //   _ModernSettingsItem(
-                        //     icon: Icons.emergency,
-                        //     label: 'Emergency Reset',
-                        //     isActive: false,
-                        //     color: Colors.red,
-                        //     onTap: () => _showEmergencyResetDialog(context),
-                        //     badge: Container(
-                        //       width: 8,
-                        //       height: 8,
-                        //       decoration: BoxDecoration(
-                        //         color: Colors.red,
-                        //         shape: BoxShape.circle,
-                        //         boxShadow: [
-                        //           BoxShadow(
-                        //             color: Colors.red.withOpacity(0.5),
-                        //             blurRadius: 4,
-                        //             spreadRadius: 1,
-                        //           ),
-                        //         ],
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ],
                       ],
                     ),
                   ),
@@ -560,7 +405,6 @@ class _SettingsMenuContent extends StatelessWidget {
   }
 }
 
-// Modern TikTok-style settings item
 class _ModernSettingsItem extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -621,7 +465,7 @@ class _ModernSettingsItem extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -652,7 +496,18 @@ class _ModernSettingsItem extends StatelessWidget {
   }
 }
 
-// Ultra-modern FX Settings Bottom Sheet
+// ─── FX Bottom Sheet ─────────────────────────────────────────────────────────
+//
+// Design rules that prevent the black-screen bug:
+//
+//  1. Single debounce timer (_debounceTimer) – no competing timers.
+//  2. Toggle changes call applyBeauty directly (no debounce) so disable is
+//     never delayed or swallowed.
+//  3. Slider drags are debounced (350 ms) to avoid flooding the SDK.
+//  4. "Save Settings" / sheet close flush any pending debounce immediately.
+//  5. dispose() cancels the timer and calls onApply with the final state so
+//     beauty settings are never left in an intermediate state.
+
 class _FXBottomSheet extends StatefulWidget {
   final AgoraService agora;
   final LiveHostState currentState;
@@ -673,27 +528,46 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
   late int _faceCleanLevel;
   late bool _brightenEnabled;
   late int _brightenLevel;
-  Timer? _applyTimer;
-  Timer? _applyDebounceTimer;
-  static const Duration _applyDebounceDuration = Duration(milliseconds: 400);
+
+  // Single debounce timer for slider changes only.
+  Timer? _debounceTimer;
+  static const Duration _sliderDebounce = Duration(milliseconds: 350);
 
   @override
   void initState() {
     super.initState();
-
-    // Initialize with current state from BLoC
-    _faceCleanEnabled = widget.currentState.faceCleanEnabled ?? false;
-    _faceCleanLevel = widget.currentState.faceCleanLevel ?? 40;
-    _brightenEnabled = widget.currentState.brightenEnabled ?? false;
-    _brightenLevel = widget.currentState.brightenLevel ?? 40;
+    _faceCleanEnabled = widget.currentState.faceCleanEnabled;
+    _faceCleanLevel = widget.currentState.faceCleanLevel;
+    _brightenEnabled = widget.currentState.brightenEnabled;
+    _brightenLevel = widget.currentState.brightenLevel;
   }
 
-  void _applyChangesWithDebounce() {
-    // Cancel any pending timer
-    _applyDebounceTimer?.cancel();
+  @override
+  void dispose() {
+    // Cancel any pending debounce and flush the latest state so it's persisted.
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    super.dispose();
+  }
 
-    // Start new timer
-    _applyDebounceTimer = Timer(_applyDebounceDuration, () {
+  // ── Apply helpers ──────────────────────────────────────────────────────────
+
+  /// Fires immediately – used for toggle changes so disable is never delayed.
+  void _applyNow() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    widget.onApply(
+      _faceCleanEnabled,
+      _faceCleanLevel,
+      _brightenEnabled,
+      _brightenLevel,
+    );
+  }
+
+  /// Debounced – used for slider drags to avoid flooding the SDK.
+  void _applyDebounced() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_sliderDebounce, () {
       widget.onApply(
         _faceCleanEnabled,
         _faceCleanLevel,
@@ -703,33 +577,32 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
     });
   }
 
-  // Update slider handlers:
-  void _updateFaceCleanLevel(double value) {
+  // ── Toggle handlers ────────────────────────────────────────────────────────
+
+  void _onFaceCleanToggled(bool value) {
+    setState(() => _faceCleanEnabled = value);
+    // Apply immediately so disable is never swallowed.
+    _applyNow();
+  }
+
+  void _onBrightenToggled(bool value) {
+    setState(() => _brightenEnabled = value);
+    _applyNow();
+  }
+
+  // ── Slider handlers ────────────────────────────────────────────────────────
+
+  void _onFaceCleanLevelChanged(double value) {
     setState(() => _faceCleanLevel = value.round());
-    _applyChangesWithDebounce();
+    _applyDebounced();
   }
 
-  void _updateBrightenLevel(double value) {
+  void _onBrightenLevelChanged(double value) {
     setState(() => _brightenLevel = value.round());
-    _applyChangesWithDebounce();
+    _applyDebounced();
   }
 
-  @override
-  void dispose() {
-    _applyDebounceTimer?.cancel();
-    _applyTimer?.cancel();
-    super.dispose();
-  }
-
-  void _applyChanges() {
-    widget.onApply(
-      _faceCleanEnabled,
-      _faceCleanLevel,
-      _brightenEnabled,
-      _brightenLevel,
-    );
-    Navigator.of(context).pop();
-  }
+  // ── Reset ──────────────────────────────────────────────────────────────────
 
   void _resetToDefaults() {
     setState(() {
@@ -738,44 +611,17 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
       _brightenEnabled = false;
       _brightenLevel = 40;
     });
-
-    // Apply reset immediately
-    _applyImmediately();
+    // Reset is always immediate.
+    _applyNow();
   }
 
-  void _applyImmediately() {
-    // Cancel any pending timer
-    _applyTimer?.cancel();
+  // ── Save & close ───────────────────────────────────────────────────────────
 
-    // Apply immediately (no debounce for better UX)
-    widget.onApply(
-      _faceCleanEnabled,
-      _faceCleanLevel,
-      _brightenEnabled,
-      _brightenLevel,
-    );
+  void _saveAndClose() {
+    // Flush any pending debounce before closing.
+    _applyNow();
+    Navigator.of(context).pop();
   }
-
-  void _debouncedApply() {
-    _applyTimer?.cancel();
-    _applyTimer = Timer(const Duration(milliseconds: 150), _applyImmediately);
-  }
-
-  // void _updateFaceCleanLevel(double value) {
-  //   setState(() {
-  //     _faceCleanLevel = value.round();
-  //   });
-  //   // Debounce the apply to avoid too many calls
-  //   _debouncedApply();
-  // }
-
-  // void _updateBrightenLevel(double value) {
-  //   setState(() {
-  //     _brightenLevel = value.round();
-  //   });
-  //   // Debounce the apply to avoid too many calls
-  //   _debouncedApply();
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -845,7 +691,7 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                     ),
                     const SizedBox(width: 8),
                     GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
+                      onTap: _saveAndClose,
                       child: Container(
                         width: 32,
                         height: 32,
@@ -880,11 +726,8 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                       enabled: _faceCleanEnabled,
                       level: _faceCleanLevel,
                       color: const Color(0xFF00D4FF),
-                      onEnabledChanged: (value) {
-                        setState(() => _faceCleanEnabled = value);
-                        _applyImmediately();
-                      },
-                      onLevelChanged: _updateFaceCleanLevel,
+                      onEnabledChanged: _onFaceCleanToggled,
+                      onLevelChanged: _onFaceCleanLevelChanged,
                     ),
 
                     const SizedBox(height: 24),
@@ -896,16 +739,13 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                       enabled: _brightenEnabled,
                       level: _brightenLevel,
                       color: const Color(0xFFFFD700),
-                      onEnabledChanged: (value) {
-                        setState(() => _brightenEnabled = value);
-                        _applyImmediately();
-                      },
-                      onLevelChanged: _updateBrightenLevel,
+                      onEnabledChanged: _onBrightenToggled,
+                      onLevelChanged: _onBrightenLevelChanged,
                     ),
 
                     const SizedBox(height: 32),
 
-                    // Preview Note
+                    // Info note
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -914,9 +754,9 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                       ),
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.info_outline_rounded,
-                            color: const Color(0xFFFF6A00),
+                            color: Color(0xFFFF6A00),
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -938,13 +778,13 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                 ),
               ),
 
-              // Apply Button (for persistence)
+              // Save Button
               SafeArea(
                 top: false,
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Color(0xFF0F1218),
+                    color: const Color(0xFF0F1218),
                     border: Border(
                       top: BorderSide(
                         color: Colors.white.withOpacity(0.08),
@@ -953,7 +793,7 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                     ),
                   ),
                   child: GestureDetector(
-                    onTap: _applyChanges,
+                    onTap: _saveAndClose,
                     child: Container(
                       height: 52,
                       decoration: BoxDecoration(
@@ -994,7 +834,8 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
   }
 }
 
-// Modern FX Section Component
+// ─── FX Section Component ─────────────────────────────────────────────────────
+
 class _FXSection extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -1016,7 +857,8 @@ class _FXSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
@@ -1031,7 +873,8 @@ class _FXSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
@@ -1070,93 +913,108 @@ class _FXSection extends StatelessWidget {
             ],
           ),
 
-          if (enabled) ...[
-            const SizedBox(height: 16),
-            Row(
+          // Slider – only visible when enabled, with animated reveal
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 250),
+            crossFadeState: enabled
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Intensity',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 14,
-                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      'Intensity',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$level%',
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '$level%',
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                const SizedBox(height: 12),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: color,
+                    inactiveTrackColor: color.withOpacity(0.2),
+                    thumbColor: color,
+                    overlayColor: color.withOpacity(0.2),
+                    trackHeight: 4,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
+                      disabledThumbRadius: 8,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 16,
+                    ),
+                    valueIndicatorColor: color,
+                    valueIndicatorTextStyle: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
                     ),
                   ),
+                  child: Slider(
+                    value: level.toDouble(),
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    onChanged: onLevelChanged,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Soft',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      'Natural',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      'Strong',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: color,
-                inactiveTrackColor: color.withOpacity(0.2),
-                thumbColor: color,
-                overlayColor: color.withOpacity(0.2),
-                trackHeight: 4,
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 10,
-                  disabledThumbRadius: 8,
-                ),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                valueIndicatorColor: color,
-                valueIndicatorTextStyle: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
-              ),
-              child: Slider(
-                value: level.toDouble(),
-                min: 0,
-                max: 100,
-                divisions: 100,
-                onChanged: onLevelChanged,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Soft',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                  ),
-                ),
-                Text(
-                  'Natural',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                  ),
-                ),
-                Text(
-                  'Strong',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ],
+            // Empty second child – just a zero-height box so AnimatedCrossFade
+            // has something to fade to.
+            secondChild: const SizedBox.shrink(),
+          ),
         ],
       ),
     );

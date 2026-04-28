@@ -82,7 +82,7 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
           child: BlocListener<DiscoverClubsCubit, DiscoverClubsState>(
             listener: (context, state) {
               if (state.errorMessage != null) {
-                TopSnack.error(context, state.errorMessage!);
+                // TopSnack.error(context, state.errorMessage!);
                 context.read<DiscoverClubsCubit>().clearMessages();
               }
               if (state.successMessage != null) {

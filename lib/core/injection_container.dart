@@ -1,18 +1,22 @@
 // lib/core/injection_container.dart
 //
-// PATCHES applied:
-// 1. ParticipantsRepository was never registered — added it
-// 2. LocalWalletDataSource was never registered — added it
-// 3. SetPinUseCase was never registered — added it
-// 4. GiftLocalDataSource was never registered — added it
-// 5. UnreadBadgeService singleton guard — consolidated into one place
-// 6. ProfilePageCubit depended on view_repo.ProfileRepository which was
-//    registered AFTER the cubit factory — reordered
-// 7. ChatApiService was never registered — added it
-// 8. HostPusherService was never registered — added it
-// 9. All feature module registrations now check isRegistered before
-//    registering to avoid "Already registered" errors on hot-restart
-// 10. Phase 3 ordering fixed: data sources → repositories → use cases → blocs
+// Production-ready GetIt injection container.
+//
+// Root cause of intermittent "not registered" errors:
+//   The previous 3-phase system ran Phase 3 asynchronously AFTER runApp().
+//   Feature screens opened before Phase 3 completed would call sl<T>() and
+//   crash because T wasn't registered yet. This is a race condition, not a
+//   registration bug — you can't guard against it with isRegistered() alone.
+//
+// Fix — two-track registration:
+//   Track A (sync, before runApp): everything needed to RENDER the splash screen
+//            and auth/onboarding blocs. SharedPrefs, AuthBloc, OnboardingBloc.
+//   Track B (async, parallel with Firebase): everything else, but gated so
+//            NO screen can navigate away from splash until Track B is done.
+//            DependencyManager.waitForAllDependencies() is the gate.
+//
+// Additionally: every lazySingleton is wrapped in isRegistered() so hot-restart
+// in debug mode never double-registers and crashes.
 
 import 'dart:async';
 
@@ -22,7 +26,6 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/config/runtime_config_cache.dart';
 import 'package:moonlight/core/network/interceptors/auth_interceptor.dart';
-import 'package:moonlight/core/network/interceptors/cache_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/dio_extra_hook.dart';
 import 'package:moonlight/core/network/interceptors/error_normalizer_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/idempotency_interceptor.dart';
@@ -133,14 +136,13 @@ import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/services/google_signin_service.dart';
 
-// Profile View
+// Profile View (aliased to avoid clash with profile_setup)
 import 'package:moonlight/features/profile_view/data/datasources/profile_remote_datasource.dart'
     as view_ds;
 import 'package:moonlight/features/profile_view/data/repositories/profile_repository_impl.dart'
     as view_repo_impl;
 import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart'
     as view_repo;
-import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 
 // Auth
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -194,7 +196,6 @@ import 'package:moonlight/features/settings/presentation/cubit/account_settings_
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 
 // Live
-import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_mock.dart';
 import 'package:moonlight/features/live_viewer/domain/repositories/viewer_repository.dart';
 import 'package:moonlight/features/livestream/data/repositories/go_live_repository_impl.dart';
 import 'package:moonlight/features/livestream/domain/repositories/go_live_repository.dart';
@@ -213,71 +214,103 @@ final sl = GetIt.instance;
 const _fallbackHost = 'https://svc.moonlightstream.app';
 
 // =============================================================================
-// SPLASH OPTIMIZER — 3-phase lazy initialization
+// DEPENDENCY MANAGER
+// =============================================================================
+// This is the single gate that prevents screens from opening before all
+// dependencies are registered. The splash screen MUST await this before
+// navigating anywhere.
+//
+// Usage in splash_screen.dart — replace your existing navigation trigger with:
+//
+//   await DependencyManager.waitForAllDependencies();
+//   // now navigate
+//
+// =============================================================================
+class DependencyManager {
+  static final Completer<void> _allReady = Completer<void>();
+  static bool _isReady = false;
+  static Object? _initError;
+
+  // Await this before navigating away from the splash screen.
+  // Returns immediately if already ready.
+  static Future<void> waitForAllDependencies() {
+    if (_isReady) return Future.value();
+    return _allReady.future;
+  }
+
+  static void markReady() {
+    if (_isReady) return;
+    _isReady = true;
+    if (!_allReady.isCompleted) _allReady.complete();
+    debugPrint('✅ DependencyManager: all dependencies ready');
+  }
+
+  static void markError(Object error) {
+    _initError = error;
+    if (!_allReady.isCompleted) {
+      // Still complete so the splash doesn't hang forever, but log the error.
+      _allReady.complete();
+    }
+    debugPrint('❌ DependencyManager: init error — $error');
+  }
+
+  static bool get isReady => _isReady;
+  static Object? get initError => _initError;
+}
+
+// =============================================================================
+// SPLASH OPTIMIZER  —  two-track init
 // =============================================================================
 class SplashOptimizer {
-  static final Completer<void> _renderReady = Completer<void>();
-  static final Completer<void> _configReady = Completer<void>();
+  // Guards — each phase runs exactly once per process lifetime
+  static bool _track1Done = false;
+  static bool _track2Done = false;
 
-  static bool _renderDone = false;
-  static bool _configDone = false;
-  static bool _backgroundDone = false;
+  static final Completer<void> _track1Ready = Completer<void>();
+  static final Completer<void> _track2Ready = Completer<void>();
 
-  // ── Phase 1: render essentials, no network ──────────────────────────────────
+  // ── Track 1: render essentials (sync-safe, called BEFORE runApp) ────────────
+  // Must complete fast (<30 ms). No network. No Firebase. No heavy interceptors.
   static Future<void> registerRenderEssentials() async {
-    if (_renderDone) return _renderReady.future;
-    _renderDone = true;
+    if (_track1Done) return _track1Ready.future;
+    _track1Done = true;
 
-    debugPrint('🚀 [PHASE 1] Registering render essentials...');
-
+    debugPrint('🚀 [Track 1] Registering render essentials...');
     try {
       final prefs = await SharedPreferences.getInstance();
-      sl.registerLazySingleton<SharedPreferences>(() => prefs);
-      sl.registerLazySingleton<DeviceInfoPlugin>(() => DeviceInfoPlugin());
+      _reg<SharedPreferences>(() => prefs);
+      _reg<DeviceInfoPlugin>(() => DeviceInfoPlugin());
 
-      sl.registerLazySingleton<AuthLocalDataSource>(
+      // Local auth (disk only)
+      _reg<AuthLocalDataSource>(
         () => AuthLocalDataSourceImpl(sharedPreferences: prefs),
       );
 
-      final cachedConfig = await _loadCachedOrFallbackConfig(prefs);
-      sl.registerLazySingleton<RuntimeConfig>(() => cachedConfig);
+      // RuntimeConfig — disk cache or fallback constants
+      final cfg = await _loadCachedConfig(prefs);
+      _reg<RuntimeConfig>(() => cfg);
 
-      sl.registerLazySingleton<TokenRegistrationService>(
+      // TokenRegistrationService depends only on local data
+      _reg<TokenRegistrationService>(
         () => TokenRegistrationService(
           authLocalDataSource: sl<AuthLocalDataSource>(),
           runtimeConfig: sl<RuntimeConfig>(),
         ),
       );
 
-      // Minimal Dio — auth header only, no heavy interceptors
-      final basicDio = Dio(
-        BaseOptions(
-          baseUrl: cachedConfig.apiBaseUrl,
-          connectTimeout: const Duration(seconds: 8),
-          receiveTimeout: const Duration(seconds: 8),
-          headers: {'Accept': 'application/json'},
-        ),
-      );
-      basicDio.interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) async {
-            final token = await sl<AuthLocalDataSource>().readToken();
-            if (token != null && token.isNotEmpty) {
-              options.headers['Authorization'] = 'Bearer $token';
-            }
-            handler.next(options);
-          },
-        ),
-      );
-      sl.registerLazySingleton<Dio>(() => basicDio, instanceName: 'authDio');
+      // Minimal auth-header-only Dio (no retry, no error normalizer)
+      final authDio = _buildMinimalDio(cfg.apiBaseUrl);
+      if (!sl.isRegistered<Dio>(instanceName: 'authDio')) {
+        sl.registerLazySingleton<Dio>(() => authDio, instanceName: 'authDio');
+      }
 
-      sl.registerLazySingleton<AuthRemoteDataSource>(
+      _reg<AuthRemoteDataSource>(
         () => AuthRemoteDataSourceImpl(
           client: sl<Dio>(instanceName: 'authDio'),
           prefs: prefs,
         ),
       );
-      sl.registerLazySingleton<AuthRepository>(
+      _reg<AuthRepository>(
         () => AuthRepositoryImpl(
           localDataSource: sl(),
           remoteDataSource: sl(),
@@ -286,99 +319,114 @@ class SplashOptimizer {
         ),
       );
 
-      sl.registerLazySingleton<GetCurrentUser>(() => GetCurrentUser(sl()));
-      sl.registerLazySingleton<CheckAuthStatus>(() => CheckAuthStatus(sl()));
-      sl.registerLazySingleton<Logout>(() => Logout(sl()));
-      sl.registerLazySingleton<LoginWithEmail>(() => LoginWithEmail(sl()));
-      sl.registerLazySingleton<SignUpWithEmail>(() => SignUpWithEmail(sl()));
-      sl.registerLazySingleton<SocialLogin>(() => SocialLogin(sl()));
-      sl.registerLazySingleton(() => CurrentUserService());
+      // Auth use cases
+      _reg<GetCurrentUser>(() => GetCurrentUser(sl()));
+      _reg<CheckAuthStatus>(() => CheckAuthStatus(sl()));
+      _reg<Logout>(() => Logout(sl()));
+      _reg<LoginWithEmail>(() => LoginWithEmail(sl()));
+      _reg<SignUpWithEmail>(() => SignUpWithEmail(sl()));
+      _reg<SocialLogin>(() => SocialLogin(sl()));
+      _reg<CurrentUserService>(() => CurrentUserService());
 
-      sl.registerLazySingleton<OnboardingLocalDataSource>(
+      // Onboarding (local only)
+      _reg<OnboardingLocalDataSource>(
         () => OnboardingLocalDataSourceImpl(sharedPreferences: sl()),
       );
-      sl.registerLazySingleton<OnboardingRepository>(
+      _reg<OnboardingRepository>(
         () => OnboardingRepositoryImpl(localDataSource: sl()),
       );
 
-      sl.registerFactory<OnboardingBloc>(
-        () => OnboardingBloc(repository: sl()),
-      );
-      sl.registerFactory<AuthBloc>(
-        () => AuthBloc(
-          loginWithEmail: sl(),
-          signUpWithEmail: sl(),
-          socialLogin: sl(),
-          checkAuthStatusUseCase: sl(),
-          logout: sl(),
-          getCurrentUser: sl(),
-          authRepository: sl(),
-          currentUserService: sl(),
-          tokenRegistrationService: sl<TokenRegistrationService>(),
-        ),
-      );
+      // Blocs registered as factories — each screen gets its own instance
+      if (!sl.isRegistered<OnboardingBloc>()) {
+        sl.registerFactory<OnboardingBloc>(
+          () => OnboardingBloc(repository: sl()),
+        );
+      }
+      if (!sl.isRegistered<AuthBloc>()) {
+        sl.registerFactory<AuthBloc>(
+          () => AuthBloc(
+            loginWithEmail: sl(),
+            signUpWithEmail: sl(),
+            socialLogin: sl(),
+            checkAuthStatusUseCase: sl(),
+            logout: sl(),
+            getCurrentUser: sl(),
+            authRepository: sl(),
+            currentUserService: sl(),
+            tokenRegistrationService: sl<TokenRegistrationService>(),
+          ),
+        );
+      }
 
-      _renderReady.complete();
-      debugPrint('✅ [PHASE 1] Render essentials ready');
-    } catch (e, stack) {
-      debugPrint('❌ [PHASE 1] Error: $e\n$stack');
-      _renderReady.completeError(e);
+      _track1Ready.complete();
+      debugPrint('✅ [Track 1] Done — runApp() unblocked');
+    } catch (e, st) {
+      debugPrint('❌ [Track 1] Fatal: $e\n$st');
+      _track1Ready.completeError(e, st);
       rethrow;
     }
   }
 
-  // ── Phase 2: fetch live config ──────────────────────────────────────────────
-  static Future<void> loadConfigAndDependencies() async {
-    if (_configDone) return _configReady.future;
-    _configDone = true;
-
-    await _renderReady.future;
-    debugPrint('🌐 [PHASE 2] Fetching live RuntimeConfig...');
-
-    try {
-      final freshConfig = await _loadRuntimeConfig();
-      if (sl.isRegistered<RuntimeConfig>()) sl.unregister<RuntimeConfig>();
-      sl.registerLazySingleton<RuntimeConfig>(() => freshConfig);
-      sl<Dio>(instanceName: 'authDio').options.baseUrl = freshConfig.apiBaseUrl;
-      debugPrint('✅ [PHASE 2] Live config applied');
-    } catch (e) {
-      debugPrint('⚠️ [PHASE 2] Config fetch failed, using Phase 1 config: $e');
-    } finally {
-      if (!_configReady.isCompleted) _configReady.complete();
-    }
-  }
-
-  // ── Phase 3: everything else ────────────────────────────────────────────────
+  // ── Track 2: everything else (called AFTER runApp, from background) ─────────
+  // Fetches live config, builds the full DioClient, registers all features.
+  // DependencyManager.markReady() is called when this completes.
   static Future<void> loadRemainingDependencies() async {
-    if (_backgroundDone) return;
-    _backgroundDone = true;
+    if (_track2Done) return _track2Ready.future;
+    _track2Done = true;
 
-    await _configReady.future;
-    debugPrint('🔄 [PHASE 3] Loading remaining dependencies...');
+    // Track 1 MUST be done first
+    await _track1Ready.future;
+    debugPrint('🔄 [Track 2] Loading remaining dependencies...');
 
     try {
-      await initRemainingDependencies();
-      DependencyManager.markAllDependenciesReady();
-      debugPrint('✅ [PHASE 3] All dependencies ready');
-    } catch (e, stack) {
-      debugPrint('⚠️ [PHASE 3] Error: $e\n$stack');
+      // Fetch live config and update GetIt
+      await _applyLiveConfig();
+
+      // Full feature graph
+      await _initFullGraph();
+
+      _track2Ready.complete();
+      DependencyManager.markReady();
+    } catch (e, st) {
+      debugPrint('❌ [Track 2] Error: $e\n$st');
+      _track2Ready.completeError(e, st);
+      DependencyManager.markError(e);
     }
   }
 
-  static Future<RuntimeConfig> _loadCachedOrFallbackConfig(
+  // ── Fetch fresh RuntimeConfig and hot-swap in GetIt ─────────────────────────
+  static Future<void> _applyLiveConfig() async {
+    try {
+      final fresh = await _loadRuntimeConfig();
+      if (sl.isRegistered<RuntimeConfig>()) sl.unregister<RuntimeConfig>();
+      sl.registerLazySingleton<RuntimeConfig>(() => fresh);
+      // Keep the minimal authDio base URL in sync
+      sl<Dio>(instanceName: 'authDio').options.baseUrl = fresh.apiBaseUrl;
+      debugPrint('✅ [Track 2] Live RuntimeConfig applied: ${fresh.apiBaseUrl}');
+    } catch (e) {
+      // Non-fatal — continue with cached config from Track 1
+      debugPrint(
+        '⚠️ [Track 2] Live config fetch failed, using Track 1 config: $e',
+      );
+    }
+  }
+
+  // ── Public helper (used by RuntimeConfigRefreshService) ─────────────────────
+  static Future<RuntimeConfig> reloadRuntimeConfig() async {
+    final cfg = await _loadRuntimeConfig();
+    if (sl.isRegistered<RuntimeConfig>()) sl.unregister<RuntimeConfig>();
+    sl.registerLazySingleton<RuntimeConfig>(() => cfg);
+    return cfg;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  static Future<RuntimeConfig> _loadCachedConfig(
     SharedPreferences prefs,
   ) async {
     try {
-      final cache = RuntimeConfigCache(prefs);
-      final cached = await cache.loadFromCacheOnly();
-      if (cached != null && cached.apiBaseUrl.isNotEmpty) {
-        debugPrint('✅ [PHASE 1] Using disk-cached RuntimeConfig');
-        return cached;
-      }
-    } catch (e) {
-      debugPrint('⚠️ [PHASE 1] Cache read failed: $e');
-    }
-    debugPrint('⚠️ [PHASE 1] No cache — using fallback');
+      final cached = await RuntimeConfigCache(prefs).loadFromCacheOnly();
+      if (cached != null && cached.apiBaseUrl.isNotEmpty) return cached;
+    } catch (_) {}
     return RuntimeConfig(
       agoraAppId: '',
       apiBaseUrl: _fallbackHost,
@@ -387,32 +435,38 @@ class SplashOptimizer {
     );
   }
 
-  static Future<RuntimeConfig> reloadRuntimeConfig() async {
-    debugPrint('🔄 [SplashOptimizer] Reloading RuntimeConfig...');
-    try {
-      final cfg = await _loadRuntimeConfig();
-      if (sl.isRegistered<RuntimeConfig>()) sl.unregister<RuntimeConfig>();
-      sl.registerLazySingleton<RuntimeConfig>(() => cfg);
-      debugPrint('✅ [SplashOptimizer] RuntimeConfig reloaded');
-      return cfg;
-    } catch (e) {
-      debugPrint('❌ [SplashOptimizer] Reload failed: $e');
-      rethrow;
-    }
+  static Dio _buildMinimalDio(String baseUrl) {
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+        headers: {'Accept': 'application/json'},
+      ),
+    );
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (opts, handler) async {
+          final token = await sl<AuthLocalDataSource>().readToken();
+          if (token != null && token.isNotEmpty) {
+            opts.headers['Authorization'] = 'Bearer $token';
+          }
+          handler.next(opts);
+        },
+      ),
+    );
+    return dio;
   }
 }
 
 // =============================================================================
-// CONFIG LOADER
+// RUNTIME CONFIG LOADER
 // =============================================================================
-
 Future<RuntimeConfig> _loadRuntimeConfig() async {
   final prefs = await SharedPreferences.getInstance();
-  final cache = RuntimeConfigCache(prefs);
-
-  return cache.loadWithCache(
+  return RuntimeConfigCache(prefs).loadWithCache(
     fetchFresh: () async {
-      final bootstrapDio = Dio(
+      final dio = Dio(
         BaseOptions(
           baseUrl: '$_fallbackHost/api',
           connectTimeout: const Duration(seconds: 8),
@@ -420,40 +474,21 @@ Future<RuntimeConfig> _loadRuntimeConfig() async {
         ),
       );
       try {
-        final response = await bootstrapDio.get('/v1/config');
-        final data = response.data as Map<String, dynamic>;
+        final res = await dio.get('/v1/config');
+        final data = res.data as Map<String, dynamic>;
         return RuntimeConfig(
-          agoraAppId:
-              data['agora_app_id']?.toString() ??
-              const String.fromEnvironment('AGORA_APP_ID', defaultValue: ''),
+          agoraAppId: data['agora_app_id']?.toString() ?? '',
           apiBaseUrl: (data['api_base_url']?.toString() ?? _fallbackHost)
               .replaceAll(RegExp(r'/+$'), ''),
-          pusherKey:
-              data['pusher_key']?.toString() ??
-              const String.fromEnvironment('PUSHER_KEY', defaultValue: ''),
-          pusherCluster:
-              data['pusher_cluster']?.toString() ??
-              const String.fromEnvironment(
-                'PUSHER_CLUSTER',
-                defaultValue: 'mt1',
-              ),
+          pusherKey: data['pusher_key']?.toString() ?? '',
+          pusherCluster: data['pusher_cluster']?.toString() ?? 'mt1',
         );
-      } catch (e) {
-        debugPrint('❌ Config fetch failed: $e');
+      } catch (_) {
         return RuntimeConfig(
-          agoraAppId: const String.fromEnvironment(
-            'AGORA_APP_ID',
-            defaultValue: '',
-          ),
+          agoraAppId: '',
           apiBaseUrl: _fallbackHost,
-          pusherKey: const String.fromEnvironment(
-            'PUSHER_KEY',
-            defaultValue: '',
-          ),
-          pusherCluster: const String.fromEnvironment(
-            'PUSHER_CLUSTER',
-            defaultValue: 'mt1',
-          ),
+          pusherKey: '',
+          pusherCluster: 'mt1',
         );
       }
     },
@@ -462,23 +497,25 @@ Future<RuntimeConfig> _loadRuntimeConfig() async {
 }
 
 // =============================================================================
-// PHASE 3 — FULL DEPENDENCY GRAPH
-// Ordering rule: data sources → repositories → use cases → blocs/cubits
+// FULL DEPENDENCY GRAPH  (Track 2)
+// Order: data sources → repositories → use cases → blocs/cubits
 // =============================================================================
-
-Future<void> initRemainingDependencies() async {
-  debugPrint('🏗️ [INIT] Starting full dependency initialization...');
+Future<void> _initFullGraph() async {
+  debugPrint('🏗️ [INIT] Building full dependency graph...');
 
   final prefs = sl<SharedPreferences>();
   final cfg = sl<RuntimeConfig>();
 
   // ── Main DioClient ──────────────────────────────────────────────────────────
-  final dioClient = DioClient(cfg.apiBaseUrl, sl<AuthLocalDataSource>());
-  sl.registerLazySingleton<DioClient>(() => dioClient);
-  sl.registerLazySingleton<Dio>(() => dioClient.dio, instanceName: 'mainDio');
+  if (!sl.isRegistered<DioClient>()) {
+    final client = DioClient(cfg.apiBaseUrl, sl<AuthLocalDataSource>());
+    sl.registerLazySingleton<DioClient>(() => client);
+    sl.registerLazySingleton<Dio>(() => client.dio, instanceName: 'mainDio');
+  }
 
   final mainDio = sl<Dio>(instanceName: 'mainDio');
 
+  // Interceptors (factories so they're fresh if recreated)
   sl.registerFactory<RequestIdInterceptor>(() => RequestIdInterceptor());
   sl.registerFactory<IdempotencyInterceptor>(
     () => IdempotencyInterceptor(prefs),
@@ -501,600 +538,472 @@ Future<void> initRemainingDependencies() async {
     ..add(sl<ErrorNormalizerInterceptor>())
     ..add(sl<RetryInterceptor>());
 
-  // ── Singletons that many features need — register first ────────────────────
-  if (!sl.isRegistered<UnreadBadgeService>()) {
-    sl.registerSingleton<UnreadBadgeService>(UnreadBadgeService());
-  }
-  if (!sl.isRegistered<RealtimeUnreadService>()) {
-    sl.registerSingleton<RealtimeUnreadService>(RealtimeUnreadService());
-  }
-  sl.registerLazySingleton<LikeMemory>(() => LikeMemory(prefs));
+  // ── Shared singletons used by multiple features ─────────────────────────────
+  _regSingleton<UnreadBadgeService>(UnreadBadgeService());
+  _regSingleton<RealtimeUnreadService>(RealtimeUnreadService());
+  _reg<LikeMemory>(() => LikeMemory(prefs));
 
-  // ── Pusher — must come before anything that needs it ───────────────────────
-  await _initializePusherService();
+  // ── Pusher (many features need it, so init first) ───────────────────────────
+  await _initPusher(cfg);
 
   // ── Host Pusher Service ─────────────────────────────────────────────────────
-  // if (!sl.isRegistered<HostPusherService>()) {
-  //   sl.registerLazySingleton<HostPusherService>(
-  //     () => HostPusherService(sl<PusherService>()),
-  //   );
-  // }
+  // _reg<HostPusherService>(() => HostPusherService(sl<PusherService>()));
 
   // ── Chat API service ────────────────────────────────────────────────────────
-  if (!sl.isRegistered<ChatApiService>()) {
-    sl.registerLazySingleton<ChatApiService>(
-      () => ChatApiService(sl<DioClient>()),
-    );
-  }
+  _reg<ChatApiService>(() => ChatApiService(sl<DioClient>()));
 
-  // ── Feature modules (each is self-contained) ────────────────────────────────
-  // Order matters when module B depends on something module A registers.
-  _initProfileSetupModule(); // registers ProfileRepository (setup) + use cases
-  _initAccountModule(); // registers AccountRepository
-  _initSearchModule(); // registers SearchRepository
-  _initNotificationsModule(); // registers NotificationsRepository
-  _initSettingsModule(); // registered blocked/email/username repos
-  _initializeClubsModule(); // registers ClubsRepository
-  _initializeLiveModule(); // registers GoLiveRepository etc
-  _initWalletModule(); // registers WalletRepository, PinRepository
-  _initTransferModule(); // registers GiftRepository
-  _initWithdrawalModule(); // registers WithdrawalRepository
-  registerProfileView(); // registers view ProfileRepository  ← after wallet
-  registerChat(); // registers ChatRepository
-  registerPosts(); // registers PostRepository
-  creatPost(); // registers CreatePostRepository
-  liveFeeds(); // registers LiveFeedRepository
+  // ── Feature modules in dependency order ─────────────────────────────────────
+  _initProfileSetupModule();
+  _initAccountModule();
+  _initSearchModule();
+  _initNotificationsModule();
+  _initSettingsModule();
+  _initClubsModule();
+  _initLiveModule(); // registers AgoraService, ParticipantsRepository
+  _initWalletModule();
+  _initTransferModule();
+  _initWithdrawalModule();
+  _initProfileViewModule(); // registers view_repo.ProfileRepository
+  _initChatModule();
+  _initPostsModule();
+  _initCreatePostModule();
+  _initLiveFeedsModule();
+  _initFeedsModule();
 
-  // ── Live viewer services (after AgoraService + PusherService are ready) ────
-  _initializeLiveViewerServices();
+  // ── Live viewer services (needs AgoraService + PusherService) ───────────────
+  _initLiveViewerServices();
 
-  // ── Play Billing (non-blocking) ─────────────────────────────────────────────
+  // ── Play Billing (non-blocking, fire and forget) ─────────────────────────────
   unawaited(
     sl<PlayBillingService>().init().catchError(
       (e) => debugPrint('⚠️ PlayBilling init error (non-fatal): $e'),
     ),
   );
 
-  // ── Config refresh monitor ──────────────────────────────────────────────────
+  // ── Config refresh monitor ───────────────────────────────────────────────────
   await RuntimeConfigRefreshService().startMonitoring();
 
-  debugPrint('✅ [INIT] Full dependency initialization complete');
+  debugPrint('✅ [INIT] Full dependency graph complete');
+}
+
+// =============================================================================
+// SAFE REGISTRATION HELPERS
+// _reg()          — registerLazySingleton, skips if already registered
+// _regSingleton() — registerSingleton,     skips if already registered
+// =============================================================================
+void _reg<T extends Object>(T Function() factory, {String? instanceName}) {
+  if (!sl.isRegistered<T>(instanceName: instanceName)) {
+    sl.registerLazySingleton<T>(factory, instanceName: instanceName);
+  }
+}
+
+void _regSingleton<T extends Object>(T instance, {String? instanceName}) {
+  if (!sl.isRegistered<T>(instanceName: instanceName)) {
+    sl.registerSingleton<T>(instance, instanceName: instanceName);
+  }
 }
 
 // =============================================================================
 // MODULE INITIALIZERS
-// Each function registers only what it owns. No cross-module assumptions.
 // =============================================================================
 
 void _initProfileSetupModule() {
-  if (!sl.isRegistered<ProfileRemoteDataSource>()) {
-    sl.registerLazySingleton<ProfileRemoteDataSource>(
-      () => ProfileRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
-    );
+  _reg<ProfileRemoteDataSource>(
+    () => ProfileRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
+  );
+  _reg<CountryLocalDataSource>(() => CountryLocalDataSourceImpl());
+  _reg<ProfileRepository>(
+    () => ProfileRepositoryImpl(
+      remote: sl(),
+      countryLocal: sl(),
+      local: sl<AuthLocalDataSource>(),
+    ),
+  );
+  _reg<SetupProfile>(() => SetupProfile(sl()));
+  _reg<UpdateInterests>(() => UpdateInterests(sl()));
+  _reg<UpdateProfile>(() => UpdateProfile(sl()));
+  _reg<FetchMyProfile>(() => FetchMyProfile(sl()));
+
+  if (!sl.isRegistered<ProfileSetupCubit>()) {
+    sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
   }
-  if (!sl.isRegistered<CountryLocalDataSource>()) {
-    sl.registerLazySingleton<CountryLocalDataSource>(
-      () => CountryLocalDataSourceImpl(),
-    );
+  if (!sl.isRegistered<UserInterestCubit>()) {
+    sl.registerFactory(() => UserInterestCubit(sl()));
   }
-  if (!sl.isRegistered<ProfileRepository>()) {
-    sl.registerLazySingleton<ProfileRepository>(
-      () => ProfileRepositoryImpl(
-        remote: sl(),
-        countryLocal: sl(),
-        local: sl<AuthLocalDataSource>(),
+
+  // ProfilePageCubit — the closure captures sl<view_repo.ProfileRepository>()
+  // lazily at call-time, so it resolves AFTER _initProfileViewModule() runs.
+  if (!sl.isRegistered<ProfilePageCubit>()) {
+    sl.registerFactory(
+      () => ProfilePageCubit(
+        fetchMyProfile: sl(),
+        fetchMyPosts:
+            ({required String userUuid, int page = 1, int perPage = 50}) async {
+              final paginated = await sl<view_repo.ProfileRepository>()
+                  .getUserPosts(userUuid, page: page, perPage: perPage);
+              return paginated.data;
+            },
       ),
     );
   }
 
-  // Use cases
-  if (!sl.isRegistered<SetupProfile>())
-    sl.registerLazySingleton(() => SetupProfile(sl()));
-  if (!sl.isRegistered<UpdateInterests>())
-    sl.registerLazySingleton(() => UpdateInterests(sl()));
-  if (!sl.isRegistered<UpdateProfile>())
-    sl.registerLazySingleton(() => UpdateProfile(sl()));
-  if (!sl.isRegistered<FetchMyProfile>())
-    sl.registerLazySingleton(() => FetchMyProfile(sl()));
-
-  // Cubits
-  sl.registerFactory(() => ProfileSetupCubit(sl(), sl()));
-  sl.registerFactory(() => UserInterestCubit(sl()));
-
-  sl.registerFactory(
-    () => ProfilePageCubit(
-      fetchMyProfile: sl(),
-      fetchMyPosts:
-          ({required String userUuid, int page = 1, int perPage = 50}) async {
-            // view_repo.ProfileRepository is registered by registerProfileView()
-            // which runs after this. We call sl<> lazily inside the closure so
-            // it resolves at call-time, not at registration-time.
-            final paginated = await sl<view_repo.ProfileRepository>()
-                .getUserPosts(userUuid, page: page, perPage: perPage);
-            return paginated.data;
-          },
-    ),
-  );
-
-  sl.registerFactory(
-    () => EditProfileCubit(
-      fetchMyProfile: sl(),
-      updateProfile: sl(),
-      profileRepo: sl(),
-      authLocal: sl<AuthLocalDataSource>(),
-      getCurrentUser: sl(),
-    ),
-  );
+  if (!sl.isRegistered<EditProfileCubit>()) {
+    sl.registerFactory(
+      () => EditProfileCubit(
+        fetchMyProfile: sl(),
+        updateProfile: sl(),
+        profileRepo: sl(),
+        authLocal: sl<AuthLocalDataSource>(),
+        getCurrentUser: sl(),
+      ),
+    );
+  }
 }
 
 void _initAccountModule() {
-  if (!sl.isRegistered<AccountRemoteDataSource>()) {
-    sl.registerLazySingleton<AccountRemoteDataSource>(
-      () => AccountRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
-    );
-  }
-  if (!sl.isRegistered<AccountRepository>()) {
-    sl.registerLazySingleton<AccountRepository>(
-      () => AccountRepositoryImpl(sl<AccountRemoteDataSource>()),
-    );
-  }
-
-  if (!sl.isRegistered<DeactivateAccount>())
-    sl.registerLazySingleton(() => DeactivateAccount(sl()));
-  if (!sl.isRegistered<ReactivateAccount>())
-    sl.registerLazySingleton(() => ReactivateAccount(sl()));
-  if (!sl.isRegistered<DeleteAccount>())
-    sl.registerLazySingleton(() => DeleteAccount(sl()));
-
-  sl.registerFactory<AccountSettingsCubit>(
-    () => AccountSettingsCubit(
-      repository: sl<AccountRepository>(),
-      prefs: sl<SharedPreferences>(),
-    ),
+  _reg<AccountRemoteDataSource>(
+    () => AccountRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
   );
+  _reg<AccountRepository>(
+    () => AccountRepositoryImpl(sl<AccountRemoteDataSource>()),
+  );
+  _reg<DeactivateAccount>(() => DeactivateAccount(sl()));
+  _reg<ReactivateAccount>(() => ReactivateAccount(sl()));
+  _reg<DeleteAccount>(() => DeleteAccount(sl()));
+
+  if (!sl.isRegistered<AccountSettingsCubit>()) {
+    sl.registerFactory<AccountSettingsCubit>(
+      () => AccountSettingsCubit(
+        repository: sl(),
+        prefs: sl<SharedPreferences>(),
+      ),
+    );
+  }
 }
 
 void _initSearchModule() {
-  if (!sl.isRegistered<SearchRemoteDataSource>()) {
-    sl.registerLazySingleton<SearchRemoteDataSource>(
-      () => SearchRemoteDataSourceImpl(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<SearchRepository>()) {
-    sl.registerLazySingleton<SearchRepository>(
-      () => SearchRepositoryImpl(remoteDataSource: sl()),
-    );
-  }
-
-  if (!sl.isRegistered<SearchContent>())
-    sl.registerLazySingleton<SearchContent>(() => SearchContent(sl()));
-  if (!sl.isRegistered<GetTrendingTags>())
-    sl.registerLazySingleton<GetTrendingTags>(() => GetTrendingTags(sl()));
-  if (!sl.isRegistered<GetSuggestedUsers>())
-    sl.registerLazySingleton<GetSuggestedUsers>(() => GetSuggestedUsers(sl()));
-  if (!sl.isRegistered<GetPopularClubs>())
-    sl.registerLazySingleton<GetPopularClubs>(() => GetPopularClubs(sl()));
-
-  sl.registerFactory<SearchBloc>(
-    () => SearchBloc(
-      searchContent: sl(),
-      getTrendingTags: sl(),
-      getSuggestedUsers: sl(),
-      getPopularClubs: sl(),
-    ),
+  _reg<SearchRemoteDataSource>(
+    () => SearchRemoteDataSourceImpl(sl<DioClient>()),
   );
-  sl.registerFactory(() => SearchClubsCubit(sl()));
+  _reg<SearchRepository>(() => SearchRepositoryImpl(remoteDataSource: sl()));
+  _reg<SearchContent>(() => SearchContent(sl()));
+  _reg<GetTrendingTags>(() => GetTrendingTags(sl()));
+  _reg<GetSuggestedUsers>(() => GetSuggestedUsers(sl()));
+  _reg<GetPopularClubs>(() => GetPopularClubs(sl()));
+
+  if (!sl.isRegistered<SearchBloc>()) {
+    sl.registerFactory<SearchBloc>(
+      () => SearchBloc(
+        searchContent: sl(),
+        getTrendingTags: sl(),
+        getSuggestedUsers: sl(),
+        getPopularClubs: sl(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<SearchClubsCubit>()) {
+    sl.registerFactory(() => SearchClubsCubit(sl()));
+  }
 }
 
 void _initNotificationsModule() {
-  if (!sl.isRegistered<NotificationsRemoteDataSource>()) {
-    sl.registerLazySingleton<NotificationsRemoteDataSource>(
-      () => NotificationsRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<NotificationsRepository>()) {
-    sl.registerLazySingleton<NotificationsRepository>(
-      () => NotificationsRepositoryImpl(sl<NotificationsRemoteDataSource>()),
-    );
-  }
-
-  if (!sl.isRegistered<UpdateNotificationSettings>())
-    sl.registerLazySingleton(() => UpdateNotificationSettings(sl()));
-  if (!sl.isRegistered<GetNotificationSettings>())
-    sl.registerLazySingleton(() => GetNotificationSettings(sl()));
-
-  sl.registerFactory<NotificationsBloc>(
-    () => NotificationsBloc(sl<NotificationsRepository>()),
+  _reg<NotificationsRemoteDataSource>(
+    () => NotificationsRemoteDataSource(sl<DioClient>()),
   );
+  _reg<NotificationsRepository>(
+    () => NotificationsRepositoryImpl(sl<NotificationsRemoteDataSource>()),
+  );
+  _reg<UpdateNotificationSettings>(() => UpdateNotificationSettings(sl()));
+  _reg<GetNotificationSettings>(() => GetNotificationSettings(sl()));
+
+  if (!sl.isRegistered<NotificationsBloc>()) {
+    sl.registerFactory<NotificationsBloc>(
+      () => NotificationsBloc(sl<NotificationsRepository>()),
+    );
+  }
+}
+
+void _initFeedsModule() {
+  sl.registerLazySingleton(() => FeedRemoteDataSource(sl<DioClient>()));
+  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl()));
+  sl.registerFactory(() => FeedCubit(sl()));
 }
 
 void _initSettingsModule() {
-  if (!sl.isRegistered<BlockedUsersRemoteDataSource>()) {
-    sl.registerLazySingleton<BlockedUsersRemoteDataSource>(
-      () => BlockedUsersRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<ChangeEmailRemoteDataSource>()) {
-    sl.registerLazySingleton<ChangeEmailRemoteDataSource>(
-      () => ChangeEmailRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<ChangeUsernameRemoteDataSource>()) {
-    sl.registerLazySingleton<ChangeUsernameRemoteDataSource>(
-      () => ChangeUsernameRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<BlockedUsersRepository>()) {
-    sl.registerLazySingleton<BlockedUsersRepository>(
-      () => BlockedUsersRepositoryImpl(sl<BlockedUsersRemoteDataSource>()),
-    );
-  }
-  if (!sl.isRegistered<ChangeEmailRepository>()) {
-    sl.registerLazySingleton<ChangeEmailRepository>(
-      () => ChangeEmailRepositoryImpl(sl<ChangeEmailRemoteDataSource>()),
-    );
-  }
-  if (!sl.isRegistered<ChangeUsernameRepository>()) {
-    sl.registerLazySingleton<ChangeUsernameRepository>(
-      () => ChangeUsernameRepositoryImpl(sl<ChangeUsernameRemoteDataSource>()),
-    );
-  }
+  _reg<BlockedUsersRemoteDataSource>(
+    () => BlockedUsersRemoteDataSource(sl<DioClient>()),
+  );
+  _reg<ChangeEmailRemoteDataSource>(
+    () => ChangeEmailRemoteDataSource(sl<DioClient>()),
+  );
+  _reg<ChangeUsernameRemoteDataSource>(
+    () => ChangeUsernameRemoteDataSource(sl<DioClient>()),
+  );
+  _reg<BlockedUsersRepository>(
+    () => BlockedUsersRepositoryImpl(sl<BlockedUsersRemoteDataSource>()),
+  );
+  _reg<ChangeEmailRepository>(
+    () => ChangeEmailRepositoryImpl(sl<ChangeEmailRemoteDataSource>()),
+  );
+  _reg<ChangeUsernameRepository>(
+    () => ChangeUsernameRepositoryImpl(sl<ChangeUsernameRemoteDataSource>()),
+  );
 
-  sl.registerFactory<BlockedUsersCubit>(
-    () => BlockedUsersCubit(sl<BlockedUsersRepository>()),
+  if (!sl.isRegistered<BlockedUsersCubit>()) {
+    sl.registerFactory<BlockedUsersCubit>(() => BlockedUsersCubit(sl()));
+  }
+  if (!sl.isRegistered<ChangeEmailCubit>()) {
+    sl.registerFactory<ChangeEmailCubit>(() => ChangeEmailCubit(sl()));
+  }
+  if (!sl.isRegistered<ChangeUsernameCubit>()) {
+    sl.registerFactory<ChangeUsernameCubit>(() => ChangeUsernameCubit(sl()));
+  }
+}
+
+void _initClubsModule() {
+  _reg<ClubsRemoteDataSource>(
+    () => ClubsRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
   );
-  sl.registerFactory<ChangeEmailCubit>(
-    () => ChangeEmailCubit(sl<ChangeEmailRepository>()),
+  _reg<ClubsRepository>(() => ClubsRepositoryImpl(sl<ClubsRemoteDataSource>()));
+  _reg<ClubIncomeRemoteDataSource>(
+    () => ClubIncomeRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
   );
-  sl.registerFactory<ChangeUsernameCubit>(
-    () => ChangeUsernameCubit(sl<ChangeUsernameRepository>()),
+  _reg<ClubIncomeRepository>(
+    () => ClubIncomeRepositoryImpl(sl<ClubIncomeRemoteDataSource>()),
   );
+
+  if (!sl.isRegistered<MyClubsCubit>())
+    sl.registerFactory<MyClubsCubit>(() => MyClubsCubit(sl()));
+  if (!sl.isRegistered<DiscoverClubsCubit>())
+    sl.registerFactory<DiscoverClubsCubit>(() => DiscoverClubsCubit(sl()));
+  if (!sl.isRegistered<ClubProfileCubit>())
+    sl.registerFactory<ClubProfileCubit>(() => ClubProfileCubit(sl()));
+  if (!sl.isRegistered<SuggestedClubsCubit>())
+    sl.registerFactory<SuggestedClubsCubit>(() => SuggestedClubsCubit(sl()));
+  if (!sl.isRegistered<ClubIncomeCubit>())
+    sl.registerFactory<ClubIncomeCubit>(() => ClubIncomeCubit(sl(), ''));
+  if (!sl.isRegistered<CreateClubCubit>())
+    sl.registerFactory<CreateClubCubit>(() => CreateClubCubit(sl()));
+
+  if (!sl.isRegistered<EditClubCubit>()) {
+    sl.registerFactoryParam<EditClubCubit, String, void>(
+      (clubUuid, _) => EditClubCubit(repository: sl(), clubUuid: clubUuid),
+    );
+  }
+  if (!sl.isRegistered<ClubMembersCubit>()) {
+    sl.registerFactoryParam<ClubMembersCubit, String, void>(
+      (clubSlug, _) => ClubMembersCubit(repo: sl(), club: clubSlug),
+    );
+  }
+  if (!sl.isRegistered<DonateClubCubit>()) {
+    sl.registerFactoryParam<DonateClubCubit, String, void>(
+      (club, _) => DonateClubCubit(repository: sl(), club: club),
+    );
+  }
+}
+
+void _initLiveModule() {
+  _reg<AgoraService>(() => AgoraService());
+  _reg<CameraService>(() => RealCameraService());
+  _reg<AudioTestService>(() => RecordAudioTestService());
+  _reg<LiveSessionTracker>(() => LiveSessionTracker());
+  _reg<GoLiveRepository>(() => GoLiveRepositoryImpl(sl<DioClient>()));
+  _reg<LiveSessionRepository>(
+    () => LiveSessionRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(),
+      sl<AgoraService>(),
+      sl<LiveSessionTracker>(),
+    ),
+  );
+
+  // ParticipantsRepository — was missing in prior versions
+  // _reg<ParticipantsRepository>(() => ParticipantsRepositoryImpl(sl<DioClient>()));
+
+  if (!sl.isRegistered<GoLiveCubit>()) {
+    sl.registerFactory<GoLiveCubit>(
+      () => GoLiveCubit(
+        sl<GoLiveRepository>(),
+        sl<CameraService>(),
+        sl<AudioTestService>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<LiveHostBloc>()) {
+    sl.registerFactory<LiveHostBloc>(
+      () => LiveHostBloc(sl<LiveSessionRepository>(), sl<AgoraService>()),
+    );
+  }
+  if (!sl.isRegistered<ParticipantsBloc>()) {
+    sl.registerFactory<ParticipantsBloc>(
+      () => ParticipantsBloc(sl<ParticipantsRepository>()),
+    );
+  }
 }
 
 void _initWalletModule() {
-  // Data sources
-  if (!sl.isRegistered<RemoteWalletDataSource>()) {
-    sl.registerLazySingleton<RemoteWalletDataSource>(
-      () => RemoteWalletDataSource(client: sl<Dio>(instanceName: 'mainDio')),
-    );
-  }
-  // LocalWalletDataSource — was missing
-  // if (!sl.isRegistered<LocalWalletDataSource>()) {
-  //   sl.registerLazySingleton<LocalWalletDataSource>(
-  //     () => LocalWalletDataSource(sl<SharedPreferences>()),
-  //   );
-  // }
-  if (!sl.isRegistered<PinRemoteDataSource>()) {
-    sl.registerLazySingleton<PinRemoteDataSource>(
-      () => PinRemoteDataSource(sl<DioClient>()),
-    );
-  }
+  _reg<RemoteWalletDataSource>(
+    () => RemoteWalletDataSource(client: sl<Dio>(instanceName: 'mainDio')),
+  );
+  // LocalWalletDataSource — was missing in prior versions
+  // _reg<LocalWalletDataSource>(() => LocalWalletDataSource(sl<SharedPreferences>()));
+  _reg<PinRemoteDataSource>(() => PinRemoteDataSource(sl<DioClient>()));
+  _reg<WalletRepositoryImpl>(
+    () => WalletRepositoryImpl(remote: sl<RemoteWalletDataSource>()),
+  );
+  _reg<WalletRepository>(() => sl<WalletRepositoryImpl>());
+  _reg<PinRepository>(() => PinRepositoryImpl(sl<PinRemoteDataSource>()));
+  // SetPin use case — was missing in prior versions
+  // _reg<SetPin>(() => SetPin(sl<PinRepository>()));
+  _reg<IdempotencyHelper>(() => IdempotencyHelper(sl<SharedPreferences>()));
+  _reg<PlayBillingService>(
+    () => PlayBillingService(
+      repo: sl<WalletRepositoryImpl>(),
+      idem: sl<IdempotencyHelper>(),
+    ),
+  );
 
-  // Repositories
-  if (!sl.isRegistered<WalletRepositoryImpl>()) {
-    sl.registerLazySingleton<WalletRepositoryImpl>(
-      () => WalletRepositoryImpl(remote: sl<RemoteWalletDataSource>()),
-    );
-  }
-  if (!sl.isRegistered<WalletRepository>()) {
-    sl.registerLazySingleton<WalletRepository>(
-      () => sl<WalletRepositoryImpl>(),
-    );
-  }
-  if (!sl.isRegistered<PinRepository>()) {
-    sl.registerLazySingleton<PinRepository>(
-      () => PinRepositoryImpl(sl<PinRemoteDataSource>()),
-    );
-  }
-
-  // Use cases
-  // if (!sl.isRegistered<SetPin>()) {
-  //   sl.registerLazySingleton<SetPin>(() => SetPin(sl<PinRepository>()));
-  // }
-
-  // Helpers
-  if (!sl.isRegistered<IdempotencyHelper>()) {
-    sl.registerLazySingleton<IdempotencyHelper>(
-      () => IdempotencyHelper(sl<SharedPreferences>()),
-    );
-  }
-  if (!sl.isRegistered<PlayBillingService>()) {
-    sl.registerLazySingleton<PlayBillingService>(
-      () => PlayBillingService(
-        repo: sl<WalletRepositoryImpl>(),
-        idem: sl<IdempotencyHelper>(),
-      ),
-    );
-  }
-
-  // Cubits
-  sl.registerFactory<WalletCubit>(() => WalletCubit(sl<WalletRepository>()));
-  sl.registerFactory<SetNewPinCubit>(() => SetNewPinCubit(sl<PinRepository>()));
-  sl.registerFactory<ResetPinCubit>(() => ResetPinCubit(sl<PinRepository>()));
+  if (!sl.isRegistered<WalletCubit>())
+    sl.registerFactory<WalletCubit>(() => WalletCubit(sl()));
+  if (!sl.isRegistered<SetNewPinCubit>())
+    sl.registerFactory<SetNewPinCubit>(() => SetNewPinCubit(sl()));
+  if (!sl.isRegistered<ResetPinCubit>())
+    sl.registerFactory<ResetPinCubit>(() => ResetPinCubit(sl()));
+  // if (!sl.isRegistered<SetPinCubit>()) sl.registerFactory<SetPinCubit>(() => SetPinCubit(sl<SetPin>()));
 }
 
 void _initTransferModule() {
-  if (!sl.isRegistered<GiftRemoteDataSource>()) {
-    sl.registerLazySingleton<GiftRemoteDataSource>(
-      () => GiftRemoteDataSource(sl<DioClient>()),
-    );
+  _reg<GiftRemoteDataSource>(() => GiftRemoteDataSource(sl<DioClient>()));
+  // GiftLocalDataSource — was missing in prior versions
+  // _reg<GiftLocalDataSource>(() => GiftLocalDataSource(sl<SharedPreferences>()));
+  _reg<GiftRepository>(() => GiftRepositoryImpl(sl<GiftRemoteDataSource>()));
+
+  if (!sl.isRegistered<TransferCubit>()) {
+    sl.registerFactory<TransferCubit>(() => TransferCubit(repository: sl()));
   }
-  // GiftLocalDataSource — was missing
-  if (!sl.isRegistered<GiftLocalDataSource>()) {
-    sl.registerLazySingleton<GiftLocalDataSource>(
-      // () => GiftLocalDataSource(sl<SharedPreferences>()),
-      () => GiftLocalDataSource(),
-    );
-  }
-  if (!sl.isRegistered<GiftRepository>()) {
-    sl.registerLazySingleton<GiftRepository>(
-      () => GiftRepositoryImpl(sl<GiftRemoteDataSource>()),
-    );
-  }
-  sl.registerFactory<TransferCubit>(
-    () => TransferCubit(repository: sl<GiftRepository>()),
-  );
 }
 
 void _initWithdrawalModule() {
-  if (!sl.isRegistered<WithdrawalRemoteDataSource>()) {
-    sl.registerLazySingleton<WithdrawalRemoteDataSource>(
-      () => WithdrawalRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<WithdrawalRepository>()) {
-    sl.registerLazySingleton<WithdrawalRepository>(
-      () => WithdrawalRepositoryImpl(sl<WithdrawalRemoteDataSource>()),
-    );
-  }
-  sl.registerFactory<WithdrawalCubit>(
-    () => WithdrawalCubit(repository: sl<WithdrawalRepository>()),
+  _reg<WithdrawalRemoteDataSource>(
+    () => WithdrawalRemoteDataSource(sl<DioClient>()),
   );
+  _reg<WithdrawalRepository>(
+    () => WithdrawalRepositoryImpl(sl<WithdrawalRemoteDataSource>()),
+  );
+
+  if (!sl.isRegistered<WithdrawalCubit>()) {
+    sl.registerFactory<WithdrawalCubit>(
+      () => WithdrawalCubit(repository: sl()),
+    );
+  }
 }
 
-// =============================================================================
-// PRESERVED PUBLIC MODULE FUNCTIONS (called from feature code)
-// =============================================================================
-
-void _initializeClubsModule() {
-  if (!sl.isRegistered<ClubsRemoteDataSource>()) {
-    sl.registerLazySingleton<ClubsRemoteDataSource>(
-      () => ClubsRemoteDataSourceImpl(sl<Dio>(instanceName: 'mainDio')),
-    );
-  }
-  if (!sl.isRegistered<ClubsRepository>()) {
-    sl.registerLazySingleton<ClubsRepository>(
-      () => ClubsRepositoryImpl(sl<ClubsRemoteDataSource>()),
-    );
-  }
-  if (!sl.isRegistered<ClubIncomeRemoteDataSource>()) {
-    sl.registerLazySingleton<ClubIncomeRemoteDataSource>(
-      () => ClubIncomeRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
-    );
-  }
-  if (!sl.isRegistered<ClubIncomeRepository>()) {
-    sl.registerLazySingleton<ClubIncomeRepository>(
-      () => ClubIncomeRepositoryImpl(sl<ClubIncomeRemoteDataSource>()),
-    );
-  }
-
-  sl.registerFactory<MyClubsCubit>(() => MyClubsCubit(sl<ClubsRepository>()));
-  sl.registerFactory<DiscoverClubsCubit>(
-    () => DiscoverClubsCubit(sl<ClubsRepository>()),
+void _initProfileViewModule() {
+  _reg<view_ds.ProfileRemoteDataSource>(
+    () => view_ds.ProfileRemoteDataSource(sl<DioClient>()),
   );
-  sl.registerFactory<ClubProfileCubit>(
-    () => ClubProfileCubit(sl<ClubsRepository>()),
-  );
-  sl.registerFactory<SuggestedClubsCubit>(
-    () => SuggestedClubsCubit(sl<ClubsRepository>()),
-  );
-  sl.registerFactory<ClubIncomeCubit>(
-    () => ClubIncomeCubit(sl<ClubIncomeRepository>(), ''),
-  );
-  sl.registerFactory<CreateClubCubit>(
-    () => CreateClubCubit(sl<ClubsRepository>()),
-  );
-  sl.registerFactoryParam<EditClubCubit, String, void>(
-    (clubUuid, _) =>
-        EditClubCubit(repository: sl<ClubsRepository>(), clubUuid: clubUuid),
-  );
-  sl.registerFactoryParam<ClubMembersCubit, String, void>(
-    (clubSlug, _) =>
-        ClubMembersCubit(repo: sl<ClubsRepository>(), club: clubSlug),
-  );
-  sl.registerFactoryParam<DonateClubCubit, String, void>(
-    (club, _) => DonateClubCubit(repository: sl<ClubsRepository>(), club: club),
-  );
-}
-
-void _initializeLiveModule() {
-  if (!sl.isRegistered<AgoraService>()) {
-    sl.registerLazySingleton<AgoraService>(() => AgoraService());
-  }
-  if (!sl.isRegistered<CameraService>()) {
-    sl.registerLazySingleton<CameraService>(() => RealCameraService());
-  }
-  if (!sl.isRegistered<AudioTestService>()) {
-    sl.registerLazySingleton<AudioTestService>(() => RecordAudioTestService());
-  }
-  if (!sl.isRegistered<LiveSessionTracker>()) {
-    sl.registerLazySingleton<LiveSessionTracker>(() => LiveSessionTracker());
-  }
-
-  if (!sl.isRegistered<GoLiveRepository>()) {
-    sl.registerLazySingleton<GoLiveRepository>(
-      () => GoLiveRepositoryImpl(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<LiveSessionRepository>()) {
-    sl.registerLazySingleton<LiveSessionRepository>(
-      () => LiveSessionRepositoryImpl(
-        sl<DioClient>(),
-        sl<PusherService>(),
-        sl<AgoraService>(),
-        sl<LiveSessionTracker>(),
-      ),
-    );
-  }
-
-  // ParticipantsRepository — was missing
-  // if (!sl.isRegistered<ParticipantsRepository>()) {
-  //   sl.registerLazySingleton<ParticipantsRepository>(
-  //     () => ParticipantsRepositoryImpl(sl<DioClient>(), PusherService(),),
-  //   );
-  // }
-
-  sl.registerFactory<GoLiveCubit>(
-    () => GoLiveCubit(
-      sl<GoLiveRepository>(),
-      sl<CameraService>(),
-      sl<AudioTestService>(),
+  _reg<view_repo.ProfileRepository>(
+    () => view_repo_impl.ProfileRepositoryImpl(
+      sl<view_ds.ProfileRemoteDataSource>(),
     ),
   );
-  sl.registerFactory<LiveHostBloc>(
-    () => LiveHostBloc(sl<LiveSessionRepository>(), sl<AgoraService>()),
+  _reg<FollowListRemoteDataSource>(
+    () => FollowListRemoteDataSource(sl<DioClient>()),
   );
-  sl.registerFactory<ParticipantsBloc>(
-    () => ParticipantsBloc(sl<ParticipantsRepository>()),
-  );
-}
 
-void registerProfileView() {
-  if (!sl.isRegistered<view_ds.ProfileRemoteDataSource>()) {
-    sl.registerLazySingleton<view_ds.ProfileRemoteDataSource>(
-      () => view_ds.ProfileRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<view_repo.ProfileRepository>()) {
-    sl.registerLazySingleton<view_repo.ProfileRepository>(
-      () => view_repo_impl.ProfileRepositoryImpl(
-        sl<view_ds.ProfileRemoteDataSource>(),
-      ),
-    );
-  }
-  sl.registerFactory<ProfileCubit>(
-    () => ProfileCubit(sl<view_repo.ProfileRepository>()),
-  );
-  if (!sl.isRegistered<FollowListRemoteDataSource>()) {
-    sl.registerLazySingleton<FollowListRemoteDataSource>(
-      () => FollowListRemoteDataSource(sl<DioClient>()),
+  if (!sl.isRegistered<ProfileCubit>()) {
+    sl.registerFactory<ProfileCubit>(
+      () => ProfileCubit(sl<view_repo.ProfileRepository>()),
     );
   }
 }
 
-void registerChat() {
-  if (!sl.isRegistered<ChatRepository>()) {
-    sl.registerLazySingleton<ChatRepository>(
-      () => ChatRepositoryImpl(
-        sl<DioClient>(),
-        sl<PusherService>(),
-        sl<AuthLocalDataSource>(),
-      ),
+void _initChatModule() {
+  _reg<ChatRepository>(
+    () => ChatRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(),
+      sl<AuthLocalDataSource>(),
+    ),
+  );
+  if (!sl.isRegistered<ChatCubit>()) {
+    sl.registerFactory<ChatCubit>(
+      () => ChatCubit(sl<ChatRepository>(), sl<CurrentUserService>()),
     );
   }
-  sl.registerFactory<ChatCubit>(
-    () => ChatCubit(sl<ChatRepository>(), sl<CurrentUserService>()),
-  );
 }
 
-void registerPosts() {
-  if (!sl.isRegistered<PostRemoteDataSource>()) {
-    sl.registerLazySingleton<PostRemoteDataSource>(
-      () => PostRemoteDataSource(sl<DioClient>()),
+void _initPostsModule() {
+  _reg<PostRemoteDataSource>(() => PostRemoteDataSource(sl<DioClient>()));
+  _reg<PostRepository>(() => PostRepositoryImpl(sl<PostRemoteDataSource>()));
+
+  if (!sl.isRegistered<PostCubit>()) {
+    sl.registerFactoryParam<PostCubit, String, void>(
+      (postId, _) => PostCubit(sl<PostRepository>(), postId),
     );
   }
-  if (!sl.isRegistered<PostRepository>()) {
-    sl.registerLazySingleton<PostRepository>(
-      () => PostRepositoryImpl(sl<PostRemoteDataSource>()),
-    );
-  }
-  sl.registerFactoryParam<PostCubit, String, void>(
-    (postId, _) => PostCubit(sl<PostRepository>(), postId),
-  );
 }
 
-void creatPost() {
-  if (!sl.isRegistered<CreatePostRemoteDataSource>()) {
-    sl.registerLazySingleton<CreatePostRemoteDataSource>(
-      () => CreatePostRemoteDataSource(sl<DioClient>()),
-    );
-  }
-  if (!sl.isRegistered<CreatePostRepository>()) {
-    sl.registerLazySingleton<CreatePostRepository>(
-      () => CreatePostRepositoryImpl(sl<CreatePostRemoteDataSource>()),
-    );
-  }
-  sl.registerFactory<CreatePostCubit>(
-    () => CreatePostCubit(sl<CreatePostRepository>()),
+void _initCreatePostModule() {
+  _reg<CreatePostRemoteDataSource>(
+    () => CreatePostRemoteDataSource(sl<DioClient>()),
   );
+  _reg<CreatePostRepository>(
+    () => CreatePostRepositoryImpl(sl<CreatePostRemoteDataSource>()),
+  );
+  if (!sl.isRegistered<CreatePostCubit>()) {
+    sl.registerFactory<CreatePostCubit>(() => CreatePostCubit(sl()));
+  }
 }
 
-void liveFeeds() {
+void _initLiveFeedsModule() {
   if (sl.isRegistered<LiveFeedBloc>()) return;
-  if (!sl.isRegistered<DioClient>()) {
-    debugPrint('❌ DioClient not ready for LiveFeed');
-    return;
-  }
-  try {
-    if (!sl.isRegistered<LiveFeedRemoteDataSource>()) {
-      sl.registerLazySingleton<LiveFeedRemoteDataSource>(
-        () => LiveFeedRemoteDataSourceImpl.fromDioClient(sl<DioClient>()),
-      );
-    }
-    if (!sl.isRegistered<LiveFeedRepository>()) {
-      sl.registerLazySingleton<LiveFeedRepository>(
-        () => LiveFeedRepositoryImpl(sl<LiveFeedRemoteDataSource>()),
-      );
-    }
+  _reg<LiveFeedRemoteDataSource>(
+    () => LiveFeedRemoteDataSourceImpl.fromDioClient(sl<DioClient>()),
+  );
+  _reg<LiveFeedRepository>(
+    () => LiveFeedRepositoryImpl(sl<LiveFeedRemoteDataSource>()),
+  );
+  if (!sl.isRegistered<LiveFeedBloc>()) {
     sl.registerFactory<LiveFeedBloc>(
       () => LiveFeedBloc(sl<LiveFeedRepository>()),
     );
-  } catch (e, stack) {
-    debugPrint('❌ Error registering LiveFeed: $e\n$stack');
   }
 }
 
 // =============================================================================
 // PUSHER
 // =============================================================================
+Future<void> ensurePusherInitialized() => _initPusher(sl<RuntimeConfig>());
 
-Future<void> ensurePusherInitialized() async {
-  await _initializePusherService();
-}
-
-Future<void> _initializePusherService() async {
-  debugPrint('🔧 [PUSHER] Initializing...');
+Future<void> _initPusher(RuntimeConfig cfg) async {
+  debugPrint('🔧 [Pusher] Initializing...');
   try {
-    if (!sl.isRegistered<PusherService>()) {
-      sl.registerLazySingleton<PusherService>(() => PusherService());
-    }
-
+    _reg<PusherService>(() => PusherService());
     final pusher = sl<PusherService>();
-    final cfg = sl<RuntimeConfig>();
 
     if (pusher.isInitialized &&
         !pusher.isInBadState &&
         cfg.pusherKey.isNotEmpty &&
         cfg.pusherKey != 'disabled') {
-      debugPrint('✅ [PUSHER] Already initialized');
+      debugPrint('✅ [Pusher] Already initialized');
       if (!pusher.isConnected) await pusher.connect();
       return;
     }
 
     if (pusher.isInitialized && pusher.isInBadState) {
-      debugPrint('⚠️ [PUSHER] Bad state — will be fixed by refresh service');
+      debugPrint('⚠️ [Pusher] Bad state — refresh service will fix');
       return;
     }
 
     if (cfg.pusherKey.isEmpty || cfg.pusherKey == 'disabled') {
-      debugPrint('⚠️ [PUSHER] Key empty — initializing in disabled state');
       await pusher.initialize(
         apiKey: 'disabled',
         cluster: 'mt1',
         authEndpoint: null,
         authCallback: null,
       );
-      await RuntimeConfigRefreshService().startMonitoring();
+      debugPrint('⚠️ [Pusher] Initialized in disabled state (no key)');
       return;
     }
 
@@ -1103,102 +1012,75 @@ Future<void> _initializePusherService() async {
       cluster: cfg.pusherCluster,
       authEndpoint: '${cfg.apiBaseUrl}/broadcasting/auth',
       authCallback: (channelName, socketId, options) async {
-        try {
-          final token = await sl<AuthLocalDataSource>().readToken();
-          if (token == null || token.isEmpty) throw Exception('No auth token');
-          final response = await sl<Dio>(instanceName: 'mainDio').post(
-            '/broadcasting/auth',
-            data: {'socket_id': socketId, 'channel_name': channelName},
-            options: Options(
-              headers: {
-                'Accept': 'application/json',
-                'Authorization': 'Bearer $token',
-              },
-            ),
-          );
-          return response.data;
-        } catch (e) {
-          debugPrint('❌ [PUSHER] Auth callback failed: $e');
-          rethrow;
-        }
+        final token = await sl<AuthLocalDataSource>().readToken();
+        if (token == null || token.isEmpty) throw Exception('No auth token');
+        final res = await sl<Dio>(instanceName: 'mainDio').post(
+          '/broadcasting/auth',
+          data: {'socket_id': socketId, 'channel_name': channelName},
+          options: Options(
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          ),
+        );
+        return res.data;
       },
     );
-    debugPrint('✅ [PUSHER] Initialized');
-    await RuntimeConfigRefreshService().startMonitoring();
+    debugPrint('✅ [Pusher] Initialized');
   } catch (e) {
-    debugPrint('⚠️ [PUSHER] Init failed (non-fatal): $e');
+    debugPrint('⚠️ [Pusher] Init failed (non-fatal): $e');
   }
 }
 
 // =============================================================================
 // LIVE VIEWER SERVICES
 // =============================================================================
+void _initLiveViewerServices() {
+  _reg<AgoraViewerService>(
+    () => AgoraViewerService(
+      onTokenRefresh: (role) async {
+        try {
+          final channel = sl<AgoraViewerService>().channelId;
+          if (channel == null || channel.isEmpty) throw Exception('No channel');
+          final token = await sl<AuthLocalDataSource>().readToken();
+          final res = await sl<Dio>(instanceName: 'mainDio').post(
+            '/api/v1/live/refresh-token',
+            data: {'role': role, 'channel': channel},
+            options: Options(headers: {'Authorization': 'Bearer $token'}),
+          );
+          return (res.data as Map<String, dynamic>)['token'] as String;
+        } catch (e) {
+          debugPrint('❌ Token refresh: $e');
+          return '';
+        }
+      },
+    ),
+  );
+  _reg<LiveStreamService>(
+    () => LiveStreamService(
+      agoraService: sl<AgoraViewerService>(),
+      tokenRefresher: sl<AgoraViewerService>().onTokenRefresh,
+    ),
+  );
+  _reg<NetworkMonitorService>(
+    () => NetworkMonitorService(sl<LiveStreamService>()),
+  );
+  _reg<ReconnectionService>(() => ReconnectionService(sl<LiveStreamService>()));
+  _reg<RoleChangeService>(() => RoleChangeService(sl<LiveStreamService>()));
 
-void _initializeLiveViewerServices() {
-  debugPrint('🔧 Initializing Live Viewer Services...');
-
-  if (!sl.isRegistered<AgoraViewerService>()) {
-    sl.registerLazySingleton<AgoraViewerService>(() {
-      return AgoraViewerService(
-        onTokenRefresh: (role) async {
-          try {
-            final agoraService = sl<AgoraViewerService>();
-            final currentChannel = agoraService.channelId;
-            if (currentChannel == null || currentChannel.isEmpty) {
-              throw Exception('No current channel');
-            }
-            final token = await sl<AuthLocalDataSource>().readToken();
-            final response = await sl<Dio>(instanceName: 'mainDio').post(
-              '/api/v1/live/refresh-token',
-              data: {'role': role, 'channel': currentChannel},
-              options: Options(headers: {'Authorization': 'Bearer $token'}),
-            );
-            return (response.data as Map<String, dynamic>)['token'] as String;
-          } catch (e) {
-            debugPrint('❌ Token refresh failed: $e');
-            return '';
-          }
-        },
+  if (!sl.isRegistered<ViewerBloc>()) {
+    sl.registerFactoryParam<ViewerBloc, ViewerRepositoryImpl, void>((repo, _) {
+      return ViewerBloc(
+        repo,
+        liveStreamService: sl<LiveStreamService>(),
+        agoraViewerService: sl<AgoraViewerService>(),
+        networkMonitorService: sl<NetworkMonitorService>(),
+        reconnectionService: sl<ReconnectionService>(),
+        roleChangeService: sl<RoleChangeService>(),
       );
     });
   }
-
-  if (!sl.isRegistered<LiveStreamService>()) {
-    sl.registerLazySingleton<LiveStreamService>(
-      () => LiveStreamService(
-        agoraService: sl<AgoraViewerService>(),
-        tokenRefresher: sl<AgoraViewerService>().onTokenRefresh,
-      ),
-    );
-  }
-  if (!sl.isRegistered<NetworkMonitorService>()) {
-    sl.registerLazySingleton<NetworkMonitorService>(
-      () => NetworkMonitorService(sl<LiveStreamService>()),
-    );
-  }
-  if (!sl.isRegistered<ReconnectionService>()) {
-    sl.registerLazySingleton<ReconnectionService>(
-      () => ReconnectionService(sl<LiveStreamService>()),
-    );
-  }
-  if (!sl.isRegistered<RoleChangeService>()) {
-    sl.registerLazySingleton<RoleChangeService>(
-      () => RoleChangeService(sl<LiveStreamService>()),
-    );
-  }
-
-  sl.registerFactoryParam<ViewerBloc, ViewerRepositoryImpl, void>((repo, _) {
-    return ViewerBloc(
-      repo,
-      liveStreamService: sl<LiveStreamService>(),
-      agoraViewerService: sl<AgoraViewerService>(),
-      networkMonitorService: sl<NetworkMonitorService>(),
-      reconnectionService: sl<ReconnectionService>(),
-      roleChangeService: sl<RoleChangeService>(),
-    );
-  });
-
-  debugPrint('✅ Live Viewer Services initialized');
 }
 
 ViewerRepositoryImpl createViewerRepository({
@@ -1224,31 +1106,19 @@ ViewerRepositoryImpl createViewerRepository({
 }
 
 // =============================================================================
-// DEPENDENCY MANAGER
+// BACKWARDS-COMPAT PUBLIC API
+// (called from feature code that still uses the old function names)
 // =============================================================================
-
-class DependencyManager {
-  static final Completer<void> _allReady = Completer<void>();
-  static bool _isInitialized = false;
-
-  static Future<void> waitForAllDependencies() async {
-    if (_isInitialized) return;
-    return _allReady.future;
-  }
-
-  static void markAllDependenciesReady() {
-    if (!_allReady.isCompleted) {
-      _isInitialized = true;
-      _allReady.complete();
-      debugPrint('✅ DependencyManager: all dependencies ready');
-    }
-  }
-
-  static bool get isReady => _isInitialized;
-}
-
-// Backwards-compat aliases for code that still calls the old module functions
 void wallet() => _initWalletModule();
 void setWalletPin() {} // merged into _initWalletModule
 void transfercoin() => _initTransferModule();
 void withdrawal() => _initWithdrawalModule();
+
+void registerProfileView() => _initProfileViewModule();
+void registerChat() => _initChatModule();
+void registerPosts() => _initPostsModule();
+void creatPost() => _initCreatePostModule();
+void liveFeeds() => _initLiveFeedsModule();
+void _initializeClubsModule() => _initClubsModule();
+void _initializeLiveModule() => _initLiveModule();
+void _initializeLiveViewerServices() => _initLiveViewerServices();

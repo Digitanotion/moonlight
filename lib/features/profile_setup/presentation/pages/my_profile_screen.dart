@@ -150,9 +150,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         BlocListener<ProfilePageCubit, ProfilePageState>(
           listener: (context, state) {
             if (state.error != null) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(state.error!)));
+              // ScaffoldMessenger.of(
+              //   context,
+              // ).showSnackBar(SnackBar(content: Text(state.error!)));
             }
           },
         ),

@@ -70,15 +70,19 @@ class AgoraService with ChangeNotifier {
   final Map<int, bool> _remoteVideoStates = {};
   final Map<int, bool> _remoteAudioStates = {};
 
-  // Beauty state (Face Clean + Brighten)
-  bool _faceCleanEnabled = false;
-  int _faceCleanLevel = 0;
-  bool _brightenEnabled = false;
-  int _brightenLevel = 0;
-
+  // ─── Beauty state ───────────────────────────────────────────────────────────
+  // Pending-state pattern: latest requested values are always stored here.
+  // _isApplyingBeauty guards the Agora SDK call; when it finishes it checks
+  // whether a newer request came in and, if so, re-applies immediately.
+  // This guarantees the LAST requested state is always ultimately applied,
+  // so a quick toggle-off can never be silently dropped.
   bool _isApplyingBeauty = false;
-  DateTime? _lastBeautyApplyTime;
-  static const Duration _beautyApplyCooldown = Duration(milliseconds: 500);
+  bool _hasPendingBeauty = false;
+
+  bool _pendingFaceEnabled = false;
+  int _pendingFaceLevel = 0;
+  bool _pendingBrightenEnabled = false;
+  int _pendingBrightenLevel = 0;
 
   // Expose a notifier so UI can optionally react
   final ValueNotifier<bool> beautyActive = ValueNotifier<bool>(false);
@@ -88,6 +92,7 @@ class AgoraService with ChangeNotifier {
     remoteUsers.dispose();
     primaryRemoteUid.dispose();
     _remoteHasVideo.dispose();
+    beautyActive.dispose();
     super.dispose();
   }
 
@@ -95,64 +100,73 @@ class AgoraService with ChangeNotifier {
   // Public API
   // ---------------------------------------------------------------------------
 
-  /// Pass the exact JSON you showed:
-  /// {
-  ///   "channel": "live_...",
-  ///   "uid_type": "uid",
-  ///   "uid": 5,
-  ///   "rtc_role": "publisher",
-  ///   "agora": { "app_id": "...", "rtc_token": "..." }
-  /// }
-  ///
   /// Apply beauty options (face clean = smoothing, brighten = lightening).
-  /// All percentages are 0..100. Safe no-op when engine is not initialized.
+  /// Uses a pending-state queue so rapid toggles (on→off, slider drags) always
+  /// resolve to the latest requested state — preventing the black-screen bug
+  /// that occurred when a disable call was dropped by the old cooldown guard.
+  ///
+  /// IMPORTANT: This method intentionally does NOT touch the camera enabled
+  /// state. Toggling the camera inside an effect call was the primary cause of
+  /// the black-screen regression.
   Future<void> applyBeauty({
     required bool faceCleanEnabled,
     required int faceCleanLevel,
     required bool brightenEnabled,
     required int brightenLevel,
   }) async {
-    // Prevent rapid consecutive calls
-    final now = DateTime.now();
-    if (_lastBeautyApplyTime != null &&
-        now.difference(_lastBeautyApplyTime!) < _beautyApplyCooldown) {
-      debugPrint('[Beauty] Skipping rapid apply (debounced)');
+    // Always store the newest desired state.
+    _pendingFaceEnabled = faceCleanEnabled;
+    _pendingFaceLevel = faceCleanLevel.clamp(0, 100);
+    _pendingBrightenEnabled = brightenEnabled;
+    _pendingBrightenLevel = brightenLevel.clamp(0, 100);
+    _hasPendingBeauty = true;
+
+    // If a call is already in flight the pending values will be picked up when
+    // it completes (see _doApplyBeauty's finally block).
+    if (_isApplyingBeauty) {
+      debugPrint('[Beauty] Apply in progress – latest state queued');
       return;
     }
 
-    // Prevent concurrent applications
-    if (_isApplyingBeauty) {
-      debugPrint('[Beauty] Already applying effects, skipping');
+    await _doApplyBeauty();
+  }
+
+  /// Internal worker that always operates on _pending* values.
+  Future<void> _doApplyBeauty() async {
+    if (!_hasPendingBeauty) return;
+    final e = _engine;
+    if (e == null) {
+      debugPrint('[Beauty] Engine not available, skipping apply');
+      _hasPendingBeauty = false;
       return;
     }
 
     _isApplyingBeauty = true;
-    _lastBeautyApplyTime = now;
+    _hasPendingBeauty = false;
+
+    // Snapshot the values we're about to apply so later pending writes don't
+    // mutate under us mid-call.
+    final faceEnabled = _pendingFaceEnabled;
+    final faceLevel = _pendingFaceLevel;
+    final brightenEnabled = _pendingBrightenEnabled;
+    final brightenLevel = _pendingBrightenLevel;
 
     try {
-      // First, always ensure camera is working
-      if (!_isCameraEnabled) {
-        await setCameraEnabled(true);
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-
-      // Apply beauty effects
-      final smooth = (faceCleanEnabled ? (faceCleanLevel / 100.0) : 0.0).clamp(
-        0.0,
-        1.0,
-      );
+      final smooth = (faceEnabled ? (faceLevel / 100.0) : 0.0).clamp(0.0, 1.0);
       final lighten = (brightenEnabled ? (brightenLevel / 100.0) : 0.0).clamp(
         0.0,
         1.0,
       );
 
-      // If both effects are disabled, use reset instead
       if (smooth == 0.0 && lighten == 0.0) {
-        await _engine?.setBeautyEffectOptions(
+        // Disable beauty completely – this is the path most likely to cause
+        // the black screen if interrupted, so we do it in one clean call.
+        await e.setBeautyEffectOptions(
           enabled: false,
           options: const BeautyOptions(),
         );
         beautyActive.value = false;
+        debugPrint('[Beauty] Disabled successfully');
       } else {
         final options = BeautyOptions(
           smoothnessLevel: smooth,
@@ -162,39 +176,40 @@ class AgoraService with ChangeNotifier {
           rednessLevel: (lighten * 0.12).clamp(0.0, 0.15),
           sharpnessLevel: 0.25 + (smooth * 0.2),
         );
-
-        await _engine?.setBeautyEffectOptions(enabled: true, options: options);
+        await e.setBeautyEffectOptions(enabled: true, options: options);
         beautyActive.value = true;
+        debugPrint('[Beauty] Applied – smooth=$smooth lighten=$lighten');
       }
 
       notifyListeners();
+    } catch (err, stack) {
+      debugPrint('❌ [Beauty] Apply failed: $err');
+      debugPrint('$stack');
+      _lastError = 'Beauty effects failed: $err';
 
-      // Small delay to let effects stabilize
-      await Future.delayed(const Duration(milliseconds: 100));
-    } catch (e, stack) {
-      debugPrint('❌ Failed to apply beauty effects: $e');
-      debugPrint('Stack trace: $stack');
-
-      // Recovery: Reset to default and show error
+      // Attempt a clean reset so the camera pipeline isn't left in a bad state.
       try {
-        await _engine?.setBeautyEffectOptions(
+        await e.setBeautyEffectOptions(
           enabled: false,
           options: const BeautyOptions(),
         );
-
-        // Force camera restart if needed
-        if (!_isCameraEnabled || !_previewing) {
-          await setCameraEnabled(true);
-        }
-      } catch (recoveryError) {
-        debugPrint('❌ Recovery also failed: $recoveryError');
+        beautyActive.value = false;
+        debugPrint('[Beauty] Recovery reset applied');
+      } catch (recoveryErr) {
+        debugPrint('❌ [Beauty] Recovery also failed: $recoveryErr');
       }
 
-      // Notify UI about the error
-      _lastError = 'Beauty effects failed: $e';
       notifyListeners();
     } finally {
       _isApplyingBeauty = false;
+
+      // If a newer state arrived while we were applying, honour it now.
+      if (_hasPendingBeauty) {
+        debugPrint('[Beauty] Applying queued pending state');
+        // Tiny yield so we don't starve the event loop.
+        await Future.delayed(const Duration(milliseconds: 30));
+        await _doApplyBeauty();
+      }
     }
   }
 
@@ -230,13 +245,16 @@ class AgoraService with ChangeNotifier {
 
   /// Reset/disable any beauty options previously applied. Safe no-op if engine absent.
   Future<void> resetBeauty() async {
-    final e = _engine;
-    _faceCleanEnabled = false;
-    _faceCleanLevel = 0;
-    _brightenEnabled = false;
-    _brightenLevel = 0;
+    // Clear any pending state first so _doApplyBeauty won't re-enable after we reset.
+    _hasPendingBeauty = false;
+    _pendingFaceEnabled = false;
+    _pendingFaceLevel = 0;
+    _pendingBrightenEnabled = false;
+    _pendingBrightenLevel = 0;
+
     beautyActive.value = false;
 
+    final e = _engine;
     if (e == null) return;
     try {
       await e.setBeautyEffectOptions(
@@ -260,12 +278,9 @@ class AgoraService with ChangeNotifier {
     final uidType = ((resp['uid_type'] ?? 'uid').toString());
     final rtcRole = ((resp['rtc_role'] ?? 'publisher').toString());
 
-    // uid can be int or string in the payload—normalize to string here,
-    // we'll parse accordingly inside startPublishing().
     final uidVal = resp['uid'];
     final uidStr = uidVal == null ? '' : uidVal.toString();
 
-    // Basic sanity logs (prefix token for safety)
     if (kDebugMode) {
       debugPrint(
         '[Agora] creds: appId=${_safe(appId)} channel=$channel uidType=$uidType uid=$uidStr role=$rtcRole token=${_safe(token)}',
@@ -276,9 +291,9 @@ class AgoraService with ChangeNotifier {
       appId: appId,
       channel: channel,
       token: token,
-      uidType: uidType, // "uid" or "userAccount"
-      uid: uidStr, // "5" for numeric, "abc-uuid" for userAccount
-      role: rtcRole, // "publisher" or "subscriber" (host should be publisher)
+      uidType: uidType,
+      uid: uidStr,
+      role: rtcRole,
       enablePreview: enablePreview,
     );
   }
@@ -288,17 +303,15 @@ class AgoraService with ChangeNotifier {
     required String appId,
     required String channel,
     required String token,
-    required String uidType, // "uid" | "userAccount"
-    required String uid, // numeric-as-string or account string
+    required String uidType,
+    required String uid,
     String role = 'publisher',
     bool enablePreview = true,
   }) async {
     _assertInputs(appId, channel, token, uidType, uid);
 
-    // Ensure mic/cam permission
     await _ensurePermissions();
 
-    // If we are already in the exact same session, skip
     final same =
         _engine != null &&
         _joined &&
@@ -318,7 +331,6 @@ class AgoraService with ChangeNotifier {
     await _leaveIfAny();
     await _disposeIfAny();
 
-    // Create/init engine
     final e = createAgoraRtcEngine();
     _engine = e;
     _appId = appId;
@@ -334,34 +346,29 @@ class AgoraService with ChangeNotifier {
       ),
     );
 
-    // Defaults for live
     await e.enableAudio();
     await e.enableVideo();
-    // 🔧 Lock front camera & set encoder BEFORE preview
     await e.setCameraCapturerConfiguration(
       const CameraCapturerConfiguration(
         cameraDirection: CameraDirection.cameraFront,
       ),
     );
 
-    // 🔧 720x1280 portrait @ 30fps (good live default)
     await e.setVideoEncoderConfiguration(
       const VideoEncoderConfiguration(
         dimensions: VideoDimensions(width: 720, height: 1280),
         frameRate: 30,
-        bitrate: null, // kbps; let Agora auto if you prefer (set null)
+        bitrate: null,
         orientationMode: OrientationMode.orientationModeFixedPortrait,
       ),
     );
 
     await e.setDefaultAudioRouteToSpeakerphone(true);
 
-    // Only enable string UID mode if using userAccount
     if (uidType.toLowerCase() == 'useraccount') {
       await e.setParameters(r'{"rtc.string_uid":true}');
     }
 
-    // Events - FIXED: Correct parameter types for Agora SDK
     e.registerEventHandler(
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection conn, int elapsed) {
@@ -379,7 +386,6 @@ class AgoraService with ChangeNotifier {
             debugPrint('[Agora] Remote user joined: $remoteUid');
           }
 
-          // Initialize user state
           remoteUsers.value = {
             ...remoteUsers.value,
             remoteUid: RemoteUserState(
@@ -390,7 +396,6 @@ class AgoraService with ChangeNotifier {
             ),
           };
 
-          // Set as primary remote if we don't have one yet
           if (primaryRemoteUid.value == null) {
             primaryRemoteUid.value = remoteUid;
             if (kDebugMode) {
@@ -409,11 +414,9 @@ class AgoraService with ChangeNotifier {
                 );
               }
 
-              // Remove from tracking
               remoteUsers.value = Map.from(remoteUsers.value)
                 ..remove(remoteUid);
 
-              // Clear primary if this was the primary
               if (primaryRemoteUid.value == remoteUid) {
                 primaryRemoteUid.value = null;
                 _remoteHasVideo.value = false;
@@ -440,7 +443,6 @@ class AgoraService with ChangeNotifier {
                   state == RemoteVideoState.remoteVideoStateDecoding ||
                   state == RemoteVideoState.remoteVideoStateStarting;
 
-              // Update user state
               if (remoteUsers.value.containsKey(remoteUid)) {
                 remoteUsers.value = {
                   ...remoteUsers.value,
@@ -450,7 +452,6 @@ class AgoraService with ChangeNotifier {
                 };
               }
 
-              // Update primary remote video state
               if (remoteUid == primaryRemoteUid.value) {
                 _remoteHasVideo.value = hasVideo;
                 if (kDebugMode) {
@@ -472,7 +473,6 @@ class AgoraService with ChangeNotifier {
               final hasAudio =
                   state == RemoteAudioState.remoteAudioStateDecoding;
 
-              // Update user state
               if (remoteUsers.value.containsKey(remoteUid)) {
                 remoteUsers.value = {
                   ...remoteUsers.value,
@@ -485,7 +485,6 @@ class AgoraService with ChangeNotifier {
               notifyListeners();
             },
 
-        // FIXED: Correct parameter types for local audio state
         onLocalAudioStateChanged:
             (
               RtcConnection conn,
@@ -495,7 +494,6 @@ class AgoraService with ChangeNotifier {
               debugPrint('[Agora] localAudio state=$state error=$error');
             },
 
-        // FIXED: Correct parameter types for camera exposure (int, int, int, int)
         onCameraExposureAreaChanged: (int x, int y, int width, int height) {
           debugPrint(
             '[Agora] camera exposure area changed: x=$x, y=$y, w=$width, h=$height',
@@ -541,16 +539,13 @@ class AgoraService with ChangeNotifier {
       ),
     );
 
-    // Role: host is Broadcaster (must match your token role=publisher)
     await e.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
-    // Optional local preview before join
     if (enablePreview) {
       await e.startPreview();
       _previewing = true;
     }
 
-    // Channel options: Broadcaster publishing both tracks
     const options = ChannelMediaOptions(
       publishCameraTrack: true,
       publishMicrophoneTrack: true,
@@ -558,7 +553,6 @@ class AgoraService with ChangeNotifier {
       channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
     );
 
-    // UID handling
     if (uidType.toLowerCase() == 'useraccount') {
       _userAccount = uid;
       _localUid = null;
@@ -570,7 +564,6 @@ class AgoraService with ChangeNotifier {
         options: options,
       );
     } else {
-      // numeric "uid"
       final n = int.tryParse(uid);
       if (n == null) {
         throw ArgumentError(
@@ -588,7 +581,6 @@ class AgoraService with ChangeNotifier {
     }
   }
 
-  /// Renew token when backend refreshes it.
   Future<void> renewToken(String newToken) async {
     _token = newToken;
     await _engine?.renewToken(newToken);
@@ -624,7 +616,6 @@ class AgoraService with ChangeNotifier {
     await _engine?.switchCamera();
   }
 
-  // Make sure we reset on leave
   Future<void> leave() async {
     try {
       await _engine?.leaveChannel();
@@ -659,13 +650,11 @@ class AgoraService with ChangeNotifier {
     }
   }
 
-  /// Clear remote guest explicitly (e.g., when host returns them to viewer)
   void clearGuest() {
     primaryRemoteUid.value = null;
     _remoteHasVideo.value = false;
   }
 
-  // Render local preview (uid:0 canvas is standard for local view)
   Widget localPreview({double? width, double? height}) {
     final e = _engine;
     if (e == null)
@@ -683,7 +672,6 @@ class AgoraService with ChangeNotifier {
     );
   }
 
-  // Render a remote user (for co-host later)
   Widget remoteView(int remoteUid) {
     final e = _engine;
     final ch = _channelId;
@@ -698,7 +686,6 @@ class AgoraService with ChangeNotifier {
     );
   }
 
-  /// Render the primary remote (guest). Black if none.
   Widget primaryRemoteView() {
     final e = _engine;
     final ch = _channelId;
@@ -748,7 +735,6 @@ class AgoraService with ChangeNotifier {
     );
   }
 
-  // Method to explicitly set a guest (useful for manual guest management)
   void setPrimaryGuest(int remoteUid) {
     if (remoteUsers.value.containsKey(remoteUid)) {
       primaryRemoteUid.value = remoteUid;
@@ -760,7 +746,6 @@ class AgoraService with ChangeNotifier {
     }
   }
 
-  // Get all remote users for debugging
   List<int> get remoteUserIds => remoteUsers.value.keys.toList();
 
   bool get primaryGuestHasAudio {

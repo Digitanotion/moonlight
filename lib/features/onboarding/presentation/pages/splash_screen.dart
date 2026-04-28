@@ -1,7 +1,20 @@
 // lib/features/onboarding/presentation/pages/splash_screen.dart
+//
+// Behaviour:
+//   - Appears instantly (no await before runApp)
+//   - Stays visible until ALL of:
+//       1. DependencyManager ready (all GetIt registrations done)
+//       2. Auth bloc resolved (authenticated or unauthenticated)
+//       3. Onboarding bloc resolved (isFirstLaunch known)
+//       4. Minimum 1.5 s display time (prevents flash)
+//   - If network is down or registration fails, still navigates using
+//     whatever was resolved from disk cache (never hangs indefinitely)
+//   - 12-second hard safety timeout as absolute last resort
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/utils/asset_paths.dart';
@@ -10,231 +23,161 @@ import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
-
   @override
-  _SplashScreenState createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  late Animation<double> _fadeAnim;
+  late AnimationController _anim;
+  late Animation<double> _fade;
 
-  bool _minimalTimePassed = false;
-  bool _navigationTriggered = false;
-  Timer? _minimalTimer;
+  // ── Four gates — ALL must be true before navigation ─────────────────────────
+  bool _depsReady = false; // GetIt Track 2 complete
+  bool _authDone = false; // AuthBloc emitted a terminal state
+  bool _onboardDone = false; // OnboardingBloc resolved isFirstLaunch
+  bool _minTimeDone = false; // minimum splash display time elapsed
+
+  bool _navigated = false;
+
+  Timer? _minTimer;
   Timer? _safetyTimer;
-
-  // Debug counters
-  int _tryNavigationCallCount = 0;
-  int _authStateChanges = 0;
-  int _onboardingStateChanges = 0;
 
   @override
   void initState() {
     super.initState();
-    debugPrint('🎬 [Splash] initState called');
 
-    _animController = AnimationController(
+    _anim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 350),
     );
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
-    _animController.forward();
+    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeIn);
+    _anim.forward();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('📞 [Splash] Post-frame callback - firing events');
-
-      // Fire events
-      context.read<AuthBloc>().add(CheckAuthStatusEvent());
-      context.read<OnboardingBloc>().add(const CheckFirstLaunchStatus());
-
-      // Check current states immediately
-      _checkCurrentStates();
-
-      // Set timers
-      _minimalTimer = Timer(const Duration(milliseconds: 1800), () {
-        debugPrint('⏰ [Splash] Minimal timer (1800ms) FIRED');
-        _minimalTimePassed = true;
-        _tryNavigation(reason: 'minimal_timer');
-      });
-
-      _safetyTimer = Timer(const Duration(milliseconds: 10000), () {
-        if (!_navigationTriggered) {
-          debugPrint(
-            '🚨 [Splash] SAFETY TIMER FIRED - forcing navigation after 10 seconds',
-          );
-          _navigateToAppropriateScreen(force: true);
-        }
-      });
+    // Minimum display time (prevents splash flash on fast devices)
+    _minTimer = Timer(const Duration(milliseconds: 1500), () {
+      _minTimeDone = true;
+      _tryNavigate();
     });
+
+    // Hard safety valve — if anything hangs, unblock after 12 s
+    _safetyTimer = Timer(const Duration(seconds: 12), () {
+      debugPrint('🚨 [Splash] Safety timeout — forcing navigation');
+      _navigateNow(force: true);
+    });
+
+    // Gate 1: wait for all GetIt registrations
+    DependencyManager.waitForAllDependencies()
+        .then((_) {
+          debugPrint('✅ [Splash] GetIt dependencies ready');
+          _depsReady = true;
+
+          // Now that deps are ready, fire auth + onboarding checks
+          // (they may already be running if the bloc was created earlier)
+          if (mounted) {
+            context.read<AuthBloc>().add(CheckAuthStatusEvent());
+            context.read<OnboardingBloc>().add(const CheckFirstLaunchStatus());
+          }
+          _tryNavigate();
+        })
+        .catchError((e) {
+          // Dependency init had an error — still unblock so app doesn't hang
+          debugPrint('⚠️ [Splash] Dependency error (continuing): $e');
+          _depsReady = true;
+          if (mounted) {
+            context.read<AuthBloc>().add(CheckAuthStatusEvent());
+            context.read<OnboardingBloc>().add(const CheckFirstLaunchStatus());
+          }
+          _tryNavigate();
+        });
+
+    // Check if blocs already have resolved states from a previous run
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkBlocStates());
   }
 
-  void _checkCurrentStates() {
-    debugPrint('🔍 [Splash] Checking current states');
-
-    final authState = context.read<AuthBloc>().state;
-    final onboardingState = context.read<OnboardingBloc>().state;
-
-    debugPrint('   Current AuthState: ${authState.runtimeType}');
-    debugPrint('   Current OnboardingState: ${onboardingState.runtimeType}');
-    debugPrint(
-      '   onboardingState.isFirstLaunch: ${onboardingState.isFirstLaunch}',
-    );
-    debugPrint(
-      '   onboardingState.hasCompletedProfile: ${onboardingState.hasCompletedProfile}',
-    );
-
-    final authResolved =
-        authState is AuthAuthenticated || authState is AuthUnauthenticated;
-    final onboardingResolved = onboardingState.isFirstLaunch != null;
-
-    debugPrint('   authResolved: $authResolved');
-    debugPrint('   onboardingResolved: $onboardingResolved');
-
-    if (authResolved && onboardingResolved) {
-      debugPrint('✅ States already resolved - will try navigation');
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _tryNavigation(reason: 'initial_check');
-      });
-    } else {
-      debugPrint('⏳ States not yet resolved - waiting for BLoC listeners');
+  void _checkBlocStates() {
+    if (!mounted) return;
+    final auth = context.read<AuthBloc>().state;
+    final ob = context.read<OnboardingBloc>().state;
+    if (auth is AuthAuthenticated || auth is AuthUnauthenticated) {
+      _authDone = true;
     }
+    if (ob.isFirstLaunch != null) _onboardDone = true;
+    _tryNavigate();
   }
 
-  void _tryNavigation({required String reason}) {
-    _tryNavigationCallCount++;
+  void _tryNavigate() {
+    if (_navigated) return;
+
+    final ready = _depsReady && _authDone && _onboardDone && _minTimeDone;
+
     debugPrint(
-      '🔁 [_tryNavigation #$_tryNavigationCallCount] Called from: $reason',
-    );
-    debugPrint('   _navigationTriggered: $_navigationTriggered');
-    debugPrint('   _minimalTimePassed: $_minimalTimePassed');
-
-    if (_navigationTriggered) {
-      debugPrint('   ⏭️ Navigation already triggered, skipping');
-      return;
-    }
-
-    if (!_minimalTimePassed) {
-      debugPrint('   ⏳ Minimal time not passed yet, waiting...');
-      return;
-    }
-
-    final authState = context.read<AuthBloc>().state;
-    final onboardingState = context.read<OnboardingBloc>().state;
-
-    debugPrint('   Current AuthState: ${authState.runtimeType}');
-    debugPrint('   Current OnboardingState: ${onboardingState.runtimeType}');
-    debugPrint(
-      '   onboardingState.isFirstLaunch: ${onboardingState.isFirstLaunch}',
+      '🔍 [Splash] Gates — deps:$_depsReady auth:$_authDone '
+      'onboard:$_onboardDone minTime:$_minTimeDone → ${ready ? "GO" : "WAIT"}',
     );
 
-    final authResolved =
-        authState is AuthAuthenticated || authState is AuthUnauthenticated;
-    final onboardingResolved = onboardingState.isFirstLaunch != null;
-
-    debugPrint('   authResolved: $authResolved');
-    debugPrint('   onboardingResolved: $onboardingResolved');
-
-    if (authResolved && onboardingResolved) {
-      debugPrint('✅ ALL CONDITIONS MET - navigating!');
-      _navigateToAppropriateScreen(force: false);
-    } else {
-      debugPrint('❌ CONDITIONS NOT MET - waiting for BLoC updates');
-      debugPrint(
-        '   Missing: ${!authResolved ? "Auth" : ""} ${!onboardingResolved ? "Onboarding" : ""}',
-      );
-    }
+    if (ready) _navigateNow(force: false);
   }
 
-  void _navigateToAppropriateScreen({required bool force}) {
-    if (_navigationTriggered && !force) {
-      debugPrint('   Navigation already triggered, skipping');
-      return;
-    }
-
-    debugPrint('🚀 [_navigateToAppropriateScreen] force=$force');
-    _navigationTriggered = true;
-
-    _minimalTimer?.cancel();
+  void _navigateNow({required bool force}) {
+    if (_navigated && !force) return;
+    _navigated = true;
+    _minTimer?.cancel();
     _safetyTimer?.cancel();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        debugPrint('   Widget not mounted, cannot navigate');
-        return;
-      }
-
+      if (!mounted) return;
       try {
-        final authState = context.read<AuthBloc>().state;
-        final onboardingState = context.read<OnboardingBloc>().state;
-        final isFirstLaunch = onboardingState.isFirstLaunch;
-        final hasCompletedProfile = onboardingState.hasCompletedProfile;
+        final auth = context.read<AuthBloc>().state;
+        final ob = context.read<OnboardingBloc>().state;
+        final firstLaunch = ob.isFirstLaunch;
+        final doneProfile = ob.hasCompletedProfile;
 
-        debugPrint('📊 Final state for navigation:');
-        debugPrint('   auth: ${authState.runtimeType}');
-        debugPrint('   isFirstLaunch: $isFirstLaunch');
-        debugPrint('   hasCompletedProfile: $hasCompletedProfile');
-
-        String route;
-        if (isFirstLaunch == true) {
+        final String route;
+        if (firstLaunch == true) {
           route = RouteNames.onboarding;
-        } else if (authState is AuthAuthenticated) {
-          route = hasCompletedProfile == true
+        } else if (auth is AuthAuthenticated) {
+          route = doneProfile == true
               ? RouteNames.home
               : RouteNames.profile_setup;
         } else {
           route = RouteNames.login;
         }
 
-        debugPrint('➡️ Navigating to: $route');
-        Navigator.pushReplacementNamed(context, route);
-      } catch (e, stack) {
-        debugPrint('❌ Navigation error: $e');
-        debugPrint('Stack trace: $stack');
-        Navigator.pushReplacementNamed(context, RouteNames.login);
+        debugPrint('🚀 [Splash] → $route');
+        Navigator.of(context).pushReplacementNamed(route);
+      } catch (e) {
+        debugPrint('❌ [Splash] Navigation error: $e — falling back to login');
+        Navigator.of(context).pushReplacementNamed(RouteNames.login);
       }
     });
   }
 
   @override
   void dispose() {
-    debugPrint('🧹 [Splash] dispose called');
-    _animController.dispose();
-    _minimalTimer?.cancel();
+    _anim.dispose();
+    _minTimer?.cancel();
     _safetyTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('🏗️ [Splash] build called');
-
     return MultiBlocListener(
       listeners: [
         BlocListener<AuthBloc, AuthState>(
-          listener: (context, state) {
-            _authStateChanges++;
-            debugPrint(
-              '🔔 [AuthBloc] State changed #$_authStateChanges: ${state.runtimeType}',
-            );
+          listener: (_, state) {
             if (state is AuthAuthenticated || state is AuthUnauthenticated) {
-              debugPrint('   ✅ Auth resolved!');
-              _tryNavigation(reason: 'auth_listener');
+              _authDone = true;
+              _tryNavigate();
             }
           },
         ),
         BlocListener<OnboardingBloc, OnboardingState>(
-          listener: (context, state) {
-            _onboardingStateChanges++;
-            debugPrint(
-              '🔔 [OnboardingBloc] State changed #$_onboardingStateChanges:',
-            );
-            debugPrint('   isFirstLaunch: ${state.isFirstLaunch}');
-            debugPrint('   hasCompletedProfile: ${state.hasCompletedProfile}');
+          listener: (_, state) {
             if (state.isFirstLaunch != null) {
-              debugPrint('   ✅ Onboarding resolved!');
-              _tryNavigation(reason: 'onboarding_listener');
+              _onboardDone = true;
+              _tryNavigate();
             }
           },
         ),
@@ -242,7 +185,7 @@ class _SplashScreenState extends State<SplashScreen>
       child: Scaffold(
         backgroundColor: AppColors.primary,
         body: FadeTransition(
-          opacity: _fadeAnim,
+          opacity: _fade,
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -262,7 +205,6 @@ class _SplashScreenState extends State<SplashScreen>
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                // Add a loading indicator for debugging
                 const SizedBox(height: 32),
                 const CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),

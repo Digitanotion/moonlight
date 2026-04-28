@@ -13,6 +13,7 @@ abstract class LiveFeedRemoteDataSource {
     required String idempotencyKey,
   });
   Future<Map<String, dynamic>> checkPremiumStatus({required int liveId});
+  Future<Map<String, dynamic>> checkStreamStatus({required int liveId});
 }
 
 class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
@@ -101,6 +102,23 @@ class LiveFeedRemoteDataSourceImpl implements LiveFeedRemoteDataSource {
       throw Exception('Network error while checking premium status');
     } catch (e) {
       throw Exception('Failed to check premium status: $e');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> checkStreamStatus({required int liveId}) async {
+    try {
+      final resp = await dio.get('/api/v1/live/$liveId/status');
+      return resp.data
+          as Map<String, dynamic>; // ✅ return the full map {status, message}
+    } on DioException catch (e) {
+      if (e.response != null) {
+        final errorData = e.response!.data as Map<String, dynamic>;
+        throw Exception(
+          errorData['message'] ?? 'Failed to check stream status',
+        );
+      }
+      throw Exception('Network error while checking stream status');
     }
   }
 }

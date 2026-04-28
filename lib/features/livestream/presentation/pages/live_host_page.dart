@@ -3989,7 +3989,7 @@ class _PremiumBottomSheetState extends State<_PremiumBottomSheet> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '\$${(p.priceUsdCents * 0.005).toStringAsFixed(2)}',
+                                    '\$${(p.coins * 0.01).toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w800,

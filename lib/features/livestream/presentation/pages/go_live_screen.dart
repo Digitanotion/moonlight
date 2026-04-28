@@ -118,7 +118,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
                             const SizedBox(height: 16),
                             _CameraCard(),
                             const SizedBox(height: 18),
-                            sectionTitle('Stream Settings'),
+                            // sectionTitle('Stream Settings'),
 
                             // const SizedBox(height: 6),
                             // _SettingTile(

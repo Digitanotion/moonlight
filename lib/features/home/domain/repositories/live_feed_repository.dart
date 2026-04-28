@@ -18,4 +18,5 @@ abstract class LiveFeedRepository {
   });
 
   Future<Map<String, dynamic>> checkPremiumStatus({required int liveId});
+  Future<Map<String, dynamic>> checkStreamStatus({required int liveId});
 }

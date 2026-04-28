@@ -38,4 +38,9 @@ class LiveFeedRepositoryImpl implements LiveFeedRepository {
   Future<Map<String, dynamic>> checkPremiumStatus({required int liveId}) {
     return remote.checkPremiumStatus(liveId: liveId);
   }
+
+  @override
+  Future<Map<String, dynamic>> checkStreamStatus({required int liveId}) {
+    return remote.checkStreamStatus(liveId: liveId);
+  }
 }
