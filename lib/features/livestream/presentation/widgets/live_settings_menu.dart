@@ -3,11 +3,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 
-// Ultra-modern TikTok-style settings menu
+// ─── LiveSettingsMenu ─────────────────────────────────────────────────────────
+
 class LiveSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
   final AgoraService agora;
@@ -24,95 +24,82 @@ class LiveSettingsMenu extends StatefulWidget {
 
 class _LiveSettingsMenuState extends State<LiveSettingsMenu>
     with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
-  bool _hasListener = false;
+  late AnimationController _animController;
+  late Animation<double> _scaleAnim;
+  late Animation<double> _opacityAnim;
 
   @override
   void initState() {
     super.initState();
 
-    _animationController = AnimationController(
+    _animController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
+    _scaleAnim = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
+    _opacityAnim = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
 
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
-
-    _animationController.forward();
-
-    if (!_hasListener) {
-      widget.agora.addListener(_onAgoraStateChanged);
-      _hasListener = true;
-    }
+    _animController.forward();
+    widget.agora.addListener(_onAgoraChanged);
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
-    if (_hasListener) {
-      widget.agora.removeListener(_onAgoraStateChanged);
-    }
+    widget.agora.removeListener(_onAgoraChanged);
+    _animController.dispose();
     super.dispose();
   }
 
-  void _onAgoraStateChanged() {
+  void _onAgoraChanged() {
     if (mounted) setState(() {});
   }
 
   void _closeMenu() {
-    _animationController.reverse().then((_) {
-      widget.onClose();
+    // Guard: widget may already be gone when the reverse completes.
+    _animController.reverse().then((_) {
+      if (mounted) widget.onClose();
     });
   }
 
   void _showFXSettings() {
+    // Capture BLoC before going async — context may change.
     final bloc = context.read<LiveHostBloc>();
     final state = bloc.state;
+    final agora = widget.agora;
 
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withOpacity(0.6),
-      builder: (context) {
-        return _FXBottomSheet(
-          agora: widget.agora,
-          currentState: state,
-          onApply:
-              (
-                faceCleanEnabled,
-                faceCleanLevel,
-                brightenEnabled,
-                brightenLevel,
-              ) {
-                // Dispatch to BLoC for persistence
-                bloc.add(
-                  BeautyPreferencesUpdated(
-                    faceCleanEnabled: faceCleanEnabled,
-                    faceCleanLevel: faceCleanLevel,
-                    brightenEnabled: brightenEnabled,
-                    brightenLevel: brightenLevel,
-                  ),
-                );
-
-                // Apply immediately to Agora
-                widget.agora.applyBeauty(
-                  faceCleanEnabled: faceCleanEnabled,
-                  faceCleanLevel: faceCleanLevel,
-                  brightenEnabled: brightenEnabled,
-                  brightenLevel: brightenLevel,
-                );
-              },
-        );
-      },
+      builder: (_) => _FXBottomSheet(
+        agora: agora,
+        currentState: state,
+        onApply: (faceOn, faceLevel, brightOn, brightLevel) {
+          // BLoC — persists the settings.
+          bloc.add(
+            BeautyPreferencesUpdated(
+              faceCleanEnabled: faceOn,
+              faceCleanLevel: faceLevel,
+              brightenEnabled: brightOn,
+              brightenLevel: brightLevel,
+            ),
+          );
+          // Agora — applies immediately; never throws (handled internally).
+          agora.applyBeauty(
+            faceCleanEnabled: faceOn,
+            faceCleanLevel: faceLevel,
+            brightenEnabled: brightOn,
+            brightenLevel: brightLevel,
+          );
+        },
+      ),
     ).then((_) {
       if (mounted) setState(() {});
     });
@@ -124,17 +111,15 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
       onTap: _closeMenu,
       behavior: HitTestBehavior.opaque,
       child: AnimatedBuilder(
-        animation: _animationController,
-        builder: (context, child) {
-          return Opacity(
-            opacity: _opacityAnimation.value,
-            child: Transform.scale(
-              scale: _scaleAnimation.value,
-              alignment: Alignment.bottomRight,
-              child: child,
-            ),
-          );
-        },
+        animation: _animController,
+        builder: (context, child) => Opacity(
+          opacity: _opacityAnim.value,
+          child: Transform.scale(
+            scale: _scaleAnim.value,
+            alignment: Alignment.bottomRight,
+            child: child,
+          ),
+        ),
         child: Align(
           alignment: Alignment.bottomRight,
           child: Container(
@@ -151,6 +136,8 @@ class _LiveSettingsMenuState extends State<LiveSettingsMenu>
   }
 }
 
+// ─── _SettingsMenuContent ─────────────────────────────────────────────────────
+
 class _SettingsMenuContent extends StatelessWidget {
   final AgoraService agora;
   final VoidCallback onFXPressed;
@@ -162,57 +149,64 @@ class _SettingsMenuContent extends StatelessWidget {
     required this.onClose,
   });
 
-  Future<void> _performEmergencyReset(BuildContext context) async {
-    onClose();
+  // Emergency reset — called after confirmation dialog closes.
+  // Uses a [BuildContext] captured at the point of the tap, not from an async
+  // gap, so it is always valid when _performReset is first entered.
+  Future<void> _performReset(BuildContext context) async {
+    // Capture the bloc before any await so we don't access context across gaps.
+    LiveHostBloc? bloc;
+    try {
+      bloc = BlocProvider.of<LiveHostBloc>(context);
+    } catch (_) {
+      // BLoC may have been removed from the tree — continue reset without it.
+    }
 
-    final overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        bottom: 100,
-        right: 16,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.red.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 40,
-                spreadRadius: -10,
-                offset: const Offset(0, 20),
+    // Show progress overlay.
+    OverlayEntry? overlay;
+    try {
+      overlay = OverlayEntry(
+        builder: (_) => Positioned(
+          bottom: 100,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(20),
               ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Resetting camera…',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
               ),
-              SizedBox(width: 8),
-              Text(
-                'Resetting camera...',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
-    );
-
-    Overlay.of(context).insert(overlayEntry);
+      );
+      Overlay.of(context).insert(overlay);
+    } catch (e) {
+      debugPrint('[Reset] Could not show overlay: $e');
+    }
 
     try {
-      // Step 1: Reset beauty via the safe reset path
       await agora.resetBeauty();
 
-      // Step 2: Reset BLoC state
-      BlocProvider.of<LiveHostBloc>(context).add(
+      bloc?.add(
         BeautyPreferencesUpdated(
           faceCleanEnabled: false,
           faceCleanLevel: 40,
@@ -221,10 +215,10 @@ class _SettingsMenuContent extends StatelessWidget {
         ),
       );
 
-      // Step 3: Small delay for stabilization
       await Future.delayed(const Duration(milliseconds: 300));
 
-      overlayEntry.remove();
+      overlay?.remove();
+      overlay = null;
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -240,7 +234,8 @@ class _SettingsMenuContent extends StatelessWidget {
         );
       }
     } catch (e) {
-      overlayEntry.remove();
+      overlay?.remove();
+      overlay = null;
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -260,7 +255,6 @@ class _SettingsMenuContent extends StatelessWidget {
       builder: (context, state) {
         final hasBeautySettings =
             state.faceCleanEnabled || state.brightenEnabled;
-
         final beautyActive = agora.beautyActive.value;
 
         return Container(
@@ -285,7 +279,7 @@ class _SettingsMenuContent extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
+                  // ── Header ─────────────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -327,13 +321,12 @@ class _SettingsMenuContent extends StatelessWidget {
                     ),
                   ),
 
-                  // Settings Items
+                  // ── Items ──────────────────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Column(
                       children: [
-                        // Audio Control
-                        _ModernSettingsItem(
+                        _MenuItem(
                           icon: agora.isMicEnabled
                               ? Icons.mic_rounded
                               : Icons.mic_off_rounded,
@@ -346,9 +339,7 @@ class _SettingsMenuContent extends StatelessWidget {
                               : Colors.white,
                           onTap: () => agora.setMicEnabled(!agora.isMicEnabled),
                         ),
-
-                        // Video Control
-                        _ModernSettingsItem(
+                        _MenuItem(
                           icon: agora.isCameraEnabled
                               ? Icons.videocam_rounded
                               : Icons.videocam_off_rounded,
@@ -362,9 +353,7 @@ class _SettingsMenuContent extends StatelessWidget {
                           onTap: () =>
                               agora.setCameraEnabled(!agora.isCameraEnabled),
                         ),
-
-                        // Beauty FX (Unified)
-                        _ModernSettingsItem(
+                        _MenuItem(
                           icon: Icons.face_retouching_natural_rounded,
                           label: 'Beauty FX',
                           isActive: beautyActive || hasBeautySettings,
@@ -405,7 +394,9 @@ class _SettingsMenuContent extends StatelessWidget {
   }
 }
 
-class _ModernSettingsItem extends StatelessWidget {
+// ─── _MenuItem ────────────────────────────────────────────────────────────────
+
+class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
@@ -413,7 +404,7 @@ class _ModernSettingsItem extends StatelessWidget {
   final VoidCallback onTap;
   final Widget? badge;
 
-  const _ModernSettingsItem({
+  const _MenuItem({
     required this.icon,
     required this.label,
     required this.isActive,
@@ -496,22 +487,26 @@ class _ModernSettingsItem extends StatelessWidget {
   }
 }
 
-// ─── FX Bottom Sheet ─────────────────────────────────────────────────────────
+// ─── _FXBottomSheet ───────────────────────────────────────────────────────────
 //
-// Design rules that prevent the black-screen bug:
+// Design invariants that prevent crashes:
 //
-//  1. Single debounce timer (_debounceTimer) – no competing timers.
-//  2. Toggle changes call applyBeauty directly (no debounce) so disable is
-//     never delayed or swallowed.
-//  3. Slider drags are debounced (350 ms) to avoid flooding the SDK.
-//  4. "Save Settings" / sheet close flush any pending debounce immediately.
-//  5. dispose() cancels the timer and calls onApply with the final state so
-//     beauty settings are never left in an intermediate state.
+//  1. onApply is called with a typedef so the reference stays valid after the
+//     sheet is dismissed.
+//  2. Single debounce timer (_debounce) — no competing timers.
+//  3. Toggle changes call _applyNow() (no debounce) so a disable is never
+//     delayed or swallowed.
+//  4. Slider drags are debounced (350 ms) to avoid flooding the SDK.
+//  5. Save / Reset / close all flush the timer and call _applyNow() first.
+//  6. dispose() cancels the timer — no callbacks fire after the sheet is gone.
+
+typedef _OnApply =
+    void Function(bool faceOn, int faceLevel, bool brightOn, int brightLevel);
 
 class _FXBottomSheet extends StatefulWidget {
   final AgoraService agora;
   final LiveHostState currentState;
-  final Function(bool, int, bool, int) onApply;
+  final _OnApply onApply;
 
   const _FXBottomSheet({
     required this.agora,
@@ -524,104 +519,96 @@ class _FXBottomSheet extends StatefulWidget {
 }
 
 class _FXBottomSheetState extends State<_FXBottomSheet> {
-  late bool _faceCleanEnabled;
-  late int _faceCleanLevel;
-  late bool _brightenEnabled;
-  late int _brightenLevel;
+  late bool _faceOn;
+  late int _faceLevel;
+  late bool _brightOn;
+  late int _brightLevel;
 
-  // Single debounce timer for slider changes only.
-  Timer? _debounceTimer;
-  static const Duration _sliderDebounce = Duration(milliseconds: 350);
+  Timer? _debounce;
+  static const _kDebounce = Duration(milliseconds: 350);
 
   @override
   void initState() {
     super.initState();
-    _faceCleanEnabled = widget.currentState.faceCleanEnabled;
-    _faceCleanLevel = widget.currentState.faceCleanLevel;
-    _brightenEnabled = widget.currentState.brightenEnabled;
-    _brightenLevel = widget.currentState.brightenLevel;
+    _faceOn = widget.currentState.faceCleanEnabled;
+    _faceLevel = widget.currentState.faceCleanLevel;
+    _brightOn = widget.currentState.brightenEnabled;
+    _brightLevel = widget.currentState.brightenLevel;
   }
 
   @override
   void dispose() {
-    // Cancel any pending debounce and flush the latest state so it's persisted.
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
+    _debounce?.cancel();
+    _debounce = null;
     super.dispose();
   }
 
-  // ── Apply helpers ──────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /// Fires immediately – used for toggle changes so disable is never delayed.
+  /// Fire immediately — used for toggle changes and explicit save/reset.
   void _applyNow() {
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
-    widget.onApply(
-      _faceCleanEnabled,
-      _faceCleanLevel,
-      _brightenEnabled,
-      _brightenLevel,
-    );
+    _debounce?.cancel();
+    _debounce = null;
+    widget.onApply(_faceOn, _faceLevel, _brightOn, _brightLevel);
   }
 
-  /// Debounced – used for slider drags to avoid flooding the SDK.
+  /// Debounced — used for slider drags to avoid flooding the Agora SDK.
   void _applyDebounced() {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(_sliderDebounce, () {
-      widget.onApply(
-        _faceCleanEnabled,
-        _faceCleanLevel,
-        _brightenEnabled,
-        _brightenLevel,
-      );
+    _debounce?.cancel();
+    _debounce = Timer(_kDebounce, () {
+      if (mounted) {
+        widget.onApply(_faceOn, _faceLevel, _brightOn, _brightLevel);
+      }
     });
   }
 
   // ── Toggle handlers ────────────────────────────────────────────────────────
 
-  void _onFaceCleanToggled(bool value) {
-    setState(() => _faceCleanEnabled = value);
-    // Apply immediately so disable is never swallowed.
-    _applyNow();
+  void _toggleFace(bool value) {
+    if (!mounted) return;
+    setState(() => _faceOn = value);
+    _applyNow(); // immediate — disable must never be delayed
   }
 
-  void _onBrightenToggled(bool value) {
-    setState(() => _brightenEnabled = value);
+  void _toggleBright(bool value) {
+    if (!mounted) return;
+    setState(() => _brightOn = value);
     _applyNow();
   }
 
   // ── Slider handlers ────────────────────────────────────────────────────────
 
-  void _onFaceCleanLevelChanged(double value) {
-    setState(() => _faceCleanLevel = value.round());
+  void _slideFace(double value) {
+    if (!mounted) return;
+    setState(() => _faceLevel = value.round());
     _applyDebounced();
   }
 
-  void _onBrightenLevelChanged(double value) {
-    setState(() => _brightenLevel = value.round());
+  void _slideBright(double value) {
+    if (!mounted) return;
+    setState(() => _brightLevel = value.round());
     _applyDebounced();
   }
 
-  // ── Reset ──────────────────────────────────────────────────────────────────
+  // ── Actions ────────────────────────────────────────────────────────────────
 
-  void _resetToDefaults() {
+  void _reset() {
+    if (!mounted) return;
     setState(() {
-      _faceCleanEnabled = false;
-      _faceCleanLevel = 40;
-      _brightenEnabled = false;
-      _brightenLevel = 40;
+      _faceOn = false;
+      _faceLevel = 40;
+      _brightOn = false;
+      _brightLevel = 40;
     });
-    // Reset is always immediate.
     _applyNow();
   }
-
-  // ── Save & close ───────────────────────────────────────────────────────────
 
   void _saveAndClose() {
-    // Flush any pending debounce before closing.
-    _applyNow();
-    Navigator.of(context).pop();
+    _applyNow(); // flush any pending debounce before closing
+    if (mounted) Navigator.of(context).pop();
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -632,7 +619,7 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
       maxChildSize: 0.7,
       snap: true,
       snapSizes: const [0.5, 0.7],
-      builder: (context, scrollController) {
+      builder: (_, scrollController) {
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFF0F1218),
@@ -669,7 +656,7 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                     ),
                     const Spacer(),
                     GestureDetector(
-                      onTap: _resetToDefaults,
+                      onTap: _reset,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -719,33 +706,26 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                     vertical: 8,
                   ),
                   children: [
-                    // Face Clean
                     _FXSection(
                       icon: Icons.face_retouching_natural_rounded,
                       title: 'Face Clean',
-                      enabled: _faceCleanEnabled,
-                      level: _faceCleanLevel,
+                      enabled: _faceOn,
+                      level: _faceLevel,
                       color: const Color(0xFF00D4FF),
-                      onEnabledChanged: _onFaceCleanToggled,
-                      onLevelChanged: _onFaceCleanLevelChanged,
+                      onEnabledChanged: _toggleFace,
+                      onLevelChanged: _slideFace,
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Brighten
                     _FXSection(
                       icon: Icons.wb_sunny_rounded,
                       title: 'Brighten',
-                      enabled: _brightenEnabled,
-                      level: _brightenLevel,
+                      enabled: _brightOn,
+                      level: _brightLevel,
                       color: const Color(0xFFFFD700),
-                      onEnabledChanged: _onBrightenToggled,
-                      onLevelChanged: _onBrightenLevelChanged,
+                      onEnabledChanged: _toggleBright,
+                      onLevelChanged: _slideBright,
                     ),
-
                     const SizedBox(height: 32),
-
-                    // Info note
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -772,13 +752,12 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 40),
                   ],
                 ),
               ),
 
-              // Save Button
+              // Save button
               SafeArea(
                 top: false,
                 child: Container(
@@ -834,7 +813,7 @@ class _FXBottomSheetState extends State<_FXBottomSheet> {
   }
 }
 
-// ─── FX Section Component ─────────────────────────────────────────────────────
+// ─── _FXSection ───────────────────────────────────────────────────────────────
 
 class _FXSection extends StatelessWidget {
   final IconData icon;
@@ -871,6 +850,7 @@ class _FXSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Toggle row
           Row(
             children: [
               AnimatedContainer(
@@ -913,7 +893,7 @@ class _FXSection extends StatelessWidget {
             ],
           ),
 
-          // Slider – only visible when enabled, with animated reveal
+          // Slider — animated reveal
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 250),
             crossFadeState: enabled
@@ -963,15 +943,9 @@ class _FXSection extends StatelessWidget {
                     trackHeight: 4,
                     thumbShape: const RoundSliderThumbShape(
                       enabledThumbRadius: 10,
-                      disabledThumbRadius: 8,
                     ),
                     overlayShape: const RoundSliderOverlayShape(
                       overlayRadius: 16,
-                    ),
-                    valueIndicatorColor: color,
-                    valueIndicatorTextStyle: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
                     ),
                   ),
                   child: Slider(
@@ -1011,8 +985,6 @@ class _FXSection extends StatelessWidget {
                 ),
               ],
             ),
-            // Empty second child – just a zero-height box so AnimatedCrossFade
-            // has something to fade to.
             secondChild: const SizedBox.shrink(),
           ),
         ],

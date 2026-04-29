@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-// Add this state class at the top level, outside AgoraService
 class RemoteUserState {
   final int uid;
   final bool hasVideo;
@@ -29,20 +28,36 @@ class RemoteUserState {
 }
 
 /// AgoraService for hosting (Broadcaster).
+///
+/// KEY DESIGN RULE — why beauty never calls notifyListeners():
+///
+///   The camera preview is rendered inside an AnimatedBuilder(animation: agora).
+///   Every notifyListeners() call causes that builder to run, which recreates
+///   the AgoraVideoView and its VideoViewController.  Recreating the controller
+///   while the SDK is still finishing a setBeautyEffectOptions() call tears down
+///   the render surface → black screen.
+///
+///   Beauty state is therefore exposed ONLY through [beautyActive] (a separate
+///   ValueNotifier).  The AnimatedBuilder in live_host_page must NOT listen to
+///   this notifier — only localPreview-unrelated widgets should observe it.
+///   notifyListeners() is called only for session state changes (join, leave,
+///   mic/camera mute, remote user events) — never for beauty operations.
 class AgoraService with ChangeNotifier {
   RtcEngine? _engine;
 
-  // Session state
+  // Disposed guard — checked before every notifier write.
+  bool _disposed = false;
+
+  // ── Session state ──────────────────────────────────────────────────────────
   bool _joined = false;
   bool _previewing = false;
 
   String? _appId;
   String? _channelId;
   String? _token;
-
-  String? _uidType; // "uid" | "userAccount"
-  String? _userAccount; // set only when uidType == userAccount
-  int? _localUid; // set only when uidType == uid
+  String? _uidType;
+  String? _userAccount;
+  int? _localUid;
 
   String? _lastError;
   String? get lastError => _lastError;
@@ -51,92 +66,130 @@ class AgoraService with ChangeNotifier {
   String? get channelId => _channelId;
   RtcEngine? get engine => _engine;
 
-  // Add mute state tracking
   bool _isMicEnabled = true;
   bool _isCameraEnabled = true;
 
-  // Primary remote publisher (your single guest). Null when none.
   final ValueNotifier<int?> primaryRemoteUid = ValueNotifier<int?>(null);
   final ValueNotifier<bool> _remoteHasVideo = ValueNotifier<bool>(false);
 
   bool get remoteHasVideo => _remoteHasVideo.value;
   bool get isMicEnabled => _isMicEnabled;
   bool get isCameraEnabled => _isCameraEnabled;
-  // Enhanced remote user tracking
+
   final ValueNotifier<Map<int, RemoteUserState>> remoteUsers =
       ValueNotifier<Map<int, RemoteUserState>>({});
 
-  // Legacy tracking maps (keep for compatibility if needed elsewhere)
-  final Map<int, bool> _remoteVideoStates = {};
-  final Map<int, bool> _remoteAudioStates = {};
+  // ── Beauty state ───────────────────────────────────────────────────────────
+  //
+  // [beautyActive] is a SEPARATE ValueNotifier — widgets that only need to show
+  // an "FX on" badge observe this directly and do NOT cause the video view to
+  // rebuild.
+  //
+  // Pending-state pattern: latest requested values are stored immediately.
+  // _isApplyingBeauty guards one SDK call at a time.  When the in-flight call
+  // finishes, its finally{} block re-runs if _hasPendingBeauty is set — so a
+  // rapid toggle-off is never silently dropped.
+  final ValueNotifier<bool> beautyActive = ValueNotifier<bool>(false);
 
-  // ─── Beauty state ───────────────────────────────────────────────────────────
-  // Pending-state pattern: latest requested values are always stored here.
-  // _isApplyingBeauty guards the Agora SDK call; when it finishes it checks
-  // whether a newer request came in and, if so, re-applies immediately.
-  // This guarantees the LAST requested state is always ultimately applied,
-  // so a quick toggle-off can never be silently dropped.
   bool _isApplyingBeauty = false;
   bool _hasPendingBeauty = false;
-
   bool _pendingFaceEnabled = false;
   int _pendingFaceLevel = 0;
   bool _pendingBrightenEnabled = false;
   int _pendingBrightenLevel = 0;
 
-  // Expose a notifier so UI can optionally react
-  final ValueNotifier<bool> beautyActive = ValueNotifier<bool>(false);
+  // ── Stable local preview controller ───────────────────────────────────────
+  //
+  // Created once when the engine is ready and reused for the lifetime of the
+  // session.  Never recreated by a beauty change.
+  VideoViewController? _localViewController;
+
+  // ── Safe helpers ───────────────────────────────────────────────────────────
+
+  void _setNotifier<T>(ValueNotifier<T> notifier, T value) {
+    if (_disposed) return;
+    try {
+      notifier.value = value;
+    } catch (e) {
+      debugPrint('[AgoraService] notifier write skipped (disposed): $e');
+    }
+  }
+
+  /// Only used for SESSION state changes (join/leave/mic/camera/remote users).
+  /// NEVER called from beauty methods.
+  void _notify() {
+    if (_disposed) return;
+    try {
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[AgoraService] notifyListeners skipped (disposed): $e');
+    }
+  }
 
   @override
   void dispose() {
-    remoteUsers.dispose();
-    primaryRemoteUid.dispose();
-    _remoteHasVideo.dispose();
-    beautyActive.dispose();
+    _disposed = true;
+    _isApplyingBeauty = false;
+    _hasPendingBeauty = false;
+
+    // Dispose the stable controller before the engine is released.
+    try {
+      _localViewController?.dispose();
+    } catch (_) {}
+    _localViewController = null;
+
+    try {
+      remoteUsers.dispose();
+    } catch (_) {}
+    try {
+      primaryRemoteUid.dispose();
+    } catch (_) {}
+    try {
+      _remoteHasVideo.dispose();
+    } catch (_) {}
+    try {
+      beautyActive.dispose();
+    } catch (_) {}
+
     super.dispose();
   }
 
   // ---------------------------------------------------------------------------
-  // Public API
+  // Beauty API
   // ---------------------------------------------------------------------------
 
   /// Apply beauty options (face clean = smoothing, brighten = lightening).
-  /// Uses a pending-state queue so rapid toggles (on→off, slider drags) always
-  /// resolve to the latest requested state — preventing the black-screen bug
-  /// that occurred when a disable call was dropped by the old cooldown guard.
   ///
-  /// IMPORTANT: This method intentionally does NOT touch the camera enabled
-  /// state. Toggling the camera inside an effect call was the primary cause of
-  /// the black-screen regression.
+  /// NEVER calls notifyListeners() — beauty changes must not rebuild the video
+  /// view.  State is surfaced only through [beautyActive].
   Future<void> applyBeauty({
     required bool faceCleanEnabled,
     required int faceCleanLevel,
     required bool brightenEnabled,
     required int brightenLevel,
   }) async {
-    // Always store the newest desired state.
+    if (_disposed) return;
+
     _pendingFaceEnabled = faceCleanEnabled;
     _pendingFaceLevel = faceCleanLevel.clamp(0, 100);
     _pendingBrightenEnabled = brightenEnabled;
     _pendingBrightenLevel = brightenLevel.clamp(0, 100);
     _hasPendingBeauty = true;
 
-    // If a call is already in flight the pending values will be picked up when
-    // it completes (see _doApplyBeauty's finally block).
     if (_isApplyingBeauty) {
-      debugPrint('[Beauty] Apply in progress – latest state queued');
+      debugPrint('[Beauty] Apply in-flight — newest state queued');
       return;
     }
 
     await _doApplyBeauty();
   }
 
-  /// Internal worker that always operates on _pending* values.
   Future<void> _doApplyBeauty() async {
-    if (!_hasPendingBeauty) return;
+    if (_disposed || !_hasPendingBeauty) return;
+
     final e = _engine;
     if (e == null) {
-      debugPrint('[Beauty] Engine not available, skipping apply');
+      debugPrint('[Beauty] Engine not available — skipping');
       _hasPendingBeauty = false;
       return;
     }
@@ -144,28 +197,28 @@ class AgoraService with ChangeNotifier {
     _isApplyingBeauty = true;
     _hasPendingBeauty = false;
 
-    // Snapshot the values we're about to apply so later pending writes don't
-    // mutate under us mid-call.
+    // Snapshot before any await so later writes don't race.
     final faceEnabled = _pendingFaceEnabled;
     final faceLevel = _pendingFaceLevel;
     final brightenEnabled = _pendingBrightenEnabled;
     final brightenLevel = _pendingBrightenLevel;
 
     try {
-      final smooth = (faceEnabled ? (faceLevel / 100.0) : 0.0).clamp(0.0, 1.0);
-      final lighten = (brightenEnabled ? (brightenLevel / 100.0) : 0.0).clamp(
+      if (_disposed) return;
+
+      final smooth = (faceEnabled ? faceLevel / 100.0 : 0.0).clamp(0.0, 1.0);
+      final lighten = (brightenEnabled ? brightenLevel / 100.0 : 0.0).clamp(
         0.0,
         1.0,
       );
 
       if (smooth == 0.0 && lighten == 0.0) {
-        // Disable beauty completely – this is the path most likely to cause
-        // the black screen if interrupted, so we do it in one clean call.
         await e.setBeautyEffectOptions(
           enabled: false,
           options: const BeautyOptions(),
         );
-        beautyActive.value = false;
+        // Update badge notifier only — NO notifyListeners().
+        _setNotifier(beautyActive, false);
         debugPrint('[Beauty] Disabled successfully');
       } else {
         final options = BeautyOptions(
@@ -174,67 +227,77 @@ class AgoraService with ChangeNotifier {
           lighteningContrastLevel:
               LighteningContrastLevel.lighteningContrastNormal,
           rednessLevel: (lighten * 0.12).clamp(0.0, 0.15),
-          sharpnessLevel: 0.25 + (smooth * 0.2),
+          sharpnessLevel: (0.25 + smooth * 0.2).clamp(0.0, 1.0),
         );
         await e.setBeautyEffectOptions(enabled: true, options: options);
-        beautyActive.value = true;
-        debugPrint('[Beauty] Applied – smooth=$smooth lighten=$lighten');
+        // Update badge notifier only — NO notifyListeners().
+        _setNotifier(beautyActive, true);
+        debugPrint('[Beauty] Applied — smooth=$smooth lighten=$lighten');
       }
-
-      notifyListeners();
+      // ← intentionally NO _notify() here
     } catch (err, stack) {
-      debugPrint('❌ [Beauty] Apply failed: $err');
-      debugPrint('$stack');
+      debugPrint('❌ [Beauty] Apply failed: $err\n$stack');
       _lastError = 'Beauty effects failed: $err';
 
-      // Attempt a clean reset so the camera pipeline isn't left in a bad state.
+      // Best-effort recovery: disable so pipeline is clean.
       try {
-        await e.setBeautyEffectOptions(
-          enabled: false,
-          options: const BeautyOptions(),
-        );
-        beautyActive.value = false;
-        debugPrint('[Beauty] Recovery reset applied');
+        if (!_disposed && _engine != null) {
+          await _engine!.setBeautyEffectOptions(
+            enabled: false,
+            options: const BeautyOptions(),
+          );
+          _setNotifier(beautyActive, false);
+          debugPrint('[Beauty] Recovery — effects disabled after error');
+        }
       } catch (recoveryErr) {
         debugPrint('❌ [Beauty] Recovery also failed: $recoveryErr');
       }
-
-      notifyListeners();
+      // ← intentionally NO _notify() here either
     } finally {
       _isApplyingBeauty = false;
 
-      // If a newer state arrived while we were applying, honour it now.
-      if (_hasPendingBeauty) {
+      if (!_disposed && _hasPendingBeauty) {
         debugPrint('[Beauty] Applying queued pending state');
-        // Tiny yield so we don't starve the event loop.
         await Future.delayed(const Duration(milliseconds: 30));
         await _doApplyBeauty();
       }
     }
   }
 
-  // Add a new method to safely reset everything
-  Future<void> safeReset() async {
+  /// Reset all beauty — disables effects and clears pending state.
+  /// Never throws. NEVER calls notifyListeners().
+  Future<void> resetBeauty() async {
+    _hasPendingBeauty = false;
+    _pendingFaceEnabled = false;
+    _pendingFaceLevel = 0;
+    _pendingBrightenEnabled = false;
+    _pendingBrightenLevel = 0;
+
+    _setNotifier(beautyActive, false);
+
+    final e = _engine;
+    if (e == null) return;
+
     try {
-      // Reset beauty first
-      await _engine?.setBeautyEffectOptions(
+      await e.setBeautyEffectOptions(
         enabled: false,
         options: const BeautyOptions(),
       );
+      // ← intentionally NO _notify()
+      if (kDebugMode) debugPrint('[Agora] Beauty reset');
+    } catch (err) {
+      debugPrint('⚠️ Failed to reset beauty: $err');
+    }
+  }
 
-      // Ensure camera is enabled
-      if (!_isCameraEnabled) {
-        await setCameraEnabled(true);
-      }
-
-      // Small stabilization delay
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      beautyActive.value = false;
-      notifyListeners();
+  /// Safe full reset: disables beauty + ensures camera is running.
+  Future<void> safeReset() async {
+    try {
+      await resetBeauty();
+      if (!_isCameraEnabled) await setCameraEnabled(true);
+      await Future.delayed(const Duration(milliseconds: 200));
     } catch (e) {
-      debugPrint('❌ Safe reset failed: $e');
-      // Try emergency recovery
+      debugPrint('❌ safeReset failed: $e');
       try {
         await _engine?.muteLocalVideoStream(false);
         await _engine?.startPreview();
@@ -243,30 +306,9 @@ class AgoraService with ChangeNotifier {
     }
   }
 
-  /// Reset/disable any beauty options previously applied. Safe no-op if engine absent.
-  Future<void> resetBeauty() async {
-    // Clear any pending state first so _doApplyBeauty won't re-enable after we reset.
-    _hasPendingBeauty = false;
-    _pendingFaceEnabled = false;
-    _pendingFaceLevel = 0;
-    _pendingBrightenEnabled = false;
-    _pendingBrightenLevel = 0;
-
-    beautyActive.value = false;
-
-    final e = _engine;
-    if (e == null) return;
-    try {
-      await e.setBeautyEffectOptions(
-        enabled: false,
-        options: const BeautyOptions(),
-      );
-      notifyListeners();
-      if (kDebugMode) debugPrint('[Agora] Beauty reset');
-    } catch (err) {
-      debugPrint('⚠️ Failed to reset beauty: $err');
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Session API
+  // ---------------------------------------------------------------------------
 
   Future<void> startPublishingFromStartResponse(
     Map<String, dynamic> resp, {
@@ -275,15 +317,14 @@ class AgoraService with ChangeNotifier {
     final appId = (resp['agora']?['app_id'] as String?) ?? '';
     final token = (resp['agora']?['rtc_token'] as String?) ?? '';
     final channel = (resp['channel'] as String?) ?? '';
-    final uidType = ((resp['uid_type'] ?? 'uid').toString());
-    final rtcRole = ((resp['rtc_role'] ?? 'publisher').toString());
-
-    final uidVal = resp['uid'];
-    final uidStr = uidVal == null ? '' : uidVal.toString();
+    final uidType = (resp['uid_type'] ?? 'uid').toString();
+    final rtcRole = (resp['rtc_role'] ?? 'publisher').toString();
+    final uidStr = (resp['uid'] ?? '').toString();
 
     if (kDebugMode) {
       debugPrint(
-        '[Agora] creds: appId=${_safe(appId)} channel=$channel uidType=$uidType uid=$uidStr role=$rtcRole token=${_safe(token)}',
+        '[Agora] creds: appId=${_safe(appId)} channel=$channel '
+        'uidType=$uidType uid=$uidStr role=$rtcRole token=${_safe(token)}',
       );
     }
 
@@ -298,7 +339,6 @@ class AgoraService with ChangeNotifier {
     );
   }
 
-  /// Core start: initializes engine, sets role to Broadcaster, and joins.
   Future<void> startPublishing({
     required String appId,
     required String channel,
@@ -309,7 +349,6 @@ class AgoraService with ChangeNotifier {
     bool enablePreview = true,
   }) async {
     _assertInputs(appId, channel, token, uidType, uid);
-
     await _ensurePermissions();
 
     final same =
@@ -323,8 +362,7 @@ class AgoraService with ChangeNotifier {
             (uidType.toLowerCase() == 'uid' && _localUid == int.tryParse(uid)));
 
     if (same) {
-      if (kDebugMode)
-        debugPrint('[Agora] Same session detected, skipping rejoin.');
+      if (kDebugMode) debugPrint('[Agora] Same session — skipping rejoin.');
       return;
     }
 
@@ -353,7 +391,6 @@ class AgoraService with ChangeNotifier {
         cameraDirection: CameraDirection.cameraFront,
       ),
     );
-
     await e.setVideoEncoderConfiguration(
       const VideoEncoderConfiguration(
         dimensions: VideoDimensions(width: 720, height: 1280),
@@ -362,7 +399,6 @@ class AgoraService with ChangeNotifier {
         orientationMode: OrientationMode.orientationModeFixedPortrait,
       ),
     );
-
     await e.setDefaultAudioRouteToSpeakerphone(true);
 
     if (uidType.toLowerCase() == 'useraccount') {
@@ -375,54 +411,47 @@ class AgoraService with ChangeNotifier {
           _joined = true;
           if (kDebugMode) {
             debugPrint(
-              '✅ [Agora] onJoinChannelSuccess ch=${conn.channelId} localUid=${conn.localUid}',
+              '✅ [Agora] joined ch=${conn.channelId} uid=${conn.localUid}',
             );
           }
-          notifyListeners();
+          _notify(); // session change — OK to notify
         },
 
         onUserJoined: (RtcConnection conn, int remoteUid, int elapsed) {
-          if (kDebugMode) {
-            debugPrint('[Agora] Remote user joined: $remoteUid');
+          if (kDebugMode) debugPrint('[Agora] Remote joined: $remoteUid');
+          if (!_disposed) {
+            remoteUsers.value = {
+              ...remoteUsers.value,
+              remoteUid: RemoteUserState(
+                uid: remoteUid,
+                hasVideo: false,
+                hasAudio: false,
+                joined: true,
+              ),
+            };
           }
-
-          remoteUsers.value = {
-            ...remoteUsers.value,
-            remoteUid: RemoteUserState(
-              uid: remoteUid,
-              hasVideo: false,
-              hasAudio: false,
-              joined: true,
-            ),
-          };
-
           if (primaryRemoteUid.value == null) {
-            primaryRemoteUid.value = remoteUid;
-            if (kDebugMode) {
-              debugPrint('[Agora] Setting primary remote UID: $remoteUid');
-            }
+            _setNotifier(primaryRemoteUid, remoteUid);
           }
-
-          notifyListeners();
+          _notify();
         },
 
         onUserOffline:
             (RtcConnection conn, int remoteUid, UserOfflineReasonType reason) {
               if (kDebugMode) {
                 debugPrint(
-                  '[Agora] Remote user offline: $remoteUid, reason: $reason',
+                  '[Agora] Remote offline: $remoteUid reason: $reason',
                 );
               }
-
-              remoteUsers.value = Map.from(remoteUsers.value)
-                ..remove(remoteUid);
-
-              if (primaryRemoteUid.value == remoteUid) {
-                primaryRemoteUid.value = null;
-                _remoteHasVideo.value = false;
+              if (!_disposed) {
+                remoteUsers.value = Map.from(remoteUsers.value)
+                  ..remove(remoteUid);
               }
-
-              notifyListeners();
+              if (primaryRemoteUid.value == remoteUid) {
+                _setNotifier(primaryRemoteUid, null);
+                _setNotifier(_remoteHasVideo, false);
+              }
+              _notify();
             },
 
         onRemoteVideoStateChanged:
@@ -433,17 +462,11 @@ class AgoraService with ChangeNotifier {
               RemoteVideoStateReason reason,
               int elapsed,
             ) {
-              if (kDebugMode) {
-                debugPrint(
-                  '[Agora] Remote video state changed - UID: $remoteUid, State: $state, Reason: $reason',
-                );
-              }
-
               final hasVideo =
                   state == RemoteVideoState.remoteVideoStateDecoding ||
                   state == RemoteVideoState.remoteVideoStateStarting;
 
-              if (remoteUsers.value.containsKey(remoteUid)) {
+              if (!_disposed && remoteUsers.value.containsKey(remoteUid)) {
                 remoteUsers.value = {
                   ...remoteUsers.value,
                   remoteUid: remoteUsers.value[remoteUid]!.copyWith(
@@ -451,15 +474,10 @@ class AgoraService with ChangeNotifier {
                   ),
                 };
               }
-
               if (remoteUid == primaryRemoteUid.value) {
-                _remoteHasVideo.value = hasVideo;
-                if (kDebugMode) {
-                  debugPrint('[Agora] Primary remote video state: $hasVideo');
-                }
+                _setNotifier(_remoteHasVideo, hasVideo);
               }
-
-              notifyListeners();
+              _notify();
             },
 
         onRemoteAudioStateChanged:
@@ -472,8 +490,7 @@ class AgoraService with ChangeNotifier {
             ) {
               final hasAudio =
                   state == RemoteAudioState.remoteAudioStateDecoding;
-
-              if (remoteUsers.value.containsKey(remoteUid)) {
+              if (!_disposed && remoteUsers.value.containsKey(remoteUid)) {
                 remoteUsers.value = {
                   ...remoteUsers.value,
                   remoteUid: remoteUsers.value[remoteUid]!.copyWith(
@@ -481,8 +498,7 @@ class AgoraService with ChangeNotifier {
                   ),
                 };
               }
-
-              notifyListeners();
+              _notify();
             },
 
         onLocalAudioStateChanged:
@@ -495,36 +511,27 @@ class AgoraService with ChangeNotifier {
             },
 
         onCameraExposureAreaChanged: (int x, int y, int width, int height) {
-          debugPrint(
-            '[Agora] camera exposure area changed: x=$x, y=$y, w=$width, h=$height',
-          );
+          debugPrint('[Agora] camera exposure: x=$x y=$y w=$width h=$height');
         },
 
         onLeaveChannel: (RtcConnection conn, RtcStats stats) {
           _joined = false;
-          primaryRemoteUid.value = null;
-          _remoteHasVideo.value = false;
-          remoteUsers.value = {};
-          if (kDebugMode) {
-            debugPrint('[Agora] onLeaveChannel ch=${conn.channelId}');
-          }
-          notifyListeners();
+          _setNotifier(primaryRemoteUid, null);
+          _setNotifier(_remoteHasVideo, false);
+          if (!_disposed) remoteUsers.value = {};
+          if (kDebugMode) debugPrint('[Agora] left ch=${conn.channelId}');
+          _notify();
         },
 
         onError: (ErrorCodeType code, String? msg) {
           _lastError = 'Agora error $code ${msg ?? ""}';
           debugPrint('❌ $_lastError');
-          debugPrint(
-            '[Agora] DIAG appId=${_safe(_appId)} ch=$_channelId uidType=$_uidType userAccount=$_userAccount localUid=$_localUid token=${_safe(_token)}',
-          );
-          notifyListeners();
+          _notify();
         },
 
         onTokenPrivilegeWillExpire: (RtcConnection conn, String t) {
           if (kDebugMode)
-            debugPrint(
-              '[Agora] Token will expire soon — call renewToken(newToken).',
-            );
+            debugPrint('[Agora] Token expiring — call renewToken().');
         },
 
         onConnectionStateChanged:
@@ -546,6 +553,13 @@ class AgoraService with ChangeNotifier {
       _previewing = true;
     }
 
+    // Build the stable local view controller once.
+    _localViewController = VideoViewController(
+      useFlutterTexture: true,
+      rtcEngine: e,
+      canvas: const VideoCanvas(uid: 0),
+    );
+
     const options = ChannelMediaOptions(
       publishCameraTrack: true,
       publishMicrophoneTrack: true,
@@ -566,9 +580,7 @@ class AgoraService with ChangeNotifier {
     } else {
       final n = int.tryParse(uid);
       if (n == null) {
-        throw ArgumentError(
-          'uid_type was "uid" but uid="$uid" is not an integer.',
-        );
+        throw ArgumentError('uid_type="uid" but uid="$uid" is not an integer.');
       }
       _localUid = n;
       _userAccount = null;
@@ -583,57 +595,78 @@ class AgoraService with ChangeNotifier {
 
   Future<void> renewToken(String newToken) async {
     _token = newToken;
-    await _engine?.renewToken(newToken);
-    if (kDebugMode)
-      debugPrint('[Agora] renewToken ok token=${_safe(newToken)}');
+    try {
+      await _engine?.renewToken(newToken);
+      if (kDebugMode) debugPrint('[Agora] renewToken ok');
+    } catch (e) {
+      debugPrint('❌ [Agora] renewToken failed: $e');
+    }
   }
 
   Future<void> setMicEnabled(bool enabled) async {
-    final e = _engine;
-    if (e == null) return;
-    _isMicEnabled = enabled;
-    await e.muteLocalAudioStream(!enabled);
-    notifyListeners();
+    if (_disposed || _engine == null) return;
+    try {
+      _isMicEnabled = enabled;
+      await _engine!.muteLocalAudioStream(!enabled);
+      _notify();
+    } catch (e) {
+      debugPrint('❌ [Agora] setMicEnabled failed: $e');
+    }
   }
 
   Future<void> setCameraEnabled(bool enabled) async {
-    final e = _engine;
-    if (e == null) return;
-    _isCameraEnabled = enabled;
-    await e.muteLocalVideoStream(!enabled);
-
-    if (enabled && !_previewing) {
-      await e.startPreview();
-      _previewing = true;
-    } else if (!enabled && _previewing) {
-      await e.stopPreview();
-      _previewing = false;
+    if (_disposed || _engine == null) return;
+    try {
+      _isCameraEnabled = enabled;
+      await _engine!.muteLocalVideoStream(!enabled);
+      if (enabled && !_previewing) {
+        await _engine!.startPreview();
+        _previewing = true;
+      } else if (!enabled && _previewing) {
+        await _engine!.stopPreview();
+        _previewing = false;
+      }
+      _notify();
+    } catch (e) {
+      debugPrint('❌ [Agora] setCameraEnabled failed: $e');
     }
-    notifyListeners();
   }
 
   Future<void> switchCamera() async {
-    await _engine?.switchCamera();
+    try {
+      await _engine?.switchCamera();
+    } catch (e) {
+      debugPrint('❌ [Agora] switchCamera failed: $e');
+    }
   }
 
   Future<void> leave() async {
     try {
       await _engine?.leaveChannel();
+    } catch (e) {
+      debugPrint('❌ [Agora] leaveChannel failed: $e');
     } finally {
       _joined = false;
-      primaryRemoteUid.value = null;
-      _remoteHasVideo.value = false;
-      notifyListeners();
+      _setNotifier(primaryRemoteUid, null);
+      _setNotifier(_remoteHasVideo, false);
+      _notify();
     }
   }
 
   Future<void> disposeEngine() async {
+    try {
+      _localViewController?.dispose();
+      _localViewController = null;
+    } catch (_) {}
+
     try {
       if (_previewing) {
         await _engine?.stopPreview();
         _previewing = false;
       }
       await _engine?.release();
+    } catch (e) {
+      debugPrint('❌ [Agora] disposeEngine failed: $e');
     } finally {
       _engine = null;
       _appId = null;
@@ -644,31 +677,32 @@ class AgoraService with ChangeNotifier {
       _localUid = null;
       _lastError = null;
       _joined = false;
-      primaryRemoteUid.value = null;
-      _remoteHasVideo.value = false;
-      notifyListeners();
+      _setNotifier(primaryRemoteUid, null);
+      _setNotifier(_remoteHasVideo, false);
+      _notify();
     }
   }
 
   void clearGuest() {
-    primaryRemoteUid.value = null;
-    _remoteHasVideo.value = false;
+    _setNotifier(primaryRemoteUid, null);
+    _setNotifier(_remoteHasVideo, false);
   }
 
+  // ---------------------------------------------------------------------------
+  // Widget helpers
+  // ---------------------------------------------------------------------------
+
+  /// Returns a stable [AgoraVideoView] whose controller is created once per
+  /// session.  It is intentionally NOT rebuilt on beauty changes.
   Widget localPreview({double? width, double? height}) {
-    final e = _engine;
-    if (e == null)
+    final ctrl = _localViewController;
+    if (ctrl == null) {
       return const SizedBox.expand(child: ColoredBox(color: Colors.black));
+    }
     return SizedBox(
       width: width,
       height: height,
-      child: AgoraVideoView(
-        controller: VideoViewController(
-          useFlutterTexture: true,
-          rtcEngine: e,
-          canvas: const VideoCanvas(uid: 0),
-        ),
-      ),
+      child: AgoraVideoView(controller: ctrl),
     );
   }
 
@@ -689,25 +723,18 @@ class AgoraService with ChangeNotifier {
   Widget primaryRemoteView() {
     final e = _engine;
     final ch = _channelId;
-
     if (e == null || ch == null || primaryRemoteUid.value == null) {
-      return _buildBlackPlaceholder('No guest');
+      return _blackPlaceholder('No guest');
     }
-
     return ValueListenableBuilder<int?>(
       valueListenable: primaryRemoteUid,
       builder: (_, remoteUid, __) {
-        if (remoteUid == null) {
-          return _buildBlackPlaceholder('No guest');
-        }
-
+        if (remoteUid == null) return _blackPlaceholder('No guest');
         return ValueListenableBuilder<bool>(
           valueListenable: _remoteHasVideo,
           builder: (_, hasVideo, __) {
-            if (!hasVideo) {
-              return _buildBlackPlaceholder('Guest video\nconnecting...');
-            }
-
+            if (!hasVideo)
+              return _blackPlaceholder('Guest video\nconnecting...');
             return AgoraVideoView(
               controller: VideoViewController.remote(
                 rtcEngine: e,
@@ -722,7 +749,7 @@ class AgoraService with ChangeNotifier {
     );
   }
 
-  Widget _buildBlackPlaceholder(String text) {
+  Widget _blackPlaceholder(String text) {
     return Container(
       color: Colors.black,
       child: Center(
@@ -736,14 +763,12 @@ class AgoraService with ChangeNotifier {
   }
 
   void setPrimaryGuest(int remoteUid) {
-    if (remoteUsers.value.containsKey(remoteUid)) {
-      primaryRemoteUid.value = remoteUid;
-      _remoteHasVideo.value = remoteUsers.value[remoteUid]!.hasVideo;
-      if (kDebugMode) {
-        debugPrint('[Agora] Manually set primary guest: $remoteUid');
-      }
-      notifyListeners();
-    }
+    if (!remoteUsers.value.containsKey(remoteUid)) return;
+    _setNotifier(primaryRemoteUid, remoteUid);
+    _setNotifier(_remoteHasVideo, remoteUsers.value[remoteUid]!.hasVideo);
+    if (kDebugMode)
+      debugPrint('[Agora] Manually set primary guest: $remoteUid');
+    _notify();
   }
 
   List<int> get remoteUserIds => remoteUsers.value.keys.toList();
@@ -751,9 +776,7 @@ class AgoraService with ChangeNotifier {
   bool get primaryGuestHasAudio {
     final uid = primaryRemoteUid.value;
     if (uid == null) return false;
-
-    final state = remoteUsers.value[uid];
-    return state?.hasAudio ?? false;
+    return remoteUsers.value[uid]?.hasAudio ?? false;
   }
 
   // ---------------------------------------------------------------------------
@@ -796,20 +819,16 @@ class AgoraService with ChangeNotifier {
   }
 
   String _safe(String? v) {
-    if (v == null) return '';
+    if (v == null || v.isEmpty) return '';
     if (v.length <= 12) return v;
     return '${v.substring(0, 6)}…${v.substring(v.length - 6)}';
   }
 
   Future<void> _leaveIfAny() async {
-    if (_engine != null && _joined) {
-      await leave();
-    }
+    if (_engine != null && _joined) await leave();
   }
 
   Future<void> _disposeIfAny() async {
-    if (_engine != null) {
-      await disposeEngine();
-    }
+    if (_engine != null) await disposeEngine();
   }
 }

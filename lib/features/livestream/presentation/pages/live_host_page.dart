@@ -983,99 +983,90 @@ class _LiveHostPageState extends State<LiveHostPage>
               child: Stack(
                 children: [
                   // Camera preview
+                  //
+                  // WHY ValueListenableBuilder instead of AnimatedBuilder(animation: agora):
+                  //
+                  //   Beauty effects are applied entirely inside Agora's native GPU pipeline.
+                  //   Flutter rebuilding the video widget has NO effect on what the camera
+                  //   shows — the smoothing/brightening is already happening at the frame level.
+                  //
+                  //   AnimatedBuilder(animation: agora) was rebuilding this subtree on every
+                  //   notifyListeners() call, including the ones fired by beauty operations.
+                  //   Each rebuild created a brand-new VideoViewController, which tore down the
+                  //   native render surface while the SDK was finishing its work → black screen.
+                  //
+                  //   ValueListenableBuilder on primaryRemoteUid rebuilds ONLY when a guest
+                  //   joins or leaves — the only time the layout actually needs to change.
+                  //   Beauty changes now never trigger a video rebuild at all.
                   Positioned.fill(
-                    child: AnimatedBuilder(
-                      animation: agora,
-                      builder: (_, __) {
-                        return Builder(
-                          builder: (context) {
-                            if (!agora.joined) {
-                              if (!_beautyAppliedOnJoin) {
-                                WidgetsBinding.instance.addPostFrameCallback((
-                                  _,
-                                ) {
-                                  _applyEffects();
-                                });
-                              }
-                              return _buildLoadingState();
-                            }
+                    child: ValueListenableBuilder<int?>(
+                      valueListenable: agora.primaryRemoteUid,
+                      builder: (context, remoteUid, _) {
+                        if (!agora.joined) {
+                          if (!_beautyAppliedOnJoin) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _applyEffects();
+                            });
+                          }
+                          return _buildLoadingState();
+                        }
 
-                            final hasGuestInBloc = context
-                                .select<LiveHostBloc, bool>(
-                                  (b) => b.state.activeGuestUuid != null,
-                                );
-
-                            final hasRemoteUid =
-                                agora.primaryRemoteUid.value != null;
-                            final remoteHasVideo = agora.remoteHasVideo;
-
-                            debugPrint(
-                              '🎥 Video State - Guest in BLoC: $hasGuestInBloc, '
-                              'Remote UID: $hasRemoteUid, '
-                              'Remote has video: $remoteHasVideo',
+                        final hasGuestInBloc = context
+                            .select<LiveHostBloc, bool>(
+                              (b) => b.state.activeGuestUuid != null,
                             );
+                        final hasRemoteUid = remoteUid != null;
+                        final remoteHasVideo = agora.remoteHasVideo;
 
-                            if (!hasGuestInBloc || !hasRemoteUid) {
-                              // Single host view - full screen with elegant overlay
-                              return Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.zero,
-                                      child: agora.localPreview(),
+                        debugPrint(
+                          '🎥 Video State - Guest in BLoC: $hasGuestInBloc, '
+                          'Remote UID: $hasRemoteUid, '
+                          'Remote has video: $remoteHasVideo',
+                        );
+
+                        if (!hasGuestInBloc || !hasRemoteUid) {
+                          // Solo host view — full screen camera.
+                          return Stack(
+                            children: [
+                              Positioned.fill(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.zero,
+                                  child: agora.localPreview(),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withOpacity(0.1),
+                                        Colors.black.withOpacity(0.3),
+                                      ],
                                     ),
                                   ),
-                                  Positioned.fill(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            Colors.transparent,
-                                            Colors.black.withOpacity(0.1),
-                                            Colors.black.withOpacity(0.3),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-
-                            // Modern two-up layout with host and guest
-                            return Stack(
-                              children: [
-                                // Host video - main content (larger)
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  child: _buildHostVideoWithOverlay(),
                                 ),
+                              ),
+                            ],
+                          );
+                        }
 
-                                // Guest video - floating panel (smaller)
-                                _buildGuestVideoFloatingPanel(
-                                  state.activeGuestName ?? 'Guest',
-                                ),
-
-                                // Connection status indicator
-                                // if (!remoteHasVideo)
-                                //   Positioned(
-                                //     right: 16,
-                                //     bottom:
-                                //         100 +
-                                //         MediaQuery.of(context).size.width *
-                                //             0.35 *
-                                //             1.77 +
-                                //         8,
-                                //     child: _buildConnectionStatus(),
-                                //   ),
-                              ],
-                            );
-                          },
+                        // Two-up layout: host (full) + guest (floating panel).
+                        return Stack(
+                          children: [
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: _buildHostVideoWithOverlay(),
+                            ),
+                            _buildGuestVideoFloatingPanel(
+                              state.activeGuestName ?? 'Guest',
+                            ),
+                          ],
                         );
                       },
                     ),
