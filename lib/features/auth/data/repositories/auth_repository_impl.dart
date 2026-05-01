@@ -56,11 +56,9 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> logout() async {
     try {
-      // 1. Logout from your backend
       await localDataSource.clearToken();
       await localDataSource.clearUserData();
 
-      // 2. Logout from Google (important!)
       final googleService = FirebaseGoogleSignInService();
       await googleService.signOut();
 
@@ -90,29 +88,24 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final deviceName = await _getDeviceName();
 
-      // 1) Login -> get tokens
       final loginResponse = await remoteDataSource.loginWithEmail(
         email,
         password,
         deviceName,
       );
 
-      // Cache the token first
       if (loginResponse.accessToken != null) {
         await localDataSource.cacheToken(loginResponse.accessToken!);
       }
 
-      // 2) Fetch full profile from /v1/me endpoint (has complete user data including avatar)
       final fullUserProfile = await remoteDataSource.fetchMe();
 
-      // 3) Merge token fields into the full profile
       final mergedUser = fullUserProfile.copyWith(
         authToken: loginResponse.accessToken,
         tokenType: loginResponse.tokenType,
         expiresIn: loginResponse.expiresIn,
       );
 
-      // 4) Cache the complete user data
       await localDataSource.cacheUser(mergedUser);
 
       return Right(mergedUser.toEntity());
@@ -120,6 +113,8 @@ class AuthRepositoryImpl implements AuthRepository {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Login failed: ${e.toString()}'));
     }
   }
 
@@ -130,7 +125,6 @@ class AuthRepositoryImpl implements AuthRepository {
     String? agent_name,
   }) async {
     try {
-      // 1) Register -> may return token depending on backend
       final signUpResponse = await remoteDataSource.signUpWithEmail(
         email: email,
         password: password,
@@ -138,26 +132,36 @@ class AuthRepositoryImpl implements AuthRepository {
         agent_name: agent_name,
       );
 
-      // 2) Fetch full profile
-      final me = await remoteDataSource.fetchMe();
+      // ✅ Don't call fetchMe() here — the user hasn't verified their
+      // email yet, so /profile/me will return 401/403 and crash the flow.
+      // Build the user from the signup response directly instead.
+      final userModel =
+          signUpResponse.user?.copyWith(
+            authToken: signUpResponse.accessToken,
+            tokenType: signUpResponse.tokenType,
+            expiresIn: signUpResponse.expiresIn,
+          ) ??
+          UserModel(
+            email: email,
+            agent_name: agent_name,
+            authToken: signUpResponse.accessToken,
+            tokenType: signUpResponse.tokenType,
+            expiresIn: signUpResponse.expiresIn,
+          );
 
-      // 3) Merge token fields if present
-      final merged = me.copyWith(
-        authToken: signUpResponse.accessToken,
-        tokenType: signUpResponse.tokenType,
-        expiresIn: signUpResponse.expiresIn,
-      );
-
-      if (merged.authToken != null) {
-        await localDataSource.cacheToken(merged.authToken!);
-        await localDataSource.cacheUser(merged);
+      if (userModel.authToken != null) {
+        await localDataSource.cacheToken(userModel.authToken!);
+        await localDataSource.cacheUser(userModel);
       }
 
-      return Right(merged.toEntity());
+      return Right(userModel.toEntity());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
+    } catch (e) {
+      // ✅ Catch anything unexpected so the bloc never gets stuck in AuthLoading
+      return Left(ServerFailure('Registration failed: ${e.toString()}'));
     }
   }
 
@@ -189,6 +193,8 @@ class AuthRepositoryImpl implements AuthRepository {
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Social login failed: ${e.toString()}'));
     }
   }
 
@@ -197,7 +203,6 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       debugPrint("🟡 Using Firebase Google Sign-In...");
 
-      // Use Firebase Google Sign-In service
       final firebaseGoogleService = FirebaseGoogleSignInService();
       final firebaseData = await firebaseGoogleService.signIn();
       final firebaseToken = firebaseData['firebaseToken'] as String;
@@ -212,7 +217,6 @@ class AuthRepositoryImpl implements AuthRepository {
         "🟡 Sending Firebase token to backend: ${firebaseToken.substring(0, 50)}...",
       );
 
-      // Call backend with Firebase token using the loginWithFirebase method
       final userModel = await remoteDataSource.loginWithFirebase(
         firebaseToken,
         deviceName,
@@ -225,26 +229,22 @@ class AuthRepositoryImpl implements AuthRepository {
       debugPrint("   Token type: ${userModel.tokenType}");
       debugPrint("   Expires in: ${userModel.expiresIn}");
 
-      // ✅ CRITICAL: Cache the token FIRST
       if (userModel.authToken != null) {
         debugPrint("🟡 Caching token...");
         await localDataSource.cacheToken(userModel.authToken!);
         debugPrint("✅ Token cached!");
       }
 
-      // Now try to fetch full profile
       debugPrint("🟡 Fetching user profile...");
       final me = await remoteDataSource.fetchMe();
       debugPrint("✅ Profile fetched successfully!");
 
-      // Merge with token information
       final merged = me.copyWith(
         authToken: userModel.authToken,
         tokenType: userModel.tokenType,
         expiresIn: userModel.expiresIn,
       );
 
-      // Cache the complete user
       if (merged.authToken != null) {
         await localDataSource.cacheUser(merged);
         debugPrint("✅ User data cached!");
@@ -271,7 +271,6 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // Alternative method for direct ID token login (if needed)
   Future<Either<Failure, User>> loginWithGoogleToken(String idToken) async {
     try {
       final deviceName = await _getDeviceName();
