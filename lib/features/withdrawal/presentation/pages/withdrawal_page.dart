@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/utils/formatting.dart';
+import 'package:moonlight/widgets/top_snack.dart';
 import '../cubit/withdrawal_cubit.dart';
 import 'withdrawal_pin_page.dart';
 import 'package:intl/intl.dart';
@@ -621,12 +622,16 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                   label: 'PayPal',
                   sublabel: 'Instant to email',
                   icon: Icons.send_to_mobile,
-                  accentColor: const Color(0xFF003087),
+                  accentColor: const Color.fromARGB(255, 245, 245, 245),
                   selected: _selectedMethod == _PaymentMethod.paypal,
                   onTap: () {
-                    if (_selectedMethod != _PaymentMethod.paypal) {
-                      setState(() => _selectedMethod = _PaymentMethod.paypal);
-                    }
+                    // if (_selectedMethod != _PaymentMethod.paypal) {
+                    //   setState(() => _selectedMethod = _PaymentMethod.paypal);
+                    // }
+                    TopSnack.info(
+                      context,
+                      "PayPal is coming soon. Stay tuned!",
+                    );
                   },
                 ),
               ),

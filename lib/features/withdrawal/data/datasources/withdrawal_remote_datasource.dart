@@ -13,7 +13,10 @@ class WithdrawalRemoteDataSource {
   Future<int> getWithdrawableBalance() async {
     final res = await http.dio.get('/api/v1/wallet');
     final data = _extract(res);
-    return (data['data']['balance'] as num).toInt();
+    final withdrawable_balance =
+        (data['data']['balance'] as num).toInt() +
+        (data['data']['bonus_balance'] as num).toInt();
+    return withdrawable_balance;
   }
 
   // ── PIN verify ─────────────────────────────────────────────────────────────

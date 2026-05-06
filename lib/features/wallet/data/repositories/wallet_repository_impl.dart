@@ -18,7 +18,7 @@ class WalletRepositoryImpl implements WalletRepository {
   Future<int> fetchBalance() => remote.fetchBalance();
 
   @override
-  Future<double> fetchEarned() => remote.fetchEarned();
+  Future<int> fetchEarned() => remote.fetchEarned();
 
   @override
   Future<List<CoinPackage>> fetchPackages() => remote.fetchPackages();

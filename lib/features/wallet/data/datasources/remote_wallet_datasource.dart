@@ -22,14 +22,13 @@ class RemoteWalletDataSource {
     return ((data['data'] as Map)['balance'] as num).toInt();
   }
 
-  Future<double> fetchEarned() async {
+  Future<int> fetchEarned() async {
     final res = await client.get('/api/v1/wallet');
     final data = await _extractData(res);
     final payload = data['data'] as Map<String, dynamic>;
     // Coin rate (earning side): 1 coin = $0.005 (streamer receives half)
-    final earnedCents = (payload['earnings_cents'] as num? ?? 0).toDouble();
-    final bonusCents = (payload['bonus_cents'] as num? ?? 0).toDouble();
-    return (earnedCents + bonusCents) * 0.005;
+    final earnedBalance = (payload['bonus_balance'] as int? ?? 0);
+    return (earnedBalance);
   }
 
   Future<List<CoinPackage>> fetchPackages() async {

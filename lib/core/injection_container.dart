@@ -808,7 +808,9 @@ void _initLiveModule() {
   _reg<AudioTestService>(() => RecordAudioTestService());
   _reg<LiveSessionTracker>(() => LiveSessionTracker());
   _reg<GoLiveRepository>(() => GoLiveRepositoryImpl(sl<DioClient>()));
-  _reg<LiveSessionRepository>(
+
+  // Register the concrete impl FIRST so both lookups resolve to the same object.
+  _reg<LiveSessionRepositoryImpl>(
     () => LiveSessionRepositoryImpl(
       sl<DioClient>(),
       sl<PusherService>(),
@@ -816,6 +818,15 @@ void _initLiveModule() {
       sl<LiveSessionTracker>(),
     ),
   );
+
+  // Register the abstract interface as an alias that returns the same instance.
+  // Using a factory that delegates to the concrete singleton means GetIt hands
+  // back the same object regardless of which type you ask for.
+  if (!sl.isRegistered<LiveSessionRepository>()) {
+    sl.registerLazySingleton<LiveSessionRepository>(
+      () => sl<LiveSessionRepositoryImpl>(),
+    );
+  }
 
   // ParticipantsRepository — was missing in prior versions
   // _reg<ParticipantsRepository>(() => ParticipantsRepositoryImpl(sl<DioClient>()));

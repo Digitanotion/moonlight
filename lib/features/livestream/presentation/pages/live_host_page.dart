@@ -35,6 +35,85 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
 import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
 
+// Add this class BEFORE the LiveHostPage class definition.
+// It replaces the AnimatedBuilder(animation: agora) camera block.
+
+class _StableCameraPreview extends StatefulWidget {
+  final AgoraService agora;
+  final Widget Function(BuildContext context) loadingBuilder;
+
+  const _StableCameraPreview({
+    required this.agora,
+    required this.loadingBuilder,
+  });
+
+  @override
+  State<_StableCameraPreview> createState() => _StableCameraPreviewState();
+}
+
+class _StableCameraPreviewState extends State<_StableCameraPreview> {
+  bool _wasJoined = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _wasJoined = widget.agora.joined;
+    widget.agora.addListener(_onAgoraChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.agora.removeListener(_onAgoraChanged);
+    super.dispose();
+  }
+
+  void _onAgoraChanged() {
+    final isJoined = widget.agora.joined;
+    if (isJoined != _wasJoined) {
+      _wasJoined = isJoined;
+      if (mounted) {
+        // Use addPostFrameCallback so the AgoraVideoView has a full frame
+        // to register its surface texture before frames start arriving.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.agora.joined) {
+      return widget.loadingBuilder(context);
+    }
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.zero,
+            child: widget.agora.localPreview(),
+          ),
+        ),
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.1),
+                  Colors.black.withOpacity(0.3),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class LiveHostPage extends StatefulWidget {
   final String hostName;
   final String hostBadge;
@@ -43,6 +122,8 @@ class LiveHostPage extends StatefulWidget {
   final String startedAtIso;
   final String? avatarUrl;
   final String? hostUuid;
+  final bool? initialMicOn;
+  final bool? initialCamOn;
 
   const LiveHostPage({
     super.key,
@@ -53,6 +134,8 @@ class LiveHostPage extends StatefulWidget {
     required this.startedAtIso,
     this.avatarUrl,
     this.hostUuid,
+    this.initialMicOn, // ← ADD
+    this.initialCamOn,
   });
 
   @override
@@ -97,13 +180,15 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   GiftToast? _giftToast;
 
-  bool _isApplyingEffects = false;
+  // bool _isApplyingEffects = false;
   DateTime? _lastEffectApplyTime;
+
   static const Duration _minEffectApplyInterval = Duration(milliseconds: 500);
 
   @override
   void initState() {
     super.initState();
+    _beautyAppliedOnJoin = false;
     _giftToast = GiftToast();
     WidgetsBinding.instance.addObserver(this);
 
@@ -117,22 +202,32 @@ class _LiveHostPageState extends State<LiveHostPage>
     _initializePusher();
   }
 
-  // UPDATED: Better Agora state change handler
-  void _onAgoraStateChanged() {
-    if (mounted) {
-      setState(() {
-        // Update UI state
-      });
+  /// Applies the mic/cam state the server returned in the live/start response.
+  /// The API returns "mic_on": false, "cam_on": false by default, but the old
+  /// code never read these — so the UI showed them as active while they were off.
+  void _applyInitialMicCamState() {
+    final micOn = widget.initialMicOn ?? true;
+    final camOn = widget.initialCamOn ?? true;
 
-      // Apply beauty effects when Agora is joined and ready
-      if (agora.joined && !_beautyAppliedOnJoin) {
-        // Small delay to ensure engine is fully ready
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && agora.joined) {
-            _applyEffects(force: true);
-          }
-        });
-      }
+    if (!micOn) {
+      agora.setMicEnabled(false);
+      debugPrint('[Init] Mic muted per server response');
+    }
+    if (!camOn) {
+      agora.setCameraEnabled(false);
+      debugPrint('[Init] Camera muted per server response');
+    }
+  }
+
+  void _onAgoraStateChanged() {
+    if (agora.joined && !_beautyAppliedOnJoin) {
+      _beautyAppliedOnJoin = true; // ← SET IMMEDIATELY to prevent double-firing
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && agora.joined) {
+          _applyInitialMicCamState();
+          _applyEffects(force: true);
+        }
+      });
     }
   }
 
@@ -264,8 +359,8 @@ class _LiveHostPageState extends State<LiveHostPage>
   @override
   void dispose() {
     debugPrint('🧹 Disposing LiveHostPage...');
-
-    _isApplyingEffects = false; // Reset flag
+    _beautyAppliedOnJoin = false;
+    // Reset flag
 
     agora.removeListener(_onAgoraStateChanged);
 
@@ -287,6 +382,8 @@ class _LiveHostPageState extends State<LiveHostPage>
 
     // Reset beauty effects
     try {
+      _faceCleanEnabled = false;
+      _brightenEnabled = false;
       agora.resetBeauty();
       debugPrint('✅ Reset Agora beauty effects');
     } catch (_) {}
@@ -427,101 +524,33 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   // UPDATED: Robust beauty effects application
   Future<void> _applyEffects({bool force = false}) async {
-    // Prevent rapid consecutive calls
+    // Debounce rapid calls
     final now = DateTime.now();
-    if (_lastEffectApplyTime != null &&
-        now.difference(_lastEffectApplyTime!) < _minEffectApplyInterval &&
-        !force) {
-      debugPrint('[Beauty] Skipping rapid apply (debounced)');
+    if (!force &&
+        _lastEffectApplyTime != null &&
+        now.difference(_lastEffectApplyTime!) < _minEffectApplyInterval) {
       return;
     }
 
-    // Prevent concurrent applications
-    if (_isApplyingEffects) {
-      debugPrint('[Beauty] Already applying effects, skipping');
-      return;
-    }
-
-    // Validate Agora state
     if (!agora.joined) {
       _beautyAppliedOnJoin = false;
-      debugPrint('[Beauty] Engine not joined yet; will apply on join');
       return;
     }
 
-    _isApplyingEffects = true;
     _lastEffectApplyTime = now;
 
-    try {
-      // Get current values (clamped to safe ranges)
-      final faceOn = _faceCleanEnabled;
-      final faceLevel = _faceCleanLevel.clamp(0, 100);
-      final brightOn = _brightenEnabled;
-      final brightLevel = _brightenLevel.clamp(0, 100);
-
-      debugPrint(
-        '[Beauty] Applying - Face: $faceOn($faceLevel), Brighten: $brightOn($brightLevel)',
-      );
-
-      // IMPORTANT: Reset to defaults first to avoid weird states
-      if (!faceOn && !brightOn) {
-        // Both disabled - fully reset
-        await agora.resetBeauty();
-        debugPrint('[Beauty] Reset to default (both effects disabled)');
-      } else {
-        // Apply new effects with progressive approach
-        await agora.applyBeauty(
-          faceCleanEnabled: faceOn,
-          faceCleanLevel: faceLevel,
-          brightenEnabled: brightOn,
-          brightenLevel: brightLevel,
-        );
-      }
-
-      _beautyAppliedOnJoin = true;
-
-      // Small delay to ensure effects stabilize
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      debugPrint('[Beauty] Successfully applied');
-    } catch (e, st) {
-      debugPrint('❌ Failed to apply beauty effects: $e');
-      debugPrint('Stack trace: $st');
-
-      // Try recovery: Reset and retry once
-      try {
-        debugPrint('[Beauty] Attempting recovery...');
-        await agora.resetBeauty();
-        await Future.delayed(const Duration(milliseconds: 300));
-
-        if (_faceCleanEnabled || _brightenEnabled) {
-          await agora.applyBeauty(
-            faceCleanEnabled: _faceCleanEnabled,
-            faceCleanLevel: _faceCleanLevel.clamp(0, 100),
-            brightenEnabled: _brightenEnabled,
-            brightenLevel: _brightenLevel.clamp(0, 100),
-          );
-        }
-        debugPrint('[Beauty] Recovery successful');
-      } catch (recoveryError) {
-        debugPrint('❌ Recovery failed: $recoveryError');
-
-        // Last resort: Disable all effects and show error
-        _faceCleanEnabled = false;
-        _faceCleanLevel = 40;
-        _brightenEnabled = false;
-        _brightenLevel = 40;
-
-        if (mounted) {
-          TopSnack.error(
-            context,
-            'Beauty effects temporarily unavailable. Please restart if issue persists.',
-            duration: const Duration(seconds: 3),
-          );
-        }
-      }
-    } finally {
-      _isApplyingEffects = false;
+    // The agora service handles its own queueing — just fire and forget.
+    // Do NOT await here. Do NOT use Future.delayed. Do NOT catch and retry.
+    // All of those create re-entry windows that can cause the black screen.
+    if (!_faceCleanEnabled && !_brightenEnabled) {
+      agora.resetBeauty(); // ← no await
+    } else {
+      agora.applyBeauty(
+        faceCleanEnabled: _faceCleanEnabled,
+        faceCleanLevel: _faceCleanLevel.clamp(0, 100),
+        brightenEnabled: _brightenEnabled,
+        brightenLevel: _brightenLevel.clamp(0, 100),
+      ); // ← no await
     }
   }
 
@@ -967,6 +996,20 @@ class _LiveHostPageState extends State<LiveHostPage>
               }
             },
           ),
+          BlocListener<LiveHostBloc, LiveHostState>(
+            listenWhen: (p, c) =>
+                p.faceCleanEnabled != c.faceCleanEnabled ||
+                p.faceCleanLevel != c.faceCleanLevel ||
+                p.brightenEnabled != c.brightenEnabled ||
+                p.brightenLevel != c.brightenLevel,
+            listener: (context, state) {
+              _faceCleanEnabled = state.faceCleanEnabled;
+              _faceCleanLevel = state.faceCleanLevel;
+              _brightenEnabled = state.brightenEnabled;
+              _brightenLevel = state.brightenLevel;
+              _applyEffects();
+            },
+          ),
         ],
         child: BlocBuilder<LiveHostBloc, LiveHostState>(
           builder: (context, state) {
@@ -985,7 +1028,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                   // Camera preview
                   //
                   // WHY ValueListenableBuilder instead of AnimatedBuilder(animation: agora):
-                  //
+
                   //   Beauty effects are applied entirely inside Agora's native GPU pipeline.
                   //   Flutter rebuilding the video widget has NO effect on what the camera
                   //   shows — the smoothing/brightening is already happening at the frame level.
@@ -998,75 +1041,45 @@ class _LiveHostPageState extends State<LiveHostPage>
                   //   ValueListenableBuilder on primaryRemoteUid rebuilds ONLY when a guest
                   //   joins or leaves — the only time the layout actually needs to change.
                   //   Beauty changes now never trigger a video rebuild at all.
+                  // Camera preview
                   Positioned.fill(
-                    child: ValueListenableBuilder<int?>(
-                      valueListenable: agora.primaryRemoteUid,
-                      builder: (context, remoteUid, _) {
-                        if (!agora.joined) {
-                          if (!_beautyAppliedOnJoin) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _applyEffects();
-                            });
-                          }
-                          return _buildLoadingState();
-                        }
+                    child: BlocBuilder<LiveHostBloc, LiveHostState>(
+                      // Only rebuild when guest join/leave — NOT on every timer tick.
+                      buildWhen: (p, c) =>
+                          p.activeGuestUuid != c.activeGuestUuid ||
+                          p.activeGuestName != c.activeGuestName,
+                      builder: (context, state) {
+                        final hasGuestInBloc = state.activeGuestUuid != null;
 
-                        final hasGuestInBloc = context
-                            .select<LiveHostBloc, bool>(
-                              (b) => b.state.activeGuestUuid != null,
+                        return ValueListenableBuilder<int?>(
+                          valueListenable: agora.primaryRemoteUid,
+                          builder: (context, remoteUid, _) {
+                            final hasRemoteUid = remoteUid != null;
+
+                            if (!hasGuestInBloc || !hasRemoteUid) {
+                              // Solo host — stable, never rebuilt by ticks or beauty.
+                              return _StableCameraPreview(
+                                agora: agora,
+                                loadingBuilder: (_) => _buildLoadingState(),
+                              );
+                            }
+
+                            // Two-up layout.
+                            return Stack(
+                              children: [
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: _buildHostVideoWithOverlay(),
+                                ),
+                                _buildGuestVideoFloatingPanel(
+                                  state.activeGuestName ?? 'Guest',
+                                ),
+                              ],
                             );
-                        final hasRemoteUid = remoteUid != null;
-                        final remoteHasVideo = agora.remoteHasVideo;
-
-                        debugPrint(
-                          '🎥 Video State - Guest in BLoC: $hasGuestInBloc, '
-                          'Remote UID: $hasRemoteUid, '
-                          'Remote has video: $remoteHasVideo',
-                        );
-
-                        if (!hasGuestInBloc || !hasRemoteUid) {
-                          // Solo host view — full screen camera.
-                          return Stack(
-                            children: [
-                              Positioned.fill(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.zero,
-                                  child: agora.localPreview(),
-                                ),
-                              ),
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.black.withOpacity(0.1),
-                                        Colors.black.withOpacity(0.3),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }
-
-                        // Two-up layout: host (full) + guest (floating panel).
-                        return Stack(
-                          children: [
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: _buildHostVideoWithOverlay(),
-                            ),
-                            _buildGuestVideoFloatingPanel(
-                              state.activeGuestName ?? 'Guest',
-                            ),
-                          ],
+                          },
                         );
                       },
                     ),
@@ -1078,29 +1091,32 @@ class _LiveHostPageState extends State<LiveHostPage>
                       left: 12,
                       right: 12,
                       top: MediaQuery.of(context).padding.top + 8,
-                      child: _HeaderBar(
-                        hostName: widget.hostName,
-                        hostBadge: widget.hostBadge,
-                        avatarUrl: widget.avatarUrl,
-                        timeText: _mmss(state.elapsedSeconds),
-                        viewersText: _formatViewers(state.viewers),
-                        onEnd: () {
-                          // This will only be called after user confirms
-                          try {
-                            context.read<LiveHostBloc>().add(EndPressed());
-                          } catch (e, stack) {
-                            debugPrint('Button tap error: $e');
-                            debugPrint('Stack: $stack');
-                            TopSnack.error(context, 'Error ending stream: $e');
-                          }
-
-                          LiveSessionRepositoryImpl repo =
-                              GetIt.I<LiveSessionRepositoryImpl>();
-                          repo.safeEndSession();
-                        },
+                      child: BlocBuilder<LiveHostBloc, LiveHostState>(
+                        // ADD this buildWhen — was missing, causing rebuilds every second:
+                        buildWhen: (p, c) =>
+                            p.elapsedSeconds != c.elapsedSeconds ||
+                            p.viewers != c.viewers ||
+                            p.isPremium != c.isPremium,
+                        builder: (context, state) => _HeaderBar(
+                          hostName: widget.hostName,
+                          hostBadge: widget.hostBadge,
+                          avatarUrl: widget.avatarUrl,
+                          timeText: _mmss(state.elapsedSeconds),
+                          viewersText: _formatViewers(state.viewers),
+                          onEnd: () {
+                            try {
+                              context.read<LiveHostBloc>().add(EndPressed());
+                            } catch (e) {
+                              TopSnack.error(
+                                context,
+                                'Error ending stream: $e',
+                              );
+                            }
+                            // _repoImpl.safeEndSession();
+                          },
+                        ),
                       ),
                     ),
-
                     // Connection status indicator
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 8,
@@ -2187,12 +2203,14 @@ class _BottomActions extends StatelessWidget {
               ),
 
               _item(Icons.star_rounded, 'Premiums', onPremium),
-              _item(
-                Icons.settings_rounded,
-                'Settings',
-                onSettings,
-                isSettings: true,
-                showBadge: agora.beautyActive.value,
+              ValueListenableBuilder<bool>(
+                valueListenable: agora.beautyActive,
+                builder: (_, isBeautyOn, __) => _item(
+                  Icons.settings_rounded,
+                  'Settings',
+                  onSettings,
+                  showBadge: isBeautyOn, // ← reactive, always current
+                ),
               ),
             ],
           ),

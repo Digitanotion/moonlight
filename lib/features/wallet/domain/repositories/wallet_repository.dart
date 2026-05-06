@@ -7,7 +7,7 @@ abstract class WalletRepository {
   // ── Read ──────────────────────────────────────────────────────────────────
 
   Future<int> fetchBalance();
-  Future<double> fetchEarned();
+  Future<int> fetchEarned();
   Future<List<CoinPackage>> fetchPackages();
   Future<List<TransactionModel>> fetchRecentActivity();
 

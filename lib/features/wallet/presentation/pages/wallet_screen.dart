@@ -377,7 +377,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
 class _BalanceCard extends StatelessWidget {
   final int balance;
-  final double earnedbalance;
+  final int earnedbalance;
   final bool hideBalance;
   final VoidCallback onToggleHide;
   final VoidCallback onBuyCoins;
@@ -501,7 +501,7 @@ class _BalanceCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        hideBalance ? '••••••' : formatusd(earnedbalance),
+                        hideBalance ? '••••••' : formatCoin(earnedbalance),
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -509,7 +509,7 @@ class _BalanceCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Lifetime',
+                        'Bonuses',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.6),
                           fontSize: 11,

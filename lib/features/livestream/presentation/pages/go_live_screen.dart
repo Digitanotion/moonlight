@@ -583,12 +583,8 @@ class _StartButton extends StatelessWidget {
                     'host_badge': dto.hostBadge,
                     'avatar_url': dto.hostAvatarUrl,
                     'topic': topic,
-
-                    // Seed header counters
                     'initial_viewers': dto.initialViewers,
                     'started_at': dto.startedAt,
-
-                    // Agora/session
                     'livestream_id': dto.livestreamId,
                     'channel': dto.channel,
                     'uid_type': dto.uidType,
@@ -596,6 +592,8 @@ class _StartButton extends StatelessWidget {
                     'app_id': dto.appId,
                     'rtc_token': dto.rtcToken,
                     'rtc_role': dto.rtcRole,
+                    'mic_on': dto.micOn, // ← ADD
+                    'cam_on': dto.camOn, // ← ADD
                   },
                 );
               }

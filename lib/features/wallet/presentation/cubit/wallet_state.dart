@@ -12,7 +12,7 @@ class WalletLoading extends WalletState {}
 
 class WalletLoaded extends WalletState {
   final int balance;
-  final double earnedBalance;
+  final int earnedBalance;
   final List<CoinPackage> packages;
   final List<TransactionModel> recent;
   WalletLoaded({

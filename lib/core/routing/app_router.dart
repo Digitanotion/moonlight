@@ -321,6 +321,8 @@ class AppRouter {
                   a['started_at'] as String? ??
                   DateTime.now().toIso8601String(),
               avatarUrl: a['avatar_url'] as String?,
+              initialMicOn: a['mic_on'] as bool?, // ← ADD
+              initialCamOn: a['cam_on'] as bool?, // ← ADD
             ),
           ),
         );

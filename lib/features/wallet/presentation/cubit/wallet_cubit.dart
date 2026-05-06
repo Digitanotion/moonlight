@@ -23,7 +23,7 @@ class WalletCubit extends Cubit<WalletState> {
       ]);
 
       final balance = results[0] as int;
-      final earnedCents = results[1] as double;
+      final earnedCents = results[1] as int;
       final packages = results[2] as List<CoinPackage>;
       final recent = results[3] as List<TransactionModel>;
 
