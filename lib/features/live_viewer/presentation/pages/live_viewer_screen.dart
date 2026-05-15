@@ -1,11 +1,9 @@
+// lib/features/live_viewer/presentation/pages/live_viewer_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
-import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
-import 'package:moonlight/core/services/pusher_service.dart';
-import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
-import 'package:moonlight/features/gifts/presentation/gift_bottom_sheet.dart';
+
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
@@ -16,28 +14,23 @@ import 'package:moonlight/features/live_viewer/presentation/services/live_stream
 import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/reconnection_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/role_change_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/premium_overlay.dart';
+import 'package:moonlight/widgets/top_snack.dart';
 import 'package:uuid/uuid.dart';
 
-/// Legacy screen - maintained for backward compatibility
-/// Now delegates to the new LiveViewerOrchestrator
 class LiveViewerScreen extends StatefulWidget {
   final ViewerRepository repository;
-  final Map<String, dynamic>? routeArgs; // ADD THIS
+  final Map<String, dynamic>? routeArgs;
 
-  const LiveViewerScreen({
-    super.key,
-    required this.repository,
-    this.routeArgs, // ADD THIS
-  });
+  const LiveViewerScreen({super.key, required this.repository, this.routeArgs});
 
-  // Helper constructor for easy creation (Add this)
   factory LiveViewerScreen.create({
     required String livestreamId,
     required String channelName,
     String? hostUuid,
     HostInfo? hostInfo,
     DateTime? startedAt,
-    Map<String, dynamic>? routeArgs, // ADD THIS
+    Map<String, dynamic>? routeArgs,
   }) {
     final repository = createViewerRepository(
       livestreamParam: livestreamId,
@@ -47,11 +40,7 @@ class LiveViewerScreen extends StatefulWidget {
       initialHost: hostInfo,
       startedAt: startedAt,
     );
-
-    return LiveViewerScreen(
-      repository: repository,
-      routeArgs: routeArgs, // PASS ROUTE ARGS
-    );
+    return LiveViewerScreen(repository: repository, routeArgs: routeArgs);
   }
 
   @override
@@ -60,59 +49,56 @@ class LiveViewerScreen extends StatefulWidget {
 
 class _LiveViewerScreenState extends State<LiveViewerScreen> {
   bool _didAutoStartBloc = false;
-  // ADD PREMIUM STATE VARIABLES
+  ViewerBloc? _viewerBloc;
+  bool _shouldStartBloc = false;
+
+  // ── Initial premium gate (shown BEFORE the BLoC starts) ─────────────────
   late PremiumVerificationState _premiumState;
   late bool _isPremiumStream;
   late int? _premiumFee;
   late int? _numericLiveId;
+  bool _premiumCheckComplete = false;
+
+  // ── Runtime premium payment UI (shared by initial gate + BLoC overlay) ──
   bool _isProcessingPayment = false;
   String? _paymentStatusMessage;
-  bool _premiumCheckComplete = false;
-  ViewerBloc? _viewerBloc;
-  bool _shouldStartBloc = false; // Add this flag
 
   @override
   void initState() {
     super.initState();
 
-    // EXTRACT PREMIUM INFO FROM ROUTE ARGS
-    final routeArgs = widget.routeArgs ?? {};
-    _isPremiumStream = routeArgs['isPremium'] == 1;
-    _premiumFee = routeArgs['premiumFee'] as int?;
-    _numericLiveId = routeArgs['id'] as int?;
+    final args = widget.routeArgs ?? {};
+
+    // isPremium arrives as int (0/1) from LiveItem / route args.
+    // Treat anything truthy as premium.
+    final rawIsPremium = args['isPremium'];
+    _isPremiumStream =
+        rawIsPremium == 1 || rawIsPremium == true || rawIsPremium == '1';
+
+    _premiumFee = args['premiumFee'] as int?;
+    _numericLiveId = args['id'] as int?;
 
     debugPrint('=== PREMIUM DEBUG ===');
-    debugPrint('Route args: $routeArgs');
-    debugPrint('isPremium from args: ${routeArgs['isPremium']}');
-    debugPrint('_isPremiumStream: $_isPremiumStream');
+    debugPrint('isPremium raw: $rawIsPremium  parsed: $_isPremiumStream');
     debugPrint('premiumFee: $_premiumFee');
     debugPrint('numericLiveId: $_numericLiveId');
-    debugPrint('channel: ${routeArgs['channel']}');
     debugPrint('=====================');
 
-    // Initialize premium verification state
-    _premiumState = _isPremiumStream
-        ? PremiumVerificationState.checking
-        : PremiumVerificationState.free;
-
-    // Check premium status if needed
     if (_isPremiumStream) {
-      debugPrint('⚠️ Premium stream detected, checking status...');
+      _premiumState = PremiumVerificationState.checking;
       _checkPremiumStatus();
     } else {
-      debugPrint('✅ Free stream, proceeding normally');
+      _premiumState = PremiumVerificationState.free;
       _premiumCheckComplete = true;
-      _shouldStartBloc = true; // Set flag instead of accessing BLoC
+      _shouldStartBloc = true;
     }
   }
 
+  // ── Initial premium check ────────────────────────────────────────────────
+
   Future<void> _checkPremiumStatus() async {
-    if (!_isPremiumStream || _numericLiveId == null) {
-      setState(() {
-        _premiumState = PremiumVerificationState.free;
-        _premiumCheckComplete = true;
-        _shouldStartBloc = true; // Set flag
-      });
+    if (_numericLiveId == null) {
+      _markFreeAndProceed();
       return;
     }
 
@@ -122,38 +108,49 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
         liveId: _numericLiveId!,
       );
 
-      final data = response['data'] as Map<String, dynamic>? ?? {};
+      final data = (response['data'] as Map<String, dynamic>?) ?? {};
       final canAccess =
           data['can_access'] == true ||
           data['has_paid'] == true ||
           data['already_purchased'] == true;
 
+      if (!mounted) return;
       setState(() {
         _premiumState = canAccess
             ? PremiumVerificationState.premiumPaid
             : PremiumVerificationState.premiumUnpaid;
         _premiumCheckComplete = true;
-        _shouldStartBloc = canAccess; // Set flag based on access
+        _shouldStartBloc = canAccess;
       });
 
       debugPrint(
-        '✅ Premium check result: ${canAccess ? "Access granted" : "Payment required"}',
+        '✅ Premium check: ${canAccess ? "Access granted" : "Payment required"}',
       );
     } catch (e) {
+      debugPrint('❌ Premium check error: $e');
+      if (!mounted) return;
       setState(() {
         _premiumState = PremiumVerificationState.error;
         _premiumCheckComplete = true;
+        // On error, let them in — health service will re-check
+        _shouldStartBloc = true;
       });
-      debugPrint('❌ Error checking premium status: $e');
     }
   }
 
-  // ADD PAYMENT PROCESSING METHOD
-  Future<void> _processPremiumPayment() async {
-    if (_numericLiveId == null) {
-      debugPrint('❌ Missing live ID for payment');
-      return;
-    }
+  void _markFreeAndProceed() {
+    if (!mounted) return;
+    setState(() {
+      _premiumState = PremiumVerificationState.free;
+      _premiumCheckComplete = true;
+      _shouldStartBloc = true;
+    });
+  }
+
+  // ── Payment processing (used by both initial gate and runtime overlay) ───
+
+  Future<void> _processPremiumPayment(BuildContext context) async {
+    if (_numericLiveId == null) return;
 
     setState(() {
       _isProcessingPayment = true;
@@ -167,21 +164,32 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
         idempotencyKey: const Uuid().v4(),
       );
 
-      final status = (response['status'] ?? '') as String;
+      final status = (response['status'] ?? '').toString().toLowerCase();
       final message = (response['message'] as String?) ?? '';
 
-      if (status.toLowerCase() == 'success') {
-        debugPrint('✅ Premium payment successful');
+      if (!mounted) return;
+
+      if (status == 'success') {
         setState(() {
           _isProcessingPayment = false;
           _premiumState = PremiumVerificationState.premiumPaid;
-          _shouldStartBloc = true; // Set flag after payment
+          _shouldStartBloc = true;
         });
 
-        // Trigger BLoC start in next frame
+        // If BLoC is already running (runtime paywall), tell it access granted
+        if (_viewerBloc != null && !_viewerBloc!.isClosed) {
+          _viewerBloc!.add(const PremiumAccessGranted());
+        }
+
+        if (context.mounted) {
+          TopSnack.success(context, 'Access unlocked! Enjoy the stream.');
+        }
+
+        // Start the BLoC now if it wasn't started yet
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_viewerBloc != null && mounted) {
+          if (mounted && _viewerBloc != null && !_didAutoStartBloc) {
             _viewerBloc!.add(const ViewerStarted());
+            _didAutoStartBloc = true;
           }
         });
       } else {
@@ -189,272 +197,78 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
           _isProcessingPayment = false;
           _paymentStatusMessage = message.isNotEmpty
               ? message
-              : 'Payment failed';
+              : 'Payment failed. Try again.';
         });
-        debugPrint('❌ Premium payment failed: $message');
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isProcessingPayment = false;
-        _paymentStatusMessage = 'Network error: $e';
+        _paymentStatusMessage = 'Network error. Please try again.';
       });
-      debugPrint('❌ Premium payment error: $e');
     }
   }
 
-  // ADD PREMIUM OVERLAY WIDGET
-  Widget _buildPremiumOverlay() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.black.withOpacity(.85),
-            Colors.black.withOpacity(.92),
-          ],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(.04),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(.06)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(.5),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(22),
-                  child: Column(
-                    children: [
-                      Icon(
-                        _premiumState == PremiumVerificationState.checking
-                            ? Icons.hourglass_empty
-                            : Icons.lock_rounded,
-                        size: 48,
-                        color:
-                            _premiumState == PremiumVerificationState.checking
-                            ? Colors.blueAccent
-                            : Colors.orangeAccent,
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        _premiumState == PremiumVerificationState.checking
-                            ? 'Checking Access...'
-                            : 'Premium Stream',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_premiumState == PremiumVerificationState.checking)
-                        const Text(
-                          'Verifying your access to this stream...',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70, height: 1.4),
-                        )
-                      else
-                        const Text(
-                          'This live stream is premium. Unlock access to view and support the host.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70, height: 1.4),
-                        ),
+  // ── Build the initial premium gate (before BLoC starts) ─────────────────
 
-                      if (_premiumFee != null) ...[
-                        const SizedBox(height: 18),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(.02),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.stars_rounded,
-                                color: Colors.amber,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                '$_premiumFee coins',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-
-                      if (_paymentStatusMessage != null) ...[
-                        const SizedBox(height: 14),
-                        Text(
-                          _paymentStatusMessage!,
-                          style: const TextStyle(color: Colors.redAccent),
-                        ),
-                      ],
-
-                      const SizedBox(height: 6),
-
-                      if (_premiumState == PremiumVerificationState.checking)
-                        const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.orange,
-                          ),
-                        )
-                      else if (_premiumState ==
-                          PremiumVerificationState.premiumUnpaid)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _isProcessingPayment
-                                    ? null
-                                    : _processPremiumPayment,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFF7A00),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: _isProcessingPayment
-                                    ? const SizedBox(
-                                        height: 18,
-                                        width: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
-                                              ),
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Unlock Stream',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(context).pushNamed('/wallet');
-                              },
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(
-                                  color: Colors.white.withOpacity(0.06),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                              ),
-                              child: const Text(
-                                'Open Wallet',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      else if (_premiumState == PremiumVerificationState.error)
-                        OutlinedButton(
-                          onPressed: _checkPremiumStatus,
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Colors.white.withOpacity(0.06),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          child: const Text(
-                            'Retry',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+  Widget _buildInitialPremiumGate(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: PremiumOverlay(
+        fee: _premiumFee,
+        isLoading:
+            _isProcessingPayment ||
+            _premiumState == PremiumVerificationState.checking,
+        statusMessage: _premiumState == PremiumVerificationState.checking
+            ? null
+            : _premiumState == PremiumVerificationState.error
+            ? 'Could not verify access. Tap Retry.'
+            : _paymentStatusMessage,
+        onOpenPayment: _premiumState == PremiumVerificationState.error
+            ? () {
+                setState(() {
+                  _premiumState = PremiumVerificationState.checking;
+                });
+                _checkPremiumStatus();
+              }
+            : () => _processPremiumPayment(context),
+        onOpenWallet: () => Navigator.of(context).pushNamed('/wallet'),
       ),
     );
   }
 
+  // ── Dispose ──────────────────────────────────────────────────────────────
+
   @override
   void dispose() {
-    // Dispose the BLoC if it was created
     _viewerBloc?.close();
-
-    final agoraService = sl<AgoraViewerService>();
     try {
-      agoraService.leave();
+      sl<AgoraViewerService>().leave();
     } catch (e) {
-      debugPrint('⚠️ Error leaving Agora in screen dispose: $e');
+      debugPrint('⚠️ Error leaving Agora on dispose: $e');
     }
-
     widget.repository.dispose();
     super.dispose();
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // Check if we should show premium overlay
-    final shouldShowPremiumOverlay =
+    // ── 1. Show initial premium gate before BLoC is running ────────────────
+    final showInitialGate =
         _isPremiumStream &&
-        (_premiumState == PremiumVerificationState.premiumUnpaid ||
-            _premiumState == PremiumVerificationState.checking ||
+        (_premiumState == PremiumVerificationState.checking ||
+            _premiumState == PremiumVerificationState.premiumUnpaid ||
             _premiumState == PremiumVerificationState.error);
 
-    if (shouldShowPremiumOverlay) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: _buildPremiumOverlay(),
-      );
+    if (showInitialGate) {
+      return _buildInitialPremiumGate(context);
     }
 
-    // If premium check is not complete yet, show loading
+    // ── 2. Premium check still in flight, show loader ─────────────────────
     if (!_premiumCheckComplete) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
           child: CircularProgressIndicator(
@@ -464,9 +278,9 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
       );
     }
 
-    // Ensure we have the right repository type
+    // ── 3. Wrong repo type guard ───────────────────────────────────────────
     if (widget.repository is! ViewerRepositoryImpl) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(
           child: Text(
             'Invalid repository type',
@@ -478,42 +292,89 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
 
     final repo = widget.repository as ViewerRepositoryImpl;
 
-    // Use the enhanced BLoC with services if available
-    final existingBloc = context.read<ViewerBloc>();
-    final bloc = existingBloc.repo == repo
-        ? existingBloc
-        : ViewerBloc(
-            repo,
-            agoraViewerService: sl<AgoraViewerService>(),
-            liveStreamService: sl<LiveStreamService>(),
-            networkMonitorService: sl<NetworkMonitorService>(),
-            reconnectionService: sl<ReconnectionService>(),
-            roleChangeService: sl<RoleChangeService>(),
-          );
+    // ── 4. Get or create BLoC (with all services) ─────────────────────────
+    ViewerBloc bloc;
+    try {
+      final existing = context.read<ViewerBloc>();
+      bloc = existing.repo == repo ? existing : _buildBloc(repo);
+    } catch (_) {
+      bloc = _buildBloc(repo);
+    }
 
-    // Store the BLoC if we created a new one
     if (_viewerBloc == null) {
       _viewerBloc = bloc;
     }
 
-    // Trigger BLoC start if flag is set and not already started
-    if (_shouldStartBloc && !_didAutoStartBloc && _viewerBloc != null) {
+    // ── 5. Schedule BLoC start ─────────────────────────────────────────────
+    if (_shouldStartBloc && !_didAutoStartBloc) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _viewerBloc != null) {
+        if (mounted && !_didAutoStartBloc) {
           _viewerBloc!.add(const ViewerStarted());
           _didAutoStartBloc = true;
         }
       });
     }
 
+    // ── 6. Render the viewer with a runtime premium listener ───────────────
     return BlocProvider.value(
       value: bloc,
-      child: const LiveViewerOrchestratorWrapper(),
+      child: BlocListener<ViewerBloc, ViewerState>(
+        // Listen for runtime premium changes (host makes stream premium mid-session)
+        listenWhen: (p, n) =>
+            !p.requiresPremiumPayment && n.requiresPremiumPayment,
+        listener: (ctx, state) {
+          // Reset any stale payment messages
+          setState(() {
+            _premiumState = PremiumVerificationState.premiumUnpaid;
+            _isProcessingPayment = false;
+            _paymentStatusMessage = null;
+          });
+          TopSnack.warning(
+            ctx,
+            'Host has made this stream premium. Unlock to continue watching.',
+            duration: const Duration(seconds: 5),
+          );
+        },
+        child: BlocBuilder<ViewerBloc, ViewerState>(
+          // Rebuild when runtime premium paywall state changes
+          buildWhen: (p, n) =>
+              p.requiresPremiumPayment != n.requiresPremiumPayment,
+          builder: (ctx, state) {
+            // ── Runtime premium paywall (host made stream premium mid-session)
+            if (state.requiresPremiumPayment) {
+              return Scaffold(
+                backgroundColor: Colors.black,
+                body: PremiumOverlay(
+                  fee: state.premiumEntryFeeCoins ?? _premiumFee,
+                  isLoading: _isProcessingPayment,
+                  statusMessage: _paymentStatusMessage,
+                  onOpenPayment: () => _processPremiumPayment(ctx),
+                  onOpenWallet: () => Navigator.of(ctx).pushNamed('/wallet'),
+                ),
+              );
+            }
+
+            // ── Normal viewer
+            return const LiveViewerOrchestratorWrapper();
+          },
+        ),
+      ),
+    );
+  }
+
+  ViewerBloc _buildBloc(ViewerRepositoryImpl repo) {
+    return ViewerBloc(
+      repo,
+      agoraViewerService: sl<AgoraViewerService>(),
+      liveStreamService: sl<LiveStreamService>(),
+      networkMonitorService: sl<NetworkMonitorService>(),
+      reconnectionService: sl<ReconnectionService>(),
+      roleChangeService: sl<RoleChangeService>(),
     );
   }
 }
 
-/// Wrapper that provides BLoC to the orchestrator
+// ── Orchestrator wrapper ──────────────────────────────────────────────────────
 class LiveViewerOrchestratorWrapper extends StatelessWidget {
   const LiveViewerOrchestratorWrapper({super.key});
 
@@ -523,7 +384,7 @@ class LiveViewerOrchestratorWrapper extends StatelessWidget {
     final repo = bloc.repo;
 
     if (repo is! ViewerRepositoryImpl) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(
           child: Text(
             'Repository not compatible with new architecture',
@@ -533,7 +394,6 @@ class LiveViewerOrchestratorWrapper extends StatelessWidget {
       );
     }
 
-    // Check if RTC is initialized (Add this debug check)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final agoraService = sl<AgoraViewerService>();
       debugPrint(

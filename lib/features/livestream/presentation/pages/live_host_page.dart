@@ -43,6 +43,7 @@ class _StableCameraPreview extends StatefulWidget {
   final Widget Function(BuildContext context) loadingBuilder;
 
   const _StableCameraPreview({
+    super.key,
     required this.agora,
     required this.loadingBuilder,
   });
@@ -68,16 +69,12 @@ class _StableCameraPreviewState extends State<_StableCameraPreview> {
   }
 
   void _onAgoraChanged() {
+    // Only rebuild when the joined state actually flips.
+    // mic/cam mute, beauty, remote user events — all ignored here.
     final isJoined = widget.agora.joined;
     if (isJoined != _wasJoined) {
       _wasJoined = isJoined;
-      if (mounted) {
-        // Use addPostFrameCallback so the AgoraVideoView has a full frame
-        // to register its surface texture before frames start arriving.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() {});
-        });
-      }
+      if (mounted) setState(() {});
     }
   }
 
@@ -86,6 +83,8 @@ class _StableCameraPreviewState extends State<_StableCameraPreview> {
     if (!widget.agora.joined) {
       return widget.loadingBuilder(context);
     }
+    // localPreview() returns the same stable AgoraVideoView every time
+    // (backed by the single VideoViewController created in startPublishing).
     return Stack(
       children: [
         Positioned.fill(
@@ -122,6 +121,7 @@ class LiveHostPage extends StatefulWidget {
   final String startedAtIso;
   final String? avatarUrl;
   final String? hostUuid;
+  // NEW: server-provided initial mic/cam state
   final bool? initialMicOn;
   final bool? initialCamOn;
 
@@ -134,7 +134,7 @@ class LiveHostPage extends StatefulWidget {
     required this.startedAtIso,
     this.avatarUrl,
     this.hostUuid,
-    this.initialMicOn, // ← ADD
+    this.initialMicOn,
     this.initialCamOn,
   });
 
@@ -151,7 +151,7 @@ class _LiveHostPageState extends State<LiveHostPage>
   final LiveSessionRepositoryImpl _repoImpl =
       GetIt.I<LiveSessionRepository>() as LiveSessionRepositoryImpl;
 
-  // Gift animation
+  // Gift animation state
   StreamSubscription<HostGiftBroadcast>? _giftBroadcastSub;
   final List<HostGiftBroadcast> _giftQueue = [];
   HostGiftBroadcast? _currentGift;
@@ -161,50 +161,56 @@ class _LiveHostPageState extends State<LiveHostPage>
   int _overflowCount = 0;
   static const int _maxQueueCap = 10;
 
-  // Audio/Video controls
-  bool _isAudioMuted = false;
-  bool _isVideoMuted = false;
   bool _showSettingsMenu = false;
   bool _immersive = false;
 
-  // Beauty effects
+  // Beauty state (mirrors BLoC, used for _applyEffects calls)
   bool _faceCleanEnabled = false;
   int _faceCleanLevel = 40;
   bool _brightenEnabled = false;
   int _brightenLevel = 40;
 
-  // Connection management
+  // Connection
   StreamSubscription<ConnectionState>? _pusherConnectionSub;
   ValueChanged<ConnectionState>? _connectionListener;
   bool _beautyAppliedOnJoin = false;
 
   GiftToast? _giftToast;
 
-  // bool _isApplyingEffects = false;
-  DateTime? _lastEffectApplyTime;
+  // Camera recovery
+  final GlobalKey _cameraPreviewKey = GlobalKey();
+  bool _cameraBlack = false;
 
+  bool _isApplyingEffects = false;
+  DateTime? _lastEffectApplyTime;
   static const Duration _minEffectApplyInterval = Duration(milliseconds: 500);
 
   @override
   void initState() {
     super.initState();
-    _beautyAppliedOnJoin = false;
     _giftToast = GiftToast();
     WidgetsBinding.instance.addObserver(this);
-
-    // Setup Agora listener BEFORE applying effects
     agora.addListener(_onAgoraStateChanged);
-
-    // Prevent screen from sleeping during live stream
     WakelockPlus.enable();
-
-    // Initialize Pusher and setup listeners
     _initializePusher();
   }
 
-  /// Applies the mic/cam state the server returned in the live/start response.
-  /// The API returns "mic_on": false, "cam_on": false by default, but the old
-  /// code never read these — so the UI showed them as active while they were off.
+  void _onAgoraStateChanged() {
+    // Only apply beauty on join — do NOT call setState() here.
+    // The _StableCameraPreview handles its own selective rebuild.
+    if (agora.joined && !_beautyAppliedOnJoin) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && agora.joined) {
+          _applyInitialMicCamState();
+          _applyEffects(force: true);
+        }
+      });
+    }
+  }
+
+  /// Apply the mic/cam state the server sent back in the live/start response.
+  /// Without this, mic and camera appear ON in the UI but are actually OFF
+  /// because the server returned mic_on: false, cam_on: false.
   void _applyInitialMicCamState() {
     final micOn = widget.initialMicOn ?? true;
     final camOn = widget.initialCamOn ?? true;
@@ -219,31 +225,8 @@ class _LiveHostPageState extends State<LiveHostPage>
     }
   }
 
-  void _onAgoraStateChanged() {
-    if (agora.joined && !_beautyAppliedOnJoin) {
-      _beautyAppliedOnJoin = true; // ← SET IMMEDIATELY to prevent double-firing
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && agora.joined) {
-          _applyInitialMicCamState();
-          _applyEffects(force: true);
-        }
-      });
-    }
-  }
-
-  // void _onAgoraStateChanged() {
-  //   if (mounted) {
-  //     setState(() {
-  //       // Trigger rebuild when audio/video state changes
-  //     });
-  //   }
-  // }
-
   Future<void> _initializePusher() async {
-    if (_isPusherInitialized || _isPusherInitializing) {
-      return;
-    }
-
+    if (_isPusherInitialized || _isPusherInitializing) return;
     _isPusherInitializing = true;
 
     try {
@@ -251,65 +234,37 @@ class _LiveHostPageState extends State<LiveHostPage>
       final cfg = GetIt.I<RuntimeConfig>();
       final authLocal = GetIt.I<AuthLocalDataSource>();
 
-      debugPrint('🚀 Checking Pusher initialization...');
-
-      // ONLY initialize if not already done
       if (!pusher.isInitialized) {
         final apiKey = cfg.pusherKey;
         final cluster = cfg.pusherCluster;
-
-        if (apiKey.isEmpty) {
-          throw Exception('Pusher API key is empty');
-        }
-
-        debugPrint('🔧 Initializing Pusher...');
+        if (apiKey.isEmpty) throw Exception('Pusher API key is empty');
 
         await pusher.initialize(
           apiKey: apiKey,
           cluster: cluster,
           authEndpoint: '${cfg.apiBaseUrl}/broadcasting/auth',
           authCallback: (channelName, socketId, options) async {
-            try {
-              final token = await authLocal.readToken();
-              if (token == null || token.isEmpty) {
-                throw Exception('No auth token');
-              }
-
-              debugPrint('🔐 Auth request for channel: $channelName');
-
-              final dio = Dio();
-              dio.options.headers['Authorization'] = 'Bearer $token';
-              dio.options.headers['Accept'] = 'application/json';
-
-              final response = await dio.post(
-                '${cfg.apiBaseUrl}/broadcasting/auth',
-                data: {'socket_id': socketId, 'channel_name': channelName},
-                options: Options(headers: {'Content-Type': 'application/json'}),
-              );
-
-              debugPrint('✅ Auth response: ${response.statusCode}');
-              return response.data;
-            } catch (e) {
-              debugPrint('❌ Pusher auth error: $e');
-              rethrow;
-            }
+            final token = await authLocal.readToken();
+            if (token == null || token.isEmpty)
+              throw Exception('No auth token');
+            final dio = Dio();
+            dio.options.headers['Authorization'] = 'Bearer $token';
+            dio.options.headers['Accept'] = 'application/json';
+            final response = await dio.post(
+              '${cfg.apiBaseUrl}/broadcasting/auth',
+              data: {'socket_id': socketId, 'channel_name': channelName},
+              options: Options(headers: {'Content-Type': 'application/json'}),
+            );
+            return response.data;
           },
         );
-        debugPrint('✅ Pusher initialized');
-      } else {
-        debugPrint('✅ Pusher already initialized, skipping');
       }
 
-      // Setup connection listener only
       _setupPusherConnectionListener();
-
       _isPusherInitialized = true;
-      debugPrint('✅ Pusher ready for LiveHost');
     } catch (e, stack) {
       debugPrint('❌ Pusher initialization failed: $e\n$stack');
       _isPusherInitializing = false;
-
-      // Don't throw - let the repository handle connection
       return;
     } finally {
       _isPusherInitializing = false;
@@ -317,7 +272,6 @@ class _LiveHostPageState extends State<LiveHostPage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        // Start live session - repository will handle Pusher connection
         context.read<LiveHostBloc>().add(
           LiveStarted(
             widget.topic,
@@ -331,94 +285,57 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   void _setupPusherConnectionListener() {
     final pusher = GetIt.I<PusherService>();
-
     void connectionListener(ConnectionState state) {
-      debugPrint('📡 [LiveHost] Pusher Connection State: $state');
-
       if (!mounted) return;
-
-      if (state == ConnectionState.connected) {
-        debugPrint('🔄 Pusher reconnected (passive)');
-      } else if (state == ConnectionState.disconnected ||
+      if (state == ConnectionState.disconnected ||
           state == ConnectionState.failed) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
+          if (mounted)
             TopSnack.info(context, 'Connection lost. Reconnecting...');
-          }
         });
       }
     }
 
-    // Add the listener
     pusher.addConnectionListener(connectionListener);
-
-    // Store it so we can remove it later
     _connectionListener = connectionListener;
   }
 
   @override
   void dispose() {
-    debugPrint('🧹 Disposing LiveHostPage...');
     _beautyAppliedOnJoin = false;
-    // Reset flag
-
     agora.removeListener(_onAgoraStateChanged);
 
-    // Remove Pusher listener if it exists
     if (_connectionListener != null) {
       final pusher = GetIt.I<PusherService>();
       pusher.removeConnectionListener(_connectionListener!);
-      debugPrint('✅ Removed Pusher connection listener');
     }
 
-    // Cancel gift broadcast subscription
     _giftBroadcastSub?.cancel();
-    debugPrint('✅ Cancelled gift broadcast subscription');
-
-    // Stop and dispose animation controller
     _giftAnimController?.stop();
     _giftAnimController?.dispose();
-    debugPrint('✅ Disposed gift animation controller');
 
-    // Reset beauty effects
     try {
-      _faceCleanEnabled = false;
-      _brightenEnabled = false;
       agora.resetBeauty();
-      debugPrint('✅ Reset Agora beauty effects');
     } catch (_) {}
 
-    // Disable wakelock
     WakelockPlus.disable();
-    debugPrint('✅ Disabled wakelock');
-
-    // Remove observer
     WidgetsBinding.instance.removeObserver(this);
-
-    // Reset flags
     _isPusherInitialized = false;
     _isPusherInitializing = false;
 
     super.dispose();
-    debugPrint('✅ LiveHostPage disposed');
   }
 
   void _onGiftBroadcast(HostGiftBroadcast b) {
-    // Ignore gifts from the host (if any)
     final hostUuid = sl<LiveSessionTracker>().current?.hostUuid;
-    if (b.senderUuid.isNotEmpty &&
-        hostUuid != null &&
-        b.senderUuid == hostUuid) {
+    if (b.senderUuid.isNotEmpty && hostUuid != null && b.senderUuid == hostUuid)
       return;
-    }
 
-    // Enqueue with cap
     if (_giftQueue.length >= _maxQueueCap && !_isPlayingGift) {
       _overflowCount++;
       return;
     }
 
-    // If currently playing and same sender+gift within combo window, aggregate
     if (_isPlayingGift && _currentGift != null) {
       final window = Duration(milliseconds: b.comboWindowMs ?? 2000);
       if (b.senderUuid == _currentGift!.senderUuid &&
@@ -433,14 +350,11 @@ class _LiveHostPageState extends State<LiveHostPage>
     }
 
     _giftQueue.add(b);
-    if (!_isPlayingGift) {
-      _playNextGift();
-    }
+    if (!_isPlayingGift) _playNextGift();
   }
 
   Future<void> _playNextGift() async {
-    if (_isPlayingGift) return;
-    if (_giftQueue.isEmpty) return;
+    if (_isPlayingGift || _giftQueue.isEmpty) return;
 
     _currentGift = _giftQueue.removeAt(0);
     _overflowCount = _overflowCount > 0 ? _overflowCount - 1 : 0;
@@ -449,7 +363,6 @@ class _LiveHostPageState extends State<LiveHostPage>
     setState(() {});
 
     try {
-      // Build art (may be async)
       _currentGiftWidget = await GiftVisuals.build(
         _currentGift!.giftCode,
         size: 84,
@@ -457,19 +370,11 @@ class _LiveHostPageState extends State<LiveHostPage>
         imageUrl: null,
       );
     } catch (e) {
-      debugPrint('⚠️ GiftVisuals build failed: $e');
       _currentGiftWidget = const Icon(Icons.card_giftcard, size: 64);
     }
 
-    // Determine durations
-    final entranceMs = 350;
-    final baseHoldMs = 1800;
-    final exitMs = 250;
-    final extraPerQuantity = 300;
-    final holdMs =
-        baseHoldMs +
-        ((_currentGift!.quantity - 1).clamp(0, 4) * extraPerQuantity);
-    final totalMs = entranceMs + holdMs + exitMs;
+    final holdMs = 1800 + ((_currentGift!.quantity - 1).clamp(0, 4) * 300);
+    final totalMs = 350 + holdMs + 250;
 
     _giftAnimController?.dispose();
     _giftAnimController = AnimationController(
@@ -479,13 +384,11 @@ class _LiveHostPageState extends State<LiveHostPage>
 
     _giftAnimController!.addStatusListener((s) {
       if (s == AnimationStatus.completed) {
-        // finish and dequeue
         setState(() {
           _currentGift = null;
           _currentGiftWidget = null;
           _isPlayingGift = false;
         });
-        // small delay before next play to avoid tight loops
         Future.delayed(const Duration(milliseconds: 120), () {
           if (mounted) _playNextGift();
         });
@@ -501,338 +404,78 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Re-enable wakelock when app comes to foreground
-      WakelockPlus.enable();
-    }
-  }
-
-  // Add mute control methods
-  void _toggleAudioMute() {
-    agora.setMicEnabled(!agora.isMicEnabled);
-  }
-
-  void _toggleVideoMute() {
-    agora.setCameraEnabled(!agora.isCameraEnabled);
+    if (state == AppLifecycleState.resumed) WakelockPlus.enable();
   }
 
   void _toggleSettingsMenu() {
-    setState(() {
-      _showSettingsMenu = !_showSettingsMenu;
-    });
+    setState(() => _showSettingsMenu = !_showSettingsMenu);
   }
 
-  // UPDATED: Robust beauty effects application
   Future<void> _applyEffects({bool force = false}) async {
-    // Debounce rapid calls
     final now = DateTime.now();
-    if (!force &&
-        _lastEffectApplyTime != null &&
-        now.difference(_lastEffectApplyTime!) < _minEffectApplyInterval) {
+    if (_lastEffectApplyTime != null &&
+        now.difference(_lastEffectApplyTime!) < _minEffectApplyInterval &&
+        !force)
       return;
-    }
 
+    if (_isApplyingEffects) return;
     if (!agora.joined) {
       _beautyAppliedOnJoin = false;
       return;
     }
 
+    _isApplyingEffects = true;
     _lastEffectApplyTime = now;
 
-    // The agora service handles its own queueing — just fire and forget.
-    // Do NOT await here. Do NOT use Future.delayed. Do NOT catch and retry.
-    // All of those create re-entry windows that can cause the black screen.
-    if (!_faceCleanEnabled && !_brightenEnabled) {
-      agora.resetBeauty(); // ← no await
-    } else {
-      agora.applyBeauty(
-        faceCleanEnabled: _faceCleanEnabled,
-        faceCleanLevel: _faceCleanLevel.clamp(0, 100),
-        brightenEnabled: _brightenEnabled,
-        brightenLevel: _brightenLevel.clamp(0, 100),
-      ); // ← no await
-    }
-  }
+    try {
+      final faceOn = _faceCleanEnabled;
+      final faceLevel = _faceCleanLevel.clamp(0, 100);
+      final brightOn = _brightenEnabled;
+      final brightLevel = _brightenLevel.clamp(0, 100);
 
-  // Show a compact bottom sheet allowing toggle + slider for an effect
-  void _showBeautyBottomSheet({required bool isFaceClean}) {
-    if (_showSettingsMenu) {
-      setState(() => _showSettingsMenu = false);
-    }
-
-    final title = isFaceClean ? 'Face Clean' : 'Brighten';
-    final int currentLevel = isFaceClean ? _faceCleanLevel : _brightenLevel;
-    final bool currentEnabled = isFaceClean
-        ? _faceCleanEnabled
-        : _brightenEnabled;
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.40,
-          minChildSize: 0.28,
-          maxChildSize: 0.80,
-          builder: (context, scrollCtrl) {
-            return StatefulBuilder(
-              builder: (sheetCtx, sheetSetState) {
-                int innerLevel = currentLevel;
-                bool innerEnabled = currentEnabled;
-                Timer? _applyTimer;
-
-                // Debounced apply function
-                void _debouncedApply() {
-                  _applyTimer?.cancel();
-                  _applyTimer = Timer(const Duration(milliseconds: 300), () {
-                    if (!mounted) return;
-
-                    setState(() {
-                      if (isFaceClean) {
-                        _faceCleanEnabled = innerEnabled;
-                        _faceCleanLevel = innerLevel;
-                      } else {
-                        _brightenEnabled = innerEnabled;
-                        _brightenLevel = innerLevel;
-                      }
-                    });
-
-                    // Dispatch to Bloc
-                    try {
-                      context.read<LiveHostBloc>().add(
-                        BeautyPreferencesUpdated(
-                          faceCleanEnabled: _faceCleanEnabled,
-                          faceCleanLevel: _faceCleanLevel,
-                          brightenEnabled: _brightenEnabled,
-                          brightenLevel: _brightenLevel,
-                        ),
-                      );
-                    } catch (e) {
-                      debugPrint('⚠️ Failed to dispatch beauty update: $e');
-                      // Apply directly
-                      _applyEffects();
-                    }
-                  });
-                }
-
-                return _Glass(
-                  radius: 18,
-                  padding: const EdgeInsets.all(12),
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-                    ),
-                    child: ListView(
-                      controller: scrollCtrl,
-                      shrinkWrap: true,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            Switch(
-                              value: innerEnabled,
-                              onChanged: (v) {
-                                sheetSetState(() => innerEnabled = v);
-                                _debouncedApply();
-                              },
-                              activeColor: const Color(0xFFFF6A00),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Intensity: ${innerLevel}%',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        Slider(
-                          min: 0,
-                          max: 100,
-                          divisions: 100,
-                          value: innerLevel.toDouble(),
-                          onChanged: (v) {
-                            sheetSetState(() => innerLevel = v.round());
-                          },
-                          onChangeEnd: (v) {
-                            sheetSetState(() => innerLevel = v.round());
-                            _debouncedApply();
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  _applyTimer?.cancel(); // Cancel any pending
-
-                                  setState(() {
-                                    if (isFaceClean) {
-                                      _faceCleanEnabled = innerEnabled;
-                                      _faceCleanLevel = innerLevel;
-                                    } else {
-                                      _brightenEnabled = innerEnabled;
-                                      _brightenLevel = innerLevel;
-                                    }
-                                  });
-
-                                  try {
-                                    context.read<LiveHostBloc>().add(
-                                      BeautyPreferencesUpdated(
-                                        faceCleanEnabled: _faceCleanEnabled,
-                                        faceCleanLevel: _faceCleanLevel,
-                                        brightenEnabled: _brightenEnabled,
-                                        brightenLevel: _brightenLevel,
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    debugPrint(
-                                      '⚠️ Failed to dispatch beauty update: $e',
-                                    );
-                                    _applyEffects();
-                                  }
-
-                                  Navigator.of(ctx).pop();
-                                },
-                                child: Container(
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFF6A00),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'Apply',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            // Add reset button
-                            GestureDetector(
-                              onTap: () {
-                                // Use the new gradual reset instead of immediate reset
-                                _resetBeautyEffect(isFaceClean);
-                                Navigator.of(ctx).pop();
-                              },
-                              child: Container(
-                                height: 48,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.2),
-                                  ),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'Reset',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            );
-          },
+      if (!faceOn && !brightOn) {
+        await agora.resetBeauty();
+      } else {
+        await agora.applyBeauty(
+          faceCleanEnabled: faceOn,
+          faceCleanLevel: faceLevel,
+          brightenEnabled: brightOn,
+          brightenLevel: brightLevel,
         );
-      },
-    );
+      }
+      _beautyAppliedOnJoin = true;
+    } catch (e) {
+      debugPrint('❌ Failed to apply beauty effects: $e');
+      try {
+        await agora.resetBeauty();
+      } catch (_) {}
+      if (mounted) {
+        TopSnack.error(
+          context,
+          'Beauty effects temporarily unavailable.',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } finally {
+      _isApplyingEffects = false;
+    }
   }
 
-  // Add this widget method for settings menu
-  Widget _buildSettingsMenu() {
-    return Positioned(
-      right: 18,
-      bottom: 80,
-      child: AnimatedOpacity(
-        opacity: _showSettingsMenu ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 200),
-        child: Visibility(
-          visible: _showSettingsMenu,
-          child: _Glass(
-            radius: 16,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: Colors.black.withOpacity(0.8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SettingsMenuItem(
-                  icon: _isAudioMuted
-                      ? Icons.mic_off_rounded
-                      : Icons.mic_rounded,
-                  label: _isAudioMuted ? 'Unmute Audio' : 'Mute Audio',
-                  isActive: _isAudioMuted,
-                  onTap: _toggleAudioMute,
-                ),
-                const SizedBox(height: 12),
-                _SettingsMenuItem(
-                  icon: _isVideoMuted
-                      ? Icons.videocam_off_rounded
-                      : Icons.videocam_rounded,
-                  label: _isVideoMuted ? 'Show Video' : 'Hide Video',
-                  isActive: _isVideoMuted,
-                  onTap: _toggleVideoMute,
-                ),
-                const SizedBox(height: 12),
-                _SettingsMenuItem(
-                  icon: Icons.face_retouching_natural,
-                  label: 'Face Clean',
-                  isActive: _faceCleanEnabled,
-                  onTap: () => _showBeautyBottomSheet(isFaceClean: true),
-                ),
-                const SizedBox(height: 8),
-                _SettingsMenuItem(
-                  icon: Icons.wb_sunny,
-                  label: 'Brighten',
-                  isActive: _brightenEnabled,
-                  onTap: () => _showBeautyBottomSheet(isFaceClean: false),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  // Called when user taps the recovery button.
+  Future<void> _recoverCamera() async {
+    if (!agora.joined) return;
+    try {
+      await agora.engine?.stopPreview();
+      await Future.delayed(const Duration(milliseconds: 200));
+      await agora.engine?.startPreview();
+      if (mounted) setState(() => _cameraBlack = false);
+      debugPrint('[Camera] Recovery: preview restarted');
+    } catch (e) {
+      debugPrint('❌ Camera recovery failed: \$e');
+    }
   }
 
   void _resetBeautyEffect(bool isFaceClean) {
-    // Store current values
-    final oldFaceEnabled = _faceCleanEnabled;
-    final oldFaceLevel = _faceCleanLevel;
-    final oldBrightenEnabled = _brightenEnabled;
-    final oldBrightenLevel = _brightenLevel;
-
-    // Set to defaults
     setState(() {
       if (isFaceClean) {
         _faceCleanEnabled = false;
@@ -843,74 +486,14 @@ class _LiveHostPageState extends State<LiveHostPage>
       }
     });
 
-    // Apply changes gradually with animation
-    _applyBeautyGradually(
-      oldFaceEnabled: oldFaceEnabled,
-      oldFaceLevel: oldFaceLevel,
-      oldBrightenEnabled: oldBrightenEnabled,
-      oldBrightenLevel: oldBrightenLevel,
-      newFaceEnabled: isFaceClean ? false : _faceCleanEnabled,
-      newFaceLevel: isFaceClean ? 40 : _faceCleanLevel,
-      newBrightenEnabled: isFaceClean ? _brightenEnabled : false,
-      newBrightenLevel: isFaceClean ? _brightenLevel : 40,
+    context.read<LiveHostBloc>().add(
+      BeautyPreferencesUpdated(
+        faceCleanEnabled: _faceCleanEnabled,
+        faceCleanLevel: _faceCleanLevel,
+        brightenEnabled: _brightenEnabled,
+        brightenLevel: _brightenLevel,
+      ),
     );
-
-    try {
-      context.read<LiveHostBloc>().add(
-        BeautyPreferencesUpdated(
-          faceCleanEnabled: _faceCleanEnabled,
-          faceCleanLevel: _faceCleanLevel,
-          brightenEnabled: _brightenEnabled,
-          brightenLevel: _brightenLevel,
-        ),
-      );
-    } catch (e) {
-      debugPrint('⚠️ Failed to dispatch reset: $e');
-    }
-  }
-
-  Future<void> _applyBeautyGradually({
-    required bool oldFaceEnabled,
-    required int oldFaceLevel,
-    required bool oldBrightenEnabled,
-    required int oldBrightenLevel,
-    required bool newFaceEnabled,
-    required int newFaceLevel,
-    required bool newBrightenEnabled,
-    required int newBrightenLevel,
-  }) async {
-    if (!agora.joined) return;
-
-    const steps = 10;
-    const delay = Duration(milliseconds: 50);
-
-    for (int i = 0; i <= steps; i++) {
-      final progress = i / steps;
-
-      // Interpolate values
-      final currentFaceLevel =
-          (oldFaceLevel + (newFaceLevel - oldFaceLevel) * progress).toInt();
-      final currentBrightenLevel =
-          (oldBrightenLevel + (newBrightenLevel - oldBrightenLevel) * progress)
-              .toInt();
-
-      // Apply intermediate state
-      try {
-        await agora.applyBeauty(
-          faceCleanEnabled: progress > 0.5 ? newFaceEnabled : oldFaceEnabled,
-          faceCleanLevel: currentFaceLevel.clamp(0, 100),
-          brightenEnabled: progress > 0.5
-              ? newBrightenEnabled
-              : oldBrightenEnabled,
-          brightenLevel: currentBrightenLevel.clamp(0, 100),
-        );
-      } catch (e) {
-        debugPrint('⚠️ Gradual beauty step failed: $e');
-        break;
-      }
-
-      await Future.delayed(delay);
-    }
   }
 
   String _mmss(int total) {
@@ -925,12 +508,10 @@ class _LiveHostPageState extends State<LiveHostPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Use a simple Container instead of CircularProgressIndicator
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.transparent,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFFF6A00), width: 2),
             ),
@@ -948,13 +529,13 @@ class _LiveHostPageState extends State<LiveHostPage>
             style: TextStyle(color: Colors.white, fontSize: 16),
           ),
           const SizedBox(height: 8),
+          // Use a separate BlocBuilder scoped only to elapsedSeconds
           BlocBuilder<LiveHostBloc, LiveHostState>(
-            builder: (context, state) {
-              return Text(
-                'Viewers: ${state.viewers} | Time: ${_mmss(state.elapsedSeconds)}',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              );
-            },
+            buildWhen: (p, c) => p.elapsedSeconds != c.elapsedSeconds,
+            builder: (context, state) => Text(
+              'Viewers: ${state.viewers} | Time: ${_mmss(state.elapsedSeconds)}',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -963,19 +544,15 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   @override
   Widget build(BuildContext context) {
-    final agora = GetIt.I<AgoraService>();
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: MultiBlocListener(
         listeners: [
-          // 1) Navigate out when stream ends
           BlocListener<LiveHostBloc, LiveHostState>(
             listenWhen: (p, c) =>
                 p.isLive != c.isLive || p.endAnalytics != c.endAnalytics,
             listener: (context, state) {
               if (!state.isLive) {
-                // Prefer analytics route if present
                 if (state.endAnalytics != null) {
                   Navigator.of(context).pushReplacementNamed(
                     RouteNames.livestreamEnded,
@@ -996,6 +573,7 @@ class _LiveHostPageState extends State<LiveHostPage>
               }
             },
           ),
+          // Listen for beauty prefs updates from BLoC → apply to Agora
           BlocListener<LiveHostBloc, LiveHostState>(
             listenWhen: (p, c) =>
                 p.faceCleanEnabled != c.faceCleanEnabled ||
@@ -1011,569 +589,447 @@ class _LiveHostPageState extends State<LiveHostPage>
             },
           ),
         ],
-        child: BlocBuilder<LiveHostBloc, LiveHostState>(
-          builder: (context, state) {
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragEnd: (details) {
-                final v = details.primaryVelocity ?? 0;
-                if (v > 300) {
-                  setState(() => _immersive = true);
-                } else if (v < -300) {
-                  setState(() => _immersive = false);
-                }
-              },
-              child: Stack(
-                children: [
-                  // Camera preview
-                  //
-                  // WHY ValueListenableBuilder instead of AnimatedBuilder(animation: agora):
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragEnd: (details) {
+            final v = details.primaryVelocity ?? 0;
+            if (v > 300)
+              setState(() => _immersive = true);
+            else if (v < -300)
+              setState(() => _immersive = false);
+          },
+          child: Stack(
+            children: [
+              // ── CAMERA PREVIEW ─────────────────────────────────────────────
+              // _StableCameraPreview only rebuilds when agora.joined flips.
+              // It is completely isolated from:
+              //   • BLoC timer ticks (elapsedSeconds every second)
+              //   • Beauty operations (no notifyListeners from beauty)
+              //   • Mic/camera mute events
+              // Camera layout — uses GlobalKey to keep the native surface
+              // alive across solo/two-up layout switches. Never recreated.
+              Positioned.fill(child: _buildCameraLayout()),
 
-                  //   Beauty effects are applied entirely inside Agora's native GPU pipeline.
-                  //   Flutter rebuilding the video widget has NO effect on what the camera
-                  //   shows — the smoothing/brightening is already happening at the frame level.
-                  //
-                  //   AnimatedBuilder(animation: agora) was rebuilding this subtree on every
-                  //   notifyListeners() call, including the ones fired by beauty operations.
-                  //   Each rebuild created a brand-new VideoViewController, which tore down the
-                  //   native render surface while the SDK was finishing its work → black screen.
-                  //
-                  //   ValueListenableBuilder on primaryRemoteUid rebuilds ONLY when a guest
-                  //   joins or leaves — the only time the layout actually needs to change.
-                  //   Beauty changes now never trigger a video rebuild at all.
-                  // Camera preview
-                  Positioned.fill(
-                    child: BlocBuilder<LiveHostBloc, LiveHostState>(
-                      // Only rebuild when guest join/leave — NOT on every timer tick.
-                      buildWhen: (p, c) =>
-                          p.activeGuestUuid != c.activeGuestUuid ||
-                          p.activeGuestName != c.activeGuestName,
-                      builder: (context, state) {
-                        final hasGuestInBloc = state.activeGuestUuid != null;
-
-                        return ValueListenableBuilder<int?>(
-                          valueListenable: agora.primaryRemoteUid,
-                          builder: (context, remoteUid, _) {
-                            final hasRemoteUid = remoteUid != null;
-
-                            if (!hasGuestInBloc || !hasRemoteUid) {
-                              // Solo host — stable, never rebuilt by ticks or beauty.
-                              return _StableCameraPreview(
-                                agora: agora,
-                                loadingBuilder: (_) => _buildLoadingState(),
-                              );
-                            }
-
-                            // Two-up layout.
-                            return Stack(
-                              children: [
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  child: _buildHostVideoWithOverlay(),
-                                ),
-                                _buildGuestVideoFloatingPanel(
-                                  state.activeGuestName ?? 'Guest',
-                                ),
-                              ],
-                            );
-                          },
-                        );
+              // ── UI OVERLAY — only when not immersive ───────────────────────
+              if (!_immersive) ...[
+                // Header bar — scoped BlocBuilder for time + viewers only
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  top: MediaQuery.of(context).padding.top + 8,
+                  child: BlocBuilder<LiveHostBloc, LiveHostState>(
+                    buildWhen: (p, c) =>
+                        p.elapsedSeconds != c.elapsedSeconds ||
+                        p.viewers != c.viewers ||
+                        p.isPremium != c.isPremium,
+                    builder: (context, state) => _HeaderBar(
+                      hostName: widget.hostName,
+                      hostBadge: widget.hostBadge,
+                      avatarUrl: widget.avatarUrl,
+                      timeText: _mmss(state.elapsedSeconds),
+                      viewersText: _formatViewers(state.viewers),
+                      onEnd: () {
+                        try {
+                          context.read<LiveHostBloc>().add(EndPressed());
+                        } catch (e) {
+                          TopSnack.error(context, 'Error ending stream: $e');
+                        }
+                        _repoImpl.safeEndSession();
                       },
                     ),
                   ),
-                  // Add this to your build method, after the Positioned.fill for camera preview
-                  // ===== Top Bar (fixed alignment) =====
-                  if (!_immersive) ...[
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      top: MediaQuery.of(context).padding.top + 8,
-                      child: BlocBuilder<LiveHostBloc, LiveHostState>(
-                        // ADD this buildWhen — was missing, causing rebuilds every second:
-                        buildWhen: (p, c) =>
-                            p.elapsedSeconds != c.elapsedSeconds ||
-                            p.viewers != c.viewers ||
-                            p.isPremium != c.isPremium,
-                        builder: (context, state) => _HeaderBar(
-                          hostName: widget.hostName,
-                          hostBadge: widget.hostBadge,
-                          avatarUrl: widget.avatarUrl,
-                          timeText: _mmss(state.elapsedSeconds),
-                          viewersText: _formatViewers(state.viewers),
-                          onEnd: () {
-                            try {
-                              context.read<LiveHostBloc>().add(EndPressed());
-                            } catch (e) {
-                              TopSnack.error(
-                                context,
-                                'Error ending stream: $e',
-                              );
-                            }
-                            // _repoImpl.safeEndSession();
-                          },
+                ),
+
+                // Connection status
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: MediaQuery.of(context).size.width / 2 - 50,
+                  child: Builder(
+                    builder: (context) {
+                      final pusher = GetIt.I<PusherService>();
+                      if (pusher.isConnected) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.wifi_off, size: 14, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Reconnecting...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Premium badge
+                BlocBuilder<LiveHostBloc, LiveHostState>(
+                  buildWhen: (p, c) => p.isPremium != c.isPremium,
+                  builder: (context, state) {
+                    if (!state.isPremium) return const SizedBox.shrink();
+                    return Positioned(
+                      top: MediaQuery.of(context).padding.top + 100,
+                      right: 20,
+                      child: GestureDetector(
+                        onTap: _showCancelPremiumBottomSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.redAccent,
+                              width: 1.25,
+                            ),
+                          ),
+                          child: const Text(
+                            'PREMIUM',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // Dim layer when paused
+                BlocBuilder<LiveHostBloc, LiveHostState>(
+                  buildWhen: (p, c) => p.isPaused != c.isPaused,
+                  builder: (context, state) {
+                    if (!state.isPaused) return const SizedBox.shrink();
+                    return Positioned.fill(
+                      child: Container(color: Colors.black.withOpacity(0.55)),
+                    );
+                  },
+                ),
+
+                // Topic chip
+                BlocBuilder<LiveHostBloc, LiveHostState>(
+                  buildWhen: (p, c) => false, // static, never changes
+                  builder: (context, state) => Positioned(
+                    top: 92,
+                    left: 12,
+                    right: 12,
+                    child: _Glass(
+                      radius: 18,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Text(
+                        widget.topic,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13.5,
                         ),
                       ),
                     ),
-                    // Connection status indicator
-                    Positioned(
-                      top: MediaQuery.of(context).padding.top + 8,
-                      left: MediaQuery.of(context).size.width / 2 - 50,
-                      child: BlocBuilder<LiveHostBloc, LiveHostState>(
-                        builder: (context, state) {
-                          final pusher = GetIt.I<PusherService>();
-                          final isConnected = pusher.isConnected;
+                  ),
+                ),
 
-                          if (isConnected) return const SizedBox.shrink();
-
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.wifi_off,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Reconnecting...',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                // Gift overlay
+                if (_currentGift != null && _giftAnimController != null)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 64,
+                    left: 18,
+                    right: 18,
+                    child: RepaintBoundary(
+                      child: AnimatedBuilder(
+                        animation: _giftAnimController!,
+                        builder: (context, _) {
+                          final t = _giftAnimController!.value;
+                          final entrancePortion =
+                              350 /
+                              _giftAnimController!.duration!.inMilliseconds;
+                          final exitPortion =
+                              250 /
+                              _giftAnimController!.duration!.inMilliseconds;
+                          double opacity = 1.0;
+                          double translateY = 0.0;
+                          if (t < entrancePortion) {
+                            final nt = t / entrancePortion;
+                            opacity = nt;
+                            translateY = 40 * (1 - _evalEntrance(nt));
+                          } else if (t > (1 - exitPortion)) {
+                            final nt = (t - (1 - exitPortion)) / exitPortion;
+                            opacity = 1 - _evalExit(nt);
+                            translateY = 20 * nt;
+                          }
+                          return Opacity(
+                            opacity: opacity,
+                            child: Transform.translate(
+                              offset: Offset(0, translateY),
+                              child: Center(
+                                child: _Glass(
+                                  radius: 18,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 22,
+                                        backgroundImage:
+                                            _currentGift!.senderAvatar != null
+                                            ? NetworkImage(
+                                                _currentGift!.senderAvatar!,
+                                              )
+                                            : const AssetImage(
+                                                    'assets/images/logo.png',
+                                                  )
+                                                  as ImageProvider,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              '@${_currentGift!.senderDisplayName}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    'sent ${_currentGift!.giftCode} to you',
+                                                    style: const TextStyle(
+                                                      color: Colors.white70,
+                                                      fontSize: 13.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 6,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFFFF6A00,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    '+${_currentGift!.coinsSpent}',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Container(
+                                        width: 84,
+                                        height: 84,
+                                        padding: const EdgeInsets.all(6),
+                                        child:
+                                            _currentGiftWidget ??
+                                            const SizedBox.shrink(),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      if (_currentGift!.quantity > 1)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white24,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'x${_currentGift!.quantity}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                           );
                         },
                       ),
                     ),
+                  ),
 
-                    // Floating short Premium pill (top-right, above header)
-                    if (state.isPremium)
-                      Positioned(
-                        top: MediaQuery.of(context).padding.top + 100,
-                        right: 20,
-                        child: GestureDetector(
-                          onTap: _showCancelPremiumBottomSheet,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.25),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.redAccent,
-                                width: 1.25,
-                              ),
-                            ),
-                            child: const Text(
-                              'PREMIUM',
-                              style: TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
+                // Join request card
+                BlocBuilder<LiveHostBloc, LiveHostState>(
+                  buildWhen: (p, c) =>
+                      p.pendingRequest != c.pendingRequest ||
+                      p.isPaused != c.isPaused,
+                  builder: (context, state) {
+                    if (state.pendingRequest == null || state.isPaused) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned(
+                      top: 120,
+                      left: 16,
+                      right: 16,
+                      child: _JoinRequestCard(
+                        req: state.pendingRequest!,
+                        onAccept: () => context.read<LiveHostBloc>().add(
+                          AcceptJoinRequest(state.pendingRequest!.id),
+                        ),
+                        onDecline: () => context.read<LiveHostBloc>().add(
+                          DeclineJoinRequest(state.pendingRequest!.id),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // Chat overlay
+                BlocBuilder<LiveHostBloc, LiveHostState>(
+                  buildWhen: (p, c) =>
+                      p.chatVisible != c.chatVisible ||
+                      p.messages.length != c.messages.length ||
+                      p.isPaused != c.isPaused,
+                  builder: (context, state) {
+                    if (!state.chatVisible || state.isPaused) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned(
+                      left: 7,
+                      right: 7,
+                      bottom: 100,
+                      child: _HostChatWidget(
+                        messages: state.messages,
+                        onSendMessage: (text) {
+                          context.read<LiveHostBloc>().add(
+                            SendChatMessage(text),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+
+                // Bottom actions — uses AnimatedBuilder on agora for mic/cam icons only
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SafeArea(
+                      top: false,
+                      child: BlocBuilder<LiveHostBloc, LiveHostState>(
+                        buildWhen: (p, c) =>
+                            p.isPaused != c.isPaused ||
+                            p.chatVisible != c.chatVisible ||
+                            p.isPremium != c.isPremium,
+                        builder: (context, state) => _BottomActions(
+                          isPaused: state.isPaused,
+                          onPause: () =>
+                              context.read<LiveHostBloc>().add(TogglePause()),
+                          onChatToggle: () => context.read<LiveHostBloc>().add(
+                            ToggleChatVisibility(),
                           ),
-                        ),
-                      ),
-
-                    // Dim layer when paused
-                    if (state.isPaused)
-                      Positioned.fill(
-                        child: Container(color: Colors.black.withOpacity(0.55)),
-                      ),
-
-                    // Topic chip
-                    Positioned(
-                      top: 92,
-                      left: 12,
-                      right: 12,
-                      child: _Glass(
-                        radius: 18,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        child: Text(
-                          widget.topic,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Host Gift Overlay (top-center)
-                    if (_currentGift != null && _giftAnimController != null)
-                      Positioned(
-                        top: MediaQuery.of(context).padding.top + 64,
-                        left: 18,
-                        right: 18,
-                        child: RepaintBoundary(
-                          child: AnimatedBuilder(
-                            animation: _giftAnimController!,
-                            builder: (context, _) {
-                              final t = _giftAnimController!.value;
-                              final entrancePortion =
-                                  350 /
-                                  (_giftAnimController!
-                                      .duration!
-                                      .inMilliseconds);
-                              final exitPortion =
-                                  250 /
-                                  (_giftAnimController!
-                                      .duration!
-                                      .inMilliseconds);
-                              double opacity = 1.0;
-                              double translateY = 0.0;
-                              if (t < entrancePortion) {
-                                final nt = t / entrancePortion;
-                                opacity = nt;
-                                translateY = 40 * (1 - _evalEntrance(nt));
-                              } else if (t > (1 - exitPortion)) {
-                                final nt =
-                                    (t - (1 - exitPortion)) / exitPortion;
-                                opacity = 1 - _evalExit(nt);
-                                translateY = 20 * nt;
-                              }
-
-                              return Opacity(
-                                opacity: opacity,
-                                child: Transform.translate(
-                                  offset: Offset(0, translateY),
-                                  child: Center(
-                                    child: _Glass(
-                                      radius: 18,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // Avatar
-                                          Transform.scale(
-                                            scale:
-                                                0.9 +
-                                                0.1 *
-                                                    (t < 0.5 ? t * 2 : (1 - t)),
-                                            child: CircleAvatar(
-                                              radius: 22,
-                                              backgroundImage:
-                                                  _currentGift!.senderAvatar !=
-                                                      null
-                                                  ? NetworkImage(
-                                                      _currentGift!
-                                                          .senderAvatar!,
-                                                    )
-                                                  : const AssetImage(
-                                                          'assets/images/logo.png',
-                                                        )
-                                                        as ImageProvider,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          // Texts
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  '@${_currentGift!.senderDisplayName}',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w800,
-                                                    fontSize: 14,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        'sent ${_currentGift!.giftCode} to you',
-                                                        style: const TextStyle(
-                                                          color: Colors.white70,
-                                                          fontSize: 13.5,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 8,
-                                                            vertical: 6,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(
-                                                          0xFFFF6A00,
-                                                        ),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      child: Text(
-                                                        '+${_currentGift!.coinsSpent}',
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.w800,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          // Gift art
-                                          Container(
-                                            width: 84,
-                                            height: 84,
-                                            padding: const EdgeInsets.all(6),
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: const Color(
-                                                    0xFFFF6A00,
-                                                  ).withOpacity(.12),
-                                                  blurRadius: 18,
-                                                  spreadRadius: 2,
-                                                ),
-                                              ],
-                                            ),
-                                            child:
-                                                _currentGiftWidget ??
-                                                const SizedBox.shrink(),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          // multiplier badge if quantity > 1
-                                          if ((_currentGift!.quantity) > 1)
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 6,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white24,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: Text(
-                                                'x${_currentGift!.quantity}',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                          onGifts: () {
+                            final tracker = sl<LiveSessionTracker>();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => LiveGiftsPage(
+                                  livestreamId: tracker.current!.livestreamId,
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-
-                    // Join Request card
-                    if (state.pendingRequest != null && !state.isPaused)
-                      Positioned(
-                        top: 120,
-                        left: 16,
-                        right: 16,
-                        child: _JoinRequestCard(
-                          req: state.pendingRequest!,
-                          onAccept: () => context.read<LiveHostBloc>().add(
-                            AcceptJoinRequest(state.pendingRequest!.id),
-                          ),
-                          onDecline: () => context.read<LiveHostBloc>().add(
-                            DeclineJoinRequest(state.pendingRequest!.id),
-                          ),
-                        ),
-                      ),
-
-                    // Chat overlay - only show when chatVisible is true
-                    if (state.chatVisible && !state.isPaused)
-                      Positioned(
-                        left: 7,
-                        right: 7,
-                        bottom: 100,
-                        child: _HostChatWidget(
-                          messages: state.messages,
-                          onSendMessage: (text) {
-                            context.read<LiveHostBloc>().add(
-                              SendChatMessage(text),
+                              ),
                             );
                           },
-                        ),
-                      ),
-
-                    // Bottom actions - with chat toggle button
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: SafeArea(
-                          top: false,
-                          child: _BottomActions(
-                            isPaused: state.isPaused,
-                            onPause: () =>
-                                context.read<LiveHostBloc>().add(TogglePause()),
-                            onChatToggle: () => context
-                                .read<LiveHostBloc>()
-                                .add(ToggleChatVisibility()),
-                            onGifts: () {
-                              final tracker = sl<LiveSessionTracker>();
-                              final numericId = tracker.current!.livestreamId;
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      LiveGiftsPage(livestreamId: numericId),
-                                ),
-                              );
-                            },
-                            // In _BottomActions widget, update the onViewers callback:
-                            onViewers: () {
-                              final tracker = sl<LiveSessionTracker>();
-                              final numericId = tracker.current!.livestreamId;
-                              final restParam =
-                                  '${tracker.current!.livestreamId}';
-
-                              _registerParticipantsForCurrentSession();
-
-                              // Replace Navigator.pushNamed with showModalBottomSheet
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (context) => const ViewersListSheet(),
-                              );
-                            },
-                            onPremium: _showPremiumBottomSheet,
-                            onSettings: _toggleSettingsMenu,
-                            agora: agora,
-                          ),
+                          onViewers: () {
+                            _registerParticipantsForCurrentSession();
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => const ViewersListSheet(),
+                            );
+                          },
+                          onPremium: _showPremiumBottomSheet,
+                          onSettings: _toggleSettingsMenu,
+                          agora: agora,
                         ),
                       ),
                     ),
+                  ),
+                ),
 
-                    // Settings Menu - NEW
-                    if (_showSettingsMenu)
-                      LiveSettingsMenu(
-                        onClose: () {
-                          setState(() => _showSettingsMenu = false);
-                        },
-                        agora: agora,
-                      ),
+                // Settings menu
+                if (_showSettingsMenu)
+                  LiveSettingsMenu(
+                    onClose: () => setState(() => _showSettingsMenu = false),
+                    agora: agora,
+                  ),
 
-                    // Paused overlay
-                    if (state.isPaused)
-                      _PausedOverlay(
-                        onResume: () =>
-                            context.read<LiveHostBloc>().add(TogglePause()),
-                      ),
-                  ],
+                // Paused overlay
+                BlocBuilder<LiveHostBloc, LiveHostState>(
+                  buildWhen: (p, c) => p.isPaused != c.isPaused,
+                  builder: (context, state) {
+                    if (!state.isPaused) return const SizedBox.shrink();
+                    return _PausedOverlay(
+                      onResume: () =>
+                          context.read<LiveHostBloc>().add(TogglePause()),
+                    );
+                  },
+                ),
+              ],
 
-                  // Positioned(
-                  //   top: MediaQuery.of(context).padding.top + 200,
-                  //   right: 20,
-                  //   child: GestureDetector(
-                  //     onTap: () {
-                  //       debugPrint('🧪 [UI TEST] Testing stream flow...');
-
-                  //       // Test 1: Direct BLoC event
-                  //       context.read<LiveHostBloc>().add(
-                  //         IncomingMessage(
-                  //           LiveChatMessage('@test', 'Direct test message'),
-                  //         ),
-                  //       );
-                  //       debugPrint('✅ [UI TEST] Sent direct BLoC event');
-
-                  //       // Test 2: Repository test
-                  //       _repoImpl.testStreamControllers();
-
-                  //       // Test 3: Simulate pause event
-                  //       context.read<LiveHostBloc>().add(
-                  //         PauseStatusChanged(true),
-                  //       );
-                  //       debugPrint('✅ [UI TEST] Sent pause event');
-
-                  //       // Test 4: Check current state
-                  //       final state = context.read<LiveHostBloc>().state;
-                  //       debugPrint('📊 [UI TEST] Current state:');
-                  //       debugPrint('  - Viewers: ${state.viewers}');
-                  //       debugPrint('  - Messages: ${state.messages.length}');
-                  //       debugPrint('  - Paused: ${state.isPaused}');
-                  //       debugPrint('  - Chat visible: ${state.chatVisible}');
-                  //     },
-                  //     child: Container(
-                  //       padding: const EdgeInsets.all(12),
-                  //       decoration: BoxDecoration(
-                  //         color: Colors.blue,
-                  //         borderRadius: BorderRadius.circular(12),
-                  //       ),
-                  //       child: const Row(
-                  //         mainAxisSize: MainAxisSize.min,
-                  //         children: [
-                  //           Icon(
-                  //             Icons.bug_report,
-                  //             color: Colors.white,
-                  //             size: 16,
-                  //           ),
-                  //           SizedBox(width: 8),
-                  //           Text(
-                  //             'TEST',
-                  //             style: TextStyle(
-                  //               color: Colors.white,
-                  //               fontSize: 12,
-                  //             ),
-                  //           ),
-                  //         ],
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
-                  if (!_immersive) GiftToast(),
-                ],
-              ),
-            );
-          },
+              if (!_immersive) GiftToast(),
+            ],
+          ),
         ),
       ),
     );
@@ -1583,36 +1039,22 @@ class _LiveHostPageState extends State<LiveHostPage>
     try {
       final tracker = GetIt.I<LiveSessionTracker>();
       final current = tracker.current;
-
-      if (current == null) {
-        debugPrint('⚠️ No live session found for participants registration');
-        return;
-      }
+      if (current == null) return;
 
       final numericId = current.livestreamId;
       final restParam = current.livestreamId.toString();
 
-      debugPrint('🔧 Registering participants for livestream ID: $numericId');
-
-      // Check if we're already registered for this session
       if (GetIt.I.isRegistered<ParticipantsRepository>()) {
         try {
           final existingRepo = GetIt.I<ParticipantsRepository>();
-          // Check if it's the same session
-          if (existingRepo is ParticipantsRepositoryImpl) {
-            if (existingRepo.livestreamIdNumeric == numericId) {
-              debugPrint('✅ Participants already registered for this session');
-              return;
-            }
-          }
-
-          // Different session - clean up
+          if (existingRepo is ParticipantsRepositoryImpl &&
+              existingRepo.livestreamIdNumeric == numericId)
+            return;
           GetIt.I<ParticipantsRepository>().dispose();
         } catch (_) {}
         GetIt.I.unregister<ParticipantsRepository>();
       }
 
-      // Register new repository with current session
       GetIt.I.registerLazySingleton<ParticipantsRepository>(
         () => ParticipantsRepositoryImpl(
           GetIt.I<DioClient>(),
@@ -1622,84 +1064,58 @@ class _LiveHostPageState extends State<LiveHostPage>
         ),
       );
 
-      // Update ParticipantsBloc
       if (GetIt.I.isRegistered<ParticipantsBloc>()) {
         GetIt.I.unregister<ParticipantsBloc>();
       }
-
       GetIt.I.registerFactory<ParticipantsBloc>(
         () => ParticipantsBloc(GetIt.I<ParticipantsRepository>()),
       );
-
-      debugPrint('✅ Registered participants for livestream ID: $numericId');
     } catch (e, stack) {
       debugPrint('❌ Failed to register participants: $e\n$stack');
     }
   }
 
-  // ===== Premium BottomSheet (open when host taps "Premiums" button) =====
   void _showPremiumBottomSheet() {
     final liveHostBloc = context.read<LiveHostBloc>();
-
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.55,
-          minChildSize: 0.35,
-          maxChildSize: 0.95,
-          builder: (context, scrollCtrl) {
-            return _PremiumBottomSheet(
-              scrollController: scrollCtrl,
-              repo: _repoImpl,
-              onActivate: (PremiumPackageModel pkg) {
-                liveHostBloc.add(ActivatePremium(pkg));
-                Navigator.of(context).pop();
-              },
-            );
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.35,
+        maxChildSize: 0.95,
+        builder: (context, scrollCtrl) => _PremiumBottomSheet(
+          scrollController: scrollCtrl,
+          repo: _repoImpl,
+          onActivate: (PremiumPackageModel pkg) {
+            liveHostBloc.add(ActivatePremium(pkg));
+            Navigator.of(context).pop();
           },
-        );
-      },
+        ),
+      ),
     );
   }
 
-  // ===== Cancel Premium BottomSheet (open when host taps premium badge) =====
   void _showCancelPremiumBottomSheet() {
     final liveHostBloc = context.read<LiveHostBloc>();
-
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.32,
-          minChildSize: 0.2,
-          maxChildSize: 0.6,
-          builder: (sheetCtx, scrollCtrl) {
-            return _CancelPremiumSheet(
-              scrollController: scrollCtrl,
-              onConfirm: () {
-                liveHostBloc.add(CancelPremium());
-                Navigator.of(sheetCtx).pop();
-              },
-            );
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.32,
+        minChildSize: 0.2,
+        maxChildSize: 0.6,
+        builder: (sheetCtx, scrollCtrl) => _CancelPremiumSheet(
+          scrollController: scrollCtrl,
+          onConfirm: () {
+            liveHostBloc.add(CancelPremium());
+            Navigator.of(sheetCtx).pop();
           },
-        );
-      },
-    );
-  }
-
-  static void _toast(BuildContext c, String title) {
-    ScaffoldMessenger.of(c).showSnackBar(
-      SnackBar(
-        content: Text('$title coming soon'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 1),
+        ),
       ),
     );
   }
@@ -1710,213 +1126,184 @@ class _LiveHostPageState extends State<LiveHostPage>
     return '$v';
   }
 
-  Widget _buildHostVideoWithOverlay() {
-    return Stack(
-      children: [
-        ClipRRect(borderRadius: BorderRadius.zero, child: agora.localPreview()),
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.transparent, Colors.black.withOpacity(0.2)],
-            ),
-          ),
-        ),
-      ],
+  // _buildCameraLayout — keeps host camera alive via GlobalKey regardless
+  // of whether a guest is present. Never creates a new AgoraVideoView
+  // instance just because a guest joined — that was the black screen cause.
+  Widget _buildCameraLayout() {
+    final hostCamera = _StableCameraPreview(
+      key: _cameraPreviewKey,
+      agora: agora,
+      loadingBuilder: (_) => _buildLoadingState(),
     );
-  }
 
-  Widget _buildGuestVideoFloatingPanel(String guestName) {
-    // Add these new variables to track drag position
-    final double panelWidth = MediaQuery.of(context).size.width * 0.40;
-    final double panelHeight = panelWidth * 1.77;
+    // BlocBuilder scoped only to guest state — never fires on timer ticks.
+    return BlocBuilder<LiveHostBloc, LiveHostState>(
+      buildWhen: (p, c) =>
+          p.activeGuestUuid != c.activeGuestUuid ||
+          p.activeGuestName != c.activeGuestName,
+      builder: (context, state) {
+        final hasGuestInBloc = state.activeGuestUuid != null;
 
-    // Use a stateful wrapper to manage drag position
-    return _DraggableGuestVideoPanel(
-      width: panelWidth,
-      height: panelHeight,
-      child: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                children: [
-                  agora.primaryRemoteView(),
+        return ValueListenableBuilder<int?>(
+          valueListenable: agora.primaryRemoteUid,
+          builder: (context, remoteUid, _) {
+            final hasGuest = hasGuestInBloc && remoteUid != null;
 
-                  if (!agora.remoteHasVideo)
-                    Container(
-                      color: Colors.black,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ShaderMask(
-                              shaderCallback: (Rect bounds) {
-                                return LinearGradient(
-                                  colors: [
-                                    Colors.red.shade400.withOpacity(0.4),
-                                    Colors.orange.shade300.withOpacity(0.2),
-                                  ],
-                                ).createShader(bounds);
-                              },
-                              child: const Icon(
-                                Icons.videocam_off,
-                                size: 50,
-                                color: Colors.white,
-                              ),
-                            ),
+            return Stack(
+              children: [
+                // Host camera ALWAYS full-screen, ALWAYS in the tree.
+                // GlobalKey ensures the widget element/state is preserved
+                // when Flutter rebuilds the parent (no surface teardown).
+                Positioned.fill(child: hostCamera),
+
+                // Guest panel + gradient only when a guest is active.
+                if (hasGuest) ...[
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.2),
                           ],
                         ),
                       ),
                     ),
-                ],
-              ),
-            ),
-          ),
-
-          Positioned(
-            top: 8,
-            left: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.person_rounded,
-                    color: Colors.orangeAccent,
-                    size: 12,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${guestName.toUpperCase()}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
+                  _buildGuestVideoFloatingPanel(
+                    state.activeGuestName ?? 'Guest',
+                  ),
+                ],
+
+                // Tap-to-recover button — appears when _cameraBlack is true.
+                if (_cameraBlack)
+                  Positioned(
+                    bottom: 200,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: _CameraRecoveryButton(onRecover: _recoverCamera),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-
-          // Dynamic mic state indicator - UPDATED
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                shape: BoxShape.circle,
-              ),
-              child: AnimatedBuilder(
-                animation: agora, // Listen to agora changes
-                builder: (context, _) {
-                  final hasGuest = agora.primaryRemoteUid.value != null;
-                  bool guestHasAudio = false;
-
-                  if (hasGuest) {
-                    final guestUid = agora.primaryRemoteUid.value!;
-                    final guestState = agora.remoteUsers.value[guestUid];
-                    guestHasAudio = guestState?.hasAudio ?? false;
-                  }
-
-                  return Icon(
-                    guestHasAudio ? Icons.mic_rounded : Icons.mic_off_rounded,
-                    color: guestHasAudio
-                        ? Colors.greenAccent
-                        : Colors.redAccent,
-                    size: 12,
-                  );
-                },
-              ),
-            ),
-          ),
-
-          // Add drag handle at the bottom
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 24,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-                color: Colors.black.withOpacity(0.3),
-              ),
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildConnectionStatus() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: agora.remoteHasVideo
-                  ? Colors.greenAccent
-                  : Colors.orangeAccent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            agora.remoteHasVideo ? 'Live' : 'Connecting...',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+  Widget _buildGuestVideoFloatingPanel(String guestName) {
+    final double panelWidth = MediaQuery.of(context).size.width * 0.40;
+    final double panelHeight = panelWidth * 1.77;
+
+    return _DraggableGuestVideoPanel(
+      width: panelWidth,
+      height: panelHeight,
+      // Reactive to remoteUsers so panel rebuilds when guest toggles video/audio.
+      child: ValueListenableBuilder<Map<int, RemoteUserState>>(
+        valueListenable: agora.remoteUsers,
+        builder: (_, users, __) {
+          final uid = agora.primaryRemoteUid.value;
+          final guestState = uid != null ? users[uid] : null;
+          final hasVideo = guestState?.hasVideo ?? false;
+          final hasAudio = guestState?.hasAudio ?? false;
+
+          return Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Stack(
+                    children: [
+                      // Remote view always in tree — Agora renders as soon
+                      // as frames arrive without surface teardown on toggle.
+                      agora.primaryRemoteView(),
+                      // "Camera off" overlay on top when guest has no video.
+                      if (!hasVideo)
+                        Container(
+                          color: Colors.black,
+                          child: const Center(
+                            child: Icon(
+                              Icons.videocam_off,
+                              size: 50,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.person_rounded,
+                        color: Colors.orangeAccent,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        guestName.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasAudio ? Icons.mic_rounded : Icons.mic_off_rounded,
+                    color: hasAudio ? Colors.greenAccent : Colors.redAccent,
+                    size: 12,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1939,16 +1326,13 @@ class _Glass extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: ClipRect(
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: (color ?? Colors.black.withOpacity(0)),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: Colors.white.withOpacity(0)),
-          ),
-          child: child,
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: color ?? Colors.black.withOpacity(0),
+          borderRadius: BorderRadius.circular(radius),
         ),
+        child: child,
       ),
     );
   }
@@ -2069,7 +1453,7 @@ class _BottomActions extends StatelessWidget {
   final VoidCallback onGifts;
   final VoidCallback onPremium;
   final VoidCallback onSettings;
-  final AgoraService agora; // Add this parameter
+  final AgoraService agora;
 
   const _BottomActions({
     required this.isPaused,
@@ -2079,16 +1463,15 @@ class _BottomActions extends StatelessWidget {
     required this.onGifts,
     required this.onPremium,
     required this.onSettings,
-    required this.agora, // Add this
+    required this.agora,
   });
 
   Widget _item(
     IconData icon,
     String label,
     VoidCallback onTap, {
-    bool isSettings = false,
     bool isActive = false,
-    bool showBadge = false, // Add this parameter
+    bool showBadge = false,
   }) {
     return InkWell(
       onTap: onTap,
@@ -2098,8 +1481,8 @@ class _BottomActions extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               Container(
-                width: isSettings ? 44 : 48,
-                height: isSettings ? 44 : 48,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: isActive
                       ? const Color(0xFFFF6A00).withOpacity(0.3)
@@ -2114,7 +1497,7 @@ class _BottomActions extends StatelessWidget {
                 child: Icon(
                   icon,
                   color: isActive ? const Color(0xFFFF6A00) : Colors.white,
-                  size: isSettings ? 20 : 24,
+                  size: 24,
                 ),
               ),
               if (showBadge)
@@ -2124,16 +1507,9 @@ class _BottomActions extends StatelessWidget {
                   child: Container(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF6A00),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF6A00),
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFFF6A00).withOpacity(0.5),
-                          blurRadius: 4,
-                          spreadRadius: 1,
-                        ),
-                      ],
                     ),
                   ),
                 ),
@@ -2155,64 +1531,70 @@ class _BottomActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<LiveHostBloc, LiveHostState>(
-      buildWhen: (previous, current) =>
-          previous.chatVisible != current.chatVisible,
+      buildWhen: (p, c) => p.chatVisible != c.chatVisible,
       builder: (context, state) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _item(
-                state.chatVisible
-                    ? Icons.chat_bubble_rounded
-                    : Icons.chat_bubble_outline_rounded,
-                'Chat',
-                onChatToggle,
-                isActive: state.chatVisible,
-              ),
-              _item(Icons.card_giftcard_rounded, 'Gifts', onGifts),
-
-              _item(Icons.visibility_rounded, 'Viewers', onViewers),
-              InkWell(
-                onTap: onPause,
-                child: Column(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        color: Colors.white24,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isPaused
-                            ? Icons.play_arrow_rounded
-                            : Icons.pause_rounded,
-                        color: Colors.white,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      isPaused ? 'Resume' : 'Pause',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ],
+        // Use AnimatedBuilder for mic/cam icons so they update on mute without
+        // rebuilding the whole page.
+        return AnimatedBuilder(
+          animation: agora,
+          builder: (context, _) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _item(
+                  state.chatVisible
+                      ? Icons.chat_bubble_rounded
+                      : Icons.chat_bubble_outline_rounded,
+                  'Chat',
+                  onChatToggle,
+                  isActive: state.chatVisible,
                 ),
-              ),
-
-              _item(Icons.star_rounded, 'Premiums', onPremium),
-              ValueListenableBuilder<bool>(
-                valueListenable: agora.beautyActive,
-                builder: (_, isBeautyOn, __) => _item(
-                  Icons.settings_rounded,
-                  'Settings',
-                  onSettings,
-                  showBadge: isBeautyOn, // ← reactive, always current
+                _item(Icons.card_giftcard_rounded, 'Gifts', onGifts),
+                _item(Icons.visibility_rounded, 'Viewers', onViewers),
+                InkWell(
+                  onTap: onPause,
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: const BoxDecoration(
+                          color: Colors.white24,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isPaused
+                              ? Icons.play_arrow_rounded
+                              : Icons.pause_rounded,
+                          color: Colors.white,
+                          size: 36,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        isPaused ? 'Resume' : 'Pause',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                _item(Icons.star_rounded, 'Premiums', onPremium),
+                // Settings with beauty badge — only watches beautyActive
+                ValueListenableBuilder<bool>(
+                  valueListenable: agora.beautyActive,
+                  builder: (_, isBeautyOn, __) => _item(
+                    Icons.settings_rounded,
+                    'Settings',
+                    onSettings,
+                    showBadge: isBeautyOn,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -2522,10 +1904,9 @@ class _HeaderBar extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                // hostName,
-                "You are the",
-                style: const TextStyle(
+              const Text(
+                'You are the',
+                style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
                   fontSize: 12.5,
@@ -2536,7 +1917,6 @@ class _HeaderBar extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 10),
-
           const Padding(padding: EdgeInsets.only(top: 2), child: _LiveDot()),
           const SizedBox(width: 6),
           Padding(
@@ -2552,20 +1932,14 @@ class _HeaderBar extends StatelessWidget {
           const SizedBox(width: 10),
           GestureDetector(
             onTap: () {
-              final tracker = sl<LiveSessionTracker>();
-              final numericId = tracker.current!.livestreamId;
-              final restParam = '${tracker.current!.livestreamId}';
-
               _registerParticipantsForCurrentSession();
-
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
-                builder: (context) => const ViewersListSheet(),
+                builder: (_) => const ViewersListSheet(),
               );
             },
-
             child: const Padding(
               padding: EdgeInsets.only(top: 2, left: 3, right: 2),
               child: Icon(
@@ -2586,14 +1960,10 @@ class _HeaderBar extends StatelessWidget {
               ),
             ),
           ),
-
           const Spacer(),
-
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {
-              _showEndStreamConfirmation(context);
-            },
+            onTap: () => _showEndStreamConfirmation(context),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
@@ -2604,31 +1974,22 @@ class _HeaderBar extends StatelessWidget {
                   ],
                 ),
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF3D00).withOpacity(0.4),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
               ),
-              child: Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.power_settings_new_rounded,
                     color: Colors.white,
                     size: 14,
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
+                  SizedBox(width: 6),
+                  Text(
                     'End',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      letterSpacing: 0.5,
                     ),
                   ),
                 ],
@@ -2640,83 +2001,53 @@ class _HeaderBar extends StatelessWidget {
     );
   }
 
-  void _registerParticipantsForCurrentSession() {
+  static void _registerParticipantsForCurrentSession() {
     try {
       final tracker = GetIt.I<LiveSessionTracker>();
       final current = tracker.current;
-
-      if (current == null) {
-        debugPrint('⚠️ No live session found for participants registration');
-        return;
-      }
-
+      if (current == null) return;
       final numericId = current.livestreamId;
-      final restParam = current.livestreamId.toString();
-
-      debugPrint('🔧 Registering participants for livestream ID: $numericId');
-
-      // Check if we're already registered for this session
       if (GetIt.I.isRegistered<ParticipantsRepository>()) {
         try {
-          final existingRepo = GetIt.I<ParticipantsRepository>();
-          // Check if it's the same session
-          if (existingRepo is ParticipantsRepositoryImpl) {
-            if (existingRepo.livestreamIdNumeric == numericId) {
-              debugPrint('✅ Participants already registered for this session');
-              return;
-            }
-          }
-
-          // Different session - clean up
+          final r = GetIt.I<ParticipantsRepository>();
+          if (r is ParticipantsRepositoryImpl &&
+              r.livestreamIdNumeric == numericId)
+            return;
           GetIt.I<ParticipantsRepository>().dispose();
         } catch (_) {}
         GetIt.I.unregister<ParticipantsRepository>();
       }
-
-      // Register new repository with current session
       GetIt.I.registerLazySingleton<ParticipantsRepository>(
         () => ParticipantsRepositoryImpl(
           GetIt.I<DioClient>(),
           GetIt.I<PusherService>(),
           livestreamIdNumeric: numericId,
-          livestreamParam: restParam,
+          livestreamParam: numericId.toString(),
         ),
       );
-
-      // Update ParticipantsBloc
-      if (GetIt.I.isRegistered<ParticipantsBloc>()) {
+      if (GetIt.I.isRegistered<ParticipantsBloc>())
         GetIt.I.unregister<ParticipantsBloc>();
-      }
-
       GetIt.I.registerFactory<ParticipantsBloc>(
         () => ParticipantsBloc(GetIt.I<ParticipantsRepository>()),
       );
-
-      debugPrint('✅ Registered participants for livestream ID: $numericId');
-    } catch (e, stack) {
-      debugPrint('❌ Failed to register participants: $e\n$stack');
+    } catch (e) {
+      debugPrint('❌ Failed to register participants: $e');
     }
   }
 
   void _showEndStreamConfirmation(BuildContext context) {
-    // Get the current state before showing dialog
     final liveHostBloc = context.read<LiveHostBloc>();
     final state = liveHostBloc.state;
-
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) {
-        return EndStreamConfirmationDialog(
-          onConfirm: onEnd,
-          onCancel: () {
-            Navigator.of(context).pop();
-          },
-          viewerCount: state.viewers,
-          elapsedSeconds: state.elapsedSeconds,
-          messageCount: state.messages.length,
-        );
-      },
+      builder: (_) => EndStreamConfirmationDialog(
+        onConfirm: onEnd,
+        onCancel: () => Navigator.of(context).pop(),
+        viewerCount: state.viewers,
+        elapsedSeconds: state.elapsedSeconds,
+        messageCount: state.messages.length,
+      ),
     );
   }
 }
@@ -4172,7 +3503,6 @@ class _CancelPremiumSheet extends StatelessWidget {
   }
 }
 
-// Add this new StatefulWidget class at the end of the file (before the last closing bracket)
 class _DraggableGuestVideoPanel extends StatefulWidget {
   final double width;
   final double height;
@@ -4189,8 +3519,10 @@ class _DraggableGuestVideoPanel extends StatefulWidget {
       _DraggableGuestVideoPanelState();
 }
 
+// Add this new StatefulWidget class at the end of the file (before the last closing bracket)
 class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
-  late Offset _position;
+  // Use nullable Offset — late non-nullable cannot be null-checked at build time
+  Offset? _position;
   late Size _screenSize;
   late double _panelWidth;
   late double _panelHeight;
@@ -4203,7 +3535,6 @@ class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _screenSize = MediaQuery.of(context).size;
-      // Start position: right 16, bottom 100
       _position = Offset(
         _screenSize.width - _panelWidth - 16,
         _screenSize.height -
@@ -4211,13 +3542,9 @@ class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
             100 -
             MediaQuery.of(context).padding.bottom,
       );
+      _position = _clampPosition(_position!);
 
-      // Ensure position is within bounds
-      _position = _clampPosition(_position);
-
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     });
   }
 
@@ -4225,48 +3552,38 @@ class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
     double x = position.dx;
     double y = position.dy;
 
-    // Keep panel within screen bounds with some padding
-    final double padding = 8;
-
-    // Clamp X position
+    const double padding = 8;
     x = x.clamp(padding, _screenSize.width - _panelWidth - padding);
 
-    // Clamp Y position (account for top bar and bottom actions)
     final double topPadding = MediaQuery.of(context).padding.top + 100;
     final double bottomPadding = 180 + MediaQuery.of(context).padding.bottom;
-
     y = y.clamp(topPadding, _screenSize.height - _panelHeight - bottomPadding);
 
     return Offset(x, y);
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
+    if (_position == null) return;
     setState(() {
-      _position += details.delta;
-      _position = _clampPosition(_position);
+      _position = _clampPosition(_position! + details.delta);
     });
   }
 
   void _onPanEnd(DragEndDetails details) {
-    // Optional: Add snap-to-edge behavior
+    if (_position == null) return;
     final double screenCenterX = _screenSize.width / 2;
-
-    if (_position.dx < screenCenterX - _panelWidth / 2) {
-      // Snap to left
-      setState(() {
-        _position = Offset(8, _position.dy);
-      });
-    } else {
-      // Snap to right
-      setState(() {
-        _position = Offset(_screenSize.width - _panelWidth - 8, _position.dy);
-      });
-    }
+    setState(() {
+      if (_position!.dx < screenCenterX - _panelWidth / 2) {
+        _position = Offset(8, _position!.dy);
+      } else {
+        _position = Offset(_screenSize.width - _panelWidth - 8, _position!.dy);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // If position hasn't been initialized yet, return widget in original position
+    // Position not yet initialised — show in default corner
     if (_position == null) {
       return Positioned(
         right: 16,
@@ -4278,8 +3595,8 @@ class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
     }
 
     return Positioned(
-      left: _position.dx,
-      top: _position.dy,
+      left: _position!.dx,
+      top: _position!.dy,
       width: _panelWidth,
       height: _panelHeight,
       child: GestureDetector(
@@ -4288,6 +3605,55 @@ class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
         child: MouseRegion(
           cursor: SystemMouseCursors.move,
           child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════
+// CHANGED: _CameraRecoveryButton (new class)
+// ═══════════════════════════════════════════════
+
+class _CameraRecoveryButton extends StatelessWidget {
+  final VoidCallback onRecover;
+  const _CameraRecoveryButton({required this.onRecover});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onRecover,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.80),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: const Color(0xFFFF6A00).withOpacity(0.8),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.videocam_rounded, color: Color(0xFFFF6A00), size: 18),
+            SizedBox(width: 8),
+            Text(
+              'Tap to restore camera',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );

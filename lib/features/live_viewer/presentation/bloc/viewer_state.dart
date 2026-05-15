@@ -1,10 +1,10 @@
-// lib/features/live_viewer/presentation/bloc/viewer_state.dart - ENHANCED
+// lib/features/live_viewer/presentation/bloc/viewer_state.dart
 part of 'viewer_bloc.dart';
 
 enum ViewerStatus { initial, loading, active, reconnecting, ended, error }
 
 class ViewerState extends Equatable {
-  // ============ EXISTING FIELDS ============
+  // ============ CORE ============
   final ViewerStatus status;
   final Duration elapsed;
   final int viewers;
@@ -38,7 +38,7 @@ class ViewerState extends Equatable {
   final bool shouldNavigateBack;
   final String? activeGuestUuid;
 
-  // ============ NEW FIELDS FOR REQUIREMENTS ============
+  // ============ ENHANCED ============
   final ViewMode viewMode;
   final NetworkStatus networkStatus;
   final GuestControlsState guestControls;
@@ -48,15 +48,20 @@ class ViewerState extends Equatable {
   final bool showReconnectOverlay;
   final bool showNetworkStatus;
 
+  // ============ STREAM HEALTH ============
+  final bool isStreamUnstable;
+  final String? streamUnstableMessage;
+  final bool requiresPremiumPayment;
+  final int? premiumEntryFeeCoins;
+
   const ViewerState({
-    // Existing fields with defaults
     required this.status,
     required this.elapsed,
     required this.viewers,
     required this.likes,
     required this.shares,
     required this.chat,
-    this.showChatUI = false,
+    this.showChatUI = true,
     this.host,
     this.guest,
     this.showGuestBanner = false,
@@ -82,8 +87,7 @@ class ViewerState extends Equatable {
     this.showRemovalOverlay = false,
     this.shouldNavigateBack = false,
     this.activeGuestUuid,
-
-    // New fields with defaults
+    // Enhanced
     this.viewMode = ViewMode.viewer,
     this.networkStatus = const NetworkStatus(
       selfQuality: NetworkQuality.unknown,
@@ -98,10 +102,15 @@ class ViewerState extends Equatable {
     this.reconnectAttempts = 0,
     this.reconnectMessage,
     this.showReconnectOverlay = false,
-    this.showNetworkStatus = true,
+    this.showNetworkStatus = false, // OFF by default — no network UI flags
+    // Health
+    this.isStreamUnstable = false,
+    this.streamUnstableMessage,
+    this.requiresPremiumPayment = false,
+    this.premiumEntryFeeCoins,
   });
 
-  static ViewerState initial() => ViewerState(
+  static ViewerState initial() => const ViewerState(
     status: ViewerStatus.initial,
     elapsed: Duration.zero,
     viewers: 0,
@@ -109,9 +118,8 @@ class ViewerState extends Equatable {
     shares: 0,
     chat: [],
     showChatUI: true,
-    // Initialize new fields
     viewMode: ViewMode.viewer,
-    networkStatus: const NetworkStatus(
+    networkStatus: NetworkStatus(
       selfQuality: NetworkQuality.unknown,
       hostQuality: NetworkQuality.unknown,
       guestQuality: null,
@@ -119,15 +127,16 @@ class ViewerState extends Equatable {
       reconnectAttempts: 0,
       lastDisconnection: null,
     ),
-    guestControls: const GuestControlsState(),
+    guestControls: GuestControlsState(),
     isReconnecting: false,
     reconnectAttempts: 0,
     showReconnectOverlay: false,
-    showNetworkStatus: true,
+    showNetworkStatus: false,
+    isStreamUnstable: false,
+    requiresPremiumPayment: false,
   );
 
   ViewerState copyWith({
-    // Existing fields
     ViewerStatus? status,
     Duration? elapsed,
     int? viewers,
@@ -160,8 +169,7 @@ class ViewerState extends Equatable {
     bool? showRemovalOverlay,
     bool? shouldNavigateBack,
     String? activeGuestUuid,
-
-    // New fields
+    // Enhanced
     ViewMode? viewMode,
     NetworkStatus? networkStatus,
     GuestControlsState? guestControls,
@@ -170,6 +178,11 @@ class ViewerState extends Equatable {
     String? reconnectMessage,
     bool? showReconnectOverlay,
     bool? showNetworkStatus,
+    // Health
+    bool? isStreamUnstable,
+    String? streamUnstableMessage,
+    bool? requiresPremiumPayment,
+    int? premiumEntryFeeCoins,
   }) {
     return ViewerState(
       status: status ?? this.status,
@@ -204,8 +217,6 @@ class ViewerState extends Equatable {
       showRemovalOverlay: showRemovalOverlay ?? this.showRemovalOverlay,
       shouldNavigateBack: shouldNavigateBack ?? this.shouldNavigateBack,
       activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
-
-      // New fields
       viewMode: viewMode ?? this.viewMode,
       networkStatus: networkStatus ?? this.networkStatus,
       guestControls: guestControls ?? this.guestControls,
@@ -214,12 +225,17 @@ class ViewerState extends Equatable {
       reconnectMessage: reconnectMessage ?? this.reconnectMessage,
       showReconnectOverlay: showReconnectOverlay ?? this.showReconnectOverlay,
       showNetworkStatus: showNetworkStatus ?? this.showNetworkStatus,
+      isStreamUnstable: isStreamUnstable ?? this.isStreamUnstable,
+      streamUnstableMessage:
+          streamUnstableMessage ?? this.streamUnstableMessage,
+      requiresPremiumPayment:
+          requiresPremiumPayment ?? this.requiresPremiumPayment,
+      premiumEntryFeeCoins: premiumEntryFeeCoins ?? this.premiumEntryFeeCoins,
     );
   }
 
   @override
   List<Object?> get props => [
-    // Existing props
     status,
     elapsed,
     viewers,
@@ -252,8 +268,6 @@ class ViewerState extends Equatable {
     showRemovalOverlay,
     shouldNavigateBack,
     activeGuestUuid,
-
-    // New props
     viewMode,
     networkStatus,
     guestControls,
@@ -262,5 +276,9 @@ class ViewerState extends Equatable {
     reconnectMessage,
     showReconnectOverlay,
     showNetworkStatus,
+    isStreamUnstable,
+    streamUnstableMessage,
+    requiresPremiumPayment,
+    premiumEntryFeeCoins,
   ];
 }

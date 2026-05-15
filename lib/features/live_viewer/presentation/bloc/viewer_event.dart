@@ -1,4 +1,4 @@
-// lib/features/live_viewer/presentation/bloc/viewer_event.dart - ENHANCED
+// lib/features/live_viewer/presentation/bloc/viewer_event.dart
 part of 'viewer_bloc.dart';
 
 abstract class ViewerEvent extends Equatable {
@@ -7,7 +7,7 @@ abstract class ViewerEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-// ============ EXISTING EVENTS (PRESERVED) ============
+// ============ CORE LIFECYCLE ============
 class ViewerStarted extends ViewerEvent {
   const ViewerStarted();
 }
@@ -144,6 +144,7 @@ class _ActiveGuestUpdated extends ViewerEvent {
   List<Object?> get props => [uuid];
 }
 
+// ============ GIFT SYSTEM ============
 class GiftSheetRequested extends ViewerEvent {
   const GiftSheetRequested();
 }
@@ -196,9 +197,7 @@ class GiftOverlayDequeued extends ViewerEvent {
   const GiftOverlayDequeued();
 }
 
-// ============ NEW EVENTS FOR REQUIREMENTS ============
-
-// Network monitoring events
+// ============ NETWORK MONITORING ============
 class NetworkQualityUpdated extends ViewerEvent {
   final NetworkQuality selfQuality;
   final NetworkQuality hostQuality;
@@ -219,7 +218,7 @@ class ConnectionStatsUpdated extends ViewerEvent {
   List<Object?> get props => [stats];
 }
 
-// Reconnection events
+// ============ RECONNECTION ============
 class ConnectionLost extends ViewerEvent {
   final DateTime timestamp;
   final String reason;
@@ -251,7 +250,7 @@ class ReconnectionOverlayDismissed extends ViewerEvent {
   const ReconnectionOverlayDismissed();
 }
 
-// Guest controls events
+// ============ GUEST CONTROLS ============
 class GuestVideoToggled extends ViewerEvent {
   final bool enabled;
   const GuestVideoToggled(this.enabled);
@@ -273,7 +272,7 @@ class GuestControlsUpdated extends ViewerEvent {
   List<Object?> get props => [controls];
 }
 
-// Mode switching events
+// ============ MODE SWITCHING ============
 class ModeSwitched extends ViewerEvent {
   final ViewMode mode;
   const ModeSwitched(this.mode);
@@ -286,4 +285,46 @@ class NetworkStatusVisibilityToggled extends ViewerEvent {
   const NetworkStatusVisibilityToggled(this.visible);
   @override
   List<Object?> get props => [visible];
+}
+
+// ============ STREAM HEALTH ============
+
+/// Fired by StreamHealthService when the stream goes offline / ended.
+class StreamWentOffline extends ViewerEvent {
+  final String message;
+  const StreamWentOffline(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+/// Fired when the stream is online but quality is degraded.
+class StreamBecameUnstable extends ViewerEvent {
+  final String message;
+  const StreamBecameUnstable(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+/// Fired when an unstable stream recovers.
+class StreamRecovered extends ViewerEvent {
+  const StreamRecovered();
+}
+
+/// Fired when a premium stream requires payment (runtime check).
+class PremiumAccessRequired extends ViewerEvent {
+  final int entryFeeCoins;
+  const PremiumAccessRequired(this.entryFeeCoins);
+  @override
+  List<Object?> get props => [entryFeeCoins];
+}
+
+/// Fired after the user successfully pays for premium access.
+class PremiumAccessGranted extends ViewerEvent {
+  const PremiumAccessGranted();
+}
+
+// Internal — fired when health service detects host cancelled premium.
+// Private so it cannot be dispatched from outside the BLoC.
+class _PremiumCancelledByHost extends ViewerEvent {
+  const _PremiumCancelledByHost();
 }

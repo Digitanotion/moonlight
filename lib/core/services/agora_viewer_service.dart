@@ -1053,4 +1053,16 @@ Engine exists: ${_engine != null}
 ''');
     }
   }
+
+  /// Mutes or unmutes ALL incoming remote audio (what the local viewer hears).
+  /// Used to silence the host+guests when the premium paywall is active.
+  /// Restores audio when premium access is granted or cancelled by the host.
+  Future<void> muteAllRemoteAudio(bool mute) async {
+    try {
+      await _engine?.muteAllRemoteAudioStreams(mute);
+      debugPrint('🔇 [Viewer] Remote audio muted=$mute');
+    } catch (e) {
+      debugPrint('⚠️ muteAllRemoteAudio error: $e');
+    }
+  }
 }

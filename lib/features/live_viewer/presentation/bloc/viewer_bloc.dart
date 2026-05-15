@@ -1,4 +1,4 @@
-// lib/features/live_viewer/presentation/bloc/viewer_bloc.dart - ENHANCED
+// lib/features/live_viewer/presentation/bloc/viewer_bloc.dart
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -11,6 +11,7 @@ import 'package:moonlight/features/live_viewer/presentation/services/live_stream
 import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/reconnection_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/role_change_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/stream_health_service.dart';
 
 part 'viewer_event.dart';
 part 'viewer_state.dart';
@@ -23,14 +24,14 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   final ReconnectionService? reconnectionService;
   final RoleChangeService? roleChangeService;
 
-  // Existing subscriptions
+  // Core stream subscriptions
   StreamSubscription? _clockSub, _viewerSub, _chatSub, _guestSub, _giftSub;
   StreamSubscription? _pauseSub, _endedSub, _approvalSub;
   StreamSubscription? _errorSub, _roleChangeSub, _removalSub;
   StreamSubscription<String?>? _activeGuestSub;
   StreamSubscription<GiftBroadcast>? _giftBroadcastSub;
 
-  // New subscriptions for services
+  // Service subscriptions
   StreamSubscription<NetworkStatus>? _networkStatusSub;
   StreamSubscription<ConnectionStats>? _connectionStatsSub;
   StreamSubscription<ReconnectionStatus>? _reconnectionSub;
@@ -39,6 +40,10 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   StreamSubscription<NetworkQuality>? _selfQualitySub;
   StreamSubscription<NetworkQuality>? _guestQualitySub;
   StreamSubscription<ConnectionState>? _connectionStateSub;
+
+  // Health service
+  StreamHealthService? _streamHealthService;
+  StreamSubscription<StreamHealthResult>? _healthSub;
 
   bool _isClosing = false;
   bool _isStarted = false;
@@ -52,14 +57,10 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     this.reconnectionService,
     this.roleChangeService,
   }) : super(ViewerState.initial()) {
-    _logEvent('BLOC_CREATED', 'Bloc created with enhanced services');
+    _logEvent('BLOC_CREATED', 'Bloc created');
 
-    // ============ REGISTER ALL EVENT HANDLERS ============
-
-    // Core lifecycle
     on<ViewerStarted>(_onStarted);
 
-    // Time and counters
     on<_Ticked>(
       (e, emit) => _safeEmit(emit, state.copyWith(elapsed: e.elapsed)),
     );
@@ -75,15 +76,11 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     on<GiftToastDismissed>(
       (e, emit) => _safeEmit(emit, state.copyWith(showGiftToast: false)),
     );
-
-    // User actions
     on<FollowToggled>(_onFollowToggled);
     on<CommentSent>(_onCommentSent);
     on<LikePressed>(_onLikePressed);
     on<SharePressed>(_onSharePressed);
     on<RequestToJoinPressed>(_onRequestToJoinPressed);
-
-    // UI toggles
     on<ChatVisibilityToggled>(
       (e, emit) =>
           _safeEmit(emit, state.copyWith(showChatUI: !state.showChatUI)),
@@ -94,8 +91,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     on<ChatHideRequested>(
       (e, emit) => _safeEmit(emit, state.copyWith(showChatUI: false)),
     );
-
-    // Stream events
     on<_PauseChanged>(
       (e, emit) => _safeEmit(emit, state.copyWith(isPaused: e.paused)),
     );
@@ -114,7 +109,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       (e, emit) => _safeEmit(emit, state.copyWith(activeGuestUuid: e.uuid)),
     );
 
-    // Gift system
+    // Gifts
     on<GiftSheetRequested>(
       (e, emit) => _safeEmit(emit, state.copyWith(showGiftSheet: true)),
     );
@@ -136,16 +131,12 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     on<GiftBroadcastReceived>(_onGiftBroadcastReceived);
     on<GiftOverlayDequeued>(_onGiftOverlayDequeued);
 
-    // ============ NEW EVENT HANDLERS ============
-
-    // Network monitoring
+    // Network
     on<NetworkQualityUpdated>(_onNetworkQualityUpdated);
     on<ConnectionStatsUpdated>(
       (e, emit) =>
           _logEvent('CONNECTION_STATS', 'Updated: ${e.stats.bitrate}kbps'),
     );
-
-    // Reconnection
     on<ConnectionLost>(_onConnectionLost);
     on<ReconnectionStarted>(_onReconnectionStarted);
     on<ReconnectionSucceeded>(_onReconnectionSucceeded);
@@ -161,27 +152,32 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       (e, emit) => _safeEmit(emit, state.copyWith(guestControls: e.controls)),
     );
 
-    // Mode switching
+    // Mode
     on<ModeSwitched>(_onModeSwitched);
     on<NetworkStatusVisibilityToggled>(
       (e, emit) =>
           _safeEmit(emit, state.copyWith(showNetworkStatus: e.visible)),
     );
+
+    // ── Stream health ──────────────────────────────────────────
+    on<StreamWentOffline>(_onStreamWentOffline);
+    on<StreamBecameUnstable>(_onStreamBecameUnstable);
+    on<StreamRecovered>(_onStreamRecovered);
+    on<PremiumAccessRequired>(_onPremiumAccessRequired);
+    on<PremiumAccessGranted>(_onPremiumAccessGranted);
+    on<_PremiumCancelledByHost>(_onPremiumCancelledByHost);
   }
 
-  // ============ EXISTING METHODS (ENHANCED) ============
+  // ── Logging ───────────────────────────────────────────────────────────────
 
   void _logEvent(String type, String message) {
-    final timestamp = DateTime.now();
-    final logEntry = '[$timestamp] $type: $message';
-    _eventLog.add(logEntry);
-
-    if (_eventLog.length > 100) {
-      _eventLog.removeAt(0);
-    }
-
-    debugPrint('🔵 BLOC: $logEntry');
+    final entry = '[${DateTime.now()}] $type: $message';
+    _eventLog.add(entry);
+    if (_eventLog.length > 100) _eventLog.removeAt(0);
+    debugPrint('🔵 BLOC: $entry');
   }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   Future<void> _onStarted(
     ViewerStarted event,
@@ -191,29 +187,25 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       _logEvent('START_IGNORED', 'Already started');
       return;
     }
-
     _isStarted = true;
-    _logEvent('STARTING', 'Viewer started with enhanced services');
+    _logEvent('STARTING', 'Viewer started');
 
-    emit(state.copyWith(status: ViewerStatus.loading));
+    _safeEmit(emit, state.copyWith(status: ViewerStatus.loading));
 
     try {
-      // Fetch host info
       final host = await repo.fetchHostInfo();
       _logEvent('HOST_FETCHED', 'Host: ${host.name}');
 
-      // Fetch wallet balance
       int? walletBalance;
       try {
         walletBalance = await repo.fetchWalletBalance();
         _logEvent('WALLET_FETCHED', 'Balance: $walletBalance');
       } catch (e) {
         _logEvent('WALLET_FAILED', 'Error: $e');
-        walletBalance = null;
       }
 
-      // Update state
-      emit(
+      _safeEmit(
+        emit,
         state.copyWith(
           status: ViewerStatus.active,
           host: host,
@@ -224,165 +216,157 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       );
       _logEvent('STATE_ACTIVE', 'Ready');
 
-      // Setup subscriptions
       _setupSubscriptions();
-
-      // Start services if available
       _startEnhancedServices();
-
+      _startHealthService(); // ← health polling starts here
       _logEvent('SERVICES_STARTED', 'All services active');
     } catch (e, stack) {
       _logEvent('START_FAILED', 'Error: $e');
       debugPrint('Stack: $stack');
-
-      emit(
+      _safeEmit(
+        emit,
         state.copyWith(
-          status:
-              ViewerStatus.active, // Still show UI even if some features fail
-          errorMessage: 'Failed to start: ${e.toString()}',
+          status: ViewerStatus.active,
+          errorMessage: 'Failed to start: $e',
         ),
       );
     }
   }
 
-  void _startEnhancedServices() {
-    // Start network monitoring
-    networkMonitorService?.startMonitoring();
+  // ── Health service ────────────────────────────────────────────────────────
 
-    // Start reconnection monitoring
-    reconnectionService?.startMonitoring();
+  void _startHealthService() {
+    if (repo is! ViewerRepositoryImpl) return;
+    final implRepo = repo as ViewerRepositoryImpl;
 
-    // Setup service subscriptions
-    _setupServiceSubscriptions();
-  }
+    _streamHealthService = StreamHealthService(
+      http: implRepo.http,
+      livestreamUuid: implRepo.livestreamParam,
+      pollInterval: const Duration(seconds: 12),
+    );
 
-  void _setupServiceSubscriptions() {
-    // Network monitoring
-    if (networkMonitorService != null) {
-      _networkStatusSub = networkMonitorService!.watchNetworkStatus().listen(
-        (status) => add(
-          NetworkQualityUpdated(
-            selfQuality: status.selfQuality,
-            hostQuality: status.hostQuality,
-            guestQuality: status.guestQuality,
-          ),
-        ),
-        onError: (e) => _logEvent('NETWORK_STATUS_ERROR', 'Error: $e'),
-      );
-
-      _connectionStatsSub = networkMonitorService!
-          .watchConnectionStats()
-          .listen(
-            (stats) => add(ConnectionStatsUpdated(stats)),
-            onError: (e) => _logEvent('CONNECTION_STATS_ERROR', 'Error: $e'),
-          );
-
-      networkMonitorService!.watchNetworkIssues().listen(
-        (issue) => add(ErrorOccurred('Network: $issue')),
-        onError: (e) => _logEvent('NETWORK_ISSUE_ERROR', 'Error: $e'),
-      );
-    }
-
-    // Reconnection service
-    if (reconnectionService != null) {
-      _reconnectionSub = reconnectionService!.watchReconnection().listen((
-        status,
-      ) {
-        if (status.isActive) {
-          add(ReconnectionStarted());
-        } else if (status.isSuccessful) {
-          add(ReconnectionSucceeded(status.attempt));
-        } else if (status.isFailed || status.gaveUp) {
+    _healthSub = _streamHealthService!.stream.listen((result) {
+      if (_isClosing || isClosed) return;
+      switch (result.status) {
+        case StreamHealthStatus.offline:
+          add(StreamWentOffline(result.message ?? 'Stream has ended.'));
+        case StreamHealthStatus.unstable:
           add(
-            ReconnectionFailed(
-              error: status.message ?? 'Unknown error',
-              attempts: status.attempt,
+            StreamBecameUnstable(
+              result.message ??
+                  'Stream is unstable — trying to reach host network…',
             ),
           );
-        }
-      }, onError: (e) => _logEvent('RECONNECTION_ERROR', 'Error: $e'));
-    }
-
-    // Role change service
-    if (roleChangeService != null) {
-      _roleChangeResultSub = roleChangeService!.watchRoleChanges().listen((
-        result,
-      ) {
-        if (result.state == RoleChangeState.promoted) {
-          add(ModeSwitched(ViewMode.guest));
-          add(ErrorOccurred('You are now a guest!'));
-        } else if (result.state == RoleChangeState.demoted) {
-          add(ModeSwitched(ViewMode.viewer));
-          add(ErrorOccurred('You are back in the audience.'));
-        } else if (result.state == RoleChangeState.failed) {
-          add(ErrorOccurred(result.error ?? 'Role change failed'));
-        }
-      }, onError: (e) => _logEvent('ROLE_CHANGE_ERROR', 'Error: $e'));
-
-      // Guest controls state
-      roleChangeService!.guestAudioMuted.addListener(() {
-        add(GuestControlsUpdated(roleChangeService!.getGuestControlsState()));
-      });
-
-      roleChangeService!.guestVideoMuted.addListener(() {
-        add(GuestControlsUpdated(roleChangeService!.getGuestControlsState()));
-      });
-    }
-
-    // Live stream service network quality
-    if (liveStreamService != null) {
-      _hostQualitySub = liveStreamService!.watchHostNetworkQuality().listen(
-        (quality) => add(
-          NetworkQualityUpdated(
-            selfQuality: state.networkStatus.selfQuality,
-            hostQuality: quality,
-            guestQuality: state.networkStatus.guestQuality,
-          ),
-        ),
-        onError: (e) => _logEvent('HOST_QUALITY_ERROR', 'Error: $e'),
-      );
-
-      _selfQualitySub = liveStreamService!.watchSelfNetworkQuality().listen(
-        (quality) => add(
-          NetworkQualityUpdated(
-            selfQuality: quality,
-            hostQuality: state.networkStatus.hostQuality,
-            guestQuality: state.networkStatus.guestQuality,
-          ),
-        ),
-        onError: (e) => _logEvent('SELF_QUALITY_ERROR', 'Error: $e'),
-      );
-
-      final guestStream = liveStreamService!.watchGuestNetworkQuality();
-      if (guestStream != null) {
-        _guestQualitySub = guestStream.listen(
-          (quality) => add(
-            NetworkQualityUpdated(
-              selfQuality: state.networkStatus.selfQuality,
-              hostQuality: state.networkStatus.hostQuality,
-              guestQuality: quality,
-            ),
-          ),
-          onError: (e) => _logEvent('GUEST_QUALITY_ERROR', 'Error: $e'),
-        );
+        case StreamHealthStatus.online:
+          if (state.isStreamUnstable) add(const StreamRecovered());
+          if (state.requiresPremiumPayment)
+            add(const _PremiumCancelledByHost());
+        case StreamHealthStatus.premiumRequired:
+          add(PremiumAccessRequired(result.entryFeeCoins ?? 0));
+        case StreamHealthStatus.unknown:
+          break;
       }
+    }, onError: (e) => _logEvent('HEALTH_ERROR', 'Error: $e'));
 
-      _connectionStateSub = liveStreamService!.watchConnectionState().listen((
-        connectionState,
-      ) {
-        if (connectionState == ConnectionState.disconnected) {
-          add(
-            ConnectionLost(
-              timestamp: DateTime.now(),
-              reason: 'Connection lost',
-            ),
-          );
-        }
-      }, onError: (e) => _logEvent('CONNECTION_STATE_ERROR', 'Error: $e'));
-    }
+    _streamHealthService!.start();
+    _logEvent('HEALTH_SERVICE', 'Polling every 12s');
   }
 
-  // ============ NEW EVENT HANDLERS ============
+  // ── Stream health handlers ────────────────────────────────────────────────
+
+  Future<void> _onStreamWentOffline(
+    StreamWentOffline event,
+    Emitter<ViewerState> emit,
+  ) async {
+    _logEvent('STREAM_OFFLINE', event.message);
+    _streamHealthService?.stop(); // No point polling a dead stream
+    _safeEmit(emit, state.copyWith(isEnded: true, errorMessage: event.message));
+  }
+
+  Future<void> _onStreamBecameUnstable(
+    StreamBecameUnstable event,
+    Emitter<ViewerState> emit,
+  ) async {
+    _logEvent('STREAM_UNSTABLE', event.message);
+    _safeEmit(
+      emit,
+      state.copyWith(
+        isStreamUnstable: true,
+        streamUnstableMessage: event.message,
+      ),
+    );
+  }
+
+  Future<void> _onStreamRecovered(
+    StreamRecovered event,
+    Emitter<ViewerState> emit,
+  ) async {
+    _logEvent('STREAM_RECOVERED', 'Back online');
+    _safeEmit(
+      emit,
+      state.copyWith(isStreamUnstable: false, streamUnstableMessage: null),
+    );
+  }
+
+  Future<void> _onPremiumAccessRequired(
+    PremiumAccessRequired event,
+    Emitter<ViewerState> emit,
+  ) async {
+    _logEvent('PREMIUM_REQUIRED', 'Fee: ${event.entryFeeCoins} coins');
+    try {
+      // Mute ALL incoming remote audio — stops viewer hearing host/guests.
+      await agoraViewerService?.muteAllRemoteAudio(true);
+      // Also mute the viewer's own outgoing streams (they are audience).
+      await agoraViewerService?.setMicEnabled(false);
+      await agoraViewerService?.setCamEnabled(false);
+    } catch (_) {}
+    _safeEmit(
+      emit,
+      state.copyWith(
+        requiresPremiumPayment: true,
+        premiumEntryFeeCoins: event.entryFeeCoins,
+      ),
+    );
+  }
+
+  Future<void> _onPremiumAccessGranted(
+    PremiumAccessGranted event,
+    Emitter<ViewerState> emit,
+  ) async {
+    _logEvent('PREMIUM_GRANTED', 'Access restored');
+    _streamHealthService?.onPremiumGranted();
+    try {
+      // Restore incoming remote audio so viewer can hear the stream again.
+      await agoraViewerService?.muteAllRemoteAudio(false);
+    } catch (_) {}
+    _safeEmit(
+      emit,
+      state.copyWith(requiresPremiumPayment: false, premiumEntryFeeCoins: null),
+    );
+  }
+
+  // Fired when the health service detects host cancelled premium mid-session.
+  // Does NOT call onPremiumGranted() on the service — the service already
+  // reset _premiumAccessConfirmed so future re-enables are detected.
+  Future<void> _onPremiumCancelledByHost(
+    _PremiumCancelledByHost event,
+    Emitter<ViewerState> emit,
+  ) async {
+    _logEvent(
+      'PREMIUM_CANCELLED_BY_HOST',
+      'Host cancelled premium — clearing paywall',
+    );
+    try {
+      // Restore incoming remote audio — host made stream free again.
+      await agoraViewerService?.muteAllRemoteAudio(false);
+    } catch (_) {}
+    _safeEmit(
+      emit,
+      state.copyWith(requiresPremiumPayment: false, premiumEntryFeeCoins: null),
+    );
+  }
+
+  // ── Network quality ───────────────────────────────────────────────────────
 
   Future<void> _onNetworkQualityUpdated(
     NetworkQualityUpdated event,
@@ -398,11 +382,9 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         ),
       ),
     );
-    _logEvent(
-      'NETWORK_QUALITY',
-      'Self: ${event.selfQuality}, Host: ${event.hostQuality}, Guest: ${event.guestQuality}',
-    );
   }
+
+  // ── Reconnection ──────────────────────────────────────────────────────────
 
   Future<void> _onConnectionLost(
     ConnectionLost event,
@@ -413,7 +395,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       state.copyWith(
         isReconnecting: true,
         reconnectAttempts: 0,
-        reconnectMessage: 'Connection lost. Reconnecting...',
+        reconnectMessage: 'Connection lost. Reconnecting…',
         showReconnectOverlay: true,
         networkStatus: state.networkStatus.copyWith(
           isReconnecting: true,
@@ -421,10 +403,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         ),
       ),
     );
-
-    _logEvent('CONNECTION_LOST', 'Reason: ${event.reason}');
-
-    // Trigger reconnection attempt
+    _logEvent('CONNECTION_LOST', event.reason);
     reconnectionService?.attemptReconnection();
   }
 
@@ -436,11 +415,10 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       emit,
       state.copyWith(
         isReconnecting: true,
-        reconnectMessage: 'Attempting to reconnect...',
+        reconnectMessage: 'Attempting to reconnect…',
         showReconnectOverlay: true,
       ),
     );
-    _logEvent('RECONNECTION_STARTED', 'Starting reconnection');
   }
 
   Future<void> _onReconnectionSucceeded(
@@ -452,7 +430,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       state.copyWith(
         isReconnecting: false,
         reconnectAttempts: event.attempts,
-        reconnectMessage: 'Reconnected successfully!',
+        reconnectMessage: 'Reconnected!',
         showReconnectOverlay: false,
         networkStatus: state.networkStatus.copyWith(
           isReconnecting: false,
@@ -460,14 +438,9 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         ),
       ),
     );
-
     _logEvent('RECONNECTION_SUCCEEDED', 'Attempts: ${event.attempts}');
-
-    // Clear reconnect message after delay
     Future.delayed(const Duration(seconds: 2), () {
-      if (!_isClosing && !isClosed) {
-        add(const ErrorOccurred(''));
-      }
+      if (!_isClosing && !isClosed) add(const ErrorOccurred(''));
     });
   }
 
@@ -488,12 +461,10 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         ),
       ),
     );
-
-    _logEvent(
-      'RECONNECTION_FAILED',
-      'Attempts: ${event.attempts}, Error: ${event.error}',
-    );
+    _logEvent('RECONNECTION_FAILED', 'Error: ${event.error}');
   }
+
+  // ── Guest controls ────────────────────────────────────────────────────────
 
   Future<void> _onGuestVideoToggled(
     GuestVideoToggled event,
@@ -509,7 +480,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
           ),
         ),
       );
-      _logEvent('GUEST_VIDEO_TOGGLED', 'Enabled: ${event.enabled}');
     } catch (e) {
       add(ErrorOccurred('Failed to toggle video: $e'));
     }
@@ -529,11 +499,12 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
           ),
         ),
       );
-      _logEvent('GUEST_AUDIO_TOGGLED', 'Enabled: ${event.enabled}');
     } catch (e) {
       add(ErrorOccurred('Failed to toggle audio: $e'));
     }
   }
+
+  // ── Mode switching ────────────────────────────────────────────────────────
 
   Future<void> _onModeSwitched(
     ModeSwitched event,
@@ -547,28 +518,19 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         roleChangeMessage: _getModeChangeMessage(event.mode),
       ),
     );
-
     _logEvent('MODE_SWITCHED', 'New mode: ${event.mode}');
-
     Future.delayed(const Duration(seconds: 3), () {
-      if (!_isClosing && !isClosed) {
-        add(const RoleChangeToastDismissed());
-      }
+      if (!_isClosing && !isClosed) add(const RoleChangeToastDismissed());
     });
   }
 
-  String _getModeChangeMessage(ViewMode mode) {
-    switch (mode) {
-      case ViewMode.guest:
-        return 'You are now a guest! You can participate in the stream.';
-      case ViewMode.cohost:
-        return 'You are now a co-host! You have host privileges.';
-      case ViewMode.viewer:
-        return 'You are in viewer mode.';
-    }
-  }
+  String _getModeChangeMessage(ViewMode mode) => switch (mode) {
+    ViewMode.guest => 'You are now a guest! You can participate.',
+    ViewMode.cohost => 'You are now a co-host!',
+    ViewMode.viewer => 'You are in viewer mode.',
+  };
 
-  // ============ EXISTING HANDLERS (UPDATED) ============
+  // ── Role change ───────────────────────────────────────────────────────────
 
   Future<void> _onParticipantRoleChanged(
     ParticipantRoleChanged event,
@@ -576,14 +538,12 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   ) async {
     _logEvent('ROLE_CHANGED', 'New role: ${event.role}');
 
-    // Determine view mode from role
     final ViewMode newMode = switch (event.role) {
       'guest' => ViewMode.guest,
       'cohost' => ViewMode.cohost,
       _ => ViewMode.viewer,
     };
 
-    // Trigger role change service if available
     if (roleChangeService != null) {
       try {
         await roleChangeService!.safeRoleChange(event.role);
@@ -599,7 +559,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         viewMode: newMode,
         showRoleChangeToast: true,
         roleChangeMessage: _getRoleChangeMessage(event.role),
-        // Clear guest UUID if demoting
         activeGuestUuid: (event.role == 'audience' || event.role == 'viewer')
             ? null
             : state.activeGuestUuid,
@@ -607,122 +566,217 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     );
 
     Future.delayed(const Duration(seconds: 3), () {
-      if (!_isClosing && !isClosed) {
-        add(const RoleChangeToastDismissed());
-      }
+      if (!_isClosing && !isClosed) add(const RoleChangeToastDismissed());
     });
   }
 
-  // ============ HELPER METHODS ============
+  String _getRoleChangeMessage(String role) => switch (role) {
+    'guest' => 'You are now a guest! You can participate.',
+    'cohost' => 'You are now a co-host!',
+    'audience' => 'You are back in the audience.',
+    _ => 'Your role has changed to $role.',
+  };
+
+  // ── Helper ────────────────────────────────────────────────────────────────
 
   void _safeEmit(Emitter<ViewerState> emit, ViewerState newState) {
-    if (!_isClosing && !isClosed) {
-      emit(newState);
+    if (!_isClosing && !isClosed) emit(newState);
+  }
+
+  // ── Enhanced services ─────────────────────────────────────────────────────
+
+  void _startEnhancedServices() {
+    networkMonitorService?.startMonitoring();
+    reconnectionService?.startMonitoring();
+    _setupServiceSubscriptions();
+  }
+
+  void _setupServiceSubscriptions() {
+    if (networkMonitorService != null) {
+      _networkStatusSub = networkMonitorService!.watchNetworkStatus().listen(
+        (s) => add(
+          NetworkQualityUpdated(
+            selfQuality: s.selfQuality,
+            hostQuality: s.hostQuality,
+            guestQuality: s.guestQuality,
+          ),
+        ),
+        onError: (e) => _logEvent('NETWORK_STATUS_ERROR', '$e'),
+      );
+      _connectionStatsSub = networkMonitorService!
+          .watchConnectionStats()
+          .listen(
+            (s) => add(ConnectionStatsUpdated(s)),
+            onError: (e) => _logEvent('CONNECTION_STATS_ERROR', '$e'),
+          );
+      networkMonitorService!.watchNetworkIssues().listen(
+        (issue) => add(ErrorOccurred('Network: $issue')),
+        onError: (e) => _logEvent('NETWORK_ISSUE_ERROR', '$e'),
+      );
+    }
+
+    if (reconnectionService != null) {
+      _reconnectionSub = reconnectionService!.watchReconnection().listen((s) {
+        if (s.isActive) {
+          add(ReconnectionStarted());
+        } else if (s.isSuccessful) {
+          add(ReconnectionSucceeded(s.attempt));
+        } else if (s.isFailed || s.gaveUp) {
+          add(
+            ReconnectionFailed(
+              error: s.message ?? 'Unknown error',
+              attempts: s.attempt,
+            ),
+          );
+        }
+      }, onError: (e) => _logEvent('RECONNECTION_ERROR', '$e'));
+    }
+
+    if (roleChangeService != null) {
+      _roleChangeResultSub = roleChangeService!.watchRoleChanges().listen((
+        result,
+      ) {
+        if (result.state == RoleChangeState.promoted) {
+          add(ModeSwitched(ViewMode.guest));
+        } else if (result.state == RoleChangeState.demoted) {
+          add(ModeSwitched(ViewMode.viewer));
+        } else if (result.state == RoleChangeState.failed) {
+          add(ErrorOccurred(result.error ?? 'Role change failed'));
+        }
+      }, onError: (e) => _logEvent('ROLE_CHANGE_ERROR', '$e'));
+
+      roleChangeService!.guestAudioMuted.addListener(() {
+        add(GuestControlsUpdated(roleChangeService!.getGuestControlsState()));
+      });
+      roleChangeService!.guestVideoMuted.addListener(() {
+        add(GuestControlsUpdated(roleChangeService!.getGuestControlsState()));
+      });
+    }
+
+    if (liveStreamService != null) {
+      _hostQualitySub = liveStreamService!.watchHostNetworkQuality().listen(
+        (q) => add(
+          NetworkQualityUpdated(
+            selfQuality: state.networkStatus.selfQuality,
+            hostQuality: q,
+            guestQuality: state.networkStatus.guestQuality,
+          ),
+        ),
+        onError: (e) => _logEvent('HOST_QUALITY_ERROR', '$e'),
+      );
+
+      _selfQualitySub = liveStreamService!.watchSelfNetworkQuality().listen(
+        (q) => add(
+          NetworkQualityUpdated(
+            selfQuality: q,
+            hostQuality: state.networkStatus.hostQuality,
+            guestQuality: state.networkStatus.guestQuality,
+          ),
+        ),
+        onError: (e) => _logEvent('SELF_QUALITY_ERROR', '$e'),
+      );
+
+      final guestStream = liveStreamService!.watchGuestNetworkQuality();
+      if (guestStream != null) {
+        _guestQualitySub = guestStream.listen(
+          (q) => add(
+            NetworkQualityUpdated(
+              selfQuality: state.networkStatus.selfQuality,
+              hostQuality: state.networkStatus.hostQuality,
+              guestQuality: q,
+            ),
+          ),
+          onError: (e) => _logEvent('GUEST_QUALITY_ERROR', '$e'),
+        );
+      }
+
+      _connectionStateSub = liveStreamService!.watchConnectionState().listen((
+        cs,
+      ) {
+        if (cs == ConnectionState.disconnected) {
+          add(
+            ConnectionLost(
+              timestamp: DateTime.now(),
+              reason: 'Connection lost',
+            ),
+          );
+        }
+      }, onError: (e) => _logEvent('CONNECTION_STATE_ERROR', '$e'));
     }
   }
 
-  String _getRoleChangeMessage(String role) {
-    switch (role) {
-      case 'guest':
-        return 'You are now a guest! You can participate in the stream.';
-      case 'cohost':
-        return 'You are now a co-host! You have host privileges.';
-      case 'audience':
-        return 'You are back in the audience.';
-      default:
-        return 'Your role has been changed to $role.';
-    }
-  }
-
-  // ============ EXISTING METHODS (PRESERVED) ============
-
-  // [Preserving all existing methods: _setupSubscriptions, _cancelAllSubscriptions,
-  // _onFollowToggled, _onCommentSent, _onLikePressed, _onSharePressed,
-  // _onRequestToJoinPressed, _onChatArrived, _onGuestJoined, _onGiftArrived,
-  // _onMyApprovalChanged, _onParticipantRemoved, _onErrorOccurred,
-  // _onGiftsFetchRequested, _onGiftSendRequested, _onGiftSendSucceeded,
-  // _onGiftBroadcastReceived, _onGiftOverlayDequeued]
-  // These remain exactly as in your original code, just adding _safeEmit wrapper
-
-  // ============ ENHANCED CLEANUP ============
+  // ── Core subscriptions ────────────────────────────────────────────────────
 
   void _setupSubscriptions() {
-    // Cancel any existing subscriptions first
     _cancelAllSubscriptions();
 
-    // Setup new subscriptions with error handling
     _clockSub = repo.watchLiveClock().listen(
       (d) => add(_Ticked(d)),
-      onError: (e) => _logEvent('CLOCK_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('CLOCK_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _viewerSub = repo.watchViewerCount().listen(
       (c) {
-        // Filter out invalid viewer counts (0 might be from empty events)
-        if (c >= 0) {
-          add(_ViewerCountUpdated(c));
-        }
+        if (c >= 0) add(_ViewerCountUpdated(c));
       },
-      onError: (e) => _logEvent('VIEWER_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('VIEWER_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _chatSub = repo.watchChat().listen(
       (m) => add(_ChatArrived(m)),
-      onError: (e) => _logEvent('CHAT_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('CHAT_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _guestSub = repo.watchGuestJoins().listen(
       (n) => add(_GuestJoined(n)),
-      onError: (e) => _logEvent('GUEST_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('GUEST_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _giftSub = repo.watchGifts().listen(
       (n) => add(_GiftArrived(n)),
-      onError: (e) => _logEvent('GIFT_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('GIFT_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _pauseSub = repo.watchPause().listen(
       (p) => add(_PauseChanged(p)),
-      onError: (e) => _logEvent('PAUSE_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('PAUSE_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _endedSub = repo.watchEnded().listen(
       (_) => add(const _LiveEnded()),
-      onError: (e) => _logEvent('ENDED_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('ENDED_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _approvalSub = repo.watchMyApproval().listen(
       (ok) => add(_MyApprovalChanged(ok)),
-      onError: (e) => _logEvent('APPROVAL_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('APPROVAL_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _errorSub = repo.watchErrors().listen(
       (error) {
-        if (error.isNotEmpty) {
-          add(ErrorOccurred(error));
-        }
+        if (error.isNotEmpty) add(ErrorOccurred(error));
       },
-      onError: (e) => _logEvent('ERROR_STREAM_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('ERROR_STREAM_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _roleChangeSub = repo.watchParticipantRoleChanges().listen(
       (role) => add(ParticipantRoleChanged(role)),
-      onError: (e) => _logEvent('ROLE_CHANGE_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('ROLE_CHANGE_ERROR', '$e'),
       cancelOnError: true,
     );
 
     _removalSub = repo.watchParticipantRemovals().listen(
       (reason) => add(ParticipantRemoved(reason)),
-      onError: (e) => _logEvent('REMOVAL_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('REMOVAL_ERROR', '$e'),
       cancelOnError: true,
     );
 
@@ -731,14 +785,14 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
           .watchActiveGuestUuid()
           .listen(
             (uuid) => add(_ActiveGuestUpdated(uuid)),
-            onError: (e) => _logEvent('ACTIVE_GUEST_ERROR', 'Error: $e'),
+            onError: (e) => _logEvent('ACTIVE_GUEST_ERROR', '$e'),
             cancelOnError: true,
           );
     }
 
     _giftBroadcastSub = repo.watchGiftBroadcasts().listen(
       (b) => add(GiftBroadcastReceived(b)),
-      onError: (e) => _logEvent('GIFT_BROADCAST_ERROR', 'Error: $e'),
+      onError: (e) => _logEvent('GIFT_BROADCAST_ERROR', '$e'),
       cancelOnError: true,
     );
   }
@@ -757,21 +811,14 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _removalSub?.cancel();
     _activeGuestSub?.cancel();
     _giftBroadcastSub?.cancel();
-
-    _clockSub = null;
-    _viewerSub = null;
-    _chatSub = null;
-    _guestSub = null;
-    _giftSub = null;
-    _pauseSub = null;
-    _endedSub = null;
-    _approvalSub = null;
-    _errorSub = null;
-    _roleChangeSub = null;
-    _removalSub = null;
+    _clockSub = _viewerSub = _chatSub = _guestSub = _giftSub = null;
+    _pauseSub = _endedSub = _approvalSub = _errorSub = null;
+    _roleChangeSub = _removalSub = null;
     _activeGuestSub = null;
     _giftBroadcastSub = null;
   }
+
+  // ── User action handlers ──────────────────────────────────────────────────
 
   Future<void> _onFollowToggled(
     FollowToggled e,
@@ -779,32 +826,31 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   ) async {
     try {
       final newState = await repo.toggleFollow(state.host?.isFollowed ?? false);
-      emit(state.copyWith(host: state.host?.copyWith(isFollowed: newState)));
-      _logEvent('FOLLOW_TOGGLED', 'New state: $newState');
+      _safeEmit(
+        emit,
+        state.copyWith(host: state.host?.copyWith(isFollowed: newState)),
+      );
     } catch (e) {
-      _logEvent('FOLLOW_FAILED', 'Error: $e');
+      _logEvent('FOLLOW_FAILED', '$e');
     }
   }
 
   Future<void> _onCommentSent(CommentSent e, Emitter<ViewerState> emit) async {
     final text = e.text.trim();
     if (text.isEmpty) return;
-
     try {
       await repo.sendComment(text);
-      _logEvent('COMMENT_SENT', 'Text: $text');
     } catch (e) {
-      _logEvent('COMMENT_FAILED', 'Error: $e');
+      _logEvent('COMMENT_FAILED', '$e');
     }
   }
 
   Future<void> _onLikePressed(LikePressed e, Emitter<ViewerState> emit) async {
     try {
       final count = await repo.like();
-      emit(state.copyWith(likes: count));
-      _logEvent('LIKE_PRESSED', 'Count: $count');
+      _safeEmit(emit, state.copyWith(likes: count));
     } catch (e) {
-      _logEvent('LIKE_FAILED', 'Error: $e');
+      _logEvent('LIKE_FAILED', '$e');
     }
   }
 
@@ -814,10 +860,9 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   ) async {
     try {
       final count = await repo.share();
-      emit(state.copyWith(shares: count));
-      _logEvent('SHARE_PRESSED', 'Count: $count');
+      _safeEmit(emit, state.copyWith(shares: count));
     } catch (e) {
-      _logEvent('SHARE_FAILED', 'Error: $e');
+      _logEvent('SHARE_FAILED', '$e');
     }
   }
 
@@ -827,28 +872,26 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   ) async {
     try {
       await repo.requestToJoin();
-      emit(state.copyWith(joinRequested: true, awaitingApproval: true));
-      _logEvent('JOIN_REQUESTED', 'Request sent');
+      _safeEmit(
+        emit,
+        state.copyWith(joinRequested: true, awaitingApproval: true),
+      );
     } catch (e) {
-      emit(state.copyWith(joinRequested: false, awaitingApproval: false));
-      _logEvent('JOIN_REQUEST_FAILED', 'Error: $e');
+      _safeEmit(
+        emit,
+        state.copyWith(joinRequested: false, awaitingApproval: false),
+      );
+      _logEvent('JOIN_REQUEST_FAILED', '$e');
     }
   }
-
-  // Add these corrected methods to viewer_bloc.dart
 
   Future<void> _onChatArrived(
     _ChatArrived event,
     Emitter<ViewerState> emit,
   ) async {
-    // Keep only last 200 chat messages
-    final updatedChat = [...state.chat];
-    updatedChat.add(event.message);
-    if (updatedChat.length > 200) {
-      updatedChat.removeAt(0);
-    }
-
-    _safeEmit(emit, state.copyWith(chat: updatedChat));
+    final updated = [...state.chat, event.message];
+    if (updated.length > 200) updated.removeAt(0);
+    _safeEmit(emit, state.copyWith(chat: updated));
   }
 
   Future<void> _onGuestJoined(
@@ -856,12 +899,8 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     Emitter<ViewerState> emit,
   ) async {
     _safeEmit(emit, state.copyWith(guest: event.notice, showGuestBanner: true));
-
-    // Auto-dismiss after 5 seconds
     Future.delayed(const Duration(seconds: 5), () {
-      if (!_isClosing && !isClosed) {
-        add(const GuestBannerDismissed());
-      }
+      if (!_isClosing && !isClosed) add(const GuestBannerDismissed());
     });
   }
 
@@ -870,12 +909,8 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     Emitter<ViewerState> emit,
   ) async {
     _safeEmit(emit, state.copyWith(gift: event.notice, showGiftToast: true));
-
-    // Auto-dismiss after 5 seconds
     Future.delayed(const Duration(seconds: 5), () {
-      if (!_isClosing && !isClosed) {
-        add(const GiftToastDismissed());
-      }
+      if (!_isClosing && !isClosed) add(const GiftToastDismissed());
     });
   }
 
@@ -890,7 +925,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         joinRequested: event.accepted,
       ),
     );
-
     _logEvent('APPROVAL_CHANGED', 'Approved: ${event.accepted}');
   }
 
@@ -906,14 +940,9 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         shouldNavigateBack: true,
       ),
     );
-
     _logEvent('REMOVED', 'Reason: ${event.reason}');
-
-    // Auto-navigate after 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
-      if (!_isClosing && !isClosed) {
-        add(const NavigateBackRequested());
-      }
+      if (!_isClosing && !isClosed) add(const NavigateBackRequested());
     });
   }
 
@@ -927,11 +956,10 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         errorMessage: event.message.isNotEmpty ? event.message : null,
       ),
     );
-
-    if (event.message.isNotEmpty) {
-      _logEvent('ERROR', event.message);
-    }
+    if (event.message.isNotEmpty) _logEvent('ERROR', event.message);
   }
+
+  // ── Gift handlers ─────────────────────────────────────────────────────────
 
   Future<void> _onGiftsFetchRequested(
     GiftsFetchRequested event,
@@ -946,7 +974,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       _logEvent('GIFTS_FETCHED', 'Loaded ${gifts.length} gifts');
     } catch (e) {
       _safeEmit(emit, state.copyWith(errorMessage: 'Failed to load gifts: $e'));
-      _logEvent('GIFTS_FETCH_FAILED', 'Error: $e');
     }
   }
 
@@ -958,7 +985,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       emit,
       state.copyWith(isSendingGift: true, sendErrorMessage: null),
     );
-
     try {
       final result = await repo.sendGift(
         giftCode: event.code,
@@ -966,7 +992,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         livestreamId: event.livestreamId,
         quantity: event.quantity,
       );
-
       add(GiftSendSucceeded(result));
     } catch (e) {
       add(GiftSendFailed(e.toString()));
@@ -985,10 +1010,9 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         sendErrorMessage: null,
       ),
     );
-
     _logEvent(
       'GIFT_SENT',
-      'Gift sent: ${event.result.serverTxnId}, New balance: ${event.result.newBalanceCoins}',
+      'Txn: ${event.result.serverTxnId}, Balance: ${event.result.newBalanceCoins}',
     );
   }
 
@@ -996,7 +1020,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     GiftBroadcastReceived event,
     Emitter<ViewerState> emit,
   ) async {
-    // Add gift to queue for display - you'll need to implement this in state
     _safeEmit(
       emit,
       state.copyWith(
@@ -1008,7 +1031,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
         showGiftToast: true,
       ),
     );
-
     _logEvent('GIFT_BROADCAST', 'Received: ${event.broadcast.giftCode}');
   }
 
@@ -1016,16 +1038,21 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     GiftOverlayDequeued event,
     Emitter<ViewerState> emit,
   ) async {
-    // Clear gift toast
     _safeEmit(emit, state.copyWith(showGiftToast: false, gift: null));
   }
 
+  // ── Cleanup ───────────────────────────────────────────────────────────────
+
   @override
   Future<void> close() {
-    _logEvent('BLOC_CLOSING', 'Starting enhanced close');
+    _logEvent('BLOC_CLOSING', 'Starting close');
     _isClosing = true;
 
-    // Cancel all service subscriptions
+    // Health service
+    _healthSub?.cancel();
+    _streamHealthService?.dispose();
+
+    // Service subscriptions
     _networkStatusSub?.cancel();
     _connectionStatsSub?.cancel();
     _reconnectionSub?.cancel();
@@ -1041,39 +1068,23 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     reconnectionService?.stopMonitoring();
     reconnectionService?.dispose();
 
-    // Existing cleanup
     _cancelAllSubscriptions();
 
     if (repo is ViewerRepositoryImpl) {
       try {
         (repo as ViewerRepositoryImpl).cancelClock();
       } catch (e) {
-        _logEvent('CLOCK_CANCEL_ERROR', 'Error: $e');
+        _logEvent('CLOCK_CANCEL_ERROR', '$e');
       }
     }
 
     try {
       repo.dispose();
-      _logEvent('REPO_DISPOSED', 'Repository disposed');
     } catch (e) {
-      _logEvent('REPO_DISPOSE_ERROR', 'Error: $e');
+      _logEvent('REPO_DISPOSE_ERROR', '$e');
     }
 
-    _logEvent('BLOC_CLOSED', 'Enhanced bloc closed');
-
-    if (_eventLog.isNotEmpty) {
-      debugPrint('📋 FINAL EVENT HISTORY (last ${_eventLog.length}):');
-      for (final event in _eventLog.take(10)) {
-        debugPrint('   $event');
-      }
-    }
-
+    _logEvent('BLOC_CLOSED', 'Done');
     return super.close();
   }
 }
-
-
-//_onChatArrived, _onGuestJoined, _onGiftArrived,
-  // _onMyApprovalChanged, _onParticipantRemoved, _onErrorOccurred,
-  // _onGiftsFetchRequested, _onGiftSendRequested, _onGiftSendSucceeded,
-  // _onGiftBroadcastReceived, _onGiftOverlayDequeued asre missing
