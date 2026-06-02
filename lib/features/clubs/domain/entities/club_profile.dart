@@ -132,14 +132,10 @@ class ClubProfile extends Equatable {
 
 class ClubProfileMember extends Equatable {
   final String uuid;
-  final String fullname;
+  final String? fullname;
   final String? avatarUrl;
 
-  const ClubProfileMember({
-    required this.uuid,
-    required this.fullname,
-    this.avatarUrl,
-  });
+  const ClubProfileMember({required this.uuid, this.fullname, this.avatarUrl});
 
   factory ClubProfileMember.fromJson(Map<String, dynamic> json) {
     return ClubProfileMember(
@@ -157,14 +153,10 @@ class ClubProfileMember extends Equatable {
 
 class ClubProfileAdmin extends Equatable {
   final String uuid;
-  final String fullname;
+  final String? fullname;
   final String? avatarUrl;
 
-  const ClubProfileAdmin({
-    required this.uuid,
-    required this.fullname,
-    this.avatarUrl,
-  });
+  const ClubProfileAdmin({required this.uuid, this.fullname, this.avatarUrl});
 
   factory ClubProfileAdmin.fromJson(Map<String, dynamic> json) {
     return ClubProfileAdmin(

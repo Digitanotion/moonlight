@@ -1,3 +1,6 @@
+// lib/core/routing/app_router.dart
+// ── PATCHED: Added 7 Club Treasury routes ────────────────────────────────────
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -18,6 +21,9 @@ import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
 import 'package:moonlight/features/chat/presentation/pages/conversations_screen.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
+import 'package:moonlight/features/clubs/domain/entities/club_treasury.dart';
+import 'package:moonlight/features/clubs/presentation/club_treasury_screen.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_members_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_profile_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
@@ -27,6 +33,12 @@ import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart'
 import 'package:moonlight/features/clubs/presentation/pages/club_members_page.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_members_page_user.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_treasury_audit_log_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_treasury_payout_profile_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_treasury_policy_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_treasury_setup_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_withdrawal_detail_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/club_withdrawal_request_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/create_club_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/discover_clubs_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/edit_club_screen.dart';
@@ -283,7 +295,7 @@ class AppRouter {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'There was an internal configuration error. Please ensure dependency injection is initialized before navigating to the profile view.\n\nError: ${err.toString()}',
+                          'There was an internal configuration error.\n\nError: ${err.toString()}',
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.white70),
                         ),
@@ -300,6 +312,7 @@ class AppRouter {
             );
           }
         }
+
       case RouteNames.goLive:
         return MaterialPageRoute(
           builder: (context) => AuthGuard(child: const GoLiveScreen()),
@@ -321,26 +334,15 @@ class AppRouter {
                   a['started_at'] as String? ??
                   DateTime.now().toIso8601String(),
               avatarUrl: a['avatar_url'] as String?,
-              initialMicOn: a['mic_on'] as bool?, // ← ADD
-              initialCamOn: a['cam_on'] as bool?, // ← ADD
+              initialMicOn: a['mic_on'] as bool?,
+              initialCamOn: a['cam_on'] as bool?,
             ),
           ),
         );
 
-      // In the RouteNames.liveViewer case in AppRouter:
-
       case RouteNames.liveViewer:
         {
-          // Cast arguments properly with null safety
           final a = (settings.arguments as Map<String, dynamic>?) ?? {};
-
-          // Add debug logging
-          debugPrint('=== ROUTER DEBUG ===');
-          debugPrint('Arguments received: $a');
-          debugPrint('isPremium: ${a['isPremium']}');
-          debugPrint('premiumFee: ${a['premiumFee']}');
-          debugPrint('channel: ${a['channel']}');
-          debugPrint('=====================');
 
           final id = a['id'] as int?;
           final uuid = a['uuid'] as String?;
@@ -351,7 +353,7 @@ class AppRouter {
 
           if (id == null || uuid == null || channel == null) {
             return MaterialPageRoute(
-              builder: (context) => Scaffold(
+              builder: (context) => const Scaffold(
                 body: Center(
                   child: Text('Unable to open live (missing id/uuid/channel).'),
                 ),
@@ -369,12 +371,11 @@ class AppRouter {
                 'https://via.placeholder.com/120x120.png?text=LIVE',
           );
 
-          final startedAtIso = (a['startedAt'] as String?);
+          final startedAtIso = a['startedAt'] as String?;
           final startedAt = startedAtIso == null
               ? null
               : DateTime.tryParse(startedAtIso);
 
-          // Pass ALL arguments including premium info
           final routeArgs = {
             ...a,
             'id': id,
@@ -391,63 +392,11 @@ class AppRouter {
               hostUuid: hostUuid,
               hostInfo: host,
               startedAt: startedAt,
-              routeArgs: routeArgs, // Pass all arguments
+              routeArgs: routeArgs,
             ),
             settings: settings,
           );
         }
-      // Optionally, add a new route for direct access to orchestrator
-      // case RouteNames.liveViewerEnhanced:
-      //   {
-      //     final a = (settings.arguments as Map?) ?? {};
-      //     final id = a['id'] as int?;
-      //     final uuid = a['uuid'] as String?;
-      //     final channel = a['channel'] as String?;
-      //     final hostUuid = a['hostUuid'] as String?;
-
-      //     if (id == null || uuid == null || channel == null) {
-      //       return MaterialPageRoute(
-      //         builder: (context) => Scaffold(
-      //           body: Center(
-      //             child: Text('Unable to open live (missing id/uuid/channel).'),
-      //           ),
-      //         ),
-      //       );
-      //     }
-
-      //     final host = HostInfo(
-      //       name: (a['hostName'] as String?) ?? 'Host',
-      //       title: (a['title'] as String?) ?? 'Live',
-      //       subtitle: '',
-      //       badge: (a['role'] as String?) ?? 'Host',
-      //       avatarUrl:
-      //           (a['hostAvatar'] as String?) ??
-      //           'https://via.placeholder.com/120x120.png?text=LIVE',
-      //     );
-
-      //     final startedAtIso = (a['startedAt'] as String?);
-      //     final startedAt = startedAtIso == null
-      //         ? null
-      //         : DateTime.tryParse(startedAtIso);
-
-      //     final repo = ViewerRepositoryImpl(
-      //       http: GetIt.I<DioClient>(),
-      //       pusher: GetIt.I<PusherService>(),
-      //       authLocalDataSource: GetIt.I<AuthLocalDataSource>(),
-      //       agoraViewerService: GetIt.I<AgoraViewerService>(),
-      //       livestreamParam: uuid,
-      //       livestreamIdNumeric: id,
-      //       channelName: channel,
-      //       hostUserUuid: hostUuid,
-      //       initialHost: host,
-      //       startedAt: startedAt,
-      //     );
-
-      //     return MaterialPageRoute(
-      //       builder: (context) => LiveViewerOrchestrator(repository: repo),
-      //       settings: settings,
-      //     );
-      //   }
 
       case RouteNames.createPost:
         return MaterialPageRoute(
@@ -488,7 +437,6 @@ class AppRouter {
             );
           }
 
-          // ✅ METHOD 1: Try GetIt factory param first
           try {
             return MaterialPageRoute(
               builder: (context) => BlocProvider(
@@ -499,8 +447,6 @@ class AppRouter {
             );
           } catch (e) {
             debugPrint('❌ GetIt factory param failed: $e');
-
-            // ✅ METHOD 2: Fallback to direct creation
             return MaterialPageRoute(
               builder: (context) => BlocProvider(
                 create: (context) =>
@@ -511,6 +457,7 @@ class AppRouter {
             );
           }
         }
+
       case RouteNames.giftCoins:
         return MaterialPageRoute(
           builder: (context) => BlocProvider<TransferCubit>(
@@ -532,30 +479,27 @@ class AppRouter {
           final args = settings.arguments as Map<String, dynamic>?;
           if (args == null) {
             return MaterialPageRoute(
-              builder: (context) =>
-                  Scaffold(body: Center(child: Text('Missing chat arguments'))),
+              builder: (context) => const Scaffold(
+                body: Center(child: Text('Missing chat arguments')),
+              ),
             );
           }
-
           final conversation = args['conversation'] as ChatConversations;
           final isClub = args['isClub'] as bool? ?? false;
-          final targetUserUuid = args['targetUserUuid'] as String?;
-
           return MaterialPageRoute(
             builder: (context) => AuthGuard(
               child: BlocProvider(
-                // Add BlocProvider here
                 create: (context) => GetIt.I<ChatCubit>(),
                 child: ChatScreen(conversation: conversation, isClub: isClub),
               ),
             ),
           );
         }
+
       case RouteNames.conversations:
         return MaterialPageRoute(
           builder: (context) => AuthGuard(
             child: BlocProvider(
-              // ← Add this BlocProvider wrapper
               create: (context) => sl<ChatCubit>(),
               child: ConversationsScreen(),
             ),
@@ -573,29 +517,164 @@ class AppRouter {
         );
 
       case RouteNames.clubProfile:
-        final args = (settings.arguments as Map?) ?? {};
-        final clubUuid = args['clubUuid'] as String?;
-
-        if (clubUuid == null || clubUuid.isEmpty) {
-          return MaterialPageRoute(
-            builder: (context) => const Scaffold(
-              body: Center(
-                child: Text(
-                  'Missing club identifier',
-                  style: TextStyle(color: Colors.white),
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String?;
+          if (clubUuid == null || clubUuid.isEmpty) {
+            return MaterialPageRoute(
+              builder: (context) => const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Missing club identifier',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
+            );
+          }
+          return MaterialPageRoute(
+            builder: (context) => BlocProvider<ClubProfileCubit>(
+              create: (_) => sl<ClubProfileCubit>()..load(clubUuid),
+              child: const ClubProfileScreen(),
             ),
+            settings: settings,
           );
         }
 
-        return MaterialPageRoute(
-          builder: (context) => BlocProvider<ClubProfileCubit>(
-            create: (_) => sl<ClubProfileCubit>()..load(clubUuid),
-            child: const ClubProfileScreen(),
-          ),
-          settings: settings,
-        );
+      // ── Club Treasury ────────────────────────────────────────────────────
+
+      case RouteNames.clubTreasury:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          final clubName = args['clubName'] as String? ?? 'Club';
+          final isOwner = args['isOwner'] as bool? ?? false;
+          final isAdmin =
+              args['isAdmin'] as bool? ?? isOwner; // admins include owner
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubTreasuryScreen(
+                clubUuid: clubUuid,
+                clubName: clubName,
+                isOwner: isOwner,
+                isAdmin: isAdmin, // ← NEW: pass this through
+              ),
+            ),
+            settings: settings,
+          );
+        }
+
+      case RouteNames.clubTreasurySetup:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          final pinOnly = args['pinOnly'] as bool? ?? false;
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubTreasurySetupScreen(
+                clubUuid: clubUuid,
+                pinOnly: pinOnly,
+              ),
+            ),
+            settings: settings,
+          );
+        }
+
+      case RouteNames.clubTreasuryPolicy:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          final policy = args['policy'] as ClubTreasuryPolicy?;
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubTreasuryPolicyScreen(
+                clubUuid: clubUuid,
+                policy: policy,
+              ),
+            ),
+            settings: settings,
+          );
+        }
+
+      case RouteNames.clubTreasuryPayoutProfile:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubTreasuryPayoutProfileScreen(clubUuid: clubUuid),
+            ),
+            settings: settings,
+          );
+        }
+
+      case RouteNames.clubTreasuryAuditLog:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubTreasuryAuditLogScreen(clubUuid: clubUuid),
+            ),
+            settings: settings,
+          );
+        }
+
+      case RouteNames.clubWithdrawalRequest:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          final clubName = args['clubName'] as String? ?? 'Club';
+          final summary = args['summary'] as ClubTreasurySummary;
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubWithdrawalRequestScreen(
+                clubUuid: clubUuid,
+                clubName: clubName,
+                summary: summary,
+              ),
+            ),
+            settings: settings,
+          );
+        }
+      // case RouteNames.clubPendingRequests:
+      //   {
+      //     final args = (settings.arguments as Map?) ?? {};
+      //     return MaterialPageRoute(
+      //       builder: (_) => ClubPendingRequestsScreen(
+      //         clubSlug: args['clubSlug'] ?? '',
+      //         clubName: args['clubName'] ?? 'Club',
+      //       ),
+      //       settings: settings,
+      //     );
+      //   }
+
+      case RouteNames.clubWithdrawalDetail:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String? ?? '';
+          final requestUuid = args['requestUuid'] as String? ?? '';
+          final clubName = args['clubName'] as String? ?? 'Club';
+          return MaterialPageRoute(
+            builder: (context) => RepositoryProvider.value(
+              value: sl<ClubTreasuryRemoteDataSource>(),
+              child: ClubWithdrawalDetailScreen(
+                clubUuid: clubUuid,
+                requestUuid: requestUuid,
+                clubName: clubName,
+              ),
+            ),
+            settings: settings,
+          );
+        }
+
+      // ── Wallet ───────────────────────────────────────────────────────────
 
       case RouteNames.wallet:
         return MaterialPageRoute(
@@ -618,78 +697,75 @@ class AppRouter {
         );
 
       case RouteNames.updateClub:
-        final args = (settings.arguments as Map?) ?? {};
-        final clubUuid = args['clubUuid'] as String?;
-
-        if (clubUuid == null || clubUuid.isEmpty) {
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubUuid = args['clubUuid'] as String?;
+          if (clubUuid == null || clubUuid.isEmpty) {
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(child: Text('Missing club identifier')),
+              ),
+            );
+          }
           return MaterialPageRoute(
-            builder: (_) => const Scaffold(
-              body: Center(child: Text('Missing club identifier')),
+            builder: (context) => BlocProvider(
+              create: (_) => sl<EditClubCubit>(param1: clubUuid)..load(),
+              child: EditClubScreen(clubUuid: clubUuid),
             ),
+            settings: settings,
           );
         }
-
-        return MaterialPageRoute(
-          builder: (context) => BlocProvider(
-            create: (_) => sl<EditClubCubit>(param1: clubUuid)..load(),
-            child: EditClubScreen(clubUuid: clubUuid),
-          ),
-          settings: settings,
-        );
 
       case RouteNames.clubMembers:
-        final args = (settings.arguments as Map?) ?? {};
-        final clubSlug = args['club'] as String?;
-        final isAdmin = args['isAdmin'] as bool? ?? false;
-
-        if (clubSlug == null || clubSlug.isEmpty) {
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          final clubSlug = args['club'] as String?;
+          final isAdmin = args['isAdmin'] as bool? ?? false;
+          if (clubSlug == null || clubSlug.isEmpty) {
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(child: Text('Missing club identifier')),
+              ),
+            );
+          }
           return MaterialPageRoute(
-            builder: (_) => const Scaffold(
-              body: Center(child: Text('Missing club identifier')),
+            builder: (context) => AuthGuard(
+              child: BlocProvider(
+                create: (_) => sl<ClubMembersCubit>(param1: clubSlug)..load(),
+                child: isAdmin
+                    ? ClubMembersPage(club: clubSlug)
+                    : ClubMembersPageUser(club: clubSlug),
+              ),
             ),
+            settings: settings,
           );
         }
-
-        // Conditionally show admin or user version
-        return MaterialPageRoute(
-          builder: (context) => AuthGuard(
-            child: BlocProvider(
-              create: (_) => sl<ClubMembersCubit>(param1: clubSlug)..load(),
-              child: isAdmin
-                  ? ClubMembersPage(club: clubSlug) // Admin version
-                  : ClubMembersPageUser(club: clubSlug), // User version
-            ),
-          ),
-          settings: settings,
-        );
 
       case RouteNames.supportClub:
-        final args = settings.arguments as Map<String, dynamic>;
-
-        final clubUuid = args['clubUuid'] as String?;
-        if (clubUuid == null || clubUuid.isEmpty) {
+        {
+          final args = settings.arguments as Map<String, dynamic>;
+          final clubUuid = args['clubUuid'] as String?;
+          if (clubUuid == null || clubUuid.isEmpty) {
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(child: Text('Missing club identifier')),
+              ),
+            );
+          }
           return MaterialPageRoute(
-            builder: (_) => const Scaffold(
-              body: Center(child: Text('Missing club identifier')),
+            builder: (context) => BlocProvider<DonateClubCubit>(
+              create: (_) => sl<DonateClubCubit>(param1: clubUuid),
+              child: SupportClubPage(
+                clubName: args['clubName'],
+                clubDescription: args['clubDescription'],
+                clubAvatar: args['clubAvatar'],
+              ),
             ),
+            settings: settings,
           );
         }
 
-        return MaterialPageRoute(
-          builder: (context) => BlocProvider<DonateClubCubit>(
-            create: (_) => sl<DonateClubCubit>(param1: clubUuid),
-            child: SupportClubPage(
-              clubName: args['clubName'],
-              clubDescription: args['clubDescription'],
-              clubAvatar: args['clubAvatar'],
-            ),
-          ),
-          settings: settings,
-        );
-
       case RouteNames.buyCoins:
-        // Reuse the same cubit instance if navigating from Wallet.
-        // If you want an independent instance, use create: (_) => sl<WalletCubit>() instead.
         return MaterialPageRoute(
           builder: (context) => BlocProvider.value(
             value: sl<WalletCubit>(),
@@ -729,7 +805,7 @@ class AppRouter {
       case RouteNames.withdrawal:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
-            create: (context) => sl<WithdrawalCubit>(), // Get from GetIt
+            create: (context) => sl<WithdrawalCubit>(),
             child: const WithdrawalPage(),
           ),
         );
@@ -739,9 +815,6 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => TransactionDetailScreen(transaction: txn),
         );
-
-      // case RouteNames.setPin:
-      //   return MaterialPageRoute(builder: (context) => const SetPinPage());
 
       case RouteNames.blockedUsers:
         return MaterialPageRoute(

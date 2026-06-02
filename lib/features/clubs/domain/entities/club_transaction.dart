@@ -4,7 +4,7 @@ class ClubTransaction {
   final int coins;
   final String reason;
   final String createdAt;
-  final String fullname;
+  final String? fullname;
   final String? avatarUrl;
 
   ClubTransaction({

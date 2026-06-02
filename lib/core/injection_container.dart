@@ -44,6 +44,7 @@ import 'package:moonlight/features/chat/data/services/chat_api_service.dart';
 import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/clubs/data/datasources/club_income_remote_data_source.dart';
+import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
 import 'package:moonlight/features/clubs/data/datasources/clubs_remote_data_source.dart';
 import 'package:moonlight/features/clubs/data/repositories/club_income_repository_impl.dart';
 import 'package:moonlight/features/clubs/data/repositories/clubs_repository_impl.dart';
@@ -795,6 +796,10 @@ void _initClubsModule() {
       (clubSlug, _) => ClubMembersCubit(repo: sl(), club: clubSlug),
     );
   }
+
+sl.registerLazySingleton<ClubTreasuryRemoteDataSource>(
+  () => ClubTreasuryRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
+);
   if (!sl.isRegistered<DonateClubCubit>()) {
     sl.registerFactoryParam<DonateClubCubit, String, void>(
       (club, _) => DonateClubCubit(repository: sl(), club: club),

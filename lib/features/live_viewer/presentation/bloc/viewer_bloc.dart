@@ -593,30 +593,35 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
 
   void _setupServiceSubscriptions() {
     if (networkMonitorService != null) {
-      _networkStatusSub = networkMonitorService!.watchNetworkStatus().listen(
-        (s) => add(
+      _networkStatusSub = networkMonitorService!.watchNetworkStatus().listen((
+        s,
+      ) {
+        if (_isClosing || isClosed) return; // ✅ already present
+        add(
           NetworkQualityUpdated(
             selfQuality: s.selfQuality,
             hostQuality: s.hostQuality,
             guestQuality: s.guestQuality,
           ),
-        ),
-        onError: (e) => _logEvent('NETWORK_STATUS_ERROR', '$e'),
-      );
+        );
+      }, onError: (e) => _logEvent('NETWORK_STATUS_ERROR', '$e'));
+
       _connectionStatsSub = networkMonitorService!
           .watchConnectionStats()
-          .listen(
-            (s) => add(ConnectionStatsUpdated(s)),
-            onError: (e) => _logEvent('CONNECTION_STATS_ERROR', '$e'),
-          );
-      networkMonitorService!.watchNetworkIssues().listen(
-        (issue) => add(ErrorOccurred('Network: $issue')),
-        onError: (e) => _logEvent('NETWORK_ISSUE_ERROR', '$e'),
-      );
+          .listen((s) {
+            if (_isClosing || isClosed) return; // ✅ already present
+            add(ConnectionStatsUpdated(s));
+          }, onError: (e) => _logEvent('CONNECTION_STATS_ERROR', '$e'));
+
+      networkMonitorService!.watchNetworkIssues().listen((issue) {
+        if (_isClosing || isClosed) return; // ← FIX 1 (was missing)
+        add(ErrorOccurred('Network: $issue'));
+      }, onError: (e) => _logEvent('NETWORK_ISSUE_ERROR', '$e'));
     }
 
     if (reconnectionService != null) {
       _reconnectionSub = reconnectionService!.watchReconnection().listen((s) {
+        if (_isClosing || isClosed) return; // ← FIX 2 (was missing)
         if (s.isActive) {
           add(ReconnectionStarted());
         } else if (s.isSuccessful) {
@@ -636,6 +641,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       _roleChangeResultSub = roleChangeService!.watchRoleChanges().listen((
         result,
       ) {
+        if (_isClosing || isClosed) return; // ← FIX 3 (was missing)
         if (result.state == RoleChangeState.promoted) {
           add(ModeSwitched(ViewMode.guest));
         } else if (result.state == RoleChangeState.demoted) {
@@ -646,53 +652,60 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       }, onError: (e) => _logEvent('ROLE_CHANGE_ERROR', '$e'));
 
       roleChangeService!.guestAudioMuted.addListener(() {
+        if (_isClosing || isClosed) return; // ← FIX 4 (was missing)
         add(GuestControlsUpdated(roleChangeService!.getGuestControlsState()));
       });
       roleChangeService!.guestVideoMuted.addListener(() {
+        if (_isClosing || isClosed) return; // ← FIX 5 (was missing)
         add(GuestControlsUpdated(roleChangeService!.getGuestControlsState()));
       });
     }
 
     if (liveStreamService != null) {
-      _hostQualitySub = liveStreamService!.watchHostNetworkQuality().listen(
-        (q) => add(
+      _hostQualitySub = liveStreamService!.watchHostNetworkQuality().listen((
+        q,
+      ) {
+        if (_isClosing || isClosed) return; // ← FIX 6 (was missing)
+        add(
           NetworkQualityUpdated(
             selfQuality: state.networkStatus.selfQuality,
             hostQuality: q,
             guestQuality: state.networkStatus.guestQuality,
           ),
-        ),
-        onError: (e) => _logEvent('HOST_QUALITY_ERROR', '$e'),
-      );
+        );
+      }, onError: (e) => _logEvent('HOST_QUALITY_ERROR', '$e'));
 
-      _selfQualitySub = liveStreamService!.watchSelfNetworkQuality().listen(
-        (q) => add(
+      _selfQualitySub = liveStreamService!.watchSelfNetworkQuality().listen((
+        q,
+      ) {
+        if (_isClosing || isClosed) return; // ← FIX 7 (was missing)
+        add(
           NetworkQualityUpdated(
             selfQuality: q,
             hostQuality: state.networkStatus.hostQuality,
             guestQuality: state.networkStatus.guestQuality,
           ),
-        ),
-        onError: (e) => _logEvent('SELF_QUALITY_ERROR', '$e'),
-      );
+        );
+      }, onError: (e) => _logEvent('SELF_QUALITY_ERROR', '$e'));
 
       final guestStream = liveStreamService!.watchGuestNetworkQuality();
       if (guestStream != null) {
-        _guestQualitySub = guestStream.listen(
-          (q) => add(
+        _guestQualitySub = guestStream.listen((q) {
+          if (_isClosing || isClosed) return; // ← FIX 8 (was missing)
+          add(
             NetworkQualityUpdated(
               selfQuality: state.networkStatus.selfQuality,
               hostQuality: state.networkStatus.hostQuality,
               guestQuality: q,
             ),
-          ),
-          onError: (e) => _logEvent('GUEST_QUALITY_ERROR', '$e'),
-        );
+          );
+        }, onError: (e) => _logEvent('GUEST_QUALITY_ERROR', '$e'));
       }
 
       _connectionStateSub = liveStreamService!.watchConnectionState().listen((
         cs,
       ) {
+        if (_isClosing || isClosed) return; // ← FIX 9 (was missing)
         if (cs == ConnectionState.disconnected) {
           add(
             ConnectionLost(
@@ -704,7 +717,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       }, onError: (e) => _logEvent('CONNECTION_STATE_ERROR', '$e'));
     }
   }
-
   // ── Core subscriptions ────────────────────────────────────────────────────
 
   void _setupSubscriptions() {

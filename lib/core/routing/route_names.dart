@@ -53,5 +53,13 @@ class RouteNames {
   static const String liveViewerEnhanced = '/live-viewer-enhanced';
   static const String debugScreen = "/debug-screen";
   static const transactionDetail = '/wallet/transaction-detail';
+  static const clubWithdrawalDetail = '/club/withdrawal-details';
+  static const clubTreasurySetup = '/club/treasury-setup';
+  static const clubTreasuryPayoutProfile = '/club/treasury-payout-profile';
+  static const clubTreasuryPolicy = '/club/treasury-policy';
+  static const clubTreasuryAuditLog = '/club/treasury-audit-log';
+  static const clubWithdrawalRequest = '/club/withdrawal-request';
+  static const clubTreasury = '/club/treasury';
+  static const String clubPendingRequests = '/club/pending-requests';
   // static const transactionReceipt = '/transactionReceipt';
 }

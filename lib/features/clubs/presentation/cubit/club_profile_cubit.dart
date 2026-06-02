@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
 import 'club_profile_state.dart';
@@ -13,7 +14,8 @@ class ClubProfileCubit extends Cubit<ClubProfileState> {
       emit(state.copyWith(loading: true, error: null, success: null));
       final profile = await repository.getClubProfile(clubUuid);
       emit(state.copyWith(loading: false, profile: profile));
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('❌ ClubProfileCubit.load error: $e\n$stack'); // ← add this
       emit(
         state.copyWith(loading: false, error: 'Failed to load club profile'),
       );

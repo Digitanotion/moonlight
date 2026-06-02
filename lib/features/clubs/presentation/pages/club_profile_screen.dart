@@ -76,15 +76,12 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
       backgroundColor: AppColors.bgBottom,
       body: BlocConsumer<ClubProfileCubit, ClubProfileState>(
         listener: (context, state) {
-          // Handle errors
           if (state.error != null) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               TopSnack.error(context, state.error!);
               context.read<ClubProfileCubit>().clearMessages();
             });
           }
-
-          // Handle success messages
           if (state.success != null) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               TopSnack.success(context, state.success!);
@@ -108,6 +105,7 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
               ),
             );
           }
+
           return Stack(
             children: [
               _CoverImage(
@@ -144,7 +142,6 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                 ),
               ),
 
-              // Modern floating guide for messaging - only show after layout is complete
               if (_showMessageGuide && club.isMember && _isLayoutComplete)
                 _MessageGuideOverlay(
                   messageButtonKey: _messageButtonKey,
@@ -187,8 +184,6 @@ class __MessageGuideOverlayState extends State<_MessageGuideOverlay>
   @override
   void initState() {
     super.initState();
-
-    // Wait for the next frame to ensure layout is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _getButtonPosition();
     });
@@ -230,12 +225,10 @@ class __MessageGuideOverlayState extends State<_MessageGuideOverlay>
 
   @override
   Widget build(BuildContext context) {
-    // If we don't have the button position yet, show nothing
     if (_buttonPosition == null || _buttonSize == null) {
       return const SizedBox.shrink();
     }
 
-    // Calculate guide position
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
@@ -248,13 +241,11 @@ class __MessageGuideOverlayState extends State<_MessageGuideOverlay>
     return Positioned.fill(
       child: Stack(
         children: [
-          // Dimmed overlay with tap to dismiss
           GestureDetector(
             onTap: widget.onDismiss,
             child: Container(color: Colors.black.withOpacity(0.4)),
           ),
 
-          // Guide bubble
           Positioned(
             left: guideLeft,
             top: guideTop,
@@ -274,7 +265,6 @@ class __MessageGuideOverlayState extends State<_MessageGuideOverlay>
             ),
           ),
 
-          // Highlight ring around message button
           Positioned(
             left: _buttonPosition!.dx - 8,
             top: _buttonPosition!.dy - 8,
@@ -340,7 +330,6 @@ class _GuideBubble extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
             child: Row(
@@ -406,7 +395,6 @@ class _GuideBubble extends StatelessWidget {
             ),
           ),
 
-          // Divider
           Container(
             height: 1,
             margin: const EdgeInsets.symmetric(horizontal: 18),
@@ -421,7 +409,6 @@ class _GuideBubble extends StatelessWidget {
             ),
           ),
 
-          // Content
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
             child: Column(
@@ -470,7 +457,6 @@ class _GuideBubble extends StatelessWidget {
             ),
           ),
 
-          // Actions
           Container(
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
             child: Row(
@@ -597,13 +583,18 @@ class _CoverImage extends StatelessWidget {
 /* ─────────────────── HEADER META ─────────────────── */
 
 class _HeaderMeta extends StatelessWidget {
-  final dynamic club;
+  final dynamic club; // ClubProfile
   final GlobalKey messageButtonKey;
 
   const _HeaderMeta({required this.club, required this.messageButtonKey});
 
   @override
   Widget build(BuildContext context) {
+    final bool isAdmin = club.isAdmin ?? false;
+
+    // Pending requests count — only meaningful for admins
+    final int pendingCount = 0; //club.pendingRequestsCount ?? 0;
+
     return Row(
       children: [
         _Avatar(url: club.coverImageUrl, name: club.name, slug: club.slug),
@@ -628,9 +619,7 @@ class _HeaderMeta extends StatelessWidget {
                   _Pill('Club Profile'),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () {
-                      _navigateToMembersPage(context);
-                    },
+                    onTap: () => _navigateToMembersPage(context),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: Container(
@@ -676,16 +665,59 @@ class _HeaderMeta extends StatelessWidget {
             ],
           ),
         ),
+
+        // ── Pending requests badge — admins only ──────────────────────────
+        if (isAdmin && pendingCount > 0) ...[
+          GestureDetector(
+            onTap: () => Navigator.pushNamed(
+              context,
+              RouteNames.clubPendingRequests,
+              arguments: {'clubSlug': club.slug, 'clubName': club.name},
+            ).then((_) => context.read<ClubProfileCubit>().load(club.uuid)),
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.5),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.person_add_rounded,
+                    color: Colors.orange,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    '$pendingCount',
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        // ── Messages / Join button ────────────────────────────────────────
         club.isMember
             ? _MessagesButton(clubUuid: club.uuid, key: messageButtonKey)
-            : _JoinButton(clubUuid: club.uuid),
+            : _JoinButton(clubUuid: club.uuid, clubSlug: club.slug),
       ],
     );
   }
 
   void _navigateToMembersPage(BuildContext context) {
     final bool isAdmin = club.isAdmin ?? false;
-
     Navigator.pushNamed(
       context,
       RouteNames.clubMembers,
@@ -694,7 +726,7 @@ class _HeaderMeta extends StatelessWidget {
   }
 }
 
-/* ─────────────────── AVATAR ─────────────────── */
+/* ─────────────────── MESSAGES BUTTON ─────────────────── */
 
 class _MessagesButton extends StatelessWidget {
   final String clubUuid;
@@ -704,9 +736,7 @@ class _MessagesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        _navigateToClubChat(context);
-      },
+      onTap: () => Navigator.pushNamed(context, RouteNames.conversations),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
@@ -721,11 +751,9 @@ class _MessagesButton extends StatelessWidget {
       ),
     );
   }
-
-  void _navigateToClubChat(BuildContext context) {
-    Navigator.pushNamed(context, RouteNames.conversations);
-  }
 }
+
+/* ─────────────────── AVATAR ─────────────────── */
 
 class _Avatar extends StatelessWidget {
   final String? url;
@@ -772,18 +800,22 @@ class _Avatar extends StatelessWidget {
     );
   }
 
-  Widget _fallback(IconData icon) {
-    return Icon(icon, size: 30, color: Colors.white.withOpacity(0.9));
-  }
+  Widget _fallback(IconData icon) =>
+      Icon(icon, size: 30, color: Colors.white.withOpacity(0.9));
 }
 
 /* ─────────────────── JOIN BUTTON ─────────────────── */
 
 class _JoinButton extends StatelessWidget {
   final String clubUuid;
+  final String clubSlug;
   final VoidCallback? onJoin;
 
-  const _JoinButton({required this.clubUuid, this.onJoin});
+  const _JoinButton({
+    required this.clubUuid,
+    required this.clubSlug,
+    this.onJoin,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -792,7 +824,7 @@ class _JoinButton extends StatelessWidget {
         final isJoining = state.joining;
         final isMember = state.profile?.isMember ?? false;
 
-        // If already a member, show joined state
+        // ── Already a member ──────────────────────────────────────────────
         if (isMember) {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -801,7 +833,7 @@ class _JoinButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.green, width: 1.5),
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.check, color: Colors.green, size: 16),
@@ -819,29 +851,102 @@ class _JoinButton extends StatelessWidget {
           );
         }
 
+        // ── Pending approval ──────────────────────────────────────────────
+        final joinRequestStatus = false; //state.profile?.joinRequestStatus;
+        if (joinRequestStatus == 'pending') {
+          return GestureDetector(
+            onTap: () => _showCancelRequestDialog(context, clubSlug),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.7),
+                  width: 1.5,
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pending',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // ── Rejected — let them request again ────────────────────────────
+        if (joinRequestStatus == 'rejected') {
+          return GestureDetector(
+            onTap: isJoining
+                ? null
+                : (onJoin ?? () => context.read<ClubProfileCubit>().joinClub()),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.red.withOpacity(0.6),
+                  width: 1.5,
+                ),
+              ),
+              child: const Text(
+                'Request Again',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // ── Default join / request to join ────────────────────────────────
+        final requiresApproval =
+            false; //state.profile?.joinApprovalRequired ?? false;
+
         return GestureDetector(
           onTap: isJoining
               ? null
               : (onJoin ?? () => context.read<ClubProfileCubit>().joinClub()),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
               color: const Color(0xFFFF7A00).withOpacity(0.2),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFFF7A00), width: 1.5),
             ),
             child: isJoining
-                ? SizedBox(
+                ? const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: const Color(0xFFFF7A00),
+                      color: Color(0xFFFF7A00),
                     ),
                   )
-                : const Text(
-                    'Join',
-                    style: TextStyle(
+                : Text(
+                    requiresApproval ? 'Request to Join' : 'Join',
+                    style: const TextStyle(
                       color: Color(0xFFFF7A00),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -852,7 +957,44 @@ class _JoinButton extends StatelessWidget {
       },
     );
   }
+
+  void _showCancelRequestDialog(BuildContext context, String slug) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1040),
+        title: const Text(
+          'Cancel Join Request?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'Are you sure you want to cancel your request to join this club?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Keep It',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              // Navigator.pop(ctx);
+              // context.read<ClubProfileCubit>().cancelJoinRequest();
+            },
+            child: const Text(
+              'Cancel Request',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
 /* ─────────────────── DESCRIPTION ─────────────────── */
 
 class _DescriptionCard extends StatelessWidget {
@@ -889,6 +1031,8 @@ class _IncomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isAdmin = club.isAdmin ?? false;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -900,17 +1044,17 @@ class _IncomeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header row ────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Club Income',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(width: 12),
               GestureDetector(
                 onTap: () {
                   Navigator.pushNamed(
@@ -924,8 +1068,8 @@ class _IncomeCard extends StatelessWidget {
                     },
                   );
                 },
-                child: Text(
-                  'Donate to Club',
+                child: const Text(
+                  'Donate',
                   style: TextStyle(
                     color: Color(0xFFFF7A00),
                     fontWeight: FontWeight.w600,
@@ -935,6 +1079,8 @@ class _IncomeCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+
+          // ── Coin balance row ──────────────────────────────────────────
           Row(
             children: [
               const CircleAvatar(
@@ -944,7 +1090,7 @@ class _IncomeCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Text(
-                ' ${formatCoin(club.totalIncomeCoins)} Coins',
+                '${formatCoin(club.totalIncomeCoins)} Coins',
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -960,26 +1106,93 @@ class _IncomeCard extends StatelessWidget {
                 : '+${club.basicStats}% vs last month',
             style: const TextStyle(color: Colors.greenAccent),
           ),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ClubIncomeDetailsScreen(clubUuid: clubUuid),
+          const SizedBox(height: 12),
+
+          // ── Action row ────────────────────────────────────────────────
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ClubIncomeDetailsScreen(clubUuid: clubUuid),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'View Details →',
+                  style: TextStyle(
+                    color: Color(0xFFFF7A00),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              );
-            },
-            child: const Text(
-              'View Details →',
-              style: TextStyle(
-                color: Color(0xFFFF7A00),
-                fontWeight: FontWeight.w600,
               ),
-            ),
+
+              // ── Manage Treasury — admin only ──────────────────────────
+              if (isAdmin) ...[
+                const SizedBox(width: 20),
+                const _VerticalDivider(),
+                const SizedBox(width: 20),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      RouteNames.clubTreasury,
+                      arguments: {
+                        'clubUuid': club.uuid,
+                        'clubName': club.name,
+                        'isOwner': club.isCreator ?? false,
+                        'isAdmin': club.isAdmin ?? false,
+                      },
+                    );
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.greenAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                          color: Colors.greenAccent,
+                          size: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Treasury',
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class _VerticalDivider extends StatelessWidget {
+  const _VerticalDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 14,
+      color: Colors.white.withOpacity(0.2),
     );
   }
 }
@@ -993,9 +1206,7 @@ class _TopMembers extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (members.isEmpty) {
-      return const SizedBox();
-    }
+    if (members.isEmpty) return const SizedBox();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1021,7 +1232,6 @@ class _TopMembers extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (_, i) {
               final member = members[i];
-
               return Column(
                 children: [
                   GestureDetector(
@@ -1044,7 +1254,7 @@ class _TopMembers extends StatelessWidget {
                   SizedBox(
                     width: 56,
                     child: Text(
-                      member.fullname,
+                      member.fullname ?? 'Unknown',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,

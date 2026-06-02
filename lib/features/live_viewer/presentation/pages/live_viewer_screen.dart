@@ -1,9 +1,9 @@
 // lib/features/live_viewer/presentation/pages/live_viewer_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
-
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
@@ -14,6 +14,7 @@ import 'package:moonlight/features/live_viewer/presentation/services/live_stream
 import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/reconnection_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/role_change_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_loading_placeholder.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/premium_overlay.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:uuid/uuid.dart';
@@ -47,45 +48,64 @@ class LiveViewerScreen extends StatefulWidget {
   State<LiveViewerScreen> createState() => _LiveViewerScreenState();
 }
 
-class _LiveViewerScreenState extends State<LiveViewerScreen> {
-  bool _didAutoStartBloc = false;
+class _LiveViewerScreenState extends State<LiveViewerScreen>
+    with SingleTickerProviderStateMixin {
+  // Track IDENTITY of the last BLoC we started.
+  // When a new BLoC is created (swipe-back), this != bloc and we re-fire ViewerStarted.
+  ViewerBloc? _startedBloc;
   ViewerBloc? _viewerBloc;
   bool _shouldStartBloc = false;
 
-  // ── Initial premium gate (shown BEFORE the BLoC starts) ─────────────────
+  final ValueNotifier<double> _videoReadyProgress = ValueNotifier(0.0);
+  AnimationController? _fadeController;
+
   late PremiumVerificationState _premiumState;
   late bool _isPremiumStream;
   late int? _premiumFee;
   late int? _numericLiveId;
   bool _premiumCheckComplete = false;
-
-  // ── Runtime premium payment UI (shared by initial gate + BLoC overlay) ──
   bool _isProcessingPayment = false;
   String? _paymentStatusMessage;
 
   @override
   void initState() {
     super.initState();
+    _fadeController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 350),
+        )..addListener(() {
+          _videoReadyProgress.value = _fadeController!.value;
+        });
+    _initPremium();
+  }
 
+  @override
+  void didUpdateWidget(LiveViewerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Detect repo reset after swipe-back (keepAlive dispose resets _wired=false)
+    final repo = widget.repository;
+    final wasReset = repo is ViewerRepositoryImpl && !repo.wasWired;
+    if (widget.repository != oldWidget.repository || wasReset) {
+      _startedBloc = null;
+      _viewerBloc = null;
+      _fadeController?.reset();
+      _videoReadyProgress.value = 0;
+      _initPremium();
+    }
+  }
+
+  void _initPremium() {
     final args = widget.routeArgs ?? {};
-
-    // isPremium arrives as int (0/1) from LiveItem / route args.
-    // Treat anything truthy as premium.
     final rawIsPremium = args['isPremium'];
     _isPremiumStream =
         rawIsPremium == 1 || rawIsPremium == true || rawIsPremium == '1';
-
     _premiumFee = args['premiumFee'] as int?;
     _numericLiveId = args['id'] as int?;
-
-    debugPrint('=== PREMIUM DEBUG ===');
-    debugPrint('isPremium raw: $rawIsPremium  parsed: $_isPremiumStream');
-    debugPrint('premiumFee: $_premiumFee');
-    debugPrint('numericLiveId: $_numericLiveId');
-    debugPrint('=====================');
-
     if (_isPremiumStream) {
       _premiumState = PremiumVerificationState.checking;
+      _premiumCheckComplete = false;
+      _shouldStartBloc = false;
       _checkPremiumStatus();
     } else {
       _premiumState = PremiumVerificationState.free;
@@ -94,26 +114,26 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
     }
   }
 
-  // ── Initial premium check ────────────────────────────────────────────────
+  void notifyVideoReady() {
+    if (_fadeController == null || _fadeController!.isAnimating) return;
+    if (_fadeController!.value >= 1.0) return;
+    _fadeController!.forward();
+  }
 
   Future<void> _checkPremiumStatus() async {
     if (_numericLiveId == null) {
       _markFreeAndProceed();
       return;
     }
-
     try {
-      final liveFeedRepo = sl<LiveFeedRepository>();
-      final response = await liveFeedRepo.checkPremiumStatus(
+      final response = await sl<LiveFeedRepository>().checkPremiumStatus(
         liveId: _numericLiveId!,
       );
-
       final data = (response['data'] as Map<String, dynamic>?) ?? {};
       final canAccess =
           data['can_access'] == true ||
           data['has_paid'] == true ||
           data['already_purchased'] == true;
-
       if (!mounted) return;
       setState(() {
         _premiumState = canAccess
@@ -122,17 +142,11 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
         _premiumCheckComplete = true;
         _shouldStartBloc = canAccess;
       });
-
-      debugPrint(
-        '✅ Premium check: ${canAccess ? "Access granted" : "Payment required"}',
-      );
-    } catch (e) {
-      debugPrint('❌ Premium check error: $e');
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _premiumState = PremiumVerificationState.error;
         _premiumCheckComplete = true;
-        // On error, let them in — health service will re-check
         _shouldStartBloc = true;
       });
     }
@@ -147,49 +161,34 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
     });
   }
 
-  // ── Payment processing (used by both initial gate and runtime overlay) ───
-
   Future<void> _processPremiumPayment(BuildContext context) async {
     if (_numericLiveId == null) return;
-
     setState(() {
       _isProcessingPayment = true;
       _paymentStatusMessage = null;
     });
-
     try {
-      final repo = sl<LiveFeedRepository>();
-      final response = await repo.payPremium(
+      final response = await sl<LiveFeedRepository>().payPremium(
         liveId: _numericLiveId!,
         idempotencyKey: const Uuid().v4(),
       );
-
       final status = (response['status'] ?? '').toString().toLowerCase();
       final message = (response['message'] as String?) ?? '';
-
       if (!mounted) return;
-
       if (status == 'success') {
         setState(() {
           _isProcessingPayment = false;
           _premiumState = PremiumVerificationState.premiumPaid;
           _shouldStartBloc = true;
         });
-
-        // If BLoC is already running (runtime paywall), tell it access granted
-        if (_viewerBloc != null && !_viewerBloc!.isClosed) {
+        if (_viewerBloc != null && !_viewerBloc!.isClosed)
           _viewerBloc!.add(const PremiumAccessGranted());
-        }
-
-        if (context.mounted) {
+        if (context.mounted)
           TopSnack.success(context, 'Access unlocked! Enjoy the stream.');
-        }
-
-        // Start the BLoC now if it wasn't started yet
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _viewerBloc != null && !_didAutoStartBloc) {
+          if (mounted && _viewerBloc != null && _startedBloc != _viewerBloc) {
             _viewerBloc!.add(const ViewerStarted());
-            _didAutoStartBloc = true;
+            _startedBloc = _viewerBloc;
           }
         });
       } else {
@@ -200,7 +199,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
               : 'Payment failed. Try again.';
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _isProcessingPayment = false;
@@ -208,8 +207,6 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
       });
     }
   }
-
-  // ── Build the initial premium gate (before BLoC starts) ─────────────────
 
   Widget _buildInitialPremiumGate(BuildContext context) {
     return Scaffold(
@@ -226,9 +223,9 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
             : _paymentStatusMessage,
         onOpenPayment: _premiumState == PremiumVerificationState.error
             ? () {
-                setState(() {
-                  _premiumState = PremiumVerificationState.checking;
-                });
+                setState(
+                  () => _premiumState = PremiumVerificationState.checking,
+                );
                 _checkPremiumStatus();
               }
             : () => _processPremiumPayment(context),
@@ -237,50 +234,49 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
     );
   }
 
-  // ── Dispose ──────────────────────────────────────────────────────────────
-
   @override
   void dispose() {
+    _fadeController?.dispose();
+    _videoReadyProgress.dispose();
     _viewerBloc?.close();
     try {
       sl<AgoraViewerService>().leave();
-    } catch (e) {
-      debugPrint('⚠️ Error leaving Agora on dispose: $e');
-    }
+    } catch (_) {}
+    // When keepAlive=true this is a soft dispose: sends /leave, resets
+    // wiring flags, keeps stream controllers open for swipe-back reuse.
     widget.repository.dispose();
     super.dispose();
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    // ── 1. Show initial premium gate before BLoC is running ────────────────
-    final showInitialGate =
-        _isPremiumStream &&
+    // 1. Initial premium gate
+    if (_isPremiumStream &&
         (_premiumState == PremiumVerificationState.checking ||
             _premiumState == PremiumVerificationState.premiumUnpaid ||
-            _premiumState == PremiumVerificationState.error);
-
-    if (showInitialGate) {
+            _premiumState == PremiumVerificationState.error)) {
       return _buildInitialPremiumGate(context);
     }
 
-    // ── 2. Premium check still in flight, show loader ─────────────────────
+    final args = widget.routeArgs ?? {};
+    final hostAvatarUrl = args['hostAvatar'] as String?;
+    final hostName = args['hostName'] as String?;
+
+    // 2. Premium check in flight
     if (!_premiumCheckComplete) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-          ),
+        body: LiveLoadingPlaceholder(
+          avatarUrl: hostAvatarUrl,
+          hostName: hostName,
         ),
       );
     }
 
-    // ── 3. Wrong repo type guard ───────────────────────────────────────────
+    // 3. Repo must be ViewerRepositoryImpl
     if (widget.repository is! ViewerRepositoryImpl) {
       return const Scaffold(
+        backgroundColor: Colors.black,
         body: Center(
           child: Text(
             'Invalid repository type',
@@ -289,123 +285,112 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
         ),
       );
     }
-
     final repo = widget.repository as ViewerRepositoryImpl;
 
-    // ── 4. Get or create BLoC (with all services) ─────────────────────────
-    ViewerBloc bloc;
-    try {
-      final existing = context.read<ViewerBloc>();
-      bloc = existing.repo == repo ? existing : _buildBloc(repo);
-    } catch (_) {
-      bloc = _buildBloc(repo);
-    }
+    // 4. Get the BLoC from context (provided by pager's BlocProvider)
+    final bloc = context.read<ViewerBloc>();
+    _viewerBloc = bloc;
 
-    if (_viewerBloc == null) {
-      _viewerBloc = bloc;
-    }
-
-    // ── 5. Schedule BLoC start ─────────────────────────────────────────────
-    if (_shouldStartBloc && !_didAutoStartBloc) {
+    // 5. Fire ViewerStarted whenever a NEW bloc is detected.
+    //    _startedBloc tracks identity — on swipe-back, BlocProvider creates
+    //    a fresh ViewerBloc so _startedBloc != bloc and we fire again.
+    if (_shouldStartBloc && _startedBloc != bloc && !bloc.isClosed) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_didAutoStartBloc) {
-          _viewerBloc!.add(const ViewerStarted());
-          _didAutoStartBloc = true;
+        if (mounted && _startedBloc != bloc && !bloc.isClosed) {
+          debugPrint('🚀 [Screen] Firing ViewerStarted on new bloc');
+          bloc.add(const ViewerStarted());
+          _startedBloc = bloc;
+          _fadeController?.reset();
+          _videoReadyProgress.value = 0;
         }
       });
     }
 
-    // ── 6. Render the viewer with a runtime premium listener ───────────────
-    return BlocProvider.value(
-      value: bloc,
-      child: BlocListener<ViewerBloc, ViewerState>(
-        // Listen for runtime premium changes (host makes stream premium mid-session)
-        listenWhen: (p, n) =>
-            !p.requiresPremiumPayment && n.requiresPremiumPayment,
-        listener: (ctx, state) {
-          // Reset any stale payment messages
-          setState(() {
-            _premiumState = PremiumVerificationState.premiumUnpaid;
-            _isProcessingPayment = false;
-            _paymentStatusMessage = null;
-          });
-          TopSnack.warning(
-            ctx,
-            'Host has made this stream premium. Unlock to continue watching.',
-            duration: const Duration(seconds: 5),
+    // 6. Main viewer
+    return BlocListener<ViewerBloc, ViewerState>(
+      listenWhen: (p, n) =>
+          !p.requiresPremiumPayment && n.requiresPremiumPayment,
+      listener: (ctx, state) {
+        setState(() {
+          _premiumState = PremiumVerificationState.premiumUnpaid;
+          _isProcessingPayment = false;
+          _paymentStatusMessage = null;
+        });
+        TopSnack.warning(
+          ctx,
+          'Host has made this stream premium. Unlock to continue watching.',
+          duration: const Duration(seconds: 5),
+        );
+      },
+      child: BlocBuilder<ViewerBloc, ViewerState>(
+        buildWhen: (p, n) =>
+            p.requiresPremiumPayment != n.requiresPremiumPayment ||
+            p.status != n.status,
+        builder: (ctx, state) {
+          if (state.requiresPremiumPayment) {
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: PremiumOverlay(
+                fee: state.premiumEntryFeeCoins ?? _premiumFee,
+                isLoading: _isProcessingPayment,
+                statusMessage: _paymentStatusMessage,
+                onOpenPayment: () => _processPremiumPayment(ctx),
+                onOpenWallet: () => Navigator.of(ctx).pushNamed('/wallet'),
+              ),
+            );
+          }
+
+          if (state.status == ViewerStatus.loading &&
+              (_fadeController?.value ?? 0) > 0) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _fadeController?.reset();
+                _videoReadyProgress.value = 0;
+              }
+            });
+          }
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              LiveViewerOrchestratorWrapper(repository: repo),
+              ValueListenableBuilder<double>(
+                valueListenable: _videoReadyProgress,
+                builder: (_, progress, __) {
+                  if (progress >= 1.0) return const SizedBox.shrink();
+                  return LiveLoadingPlaceholder(
+                    avatarUrl: hostAvatarUrl,
+                    hostName: hostName,
+                    fadeOutProgress: progress,
+                  );
+                },
+              ),
+            ],
           );
         },
-        child: BlocBuilder<ViewerBloc, ViewerState>(
-          // Rebuild when runtime premium paywall state changes
-          buildWhen: (p, n) =>
-              p.requiresPremiumPayment != n.requiresPremiumPayment,
-          builder: (ctx, state) {
-            // ── Runtime premium paywall (host made stream premium mid-session)
-            if (state.requiresPremiumPayment) {
-              return Scaffold(
-                backgroundColor: Colors.black,
-                body: PremiumOverlay(
-                  fee: state.premiumEntryFeeCoins ?? _premiumFee,
-                  isLoading: _isProcessingPayment,
-                  statusMessage: _paymentStatusMessage,
-                  onOpenPayment: () => _processPremiumPayment(ctx),
-                  onOpenWallet: () => Navigator.of(ctx).pushNamed('/wallet'),
-                ),
-              );
-            }
-
-            // ── Normal viewer
-            return const LiveViewerOrchestratorWrapper();
-          },
-        ),
       ),
-    );
-  }
-
-  ViewerBloc _buildBloc(ViewerRepositoryImpl repo) {
-    return ViewerBloc(
-      repo,
-      agoraViewerService: sl<AgoraViewerService>(),
-      liveStreamService: sl<LiveStreamService>(),
-      networkMonitorService: sl<NetworkMonitorService>(),
-      reconnectionService: sl<ReconnectionService>(),
-      roleChangeService: sl<RoleChangeService>(),
     );
   }
 }
 
-// ── Orchestrator wrapper ──────────────────────────────────────────────────────
 class LiveViewerOrchestratorWrapper extends StatelessWidget {
-  const LiveViewerOrchestratorWrapper({super.key});
+  final ViewerRepositoryImpl repository;
+  const LiveViewerOrchestratorWrapper({super.key, required this.repository});
 
   @override
   Widget build(BuildContext context) {
-    final bloc = context.read<ViewerBloc>();
-    final repo = bloc.repo;
-
-    if (repo is! ViewerRepositoryImpl) {
-      return const Scaffold(
-        body: Center(
-          child: Text(
-            'Repository not compatible with new architecture',
-            style: TextStyle(color: Colors.white),
-          ),
-        ),
-      );
-    }
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final agoraService = sl<AgoraViewerService>();
+      final s = sl<AgoraViewerService>();
       debugPrint(
-        '🎯 RTC Status: ${agoraService.isJoined ? "Joined" : "Not Joined"}',
+        '🎯 RTC: ${s.isJoined ? "Joined" : "Not Joined"} Engine: ${s.engine != null ? "OK" : "NULL"} Ch: ${s.channelId}',
       );
-      debugPrint(
-        '🎯 Engine: ${agoraService.engine != null ? "Exists" : "NULL"}',
-      );
-      debugPrint('🎯 Channel: ${agoraService.channelId}');
     });
-
-    return LiveViewerOrchestrator(repository: repo);
+    final screenState = context
+        .findAncestorStateOfType<_LiveViewerScreenState>();
+    return LiveViewerOrchestrator(
+      repository: repository,
+      onVideoReady: screenState?.notifyVideoReady,
+    );
   }
 }
 

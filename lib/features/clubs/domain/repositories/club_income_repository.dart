@@ -1,9 +1,12 @@
-import '../entities/club_income_summary.dart';
 import '../entities/club_donation.dart';
+import '../entities/club_income_summary.dart';
 import '../entities/club_transaction.dart';
 
 abstract class ClubIncomeRepository {
-  Future<ClubIncomeSummary> getSummary(String club);
+  Future<ClubIncomeSummary> getSummary(String club, {String period = 'all'});
   Future<List<ClubDonation>> getLeaderboard(String club, String period);
-  Future<List<ClubTransaction>> getTransactions(String club);
+  Future<List<ClubTransaction>> getTransactions(
+    String club, {
+    String period = 'all',
+  });
 }

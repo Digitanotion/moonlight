@@ -11,9 +11,14 @@ class ClubIncomeCubit extends Cubit<ClubIncomeState> {
   Future<void> load({String period = 'all'}) async {
     emit(state.copyWith(loading: true, period: period));
 
-    final summary = await repo.getSummary(club);
-    final txs = await repo.getTransactions(club);
+    try {
+      // Both calls now forward the period so backend filters correctly
+      final summary = await repo.getSummary(club, period: period);
+      final txs = await repo.getTransactions(club, period: period);
 
-    emit(state.copyWith(loading: false, summary: summary, transactions: txs));
+      emit(state.copyWith(loading: false, summary: summary, transactions: txs));
+    } catch (e) {
+      emit(state.copyWith(loading: false));
+    }
   }
 }

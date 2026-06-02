@@ -268,7 +268,7 @@ class _IncomeTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    transaction.fullname,
+                    transaction.fullname ?? "Unknown",
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -396,7 +396,10 @@ class _TransactionDetails extends StatelessWidget {
 
                   const SizedBox(height: 26),
 
-                  _Row(label: 'Member', value: transaction.fullname),
+                  _Row(
+                    label: 'Member',
+                    value: transaction.fullname ?? "Unknown",
+                  ),
                   _Row(label: 'Reason', value: transaction.reason),
                   _Row(label: 'Date', value: date),
                   _Row(

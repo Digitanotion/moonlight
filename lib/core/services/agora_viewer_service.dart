@@ -306,14 +306,17 @@ class AgoraViewerService with ChangeNotifier {
               RemoteVideoStateReason reason,
               int elapsed,
             ) {
+              // Accept both Starting and Decoding so we render as early as possible
               final hasVideo =
-                  state == RemoteVideoState.remoteVideoStateDecoding;
+                  state == RemoteVideoState.remoteVideoStateDecoding ||
+                  state == RemoteVideoState.remoteVideoStateStarting;
 
               if (hostUid.value == remoteUid) {
                 _hasVideo.value = hasVideo;
-                debugPrint('🎥 [Viewer] Host video: $hasVideo');
+                debugPrint(
+                  '🎥 [Viewer] Host video state: $state → hasVideo=$hasVideo',
+                );
 
-                // Handle network issues
                 if (reason ==
                     RemoteVideoStateReason
                         .remoteVideoStateReasonNetworkCongestion) {
@@ -322,12 +325,22 @@ class AgoraViewerService with ChangeNotifier {
                 }
               } else if (guestUid.value == remoteUid) {
                 _guestHasVideo.value = hasVideo;
-                debugPrint('🎥 [Viewer] Guest video: $hasVideo');
+                debugPrint(
+                  '🎥 [Viewer] Guest video state: $state → hasVideo=$hasVideo',
+                );
+              } else if (hostUid.value == null && hasVideo) {
+                // Host UID not yet set but video is arriving — assign it now.
+                // This handles the race where onRemoteVideoStateChanged fires
+                // before onUserJoined (can happen on fast networks).
+                hostUid.value = remoteUid;
+                _hasVideo.value = true;
+                debugPrint(
+                  '🎥 [Viewer] Host UID assigned from video state: $remoteUid',
+                );
               }
 
               notifyListeners();
             },
-
         onNetworkQuality:
             (
               RtcConnection conn,
@@ -384,13 +397,19 @@ class AgoraViewerService with ChangeNotifier {
         onUserJoined: (conn, remoteUid, elapsed) {
           if (hostUid.value == null) {
             hostUid.value = remoteUid;
-            debugPrint('🎯 [Viewer] Setting host UID: $remoteUid');
+            debugPrint(
+              '🎯 [Viewer] Host UID set: $remoteUid — waiting for video frame',
+            );
           } else if (guestUid.value == null && remoteUid != hostUid.value) {
             guestUid.value = remoteUid;
-            debugPrint('🎯 [Viewer] Setting guest UID: $remoteUid');
+            debugPrint(
+              '🎯 [Viewer] Guest UID set: $remoteUid — waiting for video frame',
+            );
           }
-          _hasVideo.value = hostUid.value != null;
-          _guestHasVideo.value = guestUid.value != null;
+          // DO NOT set _hasVideo or _guestHasVideo here.
+          // Video readiness is driven exclusively by onRemoteVideoStateChanged.
+          // Setting it here causes the AgoraVideoView to render before the
+          // video pipeline is ready, resulting in audio-only output.
           debugPrint('👤 [Viewer] remote joined: $remoteUid');
           notifyListeners();
         },
@@ -500,6 +519,12 @@ class AgoraViewerService with ChangeNotifier {
     await _init(appId);
     final e = _engine!;
 
+    // ── Order matters: audio + video BEFORE role + join ────────────────────
+    await e.enableAudio();
+    await e.enableVideo(); // ← must be before joinChannel for auto-subscribe
+
+    await e.setClientRole(role: ClientRoleType.clientRoleAudience);
+
     await e.setVideoEncoderConfiguration(
       const VideoEncoderConfiguration(
         dimensions: VideoDimensions(width: 360, height: 640),
@@ -508,10 +533,6 @@ class AgoraViewerService with ChangeNotifier {
         orientationMode: OrientationMode.orientationModeAdaptive,
       ),
     );
-
-    await e.enableVideo();
-    await e.enableAudio();
-    await e.setClientRole(role: ClientRoleType.clientRoleAudience);
 
     await e.setParameters(r'''
     {
@@ -528,7 +549,7 @@ class AgoraViewerService with ChangeNotifier {
       clientRoleType: ClientRoleType.clientRoleAudience,
       channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
       autoSubscribeAudio: true,
-      autoSubscribeVideo: true,
+      autoSubscribeVideo: true, // ← critical for video
       publishCameraTrack: false,
       publishMicrophoneTrack: false,
     );
@@ -550,8 +571,8 @@ class AgoraViewerService with ChangeNotifier {
         options: audienceOptions,
       );
     }
-    // notifyListeners();
-    debugPrint('✅ [Viewer] Joined as audience to channel: $channel');
+
+    debugPrint('✅ [Viewer] Joined as audience: channel=$channel uid=$uid');
   }
 
   Future<void> promoteToCoHost({required String rtcToken}) async {
