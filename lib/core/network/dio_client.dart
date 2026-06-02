@@ -40,19 +40,19 @@ class DioClient {
               // This is a file upload - increase timeouts even more
               options.sendTimeout = const Duration(seconds: 240);
               options.receiveTimeout = const Duration(seconds: 240);
-              print('📤 File upload detected - extended timeouts set');
+              // print('📤 File upload detected - extended timeouts set');
             }
           }
 
-          print('➡️ ${options.method} ${options.uri}');
-          print(
-            '   Authorization: ${options.headers['Authorization'] ?? '(none)'}',
-          );
-          print('   Headers: ${options.headers}');
-          print('   Query: ${options.queryParameters}');
-          print('   Body: ${options.data}');
-          print('   Send Timeout: ${options.sendTimeout}');
-          print('   Receive Timeout: ${options.receiveTimeout}');
+          // print('➡️ ${options.method} ${options.uri}');
+          // print(
+          //   '   Authorization: ${options.headers['Authorization'] ?? '(none)'}',
+          // );
+          // print('   Headers: ${options.headers}');
+          // print('   Query: ${options.queryParameters}');
+          // print('   Body: ${options.data}');
+          // print('   Send Timeout: ${options.sendTimeout}');
+          // print('   Receive Timeout: ${options.receiveTimeout}');
 
           handler.next(options);
         },
@@ -64,11 +64,11 @@ class DioClient {
           handler.next(resp);
         },
         onError: (e, handler) {
-          print(
-            '❌ ${e.response?.statusCode} ${e.requestOptions.method} ${e.requestOptions.uri}',
-          );
-          print('❌ Error type: ${e.type}');
-          print('❌ Message: ${e.message}');
+          // print(
+          //   '❌ ${e.response?.statusCode} ${e.requestOptions.method} ${e.requestOptions.uri}',
+          // );
+          // print('❌ Error type: ${e.type}');
+          // print('❌ Message: ${e.message}');
 
           // ✅ Handle timeout errors gracefully
           if (e.type == DioExceptionType.sendTimeout) {
