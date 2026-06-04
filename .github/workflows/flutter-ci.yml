@@ -120,6 +120,15 @@ jobs:
           name: app-bundle-v${{ steps.get_version.outputs.code }}
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
+      - name: Verify MEDIA_PROJECTION removed
+        run: |
+          if grep -q "MEDIA_PROJECTION" build/app/intermediates/merged_manifests/release/AndroidManifest.xml 2>/dev/null; then
+            echo "❌ MEDIA_PROJECTION still present in merged manifest!"
+            grep "MEDIA_PROJECTION" build/app/intermediates/merged_manifests/release/AndroidManifest.xml
+            exit 1
+          else
+            echo "✅ MEDIA_PROJECTION successfully removed"
+          fi
 
   # JOB 4: NEW - DEPLOY TO PLAY STORE.
   deploy:
