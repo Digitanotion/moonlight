@@ -1,4 +1,7 @@
 // lib/features/clubs/presentation/cubit/club_treasury_cubit.dart
+//
+// CHANGE: submitRequest() now safely unwraps the full response body
+// {status, message, data: {...}} returned by the fixed data source.
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -75,7 +78,6 @@ class ClubTreasuryCubit extends Cubit<ClubTreasuryState> {
     try {
       final summaryData = await _ds.getSummary(clubUuid);
       final requestsData = await _ds.getWithdrawalRequests(clubUuid);
-
       emit(
         state.copyWith(
           loading: false,
@@ -159,21 +161,32 @@ class ClubTreasuryCubit extends Cubit<ClubTreasuryState> {
   Future<ClubWithdrawalRequest?> submitRequest(
     Map<String, dynamic> data,
   ) async {
-    emit(state.copyWith(submitting: true, error: null));
+    emit(state.copyWith(submitting: true, error: null, success: null));
     try {
-      final res = await _ds.submitWithdrawalRequest(clubUuid, data);
+      // Data source now returns the FULL body: {status, message, data: {...}}
+      final body = await _ds.submitWithdrawalRequest(clubUuid, data);
 
-      // ← res is the full response: {"status":..., "message":..., "data":{...}}
-      // Extract the nested request object and the message separately:
-      final requestJson = res['data'] as Map<String, dynamic>; // ← FIX
+      // Extract message from top-level (never null — has fallback)
       final message =
-          res['message'] as String? ?? 'Withdrawal submitted.'; // ← FIX
+          body['message'] as String? ?? 'Withdrawal submitted successfully.';
 
-      final request = ClubWithdrawalRequest.fromJson(requestJson);
+      // Extract the nested request object safely
+      final requestJson = body['data'];
+      if (requestJson == null) {
+        // Submitted OK but no data object — still treat as success
+        emit(state.copyWith(submitting: false, success: message));
+        await load();
+        return null;
+      }
+
+      final request = ClubWithdrawalRequest.fromJson(
+        Map<String, dynamic>.from(requestJson as Map),
+      );
+
       emit(
         state.copyWith(
           submitting: false,
-          success: message, // ← now shows actual message
+          success: message,
           requests: [request, ...state.requests],
         ),
       );
@@ -254,7 +267,6 @@ class ClubTreasuryCubit extends Cubit<ClubTreasuryState> {
 
   String _clean(Object e) {
     final s = e.toString();
-    // Try to extract message from DioException response
     if (s.contains('"message"')) {
       final match = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(s);
       if (match != null) return match.group(1)!;

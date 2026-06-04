@@ -1,14 +1,4 @@
 // lib/features/clubs/presentation/pages/club_withdrawal_request_screen.dart
-//
-// Complete replacement. An admin fills in:
-//   1. Amount (validated against available balance & policy minimum)
-//   2. Payment method (Bank Transfer via Flutterwave, or PayPal)
-//   3. Payout details (bank with live name resolution, or PayPal email)
-//   4. Reason for the withdrawal
-//   5. Club Treasury PIN (6-digit, required to submit)
-//
-// On submit → POST /api/v1/clubs/{uuid}/treasury/withdrawal-requests
-// Other admins receive a push notification and see it in the Pending tab.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,6 +8,63 @@ import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:uuid/uuid.dart';
+
+// ── Country list (matches Flutterwave payout docs) ────────────────────────
+// Kept in sync with withdrawal_page.dart's _kSupportedCountries.
+class _CountryInfo {
+  final String name;
+  final String currency;
+  const _CountryInfo(this.name, this.currency);
+}
+
+const List<_CountryInfo> _kCountries = [
+  _CountryInfo('Nigeria', 'NGN'),
+  _CountryInfo('Ghana', 'GHS'),
+  _CountryInfo('Kenya', 'KES'),
+  _CountryInfo('South Africa', 'ZAR'),
+  _CountryInfo('Uganda', 'UGX'),
+  _CountryInfo('Tanzania', 'TZS'),
+  _CountryInfo('Rwanda', 'RWF'),
+  _CountryInfo('Zambia', 'ZMW'),
+  _CountryInfo('Cameroon', 'XAF'),
+  _CountryInfo('Chad', 'XAF'),
+  _CountryInfo('Congo', 'XAF'),
+  _CountryInfo('Gabon', 'XAF'),
+  _CountryInfo('Senegal', 'XOF'),
+  _CountryInfo('Ivory Coast', 'XOF'),
+  _CountryInfo('Malawi', 'MWK'),
+  _CountryInfo('Sierra Leone', 'SLL'),
+  _CountryInfo('Ethiopia', 'ETB'),
+  _CountryInfo('Austria', 'EUR'),
+  _CountryInfo('Belgium', 'EUR'),
+  _CountryInfo('Bulgaria', 'EUR'),
+  _CountryInfo('Croatia', 'EUR'),
+  _CountryInfo('Cyprus', 'EUR'),
+  _CountryInfo('Czech Republic', 'EUR'),
+  _CountryInfo('Denmark', 'EUR'),
+  _CountryInfo('Estonia', 'EUR'),
+  _CountryInfo('Finland', 'EUR'),
+  _CountryInfo('Germany', 'EUR'),
+  _CountryInfo('Greece', 'EUR'),
+  _CountryInfo('Hungary', 'EUR'),
+  _CountryInfo('Ireland', 'EUR'),
+  _CountryInfo('Italy', 'EUR'),
+  _CountryInfo('Latvia', 'EUR'),
+  _CountryInfo('Lithuania', 'EUR'),
+  _CountryInfo('Luxembourg', 'EUR'),
+  _CountryInfo('Malta', 'EUR'),
+  _CountryInfo('Netherlands', 'EUR'),
+  _CountryInfo('Poland', 'EUR'),
+  _CountryInfo('Slovakia', 'EUR'),
+  _CountryInfo('Slovenia', 'EUR'),
+  _CountryInfo('Spain', 'EUR'),
+  _CountryInfo('Sweden', 'EUR'),
+  _CountryInfo('UK', 'GBP'),
+  _CountryInfo('US', 'USD'),
+  _CountryInfo('Australia', 'AUD'),
+  _CountryInfo('India', 'INR'),
+  _CountryInfo('UAE', 'AED'),
+];
 
 class ClubWithdrawalRequestScreen extends StatefulWidget {
   final String clubUuid;
@@ -40,7 +87,6 @@ class _ClubWithdrawalRequestScreenState
     extends State<ClubWithdrawalRequestScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
   final _amountCtrl = TextEditingController();
   final _reasonCtrl = TextEditingController();
   final _pinCtrl = TextEditingController();
@@ -53,37 +99,16 @@ class _ClubWithdrawalRequestScreenState
   String _country = 'Nigeria';
   bool _obscurePin = true;
 
-  // Bank list
   List<Map<String, dynamic>> _banks = [];
   bool _loadingBanks = false;
   Map<String, dynamic>? _selectedBank;
 
-  // Account name resolution
   bool _resolvingName = false;
   String? _resolvedName;
-
-  // FX preview
-  double? _localAmount;
-  String? _localCurrency;
-  double? _fxRate;
-  bool _loadingFx = false;
-
-  static const _countries = [
-    'Nigeria',
-    'Ghana',
-    'Kenya',
-    'Uganda',
-    'Tanzania',
-    'Rwanda',
-    'South Africa',
-    'UK',
-    'US',
-  ];
 
   @override
   void initState() {
     super.initState();
-    _amountCtrl.addListener(_onAmountChanged);
     _bankAccountNumberCtrl.addListener(_onAccountNumberChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadBanks());
   }
@@ -100,46 +125,37 @@ class _ClubWithdrawalRequestScreenState
     super.dispose();
   }
 
-  // ── Event handlers ──────────────────────────────────────────────────────────
-
-  void _onAmountChanged() {
-    final amt = double.tryParse(_amountCtrl.text);
-    if (amt != null && amt >= 1 && _method == 'flutterwave') {
-      _loadFxPreview(amt);
-    } else {
-      setState(() {
-        _localAmount = null;
-        _localCurrency = null;
-        _fxRate = null;
-      });
-    }
-  }
-
   void _onAccountNumberChanged() {
     final code = _selectedBank?['code'] as String?;
     final num = _bankAccountNumberCtrl.text;
     if (num.length >= 8 && code != null) _resolveAccountName(num, code);
   }
 
-  // ── API helpers ─────────────────────────────────────────────────────────────
-
   dynamic get _dio =>
       (context.read<ClubTreasuryRemoteDataSource>() as dynamic).dio;
 
   Future<void> _loadBanks() async {
     if (_method != 'flutterwave') return;
-    setState(() => _loadingBanks = true);
+    setState(() {
+      _loadingBanks = true;
+      _banks = [];
+      _selectedBank = null;
+      _resolvedName = null;
+      _bankAccountNameCtrl.clear();
+    });
     try {
       final res = await _dio.get(
         '/api/v1/wallet/banks',
         queryParameters: {'country': _country},
       );
-      setState(() {
-        _banks = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
-        _loadingBanks = false;
-      });
+      if (mounted) {
+        setState(() {
+          _banks = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
+          _loadingBanks = false;
+        });
+      }
     } catch (_) {
-      setState(() => _loadingBanks = false);
+      if (mounted) setState(() => _loadingBanks = false);
     }
   }
 
@@ -154,35 +170,17 @@ class _ClubWithdrawalRequestScreenState
         queryParameters: {'account_number': number, 'bank_code': code},
       );
       final name = res.data['account_name'] as String?;
-      setState(() {
-        _resolvedName = name;
-        _bankAccountNameCtrl.text = name ?? '';
-        _resolvingName = false;
-      });
+      if (mounted) {
+        setState(() {
+          _resolvedName = name;
+          _bankAccountNameCtrl.text = name ?? '';
+          _resolvingName = false;
+        });
+      }
     } catch (_) {
-      setState(() => _resolvingName = false);
+      if (mounted) setState(() => _resolvingName = false);
     }
   }
-
-  Future<void> _loadFxPreview(double amt) async {
-    setState(() => _loadingFx = true);
-    try {
-      final res = await _dio.get(
-        '/api/v1/wallet/fx-preview',
-        queryParameters: {'amount_usd': amt, 'country': _country},
-      );
-      setState(() {
-        _localAmount = (res.data['local_amount'] as num?)?.toDouble();
-        _localCurrency = res.data['local_currency'] as String?;
-        _fxRate = (res.data['rate'] as num?)?.toDouble();
-        _loadingFx = false;
-      });
-    } catch (_) {
-      setState(() => _loadingFx = false);
-    }
-  }
-
-  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -224,36 +222,19 @@ class _ClubWithdrawalRequestScreenState
                         child: ListView(
                           padding: const EdgeInsets.all(20),
                           children: [
-                            // Available balance chip
                             _AvailableChip(summary: widget.summary),
                             const SizedBox(height: 20),
 
                             // ── Amount ────────────────────────────────
-                            _SectionLabel('Withdrawal Amount'),
-
-                            // const SizedBox(height: 8),
-                            // _buildAmountField(),
-                            // if (_loadingFx)
-                            //   const Padding(
-                            //     padding: EdgeInsets.only(top: 8),
-                            //     child: LinearProgressIndicator(
-                            //       backgroundColor: Colors.white12,
-                            //       color: Color(0xFFFF7A00),
-                            //     ),
-                            //   ),
-                            // if (_localAmount != null && _localCurrency != null)
-                            //   _FxCard(
-                            //     localAmount: _localAmount!,
-                            //     localCurrency: _localCurrency!,
-                            //     rate: _fxRate ?? 0,
-                            //   ),
+                            _SectionLabel('Withdrawal Amount (USD)'),
+                            const SizedBox(height: 8),
+                            _buildAmountField(), // ← RESTORED
                             const SizedBox(height: 20),
 
                             // ── Payment method ────────────────────────
                             _SectionLabel('Payment Method'),
                             const SizedBox(height: 8),
                             _buildMethodToggle(),
-
                             const SizedBox(height: 20),
 
                             // ── Bank / PayPal details ─────────────────
@@ -270,6 +251,7 @@ class _ClubWithdrawalRequestScreenState
                                 hint: 'Enter account number',
                                 keyboardType: TextInputType.number,
                                 maxLength: 20,
+                                required: true,
                                 suffix: _resolvingName
                                     ? const SizedBox(
                                         width: 16,
@@ -285,13 +267,6 @@ class _ClubWithdrawalRequestScreenState
                                 const SizedBox(height: 8),
                                 _ResolvedNameBadge(name: _resolvedName!),
                               ],
-                              // const SizedBox(height: 12),
-                              // _InputField(
-                              //   controller: _bankAccountNameCtrl,
-                              //   label: 'Account Name',
-                              //   hint: 'Auto-filled',
-                              //   required: false,
-                              // ),
                             ] else ...[
                               _SectionLabel('PayPal Details'),
                               const SizedBox(height: 8),
@@ -367,7 +342,6 @@ class _ClubWithdrawalRequestScreenState
 
                             const SizedBox(height: 32),
 
-                            // ── Submit ────────────────────────────────
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
@@ -426,8 +400,6 @@ class _ClubWithdrawalRequestScreenState
     );
   }
 
-  // ── Widgets ─────────────────────────────────────────────────────────────────
-
   Widget _buildTopBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -466,6 +438,7 @@ class _ClubWithdrawalRequestScreenState
     );
   }
 
+  // ── Amount field (was commented out — now live) ──────────────────────────
   Widget _buildAmountField() {
     return Container(
       decoration: BoxDecoration(
@@ -515,11 +488,9 @@ class _ClubWithdrawalRequestScreenState
                   return 'Enter a valid amount';
                 }
                 if (amt > widget.summary.usdAvailable) {
-                  return 'Exceeds available balance (\$${widget.summary.usdAvailable.toStringAsFixed(2)})';
+                  return 'Exceeds available balance '
+                      '(\$${widget.summary.usdAvailable.toStringAsFixed(2)})';
                 }
-                // if (amt < widget.summary.policy.minAmountUsd) {
-                //   return 'Minimum withdrawal is \$${widget.summary.policy.minAmountUsd.toStringAsFixed(0)}';
-                // }
                 return null;
               },
             ),
@@ -549,7 +520,6 @@ class _ClubWithdrawalRequestScreenState
           onTap: () {
             setState(() => _method = 'flutterwave');
             _loadBanks();
-            _onAmountChanged();
           },
         ),
         const SizedBox(width: 12),
@@ -559,16 +529,14 @@ class _ClubWithdrawalRequestScreenState
           selected: _method == 'paypal',
           onTap: () => TopSnack.info(
             context,
-            "PayPal payment is not available currently",
-          ), //setState(() {
-          //   _method = 'paypal';
-          //   _localAmount = null;
-          // })
+            'PayPal payment is not available currently',
+          ),
         ),
       ],
     );
   }
 
+  // ── Country dropdown — now uses full _kCountries list ────────────────────
   Widget _buildCountryDropdown() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -583,13 +551,18 @@ class _ClubWithdrawalRequestScreenState
           dropdownColor: const Color(0xFF1A1040),
           style: const TextStyle(color: Colors.white),
           isExpanded: true,
-          items: _countries
-              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+          items: _kCountries
+              .map(
+                (c) => DropdownMenuItem(
+                  value: c.name,
+                  child: Text('${c.name}  (${c.currency})'),
+                ),
+              )
               .toList(),
           onChanged: (v) {
-            setState(() => _country = v!);
-            _loadBanks();
-            _onAmountChanged();
+            if (v == null || v == _country) return;
+            setState(() => _country = v);
+            _loadBanks(); // ← re-fetches banks for the new country
           },
         ),
       ),
@@ -609,7 +582,6 @@ class _ClubWithdrawalRequestScreenState
       );
     }
 
-    // Sort banks alphabetically before showing
     final sortedBanks = List<Map<String, dynamic>>.from(_banks)
       ..sort(
         (a, b) =>
@@ -617,21 +589,23 @@ class _ClubWithdrawalRequestScreenState
       );
 
     return GestureDetector(
-      onTap: () async {
-        final picked = await showModalBottomSheet<Map<String, dynamic>>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => _BankPickerSheet(banks: sortedBanks),
-        );
-        if (picked != null) {
-          setState(() => _selectedBank = picked);
-          final num = _bankAccountNumberCtrl.text;
-          if (num.length >= 8) {
-            _resolveAccountName(num, picked['code'] as String);
-          }
-        }
-      },
+      onTap: _banks.isEmpty
+          ? null
+          : () async {
+              final picked = await showModalBottomSheet<Map<String, dynamic>>(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _BankPickerSheet(banks: sortedBanks),
+              );
+              if (picked != null) {
+                setState(() => _selectedBank = picked);
+                final num = _bankAccountNumberCtrl.text;
+                if (num.length >= 8) {
+                  _resolveAccountName(num, picked['code'] as String);
+                }
+              }
+            },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
@@ -653,9 +627,12 @@ class _ClubWithdrawalRequestScreenState
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _selectedBank != null
-                    ? (_selectedBank!['name'] as String? ?? 'Unknown Bank')
-                    : 'Select Bank',
+                _banks.isEmpty
+                    ? 'No banks available for this country'
+                    : (_selectedBank != null
+                          ? (_selectedBank!['name'] as String? ??
+                                'Unknown Bank')
+                          : 'Select Bank'),
                 style: TextStyle(
                   color: _selectedBank != null ? Colors.white : Colors.white38,
                   fontSize: 15,
@@ -727,26 +704,22 @@ class _ClubWithdrawalRequestScreenState
     );
   }
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
-
   void _submit(BuildContext context) {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    // Extra PayPal email match check
     if (_method == 'paypal' &&
         _paypalEmailCtrl.text.trim() != _paypalEmailConfirmCtrl.text.trim()) {
       TopSnack.error(context, 'PayPal email addresses do not match.');
       return;
     }
 
-    // Bank details check
     if (_method == 'flutterwave') {
       if (_selectedBank == null) {
         TopSnack.error(context, 'Please select a bank.');
         return;
       }
-      if (_bankAccountNameCtrl.text.trim().isEmpty) {
-        TopSnack.error(context, 'Account name is required.');
+      if (_resolvingName) {
+        TopSnack.error(context, 'Still verifying account — please wait.');
         return;
       }
     }
@@ -773,7 +746,7 @@ class _ClubWithdrawalRequestScreenState
   }
 }
 
-// ── Support widgets ───────────────────────────────────────────────────────────
+// ── Support widgets (unchanged from original) ─────────────────────────────
 
 class _SectionLabel extends StatelessWidget {
   final String text;
@@ -823,47 +796,6 @@ class _AvailableChip extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FxCard extends StatelessWidget {
-  final double localAmount;
-  final String localCurrency;
-  final double rate;
-  const _FxCard({
-    required this.localAmount,
-    required this.localCurrency,
-    required this.rate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.currency_exchange_rounded,
-            color: Colors.blueAccent,
-            size: 18,
-          ),
-          // const SizedBox(width: 10),
-          // Expanded(
-          //   child: Text(
-          //     'Recipient gets ≈ $localCurrency ${localAmount.toStringAsFixed(2)} '
-          //     '(rate: ${rate.toStringAsFixed(2)})',
-          //     style: const TextStyle(color: Colors.white70, fontSize: 13),
-          //   ),
-          // ),
         ],
       ),
     );
@@ -1033,6 +965,8 @@ class _MethodChip extends StatelessWidget {
   }
 }
 
+// ── Bank picker sheet (identical to original) ─────────────────────────────
+
 class _BankPickerSheet extends StatefulWidget {
   final List<Map<String, dynamic>> banks;
   const _BankPickerSheet({required this.banks});
@@ -1048,7 +982,7 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _filtered = widget.banks; // already sorted alphabetically by caller
+    _filtered = widget.banks;
     _searchCtrl.addListener(_onSearch);
   }
 
@@ -1074,7 +1008,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Fill ~85% of screen height so the keyboard doesn't squish the list
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
         color: Color(0xFF0D0D1A),
@@ -1082,7 +1015,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
       ),
       child: Column(
         children: [
-          // ── Handle bar ───────────────────────────────────────────────
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 4),
             width: 40,
@@ -1092,8 +1024,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-
-          // ── Header ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: Row(
@@ -1114,8 +1044,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
               ],
             ),
           ),
-
-          // ── Search bar ───────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Container(
@@ -1161,10 +1089,7 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
               ),
             ),
           ),
-
           const Divider(height: 1, color: Colors.white12),
-
-          // ── Bank list ────────────────────────────────────────────────
           Expanded(
             child: _filtered.isEmpty
                 ? Center(
@@ -1181,14 +1106,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
                           'No banks found',
                           style: TextStyle(color: Colors.white54, fontSize: 15),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Try a different search term',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.3),
-                            fontSize: 13,
-                          ),
-                        ),
                       ],
                     ),
                   )
@@ -1199,14 +1116,9 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
                       final bank = _filtered[index];
                       final name = bank['name'] as String? ?? '';
                       final code = bank['code'] as String? ?? '';
-
-                      // Highlight matched characters in the name
                       final query = _searchCtrl.text.trim();
-
                       return InkWell(
                         onTap: () => Navigator.pop(context, bank),
-                        splashColor: const Color(0xFFFF7A00).withOpacity(0.08),
-                        highlightColor: Colors.white.withOpacity(0.04),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
@@ -1214,7 +1126,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
                           ),
                           child: Row(
                             children: [
-                              // Bank icon / initial
                               Container(
                                 width: 40,
                                 height: 40,
@@ -1239,8 +1150,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
                                 ),
                               ),
                               const SizedBox(width: 14),
-
-                              // Name + code
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1257,7 +1166,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
                                   ],
                                 ),
                               ),
-
                               const Icon(
                                 Icons.chevron_right_rounded,
                                 color: Colors.white24,
@@ -1279,7 +1187,6 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
 class _HighlightedText extends StatelessWidget {
   final String text;
   final String query;
-
   const _HighlightedText({required this.text, required this.query});
 
   @override
@@ -1294,11 +1201,9 @@ class _HighlightedText extends StatelessWidget {
         ),
       );
     }
-
     final lowerText = text.toLowerCase();
     final lowerQuery = query.toLowerCase();
     final matchIndex = lowerText.indexOf(lowerQuery);
-
     if (matchIndex < 0) {
       return Text(
         text,
@@ -1309,11 +1214,9 @@ class _HighlightedText extends StatelessWidget {
         ),
       );
     }
-
     final before = text.substring(0, matchIndex);
     final matched = text.substring(matchIndex, matchIndex + query.length);
     final after = text.substring(matchIndex + query.length);
-
     return RichText(
       text: TextSpan(
         style: const TextStyle(

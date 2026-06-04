@@ -16,7 +16,7 @@ class ClubProfile extends Equatable {
 
   // income / stats
   final int totalIncomeCoins;
-  final int basicStats;
+  final double basicStats; // ← double, API sends 42.86
 
   // relations
   final List<ClubProfileMember> membersYouKnow;
@@ -43,29 +43,27 @@ class ClubProfile extends Equatable {
 
   factory ClubProfile.fromJson(Map<String, dynamic> json) {
     return ClubProfile(
-      uuid: json['uuid'],
-      slug: json['slug'],
-      name: json['name'],
-      description: json['description'],
-      membersCount: json['membersCount'] ?? 0,
-      coverImageUrl: json['coverImageUrl'],
-      isMember:
-          json['isMember'] ?? false, // Changed from true to false (default)
-      isCreator:
-          json['isCreator'] ?? false, // Changed from true to false (default)
-      isAdmin: json['isAdmin'] ?? false, // Changed from true to false (default)
-      isPrivate:
-          json['isPrivate'] ?? false, // Changed from true to false (default)
-      location: json['location'],
-      motto: json['motto'],
-      totalIncomeCoins: json['totalIncomeCoins'] ?? 0,
-      basicStats: json['basicStats'] ?? 0,
+      uuid: json['uuid'] as String,
+      slug: json['slug'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String?,
+      motto: json['motto'] as String?,
+      location: json['location'] as String?,
+      membersCount: (json['membersCount'] as num?)?.toInt() ?? 0,
+      coverImageUrl: json['coverImageUrl'] as String?,
+      isMember: json['isMember'] as bool? ?? false,
+      isCreator: json['isCreator'] as bool? ?? false,
+      isAdmin: json['isAdmin'] as bool? ?? false,
+      isPrivate: json['isPrivate'] as bool? ?? false,
+      totalIncomeCoins: (json['totalIncomeCoins'] as num?)?.toInt() ?? 0,
+      // FIX: cast via num first — API sends this as a double (e.g. 42.86)
+      basicStats: (json['basicStats'] as num?)?.toDouble() ?? 0.0,
+      // API key is 'membersYouKnows' (with trailing s)
       membersYouKnow:
-          (json['membersYouKnow'] as List? ??
-                  []) // Fixed typo: membersYouKnows → membersYouKnow
-              .map((e) => ClubProfileMember.fromJson(e))
+          ((json['membersYouKnows'] ?? json['membersYouKnow']) as List? ?? [])
+              .map((e) => ClubProfileMember.fromJson(e as Map<String, dynamic>))
               .toList(),
-      admin: ClubProfileAdmin.fromJson(json['admin']),
+      admin: ClubProfileAdmin.fromJson(json['admin'] as Map<String, dynamic>),
     );
   }
 
@@ -83,9 +81,9 @@ class ClubProfile extends Equatable {
     bool? isCreator,
     bool? isAdmin,
     int? totalIncomeCoins,
-    int? basicStats,
+    double? basicStats, // FIX: was int?, must match field type double
     List<ClubProfileMember>? membersYouKnow,
-    ClubProfileAdmin? admin, // Added missing admin parameter
+    ClubProfileAdmin? admin,
   }) {
     return ClubProfile(
       uuid: uuid ?? this.uuid,
@@ -103,7 +101,7 @@ class ClubProfile extends Equatable {
       totalIncomeCoins: totalIncomeCoins ?? this.totalIncomeCoins,
       basicStats: basicStats ?? this.basicStats,
       membersYouKnow: membersYouKnow ?? this.membersYouKnow,
-      admin: admin ?? this.admin, // Added this line
+      admin: admin ?? this.admin,
     );
   }
 
@@ -139,9 +137,9 @@ class ClubProfileMember extends Equatable {
 
   factory ClubProfileMember.fromJson(Map<String, dynamic> json) {
     return ClubProfileMember(
-      uuid: json['uuid'],
-      fullname: json['fullname'],
-      avatarUrl: json['avatar_url'],
+      uuid: json['uuid'] as String,
+      fullname: json['fullname'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
     );
   }
 
@@ -160,9 +158,9 @@ class ClubProfileAdmin extends Equatable {
 
   factory ClubProfileAdmin.fromJson(Map<String, dynamic> json) {
     return ClubProfileAdmin(
-      uuid: json['uuid'],
-      fullname: json['fullname'],
-      avatarUrl: json['avatar_url'],
+      uuid: json['uuid'] as String,
+      fullname: json['fullname'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
     );
   }
 

@@ -1,0 +1,44 @@
+{
+  "folders": [
+	{
+		"path": "../.."
+	},
+	{
+		"path": "C:/laragon/www/moonlight/moonlight_api"
+	},
+	{
+		"path": "C:/laragon/www/gaijinmall_api/api"
+	},
+	{
+		"path": "../../../eduguardian"
+	},
+	{
+		"path": "../../../gaijinmall/app"
+	},
+	{
+		"path": "../../../digitanotion-web"
+	},
+	{
+		"path": "../../../mafadtechnology-group"
+	}
+],
+  "settings": {
+    "editor.formatOnSave": true,
+    "files.associations": {
+      "**/.rmv/config/*.json": "jsonc"
+    },
+    "files.exclude": {
+      "**/.git": true,
+      "**/.svn": true,
+      "**/.hg": true,
+      "**/.DS_Store": true,
+      "**/Thumbs.db": true,
+      "**/flutter/ephemeral": true,
+      "**/Flutter/ephemeral": true,
+      "**/.symlinks": true,
+      "**/.plugin_symlinks": true,
+      "**/.rmv/catalog/**": true,
+      "*/_*": false
+    }
+  }
+}

@@ -70,6 +70,10 @@ class ClubTreasuryRemoteDataSource {
     return List<Map<String, dynamic>>.from(res.data['data'] ?? []);
   }
 
+  // ── KEY FIX ───────────────────────────────────────────────────────────────
+  // Previously returned res.data['data'] (just the inner object).
+  // The cubit does res['data'] and res['message'] on the result, so we must
+  // return the FULL response body: {status, message, data: {...}}.
   Future<Map<String, dynamic>> submitWithdrawalRequest(
     String clubUuid,
     Map<String, dynamic> data,
@@ -78,7 +82,25 @@ class ClubTreasuryRemoteDataSource {
       '/api/v1/clubs/$clubUuid/treasury/withdrawal-requests',
       data: data,
     );
-    return Map<String, dynamic>.from(res.data['data']);
+
+    final body = Map<String, dynamic>.from(res.data as Map);
+
+    // Normalise numeric fields the backend sends as strings
+    if (body['data'] is Map) {
+      final inner = Map<String, dynamic>.from(body['data'] as Map);
+      body['data'] = {
+        ...inner,
+        'amount_coins': int.tryParse('${inner['amount_coins'] ?? 0}') ?? 0,
+        'amount_usd': (inner['amount_usd'] as num?)?.toDouble() ?? 0.0,
+        'approvals_required':
+            int.tryParse('${inner['approvals_required'] ?? 0}') ?? 0,
+        'approvals_received':
+            int.tryParse('${inner['approvals_received'] ?? 0}') ?? 0,
+        'rejections': int.tryParse('${inner['rejections'] ?? 0}') ?? 0,
+      };
+    }
+
+    return body; // ← full body: {status, message, data: {...}}
   }
 
   Future<Map<String, dynamic>> getWithdrawalRequest(

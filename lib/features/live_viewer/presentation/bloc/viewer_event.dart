@@ -15,7 +15,7 @@ class ViewerStarted extends ViewerEvent {
 class _Ticked extends ViewerEvent {
   final Duration elapsed;
   const _Ticked(this.elapsed);
-  @override
+  @override 
   List<Object?> get props => [elapsed];
 }
 
