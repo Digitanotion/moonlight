@@ -76,11 +76,22 @@ jobs:
       - name: Auto-bump version (if requested)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.version_bump != 'none'
         run: |
-          # .kts format: versionCode = 5
-          CURRENT_CODE=$(grep 'versionCode' android/app/build.gradle.kts | grep -o '[0-9]*' | head -1)
-          NEW_CODE=$((CURRENT_CODE + 1))
-          sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" android/app/build.gradle.kts
-          echo "✅ Version code bumped from $CURRENT_CODE to $NEW_CODE"
+          CURRENT=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          NAME=$(echo $CURRENT | cut -d'+' -f1)
+          CODE=$(echo $CURRENT | cut -d'+' -f2)
+          NEW_CODE=$((CODE + 1))
+          # bump patch in version name too
+          MAJOR=$(echo $NAME | cut -d'.' -f1)
+          MINOR=$(echo $NAME | cut -d'.' -f2)
+          PATCH=$(echo $NAME | cut -d'.' -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_NAME="$MAJOR.$MINOR.$NEW_PATCH"
+          # update pubspec.yaml
+          sed -i "s/^version: .*/version: $NEW_NAME+$NEW_CODE/" pubspec.yaml
+          # update local.properties
+          sed -i "s/flutter.versionCode=.*/flutter.versionCode=$NEW_CODE/" local.properties
+          sed -i "s/flutter.versionName=.*/flutter.versionName=$NEW_NAME/" local.properties
+          echo "✅ Bumped from $CURRENT to $NEW_NAME+$NEW_CODE"
 
       - uses: subosito/flutter-action@v2
         with:
