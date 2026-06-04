@@ -14,13 +14,12 @@ on:
   pull_request:
     branches: [main, master]
 
-  # NEW: Manual trigger for deployment
   workflow_dispatch:
     inputs:
       deploy_track:
         description: "Play Store Deployment Track"
         required: true
-        default: "internal"
+        default: "production"
         type: choice
         options:
           - internal
@@ -38,13 +37,12 @@ on:
           - minor
           - major
 
-# Environment variables.
 env:
   PROJECT_PATH: "."
   FLUTTER_VERSION: "3.32.7"
 
 jobs:
-  # JOB 1: TESTING (Runs on all pushes)
+  # JOB 1: TESTING — only runs on push/PR, skipped on workflow_dispatch
   test:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -60,13 +58,14 @@ jobs:
       - run: flutter pub get
       - run: flutter test --coverage
 
-  # JOB 2: BUILD APKs (Your existing build job
-
-  # JOB 3: NEW - BUILD APP BUNDLE for Play Store
+  # JOB 2: BUILD AAB
+  # FIX 1: removed `needs: [test]` — test is skipped on workflow_dispatch,
+  #         so depending on it caused build-aab to be skipped too.
+  # FIX 2: build.gradle → build.gradle.kts (your project uses .kts format)
+  # FIX 3: version grep/sed updated for .kts syntax (uses = not space)
   build-aab:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    needs: [test] # Only run after tests pass
     outputs:
       version_code: ${{ steps.get_version.outputs.code }}
       version_name: ${{ steps.get_version.outputs.name }}
@@ -77,9 +76,10 @@ jobs:
       - name: Auto-bump version (if requested)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.version_bump != 'none'
         run: |
-          CURRENT_CODE=$(grep 'versionCode' android/app/build.gradle | awk '{print $2}')
+          # .kts format: versionCode = 5
+          CURRENT_CODE=$(grep 'versionCode' android/app/build.gradle.kts | grep -o '[0-9]*' | head -1)
           NEW_CODE=$((CURRENT_CODE + 1))
-          sed -i "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" android/app/build.gradle
+          sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" android/app/build.gradle.kts
           echo "✅ Version code bumped from $CURRENT_CODE to $NEW_CODE"
 
       - uses: subosito/flutter-action@v2
@@ -88,11 +88,14 @@ jobs:
           channel: stable
           cache: true
 
+      - run: flutter pub get
+
       - name: Get Version Info
         id: get_version
         run: |
-          VERSION_CODE=$(grep 'versionCode' android/app/build.gradle | awk '{print $2}')
-          VERSION_NAME=$(grep 'versionName' android/app/build.gradle | awk '{print $2}' | tr -d '\"')
+          # .kts format: versionCode = 5  /  versionName = "1.0.0"
+          VERSION_CODE=$(grep 'versionCode' android/app/build.gradle.kts | grep -o '[0-9]*' | head -1)
+          VERSION_NAME=$(grep 'versionName' android/app/build.gradle.kts | grep -o '"[^"]*"' | tr -d '"' | head -1)
           echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
           echo "📱 Version: $VERSION_NAME ($VERSION_CODE)"
@@ -114,23 +117,28 @@ jobs:
           echo "✅ AAB built successfully!"
           ls -lh build/app/outputs/bundle/release/
 
+      - name: Verify MEDIA_PROJECTION removed
+        run: |
+          MANIFEST="build/app/intermediates/merged_manifests/release/AndroidManifest.xml"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "⚠️  Merged manifest not found at expected path — searching..."
+            find build/ -name "AndroidManifest.xml" 2>/dev/null | head -5
+          elif grep -q "MEDIA_PROJECTION" "$MANIFEST"; then
+            echo "❌ MEDIA_PROJECTION still present!"
+            grep "MEDIA_PROJECTION" "$MANIFEST"
+            exit 1
+          else
+            echo "✅ MEDIA_PROJECTION successfully removed"
+          fi
+
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-bundle-v${{ steps.get_version.outputs.code }}
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
-      - name: Verify MEDIA_PROJECTION removed
-        run: |
-          if grep -q "MEDIA_PROJECTION" build/app/intermediates/merged_manifests/release/AndroidManifest.xml 2>/dev/null; then
-            echo "❌ MEDIA_PROJECTION still present in merged manifest!"
-            grep "MEDIA_PROJECTION" build/app/intermediates/merged_manifests/release/AndroidManifest.xml
-            exit 1
-          else
-            echo "✅ MEDIA_PROJECTION successfully removed"
-          fi
 
-  # JOB 4: NEW - DEPLOY TO PLAY STORE.
+  # JOB 3: DEPLOY TO PLAY STORE
   deploy:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
@@ -146,17 +154,18 @@ jobs:
         id: track
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "track=${{ github.event.inputs.deploy_track }}" >> $GITHUB_OUTPUT
+            TRACK="${{ github.event.inputs.deploy_track }}"
           else
-            echo "track=internal" >> $GITHUB_OUTPUT
+            TRACK="internal"
           fi
-          echo "🎯 Deployment track: ${{ steps.track.outputs.track }}"
+          echo "track=$TRACK" >> $GITHUB_OUTPUT
+          echo "🎯 Deployment track: $TRACK"
 
       - name: Deploy to Google Play
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          packageName: "com.app.moonlightstream" # ⚠️ CHANGE THIS TO YOUR PACKAGE NAME
+          packageName: "com.app.moonlightstream"
           releaseFiles: app-release.aab
           track: ${{ steps.track.outputs.track }}
           status: draft
@@ -174,10 +183,9 @@ jobs:
           echo "" >> summary.md
           echo "**Next Steps:**" >> summary.md
           echo "1. Go to [Play Console](https://play.google.com/console)" >> summary.md
-          echo "2. Navigate to: Testing → ${{ steps.track.outputs.track }} testing" >> summary.md
+          echo "2. Navigate to the production track" >> summary.md
           echo "3. Review the uploaded release" >> summary.md
           echo "4. Click 'Start rollout'" >> summary.md
-          echo "5. Share test link with your team" >> summary.md
 
       - name: Upload Deployment Summary
         uses: actions/upload-artifact@v4
