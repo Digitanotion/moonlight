@@ -93,9 +93,9 @@ jobs:
       - name: Get Version Info
         id: get_version
         run: |
-          # .kts format: versionCode = 5  /  versionName = "1.0.0"
-          VERSION_CODE=$(grep 'versionCode' android/app/build.gradle.kts | grep -o '[0-9]*' | head -1)
-          VERSION_NAME=$(grep 'versionName' android/app/build.gradle.kts | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          VERSION_NAME=$(echo $VERSION | cut -d'+' -f1)
+          VERSION_CODE=$(echo $VERSION | cut -d'+' -f2)
           echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
           echo "📱 Version: $VERSION_NAME ($VERSION_CODE)"
