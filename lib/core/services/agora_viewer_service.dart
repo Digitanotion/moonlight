@@ -341,7 +341,7 @@ class AgoraViewerService with ChangeNotifier {
 
               notifyListeners();
             },
-        onNetworkQuality:
+     onNetworkQuality:
             (
               RtcConnection conn,
               int remoteUid,
@@ -351,8 +351,44 @@ class AgoraViewerService with ChangeNotifier {
               final quality = _convertAgoraQuality(rxQuality);
 
               if (remoteUid == 0) {
-                // Self quality
+                // Self quality (our own downlink/uplink as measured by Agora)
                 _selfQualityCtrl.add(quality);
+
+                // ── Proactive low-stream request ──────────────────────
+                // If OUR downlink is poor, immediately request the low
+                // stream from the host instead of waiting for Agora's
+                // automatic dual-stream switch (which has several
+                // seconds of latency). Only takes effect if the host
+                // has dual-stream mode enabled — otherwise this is a
+                // harmless no-op.
+                final isPoorSelf =
+                    quality == NetworkQuality.poor ||
+                    quality == NetworkQuality.disconnected;
+                if (isPoorSelf && hostUid.value != null) {
+                  _engine
+                      ?.setRemoteVideoStreamType(
+                        uid: hostUid.value!,
+                        streamType: VideoStreamType.videoStreamLow,
+                      )
+                      .catchError((err) {
+                        debugPrint(
+                          '⚠️ [Viewer] setRemoteVideoStreamType(low) failed: $err',
+                        );
+                      });
+                } else if (quality == NetworkQuality.excellent &&
+                    hostUid.value != null) {
+                  // Network recovered — switch back to high quality
+                  _engine
+                      ?.setRemoteVideoStreamType(
+                        uid: hostUid.value!,
+                        streamType: VideoStreamType.videoStreamHigh,
+                      )
+                      .catchError((err) {
+                        debugPrint(
+                          '⚠️ [Viewer] setRemoteVideoStreamType(high) failed: $err',
+                        );
+                      });
+                }
               } else if (hostUid.value == remoteUid) {
                 _hostQualityCtrl.add(quality);
               } else if (guestUid.value == remoteUid) {

@@ -205,7 +205,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                       const PauseOverlay(),
                       const LoadingOverlay(),
                       const RoleChangeToast(),
-                      const ErrorOverlay(),
+                      // const ErrorOverlay(),
                       const ReconnectionOverlay(),
 
                       // Chat

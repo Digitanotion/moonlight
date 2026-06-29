@@ -1,14 +1,23 @@
+// lib/features/post_view/presentation/pages/comments_page.dart
+//
+// VISUAL REFINEMENT — same design language as feed/post_view redesign.
+// NO functional changes: same cubit calls, same pagination trigger,
+// same reply sheet flow. Only colors, spacing, borders, and the loading
+// shimmer changed (Skeletonizer → ShimmerScope/ShimmerBone, real motion).
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:moonlight/core/theme/app_text_styles.dart';
-import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/skeleton_line_plus.dart';
-import 'package:skeletonizer/skeletonizer.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/time_ago.dart';
 import '../../domain/entities/comment.dart';
 import '../cubit/post_cubit.dart';
-import '../widgets/chips.dart';
+
+class _C {
+  static const bg = Color(0xFF05060F);
+  static const surface = Color(0xFF0E1024);
+  static const border = Color(0xFF1A1D3D);
+  static const accent = Color(0xFFFF6A00);
+  static const textSecondary = Color(0xFF8B8FB8);
+}
 
 class CommentsPage extends StatelessWidget {
   const CommentsPage({super.key});
@@ -18,12 +27,20 @@ class CommentsPage extends StatelessWidget {
     final comments = cubit.state.comments;
 
     return Scaffold(
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.bg,
       appBar: AppBar(
-        backgroundColor: AppColors.navy,
-        title: Text('Comments', style: AppTextStyles.titleMedium),
+        backgroundColor: _C.bg,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Comments',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17),
+        ),
         actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.more_horiz)),
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
+          ),
         ],
       ),
       body: NotificationListener<ScrollNotification>(
@@ -35,26 +52,25 @@ class CommentsPage extends StatelessWidget {
         },
         child: (cubit.state.loading && comments.isEmpty)
             ? const _CommentsShimmer()
-            : ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                itemCount:
-                    comments.length + (cubit.state.commentsLoading ? 1 : 0),
-                separatorBuilder: (_, __) =>
-                    const Divider(color: AppColors.divider, height: 28),
-                itemBuilder: (_, i) {
-                  if (i >= comments.length) {
-                    // pagination footer shimmer
-                    return const Padding(
-                      padding: EdgeInsets.only(bottom: 24),
-                      child: _MiniRowShimmer(),
-                    );
-                  }
-                  return _CommentTile(c: comments[i]);
-                },
-              ),
+            : comments.isEmpty
+                ? const _EmptyComments()
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    itemCount: comments.length + (cubit.state.commentsLoading ? 1 : 0),
+                    separatorBuilder: (_, __) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Container(height: 1, color: _C.border),
+                    ),
+                    itemBuilder: (_, i) {
+                      if (i >= comments.length) {
+                        return const Padding(
+                          padding: EdgeInsets.only(top: 8, bottom: 16),
+                          child: _LoadingMoreRow(),
+                        );
+                      }
+                      return _CommentTile(c: comments[i]);
+                    },
+                  ),
       ),
       bottomNavigationBar: _CommentInput(
         onSubmit: (t) => context.read<PostCubit>().addComment(t),
@@ -63,17 +79,74 @@ class CommentsPage extends StatelessWidget {
   }
 }
 
+// ── Empty state ────────────────────────────────────────────────────────────
+class _EmptyComments extends StatelessWidget {
+  const _EmptyComments();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _C.surface,
+                border: Border.all(color: _C.border),
+              ),
+              child: const Icon(Icons.mode_comment_rounded, color: _C.accent, size: 26),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No comments yet',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Start the conversation.',
+              style: TextStyle(color: _C.textSecondary, fontSize: 13.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Loading-more footer row ────────────────────────────────────────────────
+class _LoadingMoreRow extends StatelessWidget {
+  const _LoadingMoreRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: _C.accent),
+      ),
+    );
+  }
+}
+
+// ── Shimmer loading state — real motion, ShimmerScope/ShimmerBone ─────────
 class _CommentsShimmer extends StatelessWidget {
   const _CommentsShimmer();
   @override
   Widget build(BuildContext context) {
-    return Skeletonizer(
-      enabled: true,
+    return ShimmerScope(
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        itemCount: 10,
-        separatorBuilder: (_, __) =>
-            const Divider(color: AppColors.divider, height: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        itemCount: 8,
+        separatorBuilder: (_, __) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Container(height: 1, color: _C.border),
+        ),
         itemBuilder: (_, __) => const _MiniRowShimmer(),
       ),
     );
@@ -86,16 +159,18 @@ class _MiniRowShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        CircleAvatar(radius: 14),
-        SizedBox(width: 12),
+      children: [
+        const ShimmerCircle(radius: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SkeletonLine(widthFactor: .5, height: 12),
-              SizedBox(height: 6),
-              SkeletonLine(height: 12),
+            children: const [
+              ShimmerBone(height: 12, width: 100),
+              SizedBox(height: 7),
+              ShimmerBone(height: 12, widthFactor: 1),
+              SizedBox(height: 5),
+              ShimmerBone(height: 12, widthFactor: 0.4),
             ],
           ),
         ),
@@ -104,13 +179,26 @@ class _MiniRowShimmer extends StatelessWidget {
   }
 }
 
-String? _currentUserAvatar(BuildContext context) {
-  final s = context.read<AuthBloc>().state;
-  if (s is AuthAuthenticated) {
-    // Adjust the property name if your user model differs
-    //return s.user.avatarUrl ?? s.user.avatar_url;
+// ── Role pill — accent-tinted, matches feed/post-view ──────────────────────
+class _RolePillTinted extends StatelessWidget {
+  final String label;
+  const _RolePillTinted({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: _C.accent.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(color: _C.accent, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+      ),
+    );
   }
-  return null;
 }
 
 class _CommentTile extends StatefulWidget {
@@ -121,63 +209,78 @@ class _CommentTile extends StatefulWidget {
 }
 
 class _CommentTileState extends State<_CommentTile> {
-  bool _expanded = true; // open by default like your screenshot
+  bool _expanded = true;
 
   void _openReplySheet(BuildContext context) {
     final ctrl = TextEditingController();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + MediaQuery.of(context).viewInsets.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 44,
               height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(4)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
-                const CircleAvatar(
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=5',
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _C.border),
                   ),
-                  radius: 16,
+                  child: ClipOval(
+                    child: Image.network(
+                      'https://i.pravatar.cc/150?img=5',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, color: Colors.white54),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: TextField(
-                    controller: ctrl,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Write a reply…',
-                      filled: true,
-                      fillColor: Color(0xFF131B34),
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide.none,
-                        borderRadius: BorderRadius.all(Radius.circular(24)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _C.bg,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: _C.border),
+                    ),
+                    child: TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: 'Write a reply…',
+                        hintStyle: TextStyle(color: _C.textSecondary, fontSize: 14),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send_rounded),
-                  onPressed: () {
+                GestureDetector(
+                  onTap: () {
                     final text = ctrl.text.trim();
                     if (text.isEmpty) return;
                     context.read<PostCubit>().addReply(widget.c.id, text);
                     Navigator.pop(context);
                   },
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: _C.accent, borderRadius: BorderRadius.circular(20)),
+                    child: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                  ),
                 ),
               ],
             ),
@@ -193,11 +296,27 @@ class _CommentTileState extends State<_CommentTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // original row ...
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(backgroundImage: NetworkImage(c.user.avatarUrl)),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: _C.border, width: 1.5),
+              ),
+              child: ClipOval(
+                child: Image.network(
+                  c.user.avatarUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: _C.accent.withOpacity(0.16),
+                    child: const Icon(Icons.person_rounded, color: Colors.white70),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -208,64 +327,67 @@ class _CommentTileState extends State<_CommentTile> {
                       Expanded(
                         child: Text(
                           c.user.name,
-                          style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5),
                         ),
                       ),
-                      RolePill(
-                        text: c.user.roleLabel,
-                        color: Color(
-                          int.parse(
-                                c.user.roleColor.substring(1, 7),
-                                radix: 16,
-                              ) +
-                              0xFF000000,
-                        ),
-                      ),
+                      if (c.user.roleLabel.isNotEmpty) _RolePillTinted(label: c.user.roleLabel),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(c.text, style: AppTextStyles.body),
+                  const SizedBox(height: 5),
+                  Text(c.text, style: const TextStyle(color: Colors.white, fontSize: 13.5, height: 1.4)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Text(
                         timeAgo(DateTime.now().difference(c.createdAt)),
-                        style: AppTextStyles.small,
+                        style: const TextStyle(color: _C.textSecondary, fontSize: 11.5),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       GestureDetector(
-                        onTap: () =>
-                            context.read<PostCubit>().toggleCommentLike(c.id),
-                        child: const Icon(Icons.favorite_border, size: 16),
+                        onTap: () => context.read<PostCubit>().toggleCommentLike(c.id),
+                        behavior: HitTestBehavior.opaque,
+                        child: Row(
+                          children: [
+                            Icon(
+                              c.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              size: 14,
+                              color: c.isLiked ? _C.accent : _C.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${c.likes}',
+                              style: TextStyle(
+                                color: c.isLiked ? _C.accent : _C.textSecondary,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 4),
-                      Text('${c.likes}', style: AppTextStyles.small),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       GestureDetector(
                         onTap: () => _openReplySheet(context),
-                        child: Text(
+                        child: const Text(
                           'Reply',
-                          style: AppTextStyles.small.copyWith(
-                            color: AppColors.hashtag,
-                          ),
+                          style: TextStyle(color: _C.accent, fontSize: 11.5, fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
                   ),
-                  // View replies (n)
                   if (c.replies.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     GestureDetector(
                       onTap: () => setState(() => _expanded = !_expanded),
-                      child: Text(
-                        _expanded
-                            ? 'Hide replies (${c.replies.length})'
-                            : 'View replies (${c.replies.length})',
-                        style: AppTextStyles.small.copyWith(
-                          color: AppColors.onSurface,
-                        ),
+                      child: Row(
+                        children: [
+                          Container(width: 18, height: 1, color: _C.border),
+                          const SizedBox(width: 8),
+                          Text(
+                            _expanded ? 'Hide replies (${c.replies.length})' : 'View replies (${c.replies.length})',
+                            style: const TextStyle(color: _C.accent, fontSize: 11.5, fontWeight: FontWeight.w700),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -275,18 +397,31 @@ class _CommentTileState extends State<_CommentTile> {
           ],
         ),
         if (_expanded && c.replies.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          // nested replies
+          const SizedBox(height: 12),
           Column(
             children: c.replies.map((r) {
               return Padding(
-                padding: const EdgeInsets.only(left: 46, bottom: 12),
+                padding: const EdgeInsets.only(left: 46, bottom: 14),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundImage: NetworkImage(r.user.avatarUrl),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _C.border),
+                      ),
+                      child: ClipOval(
+                        child: Image.network(
+                          r.user.avatarUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: _C.accent.withOpacity(0.16),
+                            child: const Icon(Icons.person_rounded, size: 14, color: Colors.white70),
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -295,16 +430,14 @@ class _CommentTileState extends State<_CommentTile> {
                         children: [
                           Text(
                             r.user.name,
-                            style: AppTextStyles.body.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
                           ),
                           const SizedBox(height: 4),
-                          Text(r.text, style: AppTextStyles.body),
+                          Text(r.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
                           const SizedBox(height: 6),
                           Text(
                             timeAgo(DateTime.now().difference(r.createdAt)),
-                            style: AppTextStyles.small,
+                            style: const TextStyle(color: _C.textSecondary, fontSize: 11),
                           ),
                         ],
                       ),
@@ -320,6 +453,7 @@ class _CommentTileState extends State<_CommentTile> {
   }
 }
 
+// ── Comment input bar ──────────────────────────────────────────────────────
 class _CommentInput extends StatefulWidget {
   final ValueChanged<String> onSubmit;
   const _CommentInput({required this.onSubmit});
@@ -329,49 +463,79 @@ class _CommentInput extends StatefulWidget {
 
 class _CommentInputState extends State<_CommentInput> {
   final TextEditingController _ctrl = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        decoration: const BoxDecoration(
-          color: AppColors.navy,
-          border: Border(top: BorderSide(color: AppColors.divider)),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: _C.surface,
+          border: Border(top: BorderSide(color: _C.border)),
         ),
         child: Row(
           children: [
-            const CircleAvatar(
-              backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=5'),
-              radius: 16,
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: _C.border),
+              ),
+              child: ClipOval(
+                child: Image.network(
+                  'https://i.pravatar.cc/150?img=5',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, color: Colors.white54),
+                ),
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: TextField(
-                controller: _ctrl,
-                decoration: const InputDecoration(
-                  hintText: 'Write a comment...',
-                  filled: true,
-                  fillColor: Color(0xFF131B34),
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide.none,
-                    borderRadius: BorderRadius.all(Radius.circular(24)),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _C.bg,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: _C.border),
+                ),
+                child: TextField(
+                  controller: _ctrl,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'Write a comment...',
+                    hintStyle: TextStyle(color: _C.textSecondary, fontSize: 14),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 10),
-            IconButton(
-              onPressed: () {
+            GestureDetector(
+              onTap: () {
                 if (_ctrl.text.trim().isEmpty) return;
                 widget.onSubmit(_ctrl.text.trim());
                 _ctrl.clear();
               },
-              icon: const Icon(Icons.send_rounded),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: _C.accent, borderRadius: BorderRadius.circular(20)),
+                child: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+// ── Local timeAgo helper (kept from original — same signature) ────────────
+String timeAgo(Duration d) {
+  if (d.inSeconds < 60) return 'now';
+  if (d.inMinutes < 60) return '${d.inMinutes}m';
+  if (d.inHours < 24) return '${d.inHours}h';
+  if (d.inDays < 7) return '${d.inDays}d';
+  return '${(d.inDays / 7).floor()}w';
 }

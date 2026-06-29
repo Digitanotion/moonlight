@@ -30,6 +30,14 @@
         <!-- For Android 8.0+ notification channels -->
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="high_importance_channel" />
 
+        <!-- ── AdMob App ID ───────────────────────────────────────────────
+             REAL App ID for Moonlight Livestream App (from AdMob console).
+             This identifies the APP itself — different from the ad unit
+             IDs used in ad_service.dart for the banner/interstitial. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-9544684683357809~6052135544" />
+
         <!-- Firebase Messaging Service -->
         <service android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService" android:exported="false">
             <intent-filter>

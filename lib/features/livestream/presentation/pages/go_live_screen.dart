@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/core/widgets/styled_banner_ad.dart';
 import 'package:moonlight/features/home/presentation/widgets/bottom_nav.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_category.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
@@ -134,6 +135,8 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
                             if (state.eligibleBonus) _BonusCard(),
                             const SizedBox(height: 14),
                             _PreviewCard(),
+                            const SizedBox(height: 18),
+                             const StyledBannerAd(), 
                             const SizedBox(height: 18),
                             _StartButton(),
                             const SizedBox(height: 28),

@@ -29,15 +29,25 @@ android {
             keyAlias = System.getenv("KEY_ALIAS") ?: keystoreProperties.getProperty("keyAlias")
             keyPassword = System.getenv("KEY_PASSWORD") ?: keystoreProperties.getProperty("keyPassword")
         }
-        
-        // Add debug config that uses release keystore for local testing
-        getByName("debug") {
-            // Use release keystore for debug builds too
-            storeFile = file("upload-keystore.jks")
-            storePassword = keystoreProperties.getProperty("storePassword", "")
-            keyAlias = keystoreProperties.getProperty("keyAlias", "")
-            keyPassword = keystoreProperties.getProperty("keyPassword", "")
-        }
+
+        // REMOVED: custom "debug" signingConfig that pointed at upload-keystore.jks.
+        // That keystore is either missing or has a password mismatch on this
+        // machine, which breaks every local debug build. Debug builds now use
+        // Gradle's built-in debug config (auto-generates ~/.android/debug.keystore
+        // if missing) — this is the standard, always-works setup for local dev.
+        //
+        // If you specifically need the release-keystore SHA fingerprint for
+        // local testing (e.g. Google Sign-In, Play Billing sandbox), re-add:
+        //
+        // getByName("debug") {
+        //     storeFile = file("upload-keystore.jks")
+        //     storePassword = keystoreProperties.getProperty("storePassword", "")
+        //     keyAlias = keystoreProperties.getProperty("keyAlias", "")
+        //     keyPassword = keystoreProperties.getProperty("keyPassword", "")
+        // }
+        //
+        // ...but only once the keystore file + password are verified working
+        // via: keytool -list -v -keystore android/app/upload-keystore.jks
     }
 
     buildTypes {
@@ -50,13 +60,13 @@ android {
                 "proguard-rules.pro"
             )
         }
-        
+
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("debug")
             isDebuggable = true
+            // No signingConfig override — uses Gradle's built-in "debug" config.
         }
     }
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -69,12 +79,12 @@ android {
 
     defaultConfig {
         applicationId = "com.app.moonlightstream"
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName
         multiDexEnabled = true
-        
+
         manifestPlaceholders += mapOf(
             "appAuthRedirectScheme" to "com.app.moonlightstream"
         )

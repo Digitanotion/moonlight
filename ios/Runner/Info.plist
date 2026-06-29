@@ -62,5 +62,18 @@
 		<true/>
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
+
+		<!-- ── AdMob ──────────────────────────────────────────────────────
+		     NOTE: the value below is GOOGLE'S OFFICIAL TEST iOS App ID —
+		     safe while AdService._useTestAds = true. Replace with your
+		     real AdMob iOS App ID before a production release. -->
+		<key>GADApplicationIdentifier</key>
+		<string>ca-app-pub-3940256099942544~1458002511</string>
+
+		<!-- Required on iOS 14+ for ad personalization (App Tracking
+		     Transparency). Shown to the user as a system permission
+		     prompt the first time an ad attempts to use IDFA. -->
+		<key>NSUserTrackingUsageDescription</key>
+		<string>This identifier will be used to deliver personalized ads to you.</string>
 	</dict>
 </plist>

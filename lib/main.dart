@@ -1,8 +1,16 @@
 // lib/main.dart
 //
-// Splash shows on frame 1, guaranteed.
-// addPostFrameCallback ensures the splash is rendered to screen before any
-// initialization work begins — nothing blocks the first paint.
+// CHANGES vs your version:
+//   1. Added import for AdService.
+//   2. AdService.instance.init() added to the Future.wait(...) inside
+//      _initEverything() — runs in PARALLEL with Firebase init and the
+//      remaining dependency loading. This preserves your splash-first
+//      boot order exactly: the bare splash still renders on frame 1,
+//      nothing here blocks that, and ad init is just one more background
+//      task alongside the ones you already have.
+//
+// Nothing else changed — same two-phase boot, same DependencyManager gate,
+// same Firebase/FCM setup.
 
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
@@ -13,6 +21,7 @@ import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/app_router.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/ad_service.dart'; // ← NEW
 import 'package:moonlight/core/services/connection_monitor.dart';
 import 'package:moonlight/core/services/notification_handler_service.dart';
 import 'package:moonlight/core/services/notification_service.dart';
@@ -152,10 +161,13 @@ Future<void> _initEverything() async {
   try {
     debugPrint('🔄 Background init starting...');
 
-    // Firebase and remaining GetIt registrations run in parallel.
+    // Firebase, remaining GetIt registrations, and ad SDK init all run
+    // in parallel — none of these block the splash, which is already
+    // on screen by this point.
     await Future.wait([
       _initFirebase(),
       SplashOptimizer.loadRemainingDependencies(),
+      _initAds(), // ← NEW
     ]);
 
     // Update FCM token registration base URL.
@@ -188,6 +200,21 @@ Future<void> _initFirebase() async {
     debugPrint('✅ Firebase initialized');
   } catch (e) {
     debugPrint('⚠️ Firebase init error: $e');
+  }
+}
+
+// ── NEW ──────────────────────────────────────────────────────────────────
+// Initializes the Google Mobile Ads SDK and pre-loads the first
+// interstitial. Wrapped in try/catch so an ad-network hiccup (e.g. no
+// network yet, SDK init failure on a weird device) never blocks app
+// startup — ads are a revenue feature, not a critical path. If this
+// fails, AdService's methods will simply no-op until it succeeds.
+Future<void> _initAds() async {
+  try {
+    await AdService.instance.init();
+    debugPrint('✅ Ads initialized');
+  } catch (e) {
+    debugPrint('⚠️ Ads init error (non-fatal): $e');
   }
 }
 

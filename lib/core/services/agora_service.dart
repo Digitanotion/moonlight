@@ -415,14 +415,24 @@ class AgoraService with ChangeNotifier {
         cameraDirection: CameraDirection.cameraFront,
       ),
     );
-    await e.setVideoEncoderConfiguration(
+  await e.setVideoEncoderConfiguration(
       const VideoEncoderConfiguration(
         dimensions: VideoDimensions(width: 720, height: 1280),
         frameRate: 30,
-        bitrate: null,
+        bitrate: 0, // 0 = Agora STANDARD bitrate (calculated, not uncontrolled)
         orientationMode: OrientationMode.orientationModeFixedPortrait,
+        degradationPreference:
+            DegradationPreference.maintainFramerate, // smooth motion > resolution on bad networks
       ),
     );
+
+        try {
+      await e.enableDualStreamMode(enabled: true);
+      debugPrint('[Agora] Dual-stream mode enabled');
+    } catch (err) {
+      debugPrint('⚠️ [Agora] enableDualStreamMode failed (non-fatal): $err');
+    }
+
     await e.setDefaultAudioRouteToSpeakerphone(true);
 
     if (uidType.toLowerCase() == 'useraccount') {

@@ -166,7 +166,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       const GiftOverlay(),
                       const PauseOverlay(),
                       const RoleChangeToast(),
-                      const ErrorOverlay(),
+                      // const ErrorOverlay(),
                       const ReconnectionOverlay(),
 
                       // Inline unstable banner

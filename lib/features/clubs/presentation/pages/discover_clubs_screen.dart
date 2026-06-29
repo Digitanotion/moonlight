@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/core/widgets/styled_banner_ad.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/suggested_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/suggested_clubs_state.dart';
 import 'package:moonlight/features/clubs/presentation/pages/widgets/discover_club_card.dart';
@@ -279,7 +280,9 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
                 },
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
+              const StyledBannerAd(), 
+              const SizedBox(height: 24),
               _section('My Clubs'),
               const SizedBox(height: 12),
 

@@ -1,11 +1,19 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+
+// ── Design tokens (shared with feed_screen.dart) ──────────────────────────
+class _C {
+  static const surface = Color(0xFF0E1024);
+  static const border = Color(0xFF1A1D3D);
+  static const accent = Color(0xFFFF6A00);
+  static const textSecondary = Color(0xFF8B8FB8);
+}
 
 class FeedPostCard extends StatelessWidget {
   const FeedPostCard({
@@ -41,16 +49,32 @@ class FeedPostCard extends StatelessWidget {
     final avatar = post.author.avatarUrl;
     final valid = _isValidUrl(avatar);
     if (!valid) {
-      return CircleAvatar(
-        radius: 20,
-        backgroundColor: AppColors.primary.withOpacity(0.25),
-        child: const Icon(Icons.person, color: Colors.white70),
+      return Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _C.accent.withOpacity(0.16),
+          border: Border.all(color: _C.accent.withOpacity(0.3)),
+        ),
+        child: const Icon(Icons.person_rounded, color: Colors.white70, size: 20),
       );
     }
-    return CircleAvatar(
-      radius: 20,
-      backgroundImage: CachedNetworkImageProvider(avatar),
-      backgroundColor: AppColors.primary.withOpacity(0.06),
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _C.border, width: 1.5),
+      ),
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: avatar,
+          fit: BoxFit.cover,
+          errorWidget: (_, __, ___) =>
+              const Icon(Icons.person_rounded, color: Colors.white38),
+        ),
+      ),
     );
   }
 
@@ -61,23 +85,18 @@ class FeedPostCard extends StatelessWidget {
         : 'Member';
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(5, 8, 5, 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.20),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: _C.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _C.border, width: 1),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // ── Header ───────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
             child: Row(
               children: [
                 GestureDetector(onTap: onOpenProfile, child: _buildAvatar()),
@@ -85,34 +104,33 @@ class FeedPostCard extends StatelessWidget {
                 Expanded(
                   child: GestureDetector(
                     onTap: onOpenProfile,
+                    behavior: HitTestBehavior.opaque,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           post.author.name,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: AppColors.textWhite,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14.5,
+                            letterSpacing: -0.2,
+                          ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          badge,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
+                        const SizedBox(height: 4),
+                        _RolePill(label: badge),
                       ],
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   timeAgoFrom(post.createdAt),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Colors.white60,
+                  style: TextStyle(
+                    color: _C.textSecondary,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -120,19 +138,13 @@ class FeedPostCard extends StatelessWidget {
             ),
           ),
 
-          // Media
+          // ── Media — edge-to-edge, no horizontal margin ──────────────────
           GestureDetector(
             onTap: onOpenPost,
             child: Hero(
               tag: 'post_${post.id}',
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-                height: 180,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                clipBehavior: Clip.antiAlias,
+              child: AspectRatio(
+                aspectRatio: 16 / 11,
                 child: _isVideo
                     ? _VideoThumbnailWidget(
                         videoUrl: post.mediaUrl,
@@ -143,26 +155,26 @@ class FeedPostCard extends StatelessWidget {
             ),
           ),
 
-          // Caption
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-            child: Align(
-              alignment: Alignment.centerLeft,
+          // ── Caption ──────────────────────────────────────────────────────
+          if (post.caption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
               child: Text(
                 post.caption,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textWhite,
-                  height: 1.35,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
-          ),
 
-          // Metrics
+          // ── Metrics — single quiet row ──────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+            padding: const EdgeInsets.fromLTRB(10, 8, 14, 12),
             child: Row(
               children: [
                 _LikeMetric(
@@ -170,18 +182,17 @@ class FeedPostCard extends StatelessWidget {
                   count: post.likes,
                   onTap: onLike,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 18),
                 _Metric(
-                  icon: Icons.mode_comment_outlined,
+                  icon: Icons.mode_comment_rounded,
                   label: '${post.commentsCount}',
                   onTap: onOpenPost,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 18),
                 _Metric(
-                  icon: Icons.visibility_outlined,
+                  icon: Icons.visibility_rounded,
                   label: '${post.views}',
                 ),
-                const Spacer(),
               ],
             ),
           ),
@@ -191,7 +202,33 @@ class FeedPostCard extends StatelessWidget {
   }
 }
 
-// Image widget
+// ── Role pill — small caps, accent-tinted, not a plain text label ─────────
+class _RolePill extends StatelessWidget {
+  final String label;
+  const _RolePill({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: _C.accent.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: _C.accent,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Image widget ────────────────────────────────────────────────────────
 class _ImageWidget extends StatelessWidget {
   final String url;
   const _ImageWidget({required this.url});
@@ -206,9 +243,9 @@ class _ImageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!_valid) {
       return Container(
-        color: Colors.white10,
+        color: _C.border,
         child: const Center(
-          child: Icon(Icons.photo, color: Colors.white38, size: 40),
+          child: Icon(Icons.image_rounded, color: Colors.white24, size: 36),
         ),
       );
     }
@@ -217,15 +254,19 @@ class _ImageWidget extends StatelessWidget {
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      fadeInDuration: const Duration(milliseconds: 160),
-      placeholder: (_, __) => Container(color: Colors.white12),
-      errorWidget: (_, __, ___) =>
-          const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+      fadeInDuration: const Duration(milliseconds: 180),
+      placeholder: (_, __) => Container(color: _C.border),
+      errorWidget: (_, __, ___) => Container(
+        color: _C.border,
+        child: const Center(
+          child: Icon(Icons.broken_image_rounded, color: Colors.white24),
+        ),
+      ),
     );
   }
 }
 
-// Video thumbnail widget
+// ── Video thumbnail widget ───────────────────────────────────────────────
 // Priority: 1) serverThumbUrl  2) on-device generation  3) placeholder
 class _VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
@@ -237,10 +278,16 @@ class _VideoThumbnailWidget extends StatefulWidget {
   State<_VideoThumbnailWidget> createState() => _VideoThumbnailWidgetState();
 }
 
-class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
+class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget>
+    with SingleTickerProviderStateMixin {
   File? _localThumb;
   bool _generating = false;
   bool _failed = false;
+
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
 
   bool get _serverThumbValid {
     final url = widget.serverThumbUrl;
@@ -265,6 +312,12 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
       });
       _generateThumbnail();
     }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
   }
 
   Future<void> _generateThumbnail() async {
@@ -308,14 +361,13 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Thumbnail layer
         if (_serverThumbValid)
           CachedNetworkImage(
             imageUrl: widget.serverThumbUrl!,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            fadeInDuration: const Duration(milliseconds: 160),
+            fadeInDuration: const Duration(milliseconds: 180),
             placeholder: (_, __) => _buildPlaceholder(loading: true),
             errorWidget: (_, __, ___) => _buildPlaceholder(loading: false),
           )
@@ -329,39 +381,81 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
         else
           _buildPlaceholder(loading: !_failed),
 
-        // Video overlays
         const DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
               colors: [Colors.black54, Colors.transparent],
+              stops: [0.0, 0.5],
             ),
           ),
         ),
-        const Center(
-          child: Icon(
-            Icons.play_circle_fill_rounded,
-            size: 58,
-            color: Colors.white,
+
+        // ── Signature: soft pulsing ring around play icon ─────────────────
+        Center(
+          child: AnimatedBuilder(
+            animation: _pulse,
+            builder: (context, _) {
+              final scale = 1.0 + (_pulse.value * 0.18);
+              final opacity = 0.5 - (_pulse.value * 0.35);
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(opacity),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black38,
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      size: 26,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
+
         Positioned(
           left: 10,
           bottom: 10,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.45),
-              borderRadius: BorderRadius.circular(8),
+              color: Colors.black.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.videocam_rounded, size: 14, color: Colors.white),
-                SizedBox(width: 6),
+                Icon(Icons.videocam_rounded, size: 12, color: Colors.white),
+                SizedBox(width: 5),
                 Text(
                   'Video',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -373,28 +467,28 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
 
   Widget _buildPlaceholder({required bool loading}) {
     return Container(
-      color: Colors.white10,
+      color: _C.border,
       child: Center(
         child: loading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
+            ? SizedBox(
+                width: 22,
+                height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white54,
+                  color: _C.accent.withOpacity(0.7),
                 ),
               )
             : const Icon(
-                Icons.videocam_outlined,
-                color: Colors.white38,
-                size: 40,
+                Icons.videocam_off_rounded,
+                color: Colors.white24,
+                size: 32,
               ),
       ),
     );
   }
 }
 
-// Metric widgets
+// ── Metric widgets ───────────────────────────────────────────────────────
 class _Metric extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -404,22 +498,32 @@ class _Metric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.white70, size: 18),
-        const SizedBox(width: 6),
+        Icon(icon, color: _C.textSecondary, size: 17),
+        const SizedBox(width: 5),
         Text(
           label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Colors.white70,
-            fontWeight: FontWeight.w600,
+          style: TextStyle(
+            color: _C.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
     );
-    return onTap == null ? row : GestureDetector(onTap: onTap, child: row);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: row,
+      ),
+    );
   }
 }
 
+// ── Like metric — signature particle-burst micro-interaction ─────────────
 class _LikeMetric extends StatefulWidget {
   const _LikeMetric({
     required this.isLiked,
@@ -435,8 +539,8 @@ class _LikeMetric extends StatefulWidget {
 }
 
 class _LikeMetricState extends State<_LikeMetric>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
+    with TickerProviderStateMixin {
+  late final AnimationController _bounce = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 200),
     lowerBound: 0.7,
@@ -444,60 +548,137 @@ class _LikeMetricState extends State<_LikeMetric>
     value: 1.0,
   );
 
-  static const _likedColor = Color(0xFFFF4D67);
+  late final AnimationController _burst = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+  );
+
+  static const _likedColor = _C.accent;
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _bounce.dispose();
+    _burst.dispose();
     super.dispose();
   }
 
   Future<void> _handleTap() async {
-    await _ctrl.animateTo(
+    final wasLiked = widget.isLiked;
+    await _bounce.animateTo(
       0.7,
       duration: const Duration(milliseconds: 80),
       curve: Curves.easeIn,
     );
-    await _ctrl.animateTo(
+    await _bounce.animateTo(
       1.0,
       duration: const Duration(milliseconds: 160),
       curve: Curves.elasticOut,
     );
+    // Only burst when transitioning TO liked, not when unliking.
+    if (!wasLiked) {
+      _burst.forward(from: 0);
+    }
     widget.onTap();
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isLiked ? _likedColor : Colors.white70;
+    final color = widget.isLiked ? _likedColor : _C.textSecondary;
 
     return GestureDetector(
       onTap: _handleTap,
-      child: ScaleTransition(
-        scale: _ctrl,
-        child: Row(
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: Icon(
-                widget.isLiked ? Icons.favorite : Icons.favorite_border,
-                key: ValueKey(widget.isLiked),
-                color: color,
-                size: 18,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: ScaleTransition(
+          scale: _bounce,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 26,
+                height: 26,
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedBuilder(
+                      animation: _burst,
+                      builder: (context, _) => _ParticleBurst(
+                        progress: _burst.value,
+                        color: _likedColor,
+                      ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: Icon(
+                        widget.isLiked
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        key: ValueKey(widget.isLiked),
+                        color: color,
+                        size: 19,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: Theme.of(context).textTheme.labelMedium!.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
+              const SizedBox(width: 5),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+                child: Text('${widget.count}'),
               ),
-              child: Text('${widget.count}'),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Particle burst — 6 dots radiating outward on like ─────────────────────
+class _ParticleBurst extends StatelessWidget {
+  final double progress; // 0.0 → 1.0
+  final Color color;
+  const _ParticleBurst({required this.progress, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    if (progress <= 0 || progress >= 1) return const SizedBox.shrink();
+
+    const count = 6;
+    final fadeOut = (1 - progress).clamp(0.0, 1.0);
+    final distance = progress * 16;
+
+    return IgnorePointer(
+      child: Stack(
+        alignment: Alignment.center,
+        children: List.generate(count, (i) {
+          final angle = (i / count) * 2 * math.pi;
+          final dx = math.cos(angle) * distance;
+          final dy = math.sin(angle) * distance;
+          return Transform.translate(
+            offset: Offset(dx, dy),
+            child: Opacity(
+              opacity: fadeOut,
+              child: Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                ),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }

@@ -1,4 +1,16 @@
 // lib/features/post_view/presentation/pages/post_view_screen.dart
+//
+// VISUAL REFINEMENT — same design language as the feed redesign:
+//   • Flat near-black background instead of the navy gradient
+//   • Hairline borders instead of heavy shadows
+//   • Accent-tinted role pills with letter-spacing
+//   • Real animated shimmer loading state (ShimmerScope/ShimmerBone)
+//     instead of Skeletonizer (which rendered blank)
+//
+// NO functional changes: every callback, cubit method, route, and menu
+// action is identical to the original. Only colors, spacing, borders,
+// and the loading skeleton changed.
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,15 +18,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
+import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/core/widgets/sign_in_prompt.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/skeleton_line_plus.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/user_helper.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/time_ago.dart';
 import '../../../../core/routing/route_names.dart';
 import '../../../../core/services/share_service.dart';
 import '../../domain/entities/post.dart';
@@ -24,8 +34,16 @@ import '../cubit/post_actions.dart';
 import '../widgets/chips.dart';
 import '../widgets/sheets.dart';
 
-// ── Shared like color constant ────────────────────────────────────────────────
-const _kLikedColor = Color(0xFFFF4D67);
+// ── Design tokens (shared with feed redesign) ──────────────────────────────
+class _C {
+  static const bg = Color(0xFF05060F);
+  static const surface = Color(0xFF0E1024);
+  static const border = Color(0xFF1A1D3D);
+  static const accent = Color(0xFFFF6A00);
+  static const textSecondary = Color(0xFF8B8FB8);
+}
+
+const _kLikedColor = _C.accent;
 
 class PostViewScreen extends StatefulWidget {
   final String postId;
@@ -117,7 +135,7 @@ class _PostViewScreenState extends State<PostViewScreen> {
     final postCubit = context.read<PostCubit>();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -224,49 +242,10 @@ class _PostViewScreenState extends State<PostViewScreen> {
 
   Widget _buildErrorScreen(dynamic error) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: _C.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back_ios_new),
-        ),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading post',
-              style: AppTextStyles.titleMedium.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              style: AppTextStyles.body.copyWith(color: Colors.white70),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => context.read<PostCubit>().load(),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFatalPostScreen({
-    required String title,
-    required String subtitle,
-  }) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back_ios_new),
@@ -279,40 +258,102 @@ class _PostViewScreenState extends State<PostViewScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                height: 88,
-                width: 88,
+                width: 76,
+                height: 76,
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(.08),
                   shape: BoxShape.circle,
+                  color: _C.surface,
+                  border: Border.all(color: _C.border),
                 ),
                 child: const Icon(
-                  Icons.error_outline,
-                  color: Colors.red,
-                  size: 42,
+                  Icons.error_outline_rounded,
+                  size: 32,
+                  color: Colors.white38,
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(title, style: AppTextStyles.titleMedium),
+              const SizedBox(height: 18),
+              const Text(
+                'Error loading post',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                error.toString(),
+                style: TextStyle(color: _C.textSecondary, fontSize: 13.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 22),
+              _PrimaryButton(
+                label: 'Retry',
+                onTap: () => context.read<PostCubit>().load(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFatalPostScreen({
+    required String title,
+    required String subtitle,
+  }) {
+    return Scaffold(
+      backgroundColor: _C.bg,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_ios_new),
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                height: 76,
+                width: 76,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _C.surface,
+                  border: Border.all(color: _C.border),
+                ),
+                child: const Icon(
+                  Icons.image_not_supported_rounded,
+                  color: Colors.white38,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: AppTextStyles.body.copyWith(color: Colors.white70),
+                style: TextStyle(color: _C.textSecondary, fontSize: 13.5, height: 1.4),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Back to Feed'),
+                child: _PrimaryButton(
+                  label: 'Back to Feed',
+                  onTap: () => Navigator.pop(context),
+                  expand: true,
                 ),
               ),
             ],
@@ -334,56 +375,40 @@ class _PostViewScreenState extends State<PostViewScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: _C.bg,
       body: Column(
         children: [
           Expanded(
-            child: Stack(
-              children: [
-                const Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.center,
-                        colors: [Color(0xFF0B1E6B), Color(0xFF031049)],
-                      ),
-                    ),
+            child: CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  backgroundColor: _C.bg,
+                  surfaceTintColor: Colors.transparent,
+                  pinned: false,
+                  floating: true,
+                  elevation: 0,
+                  leading: IconButton(
+                    onPressed: () {
+                      final p = context.read<PostCubit>().state.post;
+                      Navigator.pop(context, p);
+                    },
+                    icon: const Icon(Icons.arrow_back_ios_new),
                   ),
                 ),
-                CustomScrollView(
-                  slivers: [
-                    SliverAppBar(
-                      backgroundColor: Colors.transparent,
-                      pinned: false,
-                      floating: true,
-                      leading: IconButton(
-                        onPressed: () {
-                          final p = context.read<PostCubit>().state.post;
-                          Navigator.pop(context, p);
-                        },
-                        icon: const Icon(Icons.arrow_back_ios_new),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Hero(
-                        tag: 'post_${post.id}',
-                        child: _PostMedia(post: post),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Container(
-                        color: AppColors.surface,
-                        child: _Meta(
-                          post: post,
-                          onStartReply: _startReply,
-                          onEditComment: _startEditComment,
-                          onDeleteComment: _confirmDeleteComment,
-                          cubit: cubit,
-                        ),
-                      ),
-                    ),
-                  ],
+                SliverToBoxAdapter(
+                  child: Hero(
+                    tag: 'post_${post.id}',
+                    child: _PostMedia(post: post),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: _Meta(
+                    post: post,
+                    onStartReply: _startReply,
+                    onEditComment: _startEditComment,
+                    onDeleteComment: _confirmDeleteComment,
+                    cubit: cubit,
+                  ),
                 ),
               ],
             ),
@@ -403,7 +428,43 @@ class _PostViewScreenState extends State<PostViewScreen> {
   }
 }
 
-// ── Post media ────────────────────────────────────────────────────────────────
+// ── Small shared button ────────────────────────────────────────────────────
+class _PrimaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool expand;
+  const _PrimaryButton({
+    required this.label,
+    required this.onTap,
+    this.expand = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final child = GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _C.accent,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 14.5,
+          ),
+        ),
+      ),
+    );
+    return expand ? child : IntrinsicWidth(child: child);
+  }
+}
+
+// ── Post media ────────────────────────────────────────────────────────────
 
 class _PostMedia extends StatefulWidget {
   final Post post;
@@ -481,7 +542,6 @@ class _PostMediaState extends State<_PostMedia> {
   }
 
   String get _previewUrl {
-    // For videos: prefer thumb; fallback to mediaUrl
     if (_isVideo) {
       final thumb = widget.post.thumbUrl;
       if (_isValidUrl(thumb)) return thumb!;
@@ -520,9 +580,10 @@ class _PostMediaState extends State<_PostMedia> {
           imageUrl: widget.post.mediaUrl,
           fit: BoxFit.cover,
           fadeInDuration: const Duration(milliseconds: 200),
-          placeholder: (_, __) => Container(color: Colors.white10),
-          errorWidget: (_, __, ___) =>
-              const Center(child: Icon(Icons.broken_image_outlined)),
+          placeholder: (_, __) => Container(color: _C.border),
+          errorWidget: (_, __, ___) => const Center(
+            child: Icon(Icons.broken_image_outlined, color: Colors.white38),
+          ),
         ),
       );
     }
@@ -541,9 +602,10 @@ class _PostMediaState extends State<_PostMedia> {
                 ? CachedNetworkImage(
                     imageUrl: _previewUrl,
                     fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(color: Colors.white10),
-                    errorWidget: (_, __, ___) =>
-                        const Center(child: Icon(Icons.broken_image_outlined)),
+                    placeholder: (_, __) => Container(color: _C.border),
+                    errorWidget: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image_outlined, color: Colors.white38),
+                    ),
                   )
                 : const _MediaPlaceholder(),
           if (_isInitialized) VideoPlayer(_vc!),
@@ -564,12 +626,24 @@ class _PostMediaState extends State<_PostMedia> {
           ),
           if (_showGlyph && _isInitialized)
             Center(
-              child: Icon(
-                _vc!.value.isPlaying
-                    ? Icons.pause_circle_outline_rounded
-                    : Icons.play_circle_fill_rounded,
-                size: 72,
-                color: Colors.white,
+              child: AnimatedOpacity(
+                opacity: _showGlyph ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black45,
+                  ),
+                  child: Icon(
+                    _vc!.value.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    size: 34,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
           if (_isInitialized)
@@ -584,8 +658,8 @@ class _PostMediaState extends State<_PostMedia> {
                   vertical: 8,
                   horizontal: 10,
                 ),
-                colors: const VideoProgressColors(
-                  playedColor: Colors.white,
+                colors: VideoProgressColors(
+                  playedColor: _C.accent,
                   bufferedColor: Colors.white38,
                   backgroundColor: Colors.white24,
                 ),
@@ -603,9 +677,36 @@ class _MediaPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.white10,
+      color: _C.border,
       child: const Center(
-        child: Icon(Icons.photo, color: Colors.white38, size: 40),
+        child: Icon(Icons.image_rounded, color: Colors.white24, size: 36),
+      ),
+    );
+  }
+}
+
+// ── Role pill — matches feed card's accent-tinted style ────────────────────
+class _RolePillTinted extends StatelessWidget {
+  final String label;
+  const _RolePillTinted({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: _C.accent.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: _C.accent,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
       ),
     );
   }
@@ -633,7 +734,7 @@ class _Meta extends StatelessWidget {
     final isPostOwner = UserHelper.isPostOwner(context, post);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -642,7 +743,7 @@ class _Meta extends StatelessWidget {
             children: [
               SafeCircleAvatar(
                 imageUrl: post.author.avatarUrl,
-                radius: 16,
+                radius: 18,
                 onTap: () => Navigator.pushNamed(
                   context,
                   RouteNames.profileView,
@@ -664,8 +765,11 @@ class _Meta extends StatelessWidget {
                           ),
                           child: Text(
                             post.author.name,
-                            style: AppTextStyles.body.copyWith(
-                              fontWeight: FontWeight.w600,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14.5,
+                              letterSpacing: -0.2,
                             ),
                           ),
                         ),
@@ -673,26 +777,39 @@ class _Meta extends StatelessWidget {
                         Text(post.author.countryFlagEmoji),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    RolePill(
-                      text: post.author.roleLabel,
-                      color: const Color(0xFF4C8DFF),
-                    ),
+                    const SizedBox(height: 5),
+                    _RolePillTinted(label: post.author.roleLabel),
                   ],
                 ),
               ),
-              // ── Twitter-style time ─────────────────────────────────────
-              Text(timeAgoFrom(post.createdAt), style: AppTextStyles.small),
-              const SizedBox(width: 6),
+              Text(
+                timeAgoFrom(post.createdAt),
+                style: TextStyle(
+                  color: _C.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
               _PostMenuButton(isOwner: isPostOwner, post: post),
             ],
           ),
 
-          const SizedBox(height: 12),
-          Text(post.caption, style: AppTextStyles.body),
-          const SizedBox(height: 8),
-          Wrap(children: post.tags.map((t) => TagChip(text: t)).toList()),
           const SizedBox(height: 14),
+          if (post.caption.isNotEmpty)
+            Text(
+              post.caption,
+              style: const TextStyle(color: Colors.white, fontSize: 14.5, height: 1.45),
+            ),
+          if (post.tags.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: post.tags.map((t) => TagChip(text: t)).toList(),
+            ),
+          ],
+          const SizedBox(height: 16),
 
           // ── Action row: like · comment · share ─────────────────────────
           Row(
@@ -702,43 +819,54 @@ class _Meta extends StatelessWidget {
                 count: post.likes,
                 onTap: () => cubit.toggleLike(),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 20),
               _IconStat(
-                icon: Icons.mode_comment_outlined,
+                icon: Icons.mode_comment_rounded,
                 value: post.commentsCount.toString(),
                 onTap: () {},
               ),
-              const SizedBox(width: 18),
-              // ── Improved share button ──────────────────────────────────
+              const SizedBox(width: 20),
               _ShareButton(post: post),
             ],
           ),
 
+          const SizedBox(height: 20),
+          Container(height: 1, color: _C.border),
           const SizedBox(height: 16),
-          const Divider(color: AppColors.divider),
-          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Comments',
-                style: AppTextStyles.titleMedium.copyWith(fontSize: 16),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                ),
               ),
               if (post.commentsCount > 3)
                 Text(
                   '${post.commentsCount} comments',
-                  style: AppTextStyles.small.copyWith(
-                    color: AppColors.onSurface,
-                  ),
+                  style: TextStyle(color: _C.textSecondary, fontSize: 12.5, fontWeight: FontWeight.w600),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _buildCommentsList(context),
           if (cubit.state.commentsLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _C.accent,
+                  ),
+                ),
+              ),
             ),
         ],
       ),
@@ -764,53 +892,37 @@ class _Meta extends StatelessWidget {
 
   Widget _buildEmptyComments() {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF16214B), Color(0xFF0E1631)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: _C.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(.06)),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black54,
-            blurRadius: 18,
-            offset: Offset(0, 12),
-          ),
-        ],
+        border: Border.all(color: _C.border),
       ),
       child: Row(
         children: [
           Container(
-            height: 44,
-            width: 44,
+            height: 42,
+            width: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(.06),
+              color: _C.accent.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.mode_comment_outlined,
-              color: Colors.white70,
-            ),
+            child: Icon(Icons.mode_comment_rounded, color: _C.accent, size: 19),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'No comments yet',
-                  style: AppTextStyles.titleMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w800),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   'Be the first to comment',
-                  style: AppTextStyles.small.copyWith(color: Colors.white70),
+                  style: TextStyle(color: _C.textSecondary, fontSize: 12.5),
                 ),
               ],
             ),
@@ -869,34 +981,33 @@ class _AnimatedLikeStatState extends State<_AnimatedLikeStat>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isLiked ? _kLikedColor : AppColors.onSurface;
-    return InkWell(
+    final color = widget.isLiked ? _kLikedColor : _C.textSecondary;
+    return GestureDetector(
       onTap: _handleTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: ScaleTransition(
-          scale: _ctrl,
-          child: Row(
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, anim) =>
-                    ScaleTransition(scale: anim, child: child),
-                child: Icon(
-                  widget.isLiked ? Icons.favorite : Icons.favorite_border,
-                  key: ValueKey(widget.isLiked),
-                  color: color,
-                ),
+      behavior: HitTestBehavior.opaque,
+      child: ScaleTransition(
+        scale: _ctrl,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
+              child: Icon(
+                widget.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                key: ValueKey(widget.isLiked),
+                color: color,
+                size: 20,
               ),
-              const SizedBox(width: 8),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: AppTextStyles.body.copyWith(color: color),
-                child: Text('${widget.count}'),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 7),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13.5),
+              child: Text('${widget.count}'),
+            ),
+          ],
         ),
       ),
     );
@@ -912,7 +1023,7 @@ class _ShareButton extends StatelessWidget {
   void _show(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -923,7 +1034,6 @@ class _ShareButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle
               Center(
                 child: Container(
                   width: 40,
@@ -935,11 +1045,9 @@ class _ShareButton extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              Text(
+              const Text(
                 'Share post',
-                style: AppTextStyles.titleMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 20),
               Row(
@@ -948,7 +1056,7 @@ class _ShareButton extends StatelessWidget {
                   _ShareOption(
                     icon: Icons.share_rounded,
                     label: 'Share via',
-                    color: AppColors.primary,
+                    color: _C.accent,
                     onTap: () async {
                       Navigator.pop(context);
                       await ShareService.sharePost(post);
@@ -960,17 +1068,14 @@ class _ShareButton extends StatelessWidget {
                     color: const Color(0xFF4C8DFF),
                     onTap: () {
                       Navigator.pop(context);
-                      final link =
-                          'https://moonlightstream.app/post/${post.id}';
+                      final link = 'https://moonlightstream.app/post/${post.id}';
                       Clipboard.setData(ClipboardData(text: link));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('Link copied to clipboard'),
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: _C.accent,
                           behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           duration: const Duration(seconds: 2),
                         ),
                       );
@@ -988,18 +1093,16 @@ class _ShareButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: () => _show(context),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Row(
-          children: [
-            Icon(Icons.share_outlined, color: AppColors.onSurface),
-            const SizedBox(width: 8),
-            Text('Share', style: AppTextStyles.body),
-          ],
-        ),
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.share_rounded, color: _C.textSecondary, size: 19),
+          const SizedBox(width: 7),
+          Text('Share', style: TextStyle(color: _C.textSecondary, fontSize: 13.5, fontWeight: FontWeight.w700)),
+        ],
       ),
     );
   }
@@ -1025,19 +1128,16 @@ class _ShareOption extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 26),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 8),
-          Text(
-            label,
-            style: AppTextStyles.small.copyWith(color: Colors.white70),
-          ),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
         ],
       ),
     );
@@ -1073,7 +1173,7 @@ class _CommentTileState extends State<_CommentTile> {
     final postCubit = context.read<PostCubit>();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -1086,31 +1186,25 @@ class _CommentTileState extends State<_CommentTile> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _MenuOption(
-                  icon: Icons.reply,
+                  icon: Icons.reply_rounded,
                   title: 'Reply',
                   onTap: () {
                     Navigator.pop(menuContext);
-                    widget.onStartReply(
-                      widget.comment.id,
-                      widget.comment.user.name,
-                    );
+                    widget.onStartReply(widget.comment.id, widget.comment.user.name);
                   },
                 ),
                 if (_isCurrentUserComment) ...[
-                  const Divider(color: AppColors.divider),
+                  Container(height: 1, color: _C.border),
                   _MenuOption(
-                    icon: Icons.edit,
+                    icon: Icons.edit_rounded,
                     title: 'Edit Comment',
                     onTap: () {
                       Navigator.pop(menuContext);
-                      widget.onEditComment(
-                        widget.comment.id,
-                        widget.comment.text,
-                      );
+                      widget.onEditComment(widget.comment.id, widget.comment.text);
                     },
                   ),
                   _MenuOption(
-                    icon: Icons.delete,
+                    icon: Icons.delete_rounded,
                     title: 'Delete Comment',
                     isDestructive: true,
                     onTap: () {
@@ -1119,9 +1213,9 @@ class _CommentTileState extends State<_CommentTile> {
                     },
                   ),
                 ],
-                const Divider(color: AppColors.divider),
+                Container(height: 1, color: _C.border),
                 _MenuOption(
-                  icon: Icons.flag,
+                  icon: Icons.flag_rounded,
                   title: 'Report Comment',
                   isDestructive: true,
                   onTap: () {
@@ -1150,139 +1244,139 @@ class _CommentTileState extends State<_CommentTile> {
       opacity: deleting ? 0.5 : 1,
       child: AbsorbPointer(
         absorbing: deleting,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SafeCircleAvatar(
-                  imageUrl: c.user.avatarUrl,
-                  radius: 16,
-                  onTap: () => Navigator.pushNamed(
-                    context,
-                    RouteNames.profileView,
-                    arguments: {'userUuid': c.user.id},
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SafeCircleAvatar(
+                    imageUrl: c.user.avatarUrl,
+                    radius: 17,
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      RouteNames.profileView,
+                      arguments: {'userUuid': c.user.id},
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                RouteNames.profileView,
-                                arguments: {'userUuid': c.user.id},
-                              ),
-                              child: Text(
-                                c.user.name,
-                                style: AppTextStyles.body.copyWith(
-                                  fontWeight: FontWeight.w600,
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => Navigator.pushNamed(
+                                  context,
+                                  RouteNames.profileView,
+                                  arguments: {'userUuid': c.user.id},
+                                ),
+                                child: Text(
+                                  c.user.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.5,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          RolePill(
-                            text: c.user.roleLabel,
-                            color: Color(
-                              int.parse(
-                                    c.user.roleColor.substring(1, 7),
-                                    radix: 16,
-                                  ) +
-                                  0xFF000000,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.more_horiz, size: 16),
-                            onPressed: _showCommentMenu,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(c.text, style: AppTextStyles.body),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(
-                            timeAgoFrom(c.createdAt),
-                            style: AppTextStyles.small.copyWith(
-                              color: Colors.white54,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // ── Like with red state ───────────────────────
-                          _CommentLikeButton(
-                            commentId: c.id,
-                            isLiked: c.isLiked,
-                            likes: c.likes,
-                          ),
-                          const SizedBox(width: 16),
-                          GestureDetector(
-                            onTap: () => widget.onStartReply(c.id, c.user.name),
-                            child: Text(
-                              'Reply',
-                              style: AppTextStyles.small.copyWith(
-                                color: AppColors.hashtag,
+                            if (c.user.roleLabel.isNotEmpty)
+                              _RolePillTinted(label: c.user.roleLabel),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: _showCommentMenu,
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.more_horiz_rounded, size: 16, color: Colors.white38),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (c.replies.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
-                child: Row(
-                  children: [
-                    Container(width: 24, height: 1, color: AppColors.divider),
-                    const SizedBox(width: 12),
-                    Text(
-                      _expanded
-                          ? 'Hide ${c.replies.length} ${c.replies.length == 1 ? 'reply' : 'replies'}'
-                          : 'View ${c.replies.length} ${c.replies.length == 1 ? 'reply' : 'replies'}',
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.hashtag,
-                      ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          c.text,
+                          style: const TextStyle(color: Colors.white, fontSize: 13.5, height: 1.4),
+                        ),
+                        const SizedBox(height: 7),
+                        Row(
+                          children: [
+                            Text(
+                              timeAgoFrom(c.createdAt),
+                              style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                            ),
+                            const SizedBox(width: 14),
+                            _CommentLikeButton(
+                              commentId: c.id,
+                              isLiked: c.isLiked,
+                              likes: c.likes,
+                            ),
+                            const SizedBox(width: 14),
+                            GestureDetector(
+                              onTap: () => widget.onStartReply(c.id, c.user.name),
+                              child: Text(
+                                'Reply',
+                                style: TextStyle(
+                                  color: _C.accent,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              if (_expanded) ...[
-                const SizedBox(height: 12),
-                ...c.replies.map(
-                  (reply) => Padding(
-                    padding: const EdgeInsets.only(left: 28, bottom: 16),
-                    child: _ReplyTile(
-                      reply: reply,
-                      onEditComment: widget.onEditComment,
-                      onDeleteComment: widget.onDeleteComment,
+              if (c.replies.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(left: 28),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _expanded = !_expanded),
+                    child: Row(
+                      children: [
+                        Container(width: 20, height: 1, color: _C.border),
+                        const SizedBox(width: 10),
+                        Text(
+                          _expanded
+                              ? 'Hide ${c.replies.length} ${c.replies.length == 1 ? 'reply' : 'replies'}'
+                              : 'View ${c.replies.length} ${c.replies.length == 1 ? 'reply' : 'replies'}',
+                          style: TextStyle(color: _C.accent, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ],
                     ),
                   ),
                 ),
+                if (_expanded) ...[
+                  const SizedBox(height: 12),
+                  ...c.replies.map(
+                    (reply) => Padding(
+                      padding: const EdgeInsets.only(left: 28, bottom: 14),
+                      child: _ReplyTile(
+                        reply: reply,
+                        onEditComment: widget.onEditComment,
+                        onDeleteComment: widget.onDeleteComment,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ],
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Comment like button (red when liked) ─────────────────────────────────────
+// ── Comment like button (red→orange when liked, matches accent) ───────────
 
 class _CommentLikeButton extends StatefulWidget {
   final String commentId;
@@ -1310,16 +1404,8 @@ class _CommentLikeButtonState extends State<_CommentLikeButton>
   );
 
   Future<void> _handleTap() async {
-    await _ctrl.animateTo(
-      0.7,
-      duration: const Duration(milliseconds: 80),
-      curve: Curves.easeIn,
-    );
-    await _ctrl.animateTo(
-      1.0,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.elasticOut,
-    );
+    await _ctrl.animateTo(0.7, duration: const Duration(milliseconds: 80), curve: Curves.easeIn);
+    await _ctrl.animateTo(1.0, duration: const Duration(milliseconds: 180), curve: Curves.elasticOut);
     if (mounted) {
       context.read<PostCubit>().toggleCommentLike(widget.commentId);
     }
@@ -1333,29 +1419,27 @@ class _CommentLikeButtonState extends State<_CommentLikeButton>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isLiked ? _kLikedColor : Colors.white54;
+    final color = widget.isLiked ? _kLikedColor : _C.textSecondary;
     return GestureDetector(
       onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
       child: ScaleTransition(
         scale: _ctrl,
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
+              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
               child: Icon(
-                widget.isLiked ? Icons.favorite : Icons.favorite_border,
+                widget.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                 key: ValueKey(widget.isLiked),
-                size: 16,
+                size: 14,
                 color: color,
               ),
             ),
             const SizedBox(width: 4),
-            Text(
-              '${widget.likes}',
-              style: AppTextStyles.small.copyWith(color: color),
-            ),
+            Text('${widget.likes}', style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w700)),
           ],
         ),
       ),
@@ -1383,7 +1467,7 @@ class _ReplyTile extends StatelessWidget {
     final postCubit = context.read<PostCubit>();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -1397,7 +1481,7 @@ class _ReplyTile extends StatelessWidget {
               children: [
                 if (_isCurrentUserReply(context)) ...[
                   _MenuOption(
-                    icon: Icons.edit,
+                    icon: Icons.edit_rounded,
                     title: 'Edit Reply',
                     onTap: () {
                       Navigator.pop(menuContext);
@@ -1405,7 +1489,7 @@ class _ReplyTile extends StatelessWidget {
                     },
                   ),
                   _MenuOption(
-                    icon: Icons.delete,
+                    icon: Icons.delete_rounded,
                     title: 'Delete Reply',
                     isDestructive: true,
                     onTap: () {
@@ -1413,10 +1497,10 @@ class _ReplyTile extends StatelessWidget {
                       onDeleteComment(reply.id);
                     },
                   ),
-                  const Divider(color: AppColors.divider),
+                  Container(height: 1, color: _C.border),
                 ],
                 _MenuOption(
-                  icon: Icons.flag,
+                  icon: Icons.flag_rounded,
                   title: 'Report Reply',
                   isDestructive: true,
                   onTap: () {
@@ -1449,14 +1533,14 @@ class _ReplyTile extends StatelessWidget {
           children: [
             SafeCircleAvatar(
               imageUrl: reply.user.avatarUrl,
-              radius: 12,
+              radius: 13,
               onTap: () => Navigator.pushNamed(
                 context,
                 RouteNames.profileView,
                 arguments: {'userUuid': reply.user.id},
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1472,43 +1556,27 @@ class _ReplyTile extends StatelessWidget {
                           ),
                           child: Text(
                             reply.user.name,
-                            style: AppTextStyles.body.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.more_horiz, size: 14),
-                        onPressed: () => _showReplyMenu(context),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                      GestureDetector(
+                        onTap: () => _showReplyMenu(context),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.more_horiz_rounded, size: 14, color: Colors.white38),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    reply.text,
-                    style: AppTextStyles.body.copyWith(fontSize: 14),
-                  ),
+                  Text(reply.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Text(
-                        timeAgoFrom(reply.createdAt),
-                        style: AppTextStyles.small.copyWith(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
-                      ),
+                      Text(timeAgoFrom(reply.createdAt), style: TextStyle(color: _C.textSecondary, fontSize: 11)),
                       const SizedBox(width: 12),
-                      // ── Reply like with red state ─────────────────────
-                      _CommentLikeButton(
-                        commentId: reply.id,
-                        isLiked: reply.isLiked,
-                        likes: reply.likes,
-                      ),
+                      _CommentLikeButton(commentId: reply.id, isLiked: reply.isLiked, likes: reply.likes),
                     ],
                   ),
                 ],
@@ -1539,11 +1607,13 @@ class _MenuOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: isDestructive ? Colors.red : Colors.white),
+      leading: Icon(icon, color: isDestructive ? Colors.redAccent : Colors.white),
       title: Text(
         title,
-        style: AppTextStyles.body.copyWith(
-          color: isDestructive ? Colors.red : Colors.white,
+        style: TextStyle(
+          color: isDestructive ? Colors.redAccent : Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 14.5,
         ),
       ),
       onTap: onTap,
@@ -1569,7 +1639,7 @@ class _PostMenuButton extends StatelessWidget {
           await _showViewerMenu(context);
         }
       },
-      icon: const Icon(Icons.more_horiz),
+      icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
     );
   }
 
@@ -1577,7 +1647,7 @@ class _PostMenuButton extends StatelessWidget {
     final postCubit = context.read<PostCubit>();
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -1590,7 +1660,7 @@ class _PostMenuButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _MenuOption(
-                  icon: Icons.edit,
+                  icon: Icons.edit_rounded,
                   title: 'Edit Post',
                   onTap: () {
                     Navigator.pop(ctx);
@@ -1598,7 +1668,7 @@ class _PostMenuButton extends StatelessWidget {
                   },
                 ),
                 _MenuOption(
-                  icon: Icons.delete,
+                  icon: Icons.delete_rounded,
                   title: 'Delete Post',
                   isDestructive: true,
                   onTap: () {
@@ -1606,9 +1676,9 @@ class _PostMenuButton extends StatelessWidget {
                     _deletePost(context);
                   },
                 ),
-                const Divider(color: AppColors.divider),
+                Container(height: 1, color: _C.border),
                 _MenuOption(
-                  icon: Icons.share,
+                  icon: Icons.share_rounded,
                   title: 'Share',
                   onTap: () async {
                     Navigator.pop(ctx);
@@ -1627,7 +1697,7 @@ class _PostMenuButton extends StatelessWidget {
     final postCubit = context.read<PostCubit>();
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -1640,7 +1710,7 @@ class _PostMenuButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _MenuOption(
-                  icon: Icons.flag,
+                  icon: Icons.flag_rounded,
                   title: 'Report Post',
                   isDestructive: true,
                   onTap: () {
@@ -1648,9 +1718,9 @@ class _PostMenuButton extends StatelessWidget {
                     _reportPost(context);
                   },
                 ),
-                const Divider(color: AppColors.divider),
+                Container(height: 1, color: _C.border),
                 _MenuOption(
-                  icon: Icons.share,
+                  icon: Icons.share_rounded,
                   title: 'Share',
                   onTap: () async {
                     Navigator.pop(ctx);
@@ -1671,7 +1741,7 @@ class _PostMenuButton extends StatelessWidget {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1679,9 +1749,7 @@ class _PostMenuButton extends StatelessWidget {
       builder: (dialogContext) => BlocProvider.value(
         value: postCubit,
         child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
-          ),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(dialogContext).viewInsets.bottom),
           child: Container(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -1691,40 +1759,36 @@ class _PostMenuButton extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    const Text(
                       'Edit Caption',
-                      style: AppTextStyles.titleMedium.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(dialogContext),
-                      icon: const Icon(Icons.close, color: Colors.white54),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white54),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A233F),
+                    color: _C.bg,
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _C.border),
                   ),
                   child: TextField(
                     controller: textController,
                     maxLines: 4,
-                    style: AppTextStyles.body.copyWith(color: Colors.white),
+                    style: const TextStyle(color: Colors.white, fontSize: 14.5),
                     decoration: InputDecoration(
                       hintText: "What's on your mind?",
-                      hintStyle: AppTextStyles.body.copyWith(
-                        color: Colors.white54,
-                      ),
+                      hintStyle: TextStyle(color: _C.textSecondary),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.all(16),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 Row(
                   children: [
                     Expanded(
@@ -1732,13 +1796,11 @@ class _PostMenuButton extends StatelessWidget {
                         onPressed: () => Navigator.pop(dialogContext),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
-                          side: const BorderSide(color: AppColors.divider),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          side: BorderSide(color: _C.border),
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
                         ),
-                        child: Text('Cancel', style: AppTextStyles.body),
+                        child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1746,8 +1808,7 @@ class _PostMenuButton extends StatelessWidget {
                       child: FilledButton(
                         onPressed: () async {
                           final newCaption = textController.text.trim();
-                          if (newCaption.isNotEmpty &&
-                              newCaption != post.caption) {
+                          if (newCaption.isNotEmpty && newCaption != post.caption) {
                             try {
                               await postCubit.editCaption(newCaption);
                               Navigator.pop(dialogContext);
@@ -1759,14 +1820,12 @@ class _PostMenuButton extends StatelessWidget {
                           }
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: _C.accent,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
                         ),
-                        child: Text('Save', style: AppTextStyles.body),
+                        child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
                   ],
@@ -1783,7 +1842,7 @@ class _PostMenuButton extends StatelessWidget {
     final postCubit = context.read<PostCubit>();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.navyDark,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -1791,8 +1850,7 @@ class _PostMenuButton extends StatelessWidget {
         value: postCubit,
         child: _ConfirmDeleteSheet(
           title: 'Delete Post?',
-          message:
-              'This action cannot be undone. The post will be permanently deleted.',
+          message: 'This action cannot be undone. The post will be permanently deleted.',
           confirmText: 'Delete',
           isBusy: postCubit.state.deletingPost,
           onConfirm: () {
@@ -1849,26 +1907,20 @@ class _ConfirmDeleteSheet extends StatelessWidget {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
+              color: Colors.redAccent.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.delete, color: Colors.red, size: 30),
+            child: const Icon(Icons.delete_rounded, color: Colors.redAccent, size: 28),
           ),
           const SizedBox(height: 16),
-          Text(
-            title,
-            style: AppTextStyles.titleMedium.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
           const SizedBox(height: 8),
           Text(
             message,
-            style: AppTextStyles.body.copyWith(color: Colors.white54),
+            style: TextStyle(color: _C.textSecondary, fontSize: 13.5),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
           Row(
             children: [
               Expanded(
@@ -1876,13 +1928,11 @@ class _ConfirmDeleteSheet extends StatelessWidget {
                   onPressed: isBusy ? null : () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
-                    side: const BorderSide(color: AppColors.divider),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    side: BorderSide(color: _C.border),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
                   ),
-                  child: Text('Cancel', style: AppTextStyles.body),
+                  child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1890,20 +1940,18 @@ class _ConfirmDeleteSheet extends StatelessWidget {
                 child: FilledButton(
                   onPressed: isBusy ? null : onConfirm,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red,
+                    backgroundColor: Colors.redAccent,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
                   ),
                   child: isBusy
                       ? const SizedBox(
                           height: 18,
                           width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : Text(confirmText, style: AppTextStyles.body),
+                      : Text(confirmText, style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -1943,10 +1991,8 @@ class _CommentInputBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
-        color: AppColors.navyDark,
-        border: Border(
-          top: BorderSide(color: AppColors.divider.withOpacity(0.5)),
-        ),
+        color: _C.surface,
+        border: Border(top: BorderSide(color: _C.border)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1955,19 +2001,13 @@ class _CommentInputBar extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  editingCommentId != null
-                      ? 'Editing comment'
-                      : 'Replying to ${replyingToUserName ?? ''}',
-                  style: AppTextStyles.small.copyWith(color: AppColors.hashtag),
+                  editingCommentId != null ? 'Editing comment' : 'Replying to ${replyingToUserName ?? ''}',
+                  style: TextStyle(color: _C.accent, fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
                 GestureDetector(
                   onTap: onCancel,
-                  child: const Icon(
-                    Icons.close,
-                    size: 16,
-                    color: Colors.white54,
-                  ),
+                  child: const Icon(Icons.close_rounded, size: 16, color: Colors.white54),
                 ),
               ],
             ),
@@ -1982,38 +2022,29 @@ class _CommentInputBar extends StatelessWidget {
     );
   }
 
-  Widget _buildCommentInput(
-    CurrentUserService currentUserService,
-    bool hasAction,
-  ) {
+  Widget _buildCommentInput(CurrentUserService currentUserService, bool hasAction) {
     return Row(
       children: [
-        SafeCircleAvatar(
-          imageUrl: currentUserService.getCurrentAvatar(),
-          radius: 18,
-        ),
+        SafeCircleAvatar(imageUrl: currentUserService.getCurrentAvatar(), radius: 18),
         const SizedBox(width: 12),
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF131B34),
+              color: _C.bg,
               borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _C.border),
             ),
             child: TextField(
               controller: controller,
               focusNode: focusNode,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
                 hintText: hasAction
-                    ? (editingCommentId != null
-                          ? 'Edit your comment...'
-                          : 'Write a reply...')
+                    ? (editingCommentId != null ? 'Edit your comment...' : 'Write a reply...')
                     : 'Write a comment...',
-                hintStyle: AppTextStyles.body.copyWith(color: Colors.white54),
+                hintStyle: TextStyle(color: _C.textSecondary, fontSize: 14),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               maxLines: null,
               textInputAction: TextInputAction.send,
@@ -2021,20 +2052,13 @@ class _CommentInputBar extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        IconButton(
-          onPressed: onSubmit,
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.send_rounded,
-              size: 18,
-              color: Colors.white,
-            ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: onSubmit,
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: _C.accent, borderRadius: BorderRadius.circular(20)),
+            child: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
           ),
         ),
       ],
@@ -2048,31 +2072,30 @@ class _IconStat extends StatelessWidget {
   final IconData icon;
   final String value;
   final VoidCallback onTap;
-  final bool active;
 
-  const _IconStat({
-    required this.icon,
-    required this.value,
-    required this.onTap,
-    this.active = false,
-  });
+  const _IconStat({required this.icon, required this.value, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: active ? AppColors.like : AppColors.onSurface),
-          const SizedBox(width: 8),
-          Text('$value', style: AppTextStyles.body),
+          Icon(icon, color: _C.textSecondary, size: 19),
+          const SizedBox(width: 7),
+          Text(value, style: TextStyle(color: _C.textSecondary, fontSize: 13.5, fontWeight: FontWeight.w700)),
         ],
       ),
     );
   }
 }
 
-// ── Shimmer ───────────────────────────────────────────────────────────────────
+// ── Shimmer loading state ─────────────────────────────────────────────────
+// Replaces the previous Skeletonizer-based shimmer (which rendered blank
+// because the wrapped widgets had no real content) with the ShimmerScope/
+// ShimmerBone system — real animated diagonal sweep, TikTok/FB-style.
 
 class _PostViewShimmer extends StatelessWidget {
   const _PostViewShimmer();
@@ -2080,108 +2103,117 @@ class _PostViewShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Skeletonizer(
-        enabled: true,
-        child: Stack(
-          children: [
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.center,
-                    colors: [Color(0xFF0B1E6B), Color(0xFF031049)],
-                  ),
-                ),
+      backgroundColor: _C.bg,
+      body: ShimmerScope(
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              backgroundColor: _C.bg,
+              pinned: false,
+              floating: true,
+              elevation: 0,
+              leading: const Icon(Icons.arrow_back_ios_new, color: Colors.white54),
+            ),
+            SliverToBoxAdapter(
+              child: AspectRatio(
+                aspectRatio: 375 / 380,
+                child: ShimmerBlock(),
               ),
             ),
-            CustomScrollView(
-              slivers: [
-                const SliverAppBar(
-                  backgroundColor: Colors.transparent,
-                  pinned: false,
-                  floating: true,
-                  leading: Icon(Icons.arrow_back_ios_new),
-                ),
-                SliverToBoxAdapter(
-                  child: AspectRatio(
-                    aspectRatio: 375 / 380,
-                    child: Container(color: Colors.white10),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Container(
-                    color: AppColors.surface,
-                    child: const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 14, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(radius: 16),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SkeletonLine(widthFactor: .5, height: 12),
-                                    SizedBox(height: 6),
-                                    SkeletonPill(width: 80, height: 18),
-                                  ],
-                                ),
-                              ),
-                              SkeletonLine(width: 40, height: 12),
-                              SizedBox(width: 6),
-                              Icon(Icons.more_horiz),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const ShimmerCircle(radius: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              ShimmerBone(height: 13, width: 130),
+                              SizedBox(height: 7),
+                              ShimmerBone(height: 16, width: 70, borderRadius: BorderRadius.all(Radius.circular(20))),
                             ],
                           ),
-                          SizedBox(height: 12),
-                          SkeletonLine(height: 12),
-                          SizedBox(height: 6),
-                          SkeletonLine(widthFactor: .8, height: 12),
-                          SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              SkeletonPill(width: 64, height: 22),
-                              SkeletonPill(width: 56, height: 22),
-                              SkeletonPill(width: 72, height: 22),
-                            ],
-                          ),
-                          SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Icon(Icons.favorite_border),
-                              SizedBox(width: 18),
-                              Icon(Icons.mode_comment_outlined),
-                              SizedBox(width: 18),
-                              Icon(Icons.share_outlined),
-                            ],
-                          ),
-                          SizedBox(height: 16),
-                          Divider(color: AppColors.divider),
-                          SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              SkeletonLine(width: 100, height: 16),
-                              SkeletonLine(width: 120, height: 16),
-                            ],
-                          ),
-                          SizedBox(height: 12),
-                        ],
-                      ),
+                        ),
+                        const ShimmerBone(height: 10, width: 40),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    const ShimmerBone(height: 13, widthFactor: 1),
+                    const SizedBox(height: 7),
+                    const ShimmerBone(height: 13, widthFactor: 0.7),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: const [
+                        ShimmerBone(width: 60, height: 22, borderRadius: BorderRadius.all(Radius.circular(20))),
+                        SizedBox(width: 8),
+                        ShimmerBone(width: 52, height: 22, borderRadius: BorderRadius.all(Radius.circular(20))),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: const [
+                        ShimmerBone(width: 44, height: 18),
+                        SizedBox(width: 20),
+                        ShimmerBone(width: 44, height: 18),
+                        SizedBox(width: 20),
+                        ShimmerBone(width: 44, height: 18),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(height: 1, color: _C.border),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: const [
+                        ShimmerBone(width: 90, height: 15),
+                        ShimmerBone(width: 70, height: 12),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    ...List.generate(3, (i) => const Padding(
+                          padding: EdgeInsets.only(bottom: 18),
+                          child: _CommentRowShimmer(),
+                        )),
+                  ],
                 ),
-              ],
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CommentRowShimmer extends StatelessWidget {
+  const _CommentRowShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ShimmerCircle(radius: 17),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              ShimmerBone(height: 12, width: 100),
+              SizedBox(height: 7),
+              ShimmerBone(height: 12, widthFactor: 1),
+              SizedBox(height: 5),
+              ShimmerBone(height: 12, widthFactor: 0.5),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2210,38 +2242,35 @@ class SafeCircleAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final valid = _isValidUrl(imageUrl);
 
-    final core = valid
-        ? ClipOval(
-            child: SizedBox(
-              width: radius * 2,
-              height: radius * 2,
+    final core = Container(
+      width: radius * 2,
+      height: radius * 2,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _C.border, width: 1.5),
+      ),
+      child: valid
+          ? ClipOval(
               child: CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
                 placeholder: (_, __) => Container(
-                  color: AppColors.primary.withOpacity(0.15),
-                  child: Icon(
-                    Icons.person,
-                    size: radius,
-                    color: Colors.white54,
-                  ),
+                  color: _C.accent.withOpacity(0.12),
+                  child: Icon(Icons.person_rounded, size: radius, color: Colors.white54),
                 ),
                 errorWidget: (_, __, ___) => Container(
-                  color: AppColors.primary.withOpacity(0.25),
-                  child: Icon(
-                    Icons.person,
-                    size: radius,
-                    color: Colors.white70,
-                  ),
+                  color: _C.accent.withOpacity(0.16),
+                  child: Icon(Icons.person_rounded, size: radius, color: Colors.white70),
                 ),
               ),
+            )
+          : ClipOval(
+              child: Container(
+                color: _C.accent.withOpacity(0.16),
+                child: Icon(Icons.person_rounded, size: radius, color: Colors.white70),
+              ),
             ),
-          )
-        : CircleAvatar(
-            radius: radius,
-            backgroundColor: AppColors.primary.withOpacity(0.25),
-            child: Icon(Icons.person, size: radius, color: Colors.white70),
-          );
+    );
 
     if (onTap == null) return core;
     return GestureDetector(onTap: onTap, child: core);

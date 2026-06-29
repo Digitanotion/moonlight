@@ -29,7 +29,7 @@ class ReconnectionOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    state.reconnectMessage ?? 'Reconnecting...',
+                    state.reconnectMessage ?? 'Something went wrong. Reconnecting...',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
