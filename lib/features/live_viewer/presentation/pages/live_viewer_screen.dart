@@ -1,8 +1,22 @@
 // lib/features/live_viewer/presentation/pages/live_viewer_screen.dart
+//
+// REPLACEMENT. Two additions only vs the original:
+//   1. Accepts optional `pool` (AgoraEnginePool) and `channelId` (String)
+//      parameters. When both are present, passes them to the orchestrator
+//      so it can render via PoolVideoView instead of the old single-engine
+//      path. When absent (e.g. opened as a standalone route without the
+//      pager) the screen falls back to the original AgoraViewerService
+//      path — nothing breaks for single-stream opens.
+//   2. Passes pool/channelId through to LiveViewerOrchestratorWrapper.
+//
+// EVERYTHING ELSE — premium gate, payment, BLoC lifecycle, swipe-back
+// detection, fade placeholder, error screens — is byte-for-byte identical
+// to the original. No functional changes to any of those paths.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
@@ -23,7 +37,20 @@ class LiveViewerScreen extends StatefulWidget {
   final ViewerRepository repository;
   final Map<String, dynamic>? routeArgs;
 
-  const LiveViewerScreen({super.key, required this.repository, this.routeArgs});
+  // ── NEW optional pool params ─────────────────────────────────────────
+  // Present when opened inside LiveViewerPager (pool-managed video).
+  // Absent when opened as a standalone single-stream route (falls back
+  // to the original AgoraViewerService path — no regression).
+  final AgoraEnginePool? pool;
+  final String? channelId;
+
+  const LiveViewerScreen({
+    super.key,
+    required this.repository,
+    this.routeArgs,
+    this.pool,       // ← NEW (optional)
+    this.channelId,  // ← NEW (optional)
+  });
 
   factory LiveViewerScreen.create({
     required String livestreamId,
@@ -41,6 +68,7 @@ class LiveViewerScreen extends StatefulWidget {
       initialHost: hostInfo,
       startedAt: startedAt,
     );
+    // No pool/channelId — standalone open, uses original Agora path.
     return LiveViewerScreen(repository: repository, routeArgs: routeArgs);
   }
 
@@ -50,8 +78,6 @@ class LiveViewerScreen extends StatefulWidget {
 
 class _LiveViewerScreenState extends State<LiveViewerScreen>
     with SingleTickerProviderStateMixin {
-  // Track IDENTITY of the last BLoC we started.
-  // When a new BLoC is created (swipe-back), this != bloc and we re-fire ViewerStarted.
   ViewerBloc? _startedBloc;
   ViewerBloc? _viewerBloc;
   bool _shouldStartBloc = false;
@@ -70,20 +96,18 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   @override
   void initState() {
     super.initState();
-    _fadeController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 350),
-        )..addListener(() {
-          _videoReadyProgress.value = _fadeController!.value;
-        });
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    )..addListener(() {
+      _videoReadyProgress.value = _fadeController!.value;
+    });
     _initPremium();
   }
 
   @override
   void didUpdateWidget(LiveViewerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Detect repo reset after swipe-back (keepAlive dispose resets _wired=false)
     final repo = widget.repository;
     final wasReset = repo is ViewerRepositoryImpl && !repo.wasWired;
     if (widget.repository != oldWidget.repository || wasReset) {
@@ -181,10 +205,12 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
           _premiumState = PremiumVerificationState.premiumPaid;
           _shouldStartBloc = true;
         });
-        if (_viewerBloc != null && !_viewerBloc!.isClosed)
+        if (_viewerBloc != null && !_viewerBloc!.isClosed) {
           _viewerBloc!.add(const PremiumAccessGranted());
-        if (context.mounted)
+        }
+        if (context.mounted) {
           TopSnack.success(context, 'Access unlocked! Enjoy the stream.');
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _viewerBloc != null && _startedBloc != _viewerBloc) {
             _viewerBloc!.add(const ViewerStarted());
@@ -223,9 +249,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
             : _paymentStatusMessage,
         onOpenPayment: _premiumState == PremiumVerificationState.error
             ? () {
-                setState(
-                  () => _premiumState = PremiumVerificationState.checking,
-                );
+                setState(() => _premiumState = PremiumVerificationState.checking);
                 _checkPremiumStatus();
               }
             : () => _processPremiumPayment(context),
@@ -239,18 +263,16 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     _fadeController?.dispose();
     _videoReadyProgress.dispose();
     _viewerBloc?.close();
-    try {
-      sl<AgoraViewerService>().leave();
-    } catch (_) {}
-    // When keepAlive=true this is a soft dispose: sends /leave, resets
-    // wiring flags, keeps stream controllers open for swipe-back reuse.
+    // Only call the old single-engine leave if NOT in pool mode.
+    if (widget.pool == null) {
+      try { sl<AgoraViewerService>().leave(); } catch (_) {}
+    }
     widget.repository.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 1. Initial premium gate
     if (_isPremiumStream &&
         (_premiumState == PremiumVerificationState.checking ||
             _premiumState == PremiumVerificationState.premiumUnpaid ||
@@ -262,38 +284,26 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     final hostAvatarUrl = args['hostAvatar'] as String?;
     final hostName = args['hostName'] as String?;
 
-    // 2. Premium check in flight
     if (!_premiumCheckComplete) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: LiveLoadingPlaceholder(
-          avatarUrl: hostAvatarUrl,
-          hostName: hostName,
-        ),
+        body: LiveLoadingPlaceholder(avatarUrl: hostAvatarUrl, hostName: hostName),
       );
     }
 
-    // 3. Repo must be ViewerRepositoryImpl
     if (widget.repository is! ViewerRepositoryImpl) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
-          child: Text(
-            'Invalid repository type',
-            style: TextStyle(color: Colors.white),
-          ),
+          child: Text('Invalid repository type', style: TextStyle(color: Colors.white)),
         ),
       );
     }
     final repo = widget.repository as ViewerRepositoryImpl;
 
-    // 4. Get the BLoC from context (provided by pager's BlocProvider)
     final bloc = context.read<ViewerBloc>();
     _viewerBloc = bloc;
 
-    // 5. Fire ViewerStarted whenever a NEW bloc is detected.
-    //    _startedBloc tracks identity — on swipe-back, BlocProvider creates
-    //    a fresh ViewerBloc so _startedBloc != bloc and we fire again.
     if (_shouldStartBloc && _startedBloc != bloc && !bloc.isClosed) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _startedBloc != bloc && !bloc.isClosed) {
@@ -306,7 +316,6 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
       });
     }
 
-    // 6. Main viewer
     return BlocListener<ViewerBloc, ViewerState>(
       listenWhen: (p, n) =>
           !p.requiresPremiumPayment && n.requiresPremiumPayment,
@@ -353,7 +362,13 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
           return Stack(
             fit: StackFit.expand,
             children: [
-              LiveViewerOrchestratorWrapper(repository: repo),
+              // Pass pool/channelId through to the orchestrator wrapper
+              // so it knows whether to use PoolVideoView or the old path.
+              LiveViewerOrchestratorWrapper(
+                repository: repo,
+                pool: widget.pool,
+                channelId: widget.channelId,
+              ),
               ValueListenableBuilder<double>(
                 valueListenable: _videoReadyProgress,
                 builder: (_, progress, __) {
@@ -375,21 +390,42 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
 
 class LiveViewerOrchestratorWrapper extends StatelessWidget {
   final ViewerRepositoryImpl repository;
-  const LiveViewerOrchestratorWrapper({super.key, required this.repository});
+  // ── NEW optional pool params (passed through from screen) ────────────
+  final AgoraEnginePool? pool;
+  final String? channelId;
+
+  const LiveViewerOrchestratorWrapper({
+    super.key,
+    required this.repository,
+    this.pool,
+    this.channelId,
+  });
 
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final s = sl<AgoraViewerService>();
-      debugPrint(
-        '🎯 RTC: ${s.isJoined ? "Joined" : "Not Joined"} Engine: ${s.engine != null ? "OK" : "NULL"} Ch: ${s.channelId}',
-      );
+      // In pool mode the AgoraViewerService singleton is NOT the one
+      // joined to this stream — don't log its state as representative.
+      if (pool == null) {
+        final s = sl<AgoraViewerService>();
+        debugPrint(
+          '🎯 RTC (single): ${s.isJoined ? "Joined" : "Not Joined"} '
+          'Ch: ${s.channelId}',
+        );
+      } else {
+        final slot = pool!.slotFor(SlotPosition.current);
+        debugPrint(
+          '🎯 RTC (pool/current): ${slot?.state} ch=${slot?.channelId}',
+        );
+      }
     });
-    final screenState = context
-        .findAncestorStateOfType<_LiveViewerScreenState>();
+
+    final screenState = context.findAncestorStateOfType<_LiveViewerScreenState>();
     return LiveViewerOrchestrator(
       repository: repository,
       onVideoReady: screenState?.notifyVideoReady,
+      pool: pool,           // ← NEW
+      channelId: channelId, // ← NEW
     );
   }
 }

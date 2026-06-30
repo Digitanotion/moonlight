@@ -7,7 +7,13 @@
 //      user taps "go live") so the SDK cold-start cost is paid up-front.
 //   3. New hasPreWarmedToken / _preWarmedRtcData to cache RTC credentials
 //      fetched by the pager before the page is actually shown.
-//   4. Everything else is identical to the original.
+//   4. skipAgoraJoin flag: when true (pool mode), _wireInternal() skips
+//      the agoraViewerService.joinAudience() call entirely. The pool
+//      owns all Agora join/leave in pool mode; repos only handle
+//      Pusher/chat/events/health/HTTP concerns.
+//   5. Step 3's duplicate _myApprovalCtrl.add(true) removed — it was
+//      already added in Step 3 (enter response); the skipAgoraJoin branch
+//      in Step 4 no longer re-emits it, removing harmless noise.
 
 import 'dart:async';
 import 'dart:convert';
@@ -40,14 +46,11 @@ class ViewerRepositoryImpl implements ViewerRepository {
   String? get hostSlug => hostUserSlug;
   AgoraViewerService get agoraService => agoraViewerService;
 
-  // ── Pre-warmed RTC data (set by LiveViewerPager before page is shown) ────
+  // ── Pre-warmed RTC data ───────────────────────────────────────────────────
   Map<String, dynamic>? _preWarmedRtcData;
   bool get hasPreWarmedToken => _preWarmedRtcData != null;
   bool get wasWired => _wired;
 
-  /// Called by LiveViewerPager to pre-fetch the RTC token for this stream
-  /// before the user swipes to it.  Safe to call multiple times — no-ops
-  /// if already fetched or if wiring has already started.
   Future<void> prefetchRtcToken() async {
     if (_wired || _isWiring || _preWarmedRtcData != null) return;
     try {
@@ -77,18 +80,29 @@ class ViewerRepositoryImpl implements ViewerRepository {
     } catch (_) {}
   }
 
-  // State
+  // ── State flags ───────────────────────────────────────────────────────────
   bool _hasStarted = false;
   bool _hasEnded = false;
   bool _isWiring = false;
   bool _disposed = false;
+
+  /// Soft-dispose mode: keepAlive=true means dispose() sends /leave and
+  /// resets wiring but does NOT close stream controllers (allowing the
+  /// repo to be rewired on swipe-back without recreating it).
   bool keepAlive = false;
+
+  /// Pool mode flag. When true, _wireInternal() skips the
+  /// agoraViewerService.joinAudience() call — the AgoraEnginePool owns
+  /// all Agora join/leave. Everything else (Pusher, HTTP, health) runs
+  /// unchanged. Set by LiveViewerPager for every repo when the pool is
+  /// active; defaults to false so standalone stream opens are unaffected.
+  bool skipAgoraJoin = false;
 
   final Set<String> _boundEventKeys = <String>{};
   final List<String> _eventHistory = [];
   DateTime? _wireStartedAt;
 
-  // Stream controllers
+  // ── Stream controllers ────────────────────────────────────────────────────
   final _clockCtrl = StreamController<Duration>.broadcast();
   final _viewerCtrl = StreamController<int>.broadcast();
   final _chatCtrl = StreamController<ChatMessage>.broadcast();
@@ -103,11 +117,11 @@ class ViewerRepositoryImpl implements ViewerRepository {
   final _participantRemovedCtrl = StreamController<String>.broadcast();
   final _giftBroadcastCtrl = StreamController<GiftBroadcast>.broadcast();
 
-  // Gift catalog
+  // ── Gift catalog ──────────────────────────────────────────────────────────
   List<GiftItem> _giftCatalogCache = const [];
   String? _giftCatalogVersion;
 
-  // Timing
+  // ── Internal state ────────────────────────────────────────────────────────
   String? _activeGuestUuid;
   Timer? _clockTimer;
   Future<void>? _wiringFuture;
@@ -444,33 +458,18 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // KEY CHANGE: parallelise the three independent HTTP calls.
-  //
-  // BEFORE (sequential):  status → enter → rtc → joinAgora   (~2-3 s)
-  // AFTER  (parallel):    [status + enter + rtc] → joinAgora (~600-900 ms)
-  //
-  // We also consume the pre-warmed RTC token (if the pager fetched it
-  // ahead of time) so on scroll the token is already in memory.
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _wireInternal() async {
     debugPrint('🔌 _wireInternal: starting (parallel mode)');
-
-    // ── Step 1: Fire status-check, enter, and RTC concurrently ─────────────
-    // We allow any of them to fail independently so a non-critical error
-    // (e.g. /status returning 422) doesn't block the other calls.
 
     late Map<String, dynamic> statusData;
     late Map<String, dynamic> enterData;
     late Map<String, dynamic> rtcData;
 
-    // If the pager pre-fetched the RTC token, reuse it immediately.
     if (_preWarmedRtcData != null) {
       debugPrint('🔥 [preWarm] Using cached RTC token');
       rtcData = _preWarmedRtcData!;
-      _preWarmedRtcData = null; // consume once
+      _preWarmedRtcData = null;
 
-      // Still run status + enter in parallel (but skip RTC fetch)
       final results = await Future.wait([
         _safeGet('${_basePath}/status'),
         _safePost('${_basePath}/enter'),
@@ -478,18 +477,20 @@ class ViewerRepositoryImpl implements ViewerRepository {
       statusData = results[0];
       enterData = results[1];
     } else {
-      // No pre-warmed token — run all three in parallel
       final results = await Future.wait([
         _safeGet('${_basePath}/status'),
         _safePost('${_basePath}/enter'),
-        _safeGet('${_basePath}/rtc', query: {'role': 'audience'}),
+        if (!skipAgoraJoin)
+          _safeGet('${_basePath}/rtc', query: {'role': 'audience'})
+        else
+          Future.value(<String, dynamic>{}),
       ]);
       statusData = results[0];
       enterData = results[1];
       rtcData = results[2];
     }
 
-    // ── Step 2: Check if stream already ended ───────────────────────────────
+    // ── Step 2: Check if stream already ended ─────────────────────────────
     final isEnded =
         statusData['has_ended'] == true ||
         statusData['ended_at'] != null ||
@@ -500,14 +501,19 @@ class ViewerRepositoryImpl implements ViewerRepository {
       return;
     }
 
-    // ── Step 3: Process enter response ─────────────────────────────────────
+    // ── Step 3: Process enter response ────────────────────────────────────
     final viewers = (enterData['viewers'] ?? 0) as int;
     if (!_viewerCtrl.isClosed) _viewerCtrl.add(viewers);
+    // Single approval emit here — no duplicate in Step 4
     if (!_myApprovalCtrl.isClosed) _myApprovalCtrl.add(true);
     debugPrint('🔌 Enter OK — viewers: $viewers');
 
-    // ── Step 4: Join Agora with RTC credentials ─────────────────────────────
-    if (rtcData.isNotEmpty) {
+    // ── Step 4: Agora join (skipped in pool mode) ─────────────────────────
+    if (skipAgoraJoin) {
+      // Pool mode: the AgoraEnginePool has already joined (or is joining)
+      // the correct engine for this stream. No Agora call needed here.
+      debugPrint('⚡ [Repo] skipAgoraJoin=true — pool owns Agora join');
+    } else if (rtcData.isNotEmpty) {
       debugPrint(
         '🎯 RTC App: ${rtcData['app_id']}  '
         'Ch: ${rtcData['channel']}  UID: ${rtcData['rtc_uid']}',
@@ -520,27 +526,24 @@ class ViewerRepositoryImpl implements ViewerRepository {
           uid: (rtcData['rtc_uid'] ?? '0').toString(),
           rtcToken: (rtcData['rtc_token'] ?? '').toString(),
         );
-
-        // Set host UID if provided by backend
         final hostUid = int.tryParse('${rtcData['host_uid'] ?? ''}');
         if (hostUid != null) {
           agoraViewerService.hostUid.value = hostUid;
         }
-
         debugPrint('✅ Joined Agora channel');
       } catch (e) {
         debugPrint('❌ Agora joinAudience failed: $e');
-        _myApprovalCtrl.add(false);
+        if (!_myApprovalCtrl.isClosed) _myApprovalCtrl.add(false);
         if (e is DioException) {
           _errorCtrl.add(_extractErrorMessage(e));
         }
       }
     } else {
       debugPrint('⚠️ RTC data empty — skipping Agora join');
-      _myApprovalCtrl.add(false);
+      if (!_myApprovalCtrl.isClosed) _myApprovalCtrl.add(false);
     }
 
-    // ── Step 5: Subscribe to Pusher channels ───────────────────────────────
+    // ── Step 5: Subscribe to Pusher channels ──────────────────────────────
     final id = livestreamIdNumeric;
     final chMeta = 'live.$id.meta';
     final chChat = 'live.$id.chat';
@@ -558,7 +561,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
 
     _boundEventKeys.clear();
 
-    // ── Step 6: Bind events (unchanged from original) ──────────────────────
+    // ── Step 6: Bind events ───────────────────────────────────────────────
     void bindEvent(String channel, String event, PusherCallback handler) {
       final key = '$channel::$event';
       if (_boundEventKeys.contains(key)) return;
@@ -615,9 +618,10 @@ class ViewerRepositoryImpl implements ViewerRepository {
       if (_isRoleChangeInProgress && participantUuid == currentUuid) return;
 
       if (participantUuid == currentUuid) {
-        try {
-          agoraViewerService.leave();
-        } catch (_) {}
+        // In pool mode, skip the singleton leave — the pool handles it.
+        if (!skipAgoraJoin) {
+          try { agoraViewerService.leave(); } catch (_) {}
+        }
         try {
           await pusher.unsubscribeAll();
         } catch (_) {}
@@ -686,7 +690,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
       _pauseCtrl.add(paused);
     });
 
-    // ── Step 7: Hydrate chat & start clock ─────────────────────────────────
+    // ── Step 7: Hydrate chat & start clock ───────────────────────────────
     await _hydrateRecentChat();
     _startClock();
 
@@ -702,7 +706,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     );
   }
 
-  // ── Safe HTTP helpers (return empty map on failure, never throw) ──────────
+  // ── Safe HTTP helpers ────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> _safeGet(
     String path, {
@@ -727,7 +731,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
   }
 
-  // ── Promotion / demotion helpers (unchanged) ─────────────────────────────
+  // ── Promotion / demotion ─────────────────────────────────────────────────
 
   Future<void> _promoteCurrentUserToGuest() async {
     try {
@@ -758,7 +762,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
   }
 
-  // ── Chat helpers (unchanged) ──────────────────────────────────────────────
+  // ── Chat helpers ─────────────────────────────────────────────────────────
 
   void _handleChatMessage(Map<String, dynamic> raw) {
     try {
@@ -770,12 +774,10 @@ class ViewerRepositoryImpl implements ViewerRepository {
       if (text.isEmpty) return;
 
       String username = 'user';
-      String? avatarUrl;
       if (chatData['user'] is Map) {
         final user = _asMap(chatData['user']);
         username = (user['user_slug'] ?? user['slug'] ?? user['name'] ?? 'user')
             .toString();
-        avatarUrl = user['avatar']?.toString();
       } else {
         username = chatData['user']?.toString() ?? 'user';
       }
@@ -828,7 +830,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     _clockTimer = null;
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
   Future<String?> _getCurrentUserUuid() async {
     try {
@@ -868,10 +870,9 @@ class ViewerRepositoryImpl implements ViewerRepository {
   String _genIdempotencyKey() {
     final r = Random();
     final ts = DateTime.now().microsecondsSinceEpoch;
-    final salt = List.generate(
-      8,
-      (_) => r.nextInt(16),
-    ).map((n) => n.toRadixString(16)).join();
+    final salt = List.generate(8, (_) => r.nextInt(16))
+        .map((n) => n.toRadixString(16))
+        .join();
     return 'ml-$ts-$salt';
   }
 
@@ -889,9 +890,6 @@ class ViewerRepositoryImpl implements ViewerRepository {
     if (_disposed) return;
 
     if (keepAlive) {
-      // SOFT dispose — called by LiveViewerScreen on page swipe-away.
-      // Send /leave and reset wiring flags so the repo can be rewired
-      // on swipe-back, but keep stream controllers OPEN for reuse.
       debugPrint('🛡️ [Repository] Soft dispose (keepAlive): $livestreamParam');
       try {
         cancelClock();
@@ -904,11 +902,9 @@ class ViewerRepositoryImpl implements ViewerRepository {
       _wiringFuture = null;
       _preWarmedRtcData = null;
       _boundEventKeys.clear();
-      // Do NOT set _disposed = true, do NOT close stream controllers
       return;
     }
 
-    // HARD dispose — called by pager on exit (keepAlive=false).
     _disposed = true;
     try {
       cancelClock();

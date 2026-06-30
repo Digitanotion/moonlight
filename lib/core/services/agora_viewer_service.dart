@@ -931,14 +931,17 @@ class AgoraViewerService with ChangeNotifier {
     );
   }
 
-  Widget? buildLocalPreview() {
-    // if (!_isCoHost || _engine == null) return null;
-
+Widget? buildLocalPreview() {
+    // Make a local copy to avoid race conditions
+    final engine = _engine;
+    if (engine == null) return null;
+ 
     return Container(
       color: Colors.black,
       child: AgoraVideoView(
+        key: const ValueKey('local_preview'),
         controller: VideoViewController(
-          rtcEngine: _engine!,
+          rtcEngine: engine,  // Use the local variable, no bang operator needed
           useFlutterTexture: true,
           canvas: const VideoCanvas(uid: 0),
         ),
