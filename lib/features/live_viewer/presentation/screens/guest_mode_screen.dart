@@ -1,7 +1,21 @@
 // lib/features/live_viewer/presentation/screens/guest_mode_screen.dart
+//
+// CHANGES vs original:
+//   1. Accepts optional `pool` and `channelId` (same pattern as
+//      ViewerModeScreen). Passed through to DynamicSplitScreen so its
+//      TOP half (host video) can render from the pool's current slot.
+//   2. _performCleanupAndExit guards the singleton leave() call — in
+//      pool mode, the pool owns the host-video engine; the singleton is
+//      only used for the local co-host preview/publish, so only ITS
+//      leave (which actually does belong to the singleton, since
+//      promoteToCoHost() ran on it) still needs to happen regardless of
+//      pool mode. See inline note below for why this one is different
+//      from ViewerModeScreen's guard.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
@@ -10,7 +24,6 @@ import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dar
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/glass.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
-import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/error_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/gift_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/loading_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/pause_overlay.dart';
@@ -28,7 +41,16 @@ import 'package:uuid/uuid.dart';
 class GuestModeScreen extends StatefulWidget {
   final ViewerRepositoryImpl repository;
 
-  const GuestModeScreen({super.key, required this.repository});
+  // ── NEW optional pool params ─────────────────────────────────────────
+  final AgoraEnginePool? pool;
+  final String? channelId;
+
+  const GuestModeScreen({
+    super.key,
+    required this.repository,
+    this.pool,
+    this.channelId,
+  });
 
   @override
   State<GuestModeScreen> createState() => _GuestModeScreenState();
@@ -40,7 +62,6 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   bool _overlayShown = false;
   String? _lastNotifiedRole;
 
-  // Premium payment UI state (local)
   bool _isProcessingPayment = false;
   String? _paymentError;
 
@@ -75,7 +96,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
 
     return MultiBlocListener(
       listeners: [
-        // ── Role promotion ────────────────────────────────────────────────────
+        // ── Role promotion ────────────────────────────────────────────────
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => p.currentRole != n.currentRole,
           listener: (ctx, state) {
@@ -95,22 +116,30 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
           },
         ),
 
-        // ── Stream ended ──────────────────────────────────────────────────────
+        // ── Stream ended ─────────────────────────────────────────────────
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => !p.isEnded && n.isEnded,
           listener: (ctx, state) async {
+            // Use outer StatefulWidget context — BlocListener's ctx is
+            // a nested child context and canPop()/pop() may target the
+            // wrong navigator when inside a PageView.
             TopSnack.info(
-              ctx,
+              context,
               state.errorMessage ?? 'This live stream has ended.',
             );
+            // Demote cleanly before closing so mic/cam stop publishing.
+            try {
+              await sl<AgoraViewerService>().demoteToAudience();
+            } catch (_) {}
             await Future.delayed(const Duration(milliseconds: 1200));
-            if (ctx.mounted && Navigator.of(ctx).canPop()) {
-              Navigator.of(ctx).pop();
+            if (context.mounted) {
+              // popUntil(first) is reliable regardless of nesting depth.
+              Navigator.of(context).popUntil((route) => route.isFirst);
             }
           },
         ),
 
-        // ── Stream unstable / recovered ───────────────────────────────────────
+        // ── Stream unstable / recovered ──────────────────────────────────
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => p.isStreamUnstable != n.isStreamUnstable,
           listener: (ctx, state) {
@@ -127,7 +156,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
           },
         ),
 
-        // ── Premium access required ───────────────────────────────────────────
+        // ── Premium access required ──────────────────────────────────────
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) =>
               !p.requiresPremiumPayment && n.requiresPremiumPayment,
@@ -140,7 +169,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
           },
         ),
 
-        // ── Removal overlay ───────────────────────────────────────────────────
+        // ── Removal overlay ──────────────────────────────────────────────
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => p.showRemovalOverlay != n.showRemovalOverlay,
           listener: (ctx, state) {
@@ -162,7 +191,6 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
         ),
       ],
 
-      // ── BlocBuilder rebuilds on ALL relevant fields ───────────────────────
       child: BlocBuilder<ViewerBloc, ViewerState>(
         buildWhen: (p, n) =>
             p.requiresPremiumPayment != n.requiresPremiumPayment ||
@@ -188,27 +216,24 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                 bottom: false,
                 child: Stack(
                   children: [
-                    // ── Split screen video layout ────────────────────────────
+                    // ── Split screen video layout — pool-aware ──────────────
                     DynamicSplitScreen(
                       repository: widget.repository,
                       isCurrentUserGuest: isCurrentUserGuest,
+                      pool: widget.pool,
+                      channelId: widget.channelId,
                     ),
 
-                    // ── Normal guest UI (hidden when paywall is up) ──────────
                     if (!_immersive && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
-
                       if (state.isStreamUnstable) const _UnstableBanner(),
-
                       const _GiftToast(),
                       const GiftOverlay(),
                       const PauseOverlay(),
                       const LoadingOverlay(),
                       const RoleChangeToast(),
-                      // const ErrorOverlay(),
                       const ReconnectionOverlay(),
 
-                      // Chat
                       Align(
                         alignment: Alignment.bottomLeft,
                         child: Padding(
@@ -229,7 +254,6 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                         ),
                       ),
 
-                      // Input bar
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: CommentInputBar(
@@ -250,7 +274,6 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                       ),
                     ],
 
-                    // ── Premium paywall — TOP of stack, always visible ───────
                     if (state.requiresPremiumPayment)
                       Positioned.fill(
                         child: PremiumOverlay(
@@ -272,7 +295,6 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
     );
   }
 
-  // ── Payment handler ─────────────────────────────────────────────────────────
   Future<void> _handlePremiumPayment(BuildContext context) async {
     setState(() {
       _isProcessingPayment = true;
@@ -315,13 +337,23 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
     }
   }
 
-  // ── Cleanup ──────────────────────────────────────────────────────────────────
+  // ── Cleanup ──────────────────────────────────────────────────────────────
   void _performCleanupAndExit(BuildContext context) async {
     final livestreamId = widget.repository.livestreamIdNumeric;
     widget.repository.dispose();
+
+    // NOTE: unlike ViewerModeScreen's cleanup, this leave() is NOT
+    // guarded by pool-mode. The reason: by the time this runs, the user
+    // WAS a co-host — promoteToCoHost() ran on the singleton
+    // AgoraViewerService, publishing their camera/mic through it. That
+    // engine genuinely needs to leaveChannel() regardless of whether the
+    // pool is also separately managing the host's video — they are two
+    // different engines/connections to the same channel (one audience-
+    // side via the pool's slot, one publisher-side via the singleton).
     try {
       await sl<AgoraViewerService>().leave();
     } catch (_) {}
+
     final pusher = sl<PusherService>();
     for (final ch in [
       'live.$livestreamId.meta',
@@ -346,7 +378,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   }
 }
 
-// ── Unstable banner ───────────────────────────────────────────────────────────
+// ── Unstable banner ───────────────────────────────────────────────────────
 class _UnstableBanner extends StatelessWidget {
   const _UnstableBanner();
 
@@ -388,7 +420,7 @@ class _UnstableBanner extends StatelessWidget {
   }
 }
 
-// ── Gift toast ────────────────────────────────────────────────────────────────
+// ── Gift toast ────────────────────────────────────────────────────────────
 class _GiftToast extends StatelessWidget {
   const _GiftToast();
 

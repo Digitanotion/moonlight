@@ -1,38 +1,42 @@
 // lib/core/services/agora_engine_pool.dart
 //
-// VERSION 3 — all bugs fixed.
+// ═══════════════════════════════════════════════════════════════════════
+// ARCHITECTURE — single RtcEngineEx, three fixed-uid RtcConnections
+// ═══════════════════════════════════════════════════════════════════════
 //
-// BUG 1 (fixed): onUserJoined never emitted an event, so PoolVideoView
-//   called _buildController() on SlotEventKind.joined when hostUid was
-//   still null, bailed silently, and had no signal to retry. Fixed by
-//   adding SlotEventKind.hostUidReady, emitted from onUserJoined.
+// ROOT CAUSE OF THE PREVIOUS DESIGN'S FAILURE:
+//   Agora's native SDK enforces a hard limit of ONE RtcEngine instance
+//   per running app process — confirmed from Agora's own API docs:
+//   "The SDK only supports creating one RtcEngine instance per App."
+//   The previous version of this pool created THREE separate RtcEngine
+//   instances. It appeared to work in isolated tests but broke
+//   decisively once a FOURTH engine (the co-host's publish engine in
+//   AgoraViewerService) tried to join concurrently — rejected with -17
+//   regardless of uid, because the rejection is a native one-engine
+//   constraint, not a channel/uid collision.
 //
-// BUG 2 (fixed): PoolVideoView mounted AFTER setInitialWindow() had
-//   already fired all events into the broadcast stream — missed entirely
-//   since broadcast streams don't replay. Fixed in pool_video_view.dart
-//   by reading slot state synchronously on _attach(), not relying solely
-//   on the stream.
+// THE FIX — Agora's documented multi-channel pattern:
+//   Exactly ONE RtcEngineEx. Multiple concurrent channel joins via
+//   joinChannelEx(), each identified by a distinct, PERMANENT
+//   RtcConnection(channelId, localUid). Events are routed by matching
+//   the RtcConnection on each callback, not by engine instance.
 //
-// BUG 3 (fixed): _engineContextReady was keyed by SlotPosition enum,
-//   which changes when slots rotate. So after one rotation the "previous"
-//   slot's engine would be re-initialized with a new context on its next
-//   join attempt — or worse, the set would claim it was already ready
-//   when a different slot object now occupied that position key.
-//   Fixed by keying _engineContextReady on the slot object itself
-//   (Set<EngineSlot>) so readiness follows the engine, not the label.
-//
-// BUG 4 (fixed): EngineSlot.position was final and set at construction.
-//   Event handlers emitted SlotEvent(position: slot.position) using the
-//   original creation-time label. After rotation, the slot in the
-//   "current" map key would emit events with position=previous (its
-//   original label), which PoolVideoView filtered out.
-//   Fixed by making currentPosition a mutable field updated on every
-//   rotation so callbacks always emit the correct current label.
+// KEY DESIGN DECISION: the uid for each of the 3 connection "identities"
+// is FIXED FOR THE IDENTITY'S LIFETIME, not derived from its current
+// position label (previous/current/next). This is essential — Agora
+// does not allow renaming an active connection's uid in place, so if
+// uid were tied to position, "next becomes current" on rotation would
+// force a full leave+rejoin every single swipe, destroying the whole
+// point of pre-joining. Instead: 3 permanent connection identities
+// (fixed uids), each carrying its own joined-or-not state and channel.
+// Rotation simply RELABELS which identity currently plays the
+// "previous/current/next" ROLE — mirroring how the original pool
+// design rotated RtcEngine object references, applied here to
+// RtcConnection identities instead.
 
 import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' hide ConnectionState;
 
 enum SlotPosition { previous, current, next }
 
@@ -41,7 +45,7 @@ enum SlotJoinState { unavailable, idle, joining, joined, leaving }
 enum SlotEventKind {
   joining,
   joined,
-  hostUidReady, // fires after onUserJoined sets hostUid — PoolVideoView retries _buildController()
+  hostUidReady,
   videoReady,
   leftChannel,
   joinFailed,
@@ -74,50 +78,50 @@ class StreamJoinRequest {
   final String livestreamParam;
   final String appId;
   final String channel;
-  final String rtcUid;
+  final String rtcUid; // backend-issued uid — informational only here
   final String rtcToken;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EngineSlot
+// EngineSlot — a PERMANENT connection identity with a fixed uid. Its
+// `currentPosition` (which role it's currently playing) rotates; its
+// `fixedLocalUid` never changes for the lifetime of the pool.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class EngineSlot {
-  EngineSlot(this.engine, SlotPosition initialPosition)
-      : currentPosition = initialPosition;
+  EngineSlot({
+    required SlotPosition initialPosition,
+    required this.fixedLocalUid,
+  }) : currentPosition = initialPosition;
 
-  final RtcEngine engine;
-
-  /// MUTABLE — updated by the pool on every rotation so event handlers
-  /// always emit the correct current position label, not the label the
-  /// slot was created with.
+  /// MUTABLE — which logical role (previous/current/next) this
+  /// connection identity is currently playing. Updated on every
+  /// rotation. Determines video-quality preference and which slot
+  /// PoolVideoView/listeners should treat as "the visible one."
   SlotPosition currentPosition;
 
-  /// Incremented on every new join attempt. Callbacks capture myEpoch at
-  /// call time and compare against this when they fire — stale events
-  /// from superseded joins are silently dropped.
+  /// IMMUTABLE — this connection's uid for its entire lifetime. Never
+  /// changes, regardless of which position it's currently labeled as.
+  /// This is what makes rotation cheap: relabeling currentPosition does
+  /// NOT require leaving/rejoining, because the uid (and therefore the
+  /// RtcConnection identity) never changes.
+  final int fixedLocalUid;
+
+  /// Bumped on every new join attempt. Stale-callback guard.
   int epoch = 0;
 
   SlotJoinState state = SlotJoinState.idle;
   String? channelId;
   String? livestreamParam;
+  int? activeLocalUid; // the actual uid used in the current joinChannelEx call
 
   final ValueNotifier<int?> hostUid = ValueNotifier<int?>(null);
   final ValueNotifier<bool> hasVideo = ValueNotifier<bool>(false);
 
-  /// Whether this slot's engine has been initialized with an appId.
-  /// Keyed on the slot OBJECT (not position) so it survives rotation.
-  bool engineReady = false;
-
-  /// Whether registerEventHandler() has been called on this engine yet.
-  /// Must only happen AFTER engine.initialize() succeeds — see fix note
-  /// in AgoraEnginePool.initialize(). Survives rotation since it's on
-  /// the slot OBJECT, same pattern as engineReady.
-  bool handlersRegistered = false;
-
   void resetForNewJoin() {
     epoch++;
     state = SlotJoinState.idle;
+    activeLocalUid = null;
     hostUid.value = null;
     hasVideo.value = false;
   }
@@ -127,14 +131,15 @@ class EngineSlot {
     state = SlotJoinState.unavailable;
     channelId = null;
     livestreamParam = null;
+    activeLocalUid = null;
     hostUid.value = null;
     hasVideo.value = false;
   }
 
   void softReset() {
-    // Used after leaving — keeps engineReady=true so re-join skips init.
     channelId = null;
     livestreamParam = null;
+    activeLocalUid = null;
     hostUid.value = null;
     hasVideo.value = false;
     if (state != SlotJoinState.unavailable) state = SlotJoinState.idle;
@@ -143,6 +148,14 @@ class EngineSlot {
   void dispose() {
     hostUid.dispose();
     hasVideo.dispose();
+  }
+
+  /// The RtcConnection this identity represents, if currently joined or
+  /// joining to a channel. uid is always fixedLocalUid — never derived
+  /// from position.
+  RtcConnection? get connection {
+    if (channelId == null || activeLocalUid == null) return null;
+    return RtcConnection(channelId: channelId, localUid: activeLocalUid);
   }
 }
 
@@ -153,13 +166,16 @@ class EngineSlot {
 class AgoraEnginePool {
   AgoraEnginePool();
 
-  // All three slot objects. Never recreated — only their currentPosition
-  // label and their channel assignment change on rotation.
-  late final EngineSlot _slotA;
-  late final EngineSlot _slotB;
-  late final EngineSlot _slotC;
+  late final RtcEngineEx _engine;
 
-  // Position-to-slot map. Rotated on every swipe.
+  // Three PERMANENT connection identities. Each keeps the SAME uid for
+  // the pool's entire lifetime. Rotation only ever changes which one is
+  // labeled previous/current/next — never their uid, never which
+  // RtcConnection object they represent once joined.
+  late final EngineSlot _identityA;
+  late final EngineSlot _identityB;
+  late final EngineSlot _identityC;
+
   final Map<SlotPosition, EngineSlot> _map = {};
 
   final StreamController<SlotEvent> _eventsCtrl =
@@ -167,17 +183,40 @@ class AgoraEnginePool {
   Stream<SlotEvent> get events => _eventsCtrl.stream;
 
   bool _initialized = false;
+  bool _engineContextReady = false;
   bool _disposed = false;
   bool _backgrounded = false;
 
-  // Rotation serialization
+  /// Called when a second remote uid joins the current slot's channel.
+  /// Used to propagate guest/co-host uid to AgoraViewerService for rendering.
+  void Function(int guestUid)? _onGuestUidChanged;
+
+  void setGuestUidCallback(void Function(int) cb) {
+    _onGuestUidChanged = cb;
+  }
+
   Future<void>? _rotationInFlight;
   int? _latestRequestedIndex;
   int _currentIndex = 0;
 
-  // ── Accessors ─────────────────────────────────────────────────────────────
+  /// Reserved uid offset for AgoraViewerService's co-host publish
+  /// connection — exposed so it can pick a uid guaranteed not to
+  /// collide with any of this pool's 3 fixed identities.
+  static const int coHostPublishUidOffset = 900000;
 
   EngineSlot? slotFor(SlotPosition position) => _map[position];
+
+  /// Exposes the single shared engine so AgoraViewerService can publish
+  /// through the SAME RtcEngineEx instance — required, since Agora only
+  /// allows one engine per app.
+  RtcEngineEx get sharedEngine {
+    if (!_initialized) {
+      throw StateError('AgoraEnginePool.initialize() must be called first');
+    }
+    return _engine;
+  }
+
+  bool get isInitialized => _initialized;
 
   // ── Initialization ────────────────────────────────────────────────────────
 
@@ -185,160 +224,187 @@ class AgoraEnginePool {
     if (_initialized) return;
     _initialized = true;
 
-    _slotA = EngineSlot(createAgoraRtcEngine(), SlotPosition.previous);
-    _slotB = EngineSlot(createAgoraRtcEngine(), SlotPosition.current);
-    _slotC = EngineSlot(createAgoraRtcEngine(), SlotPosition.next);
+    _engine = createAgoraRtcEngineEx();
 
-    _map[SlotPosition.previous] = _slotA;
-    _map[SlotPosition.current] = _slotB;
-    _map[SlotPosition.next] = _slotC;
+    // Fixed, permanent uids — never change for these identities' whole
+    // lifetime. Arbitrary but disjoint from each other and from
+    // coHostPublishUidOffset. If your backend already issues large
+    // numeric uids that could plausibly collide with these, adjust the
+    // offsets below to a range your backend never uses.
+    _identityA = EngineSlot(
+      initialPosition: SlotPosition.previous,
+      fixedLocalUid: 100001,
+    );
+    _identityB = EngineSlot(
+      initialPosition: SlotPosition.current,
+      fixedLocalUid: 100002,
+    );
+    _identityC = EngineSlot(
+      initialPosition: SlotPosition.next,
+      fixedLocalUid: 100003,
+    );
 
-    // FIX: do NOT call _registerHandlers() here. At this point each
-    // engine is a raw RtcEngine returned by createAgoraRtcEngine() —
-    // engine.initialize(RtcEngineContext(...)) has NOT been called yet
-    // (that only happens later, inside _joinSlot(), where we first know
-    // the appId). Agora's native SDK requires registerEventHandler() to
-    // be called AFTER initialize() for the handler to reliably attach to
-    // the native callback dispatch; calling it on an uninitialized
-    // engine silently no-ops. This was the root cause of video never
-    // rendering: onJoinChannelSuccess/onUserJoined/onRemoteVideoState
-    // Changed were never reaching our Dart-side handler at all, despite
-    // the native engine genuinely joining and decoding frames — the
-    // handler registration itself never took effect.
-    //
-    // Registration now happens in _joinSlot(), immediately after
-    // engine.initialize() succeeds, guarded by slot.handlersRegistered
-    // so it only runs once per engine's lifetime (not on every join).
+    _map[SlotPosition.previous] = _identityA;
+    _map[SlotPosition.current] = _identityB;
+    _map[SlotPosition.next] = _identityC;
 
-    debugPrint('🏊 [Pool] 3 engines created');
+    debugPrint('🏊 [Pool] Single RtcEngineEx created (3 fixed-uid identities)');
   }
 
-  List<EngineSlot> get _allSlots => [_slotA, _slotB, _slotC];
+  Future<void> _ensureEngineContext(String appId) async {
+    if (_engineContextReady) return;
 
-  // ── Event handler registration ────────────────────────────────────────────
-
-  void _registerHandlers(EngineSlot slot) {
-    slot.engine.registerEventHandler(
-      RtcEngineEventHandler(
-        onJoinChannelSuccess: (conn, elapsed) {
-          if (_disposed) return;
-          debugPrint(
-            '✅ [Pool/${slot.currentPosition.name}] '
-            'joined ch=${conn.channelId} epoch=${slot.epoch}',
-          );
-          if (slot.state != SlotJoinState.unavailable) {
-            slot.state = SlotJoinState.joined;
-          }
-          _emit(slot, SlotEventKind.joined);
-        },
-
-        onUserJoined: (conn, remoteUid, elapsed) {
-          if (_disposed) return;
-          if (slot.hostUid.value == null) {
-            slot.hostUid.value = remoteUid;
-            debugPrint(
-              '👤 [Pool/${slot.currentPosition.name}] '
-              'hostUid=$remoteUid — emitting hostUidReady',
-            );
-            // KEY FIX (Bug 1): emit hostUidReady so PoolVideoView can
-            // now call _buildController() with a valid hostUid.
-            _emit(slot, SlotEventKind.hostUidReady);
-          }
-        },
-
-        onRemoteVideoStateChanged: (conn, uid, state, reason, elapsed) {
-          if (_disposed) return;
-
-          // FIX: previously this hard-gated on `slot.hostUid.value != uid`
-          // and silently dropped the event on any mismatch. That's fragile
-          // — onUserJoined can report a different uid than the one that
-          // actually publishes video (e.g. internal SDK stream ids, or
-          // ordering races between onUserJoined and the first video state
-          // change for the SAME logical host). If hostUid was set to the
-          // "wrong" uid first, every subsequent real video event for the
-          // actual publishing uid was being discarded here — which is
-          // very likely why frames decoded successfully at the codec
-          // level but the pool/Flutter side never learned about it.
-          //
-          // New behavior: treat onRemoteVideoStateChanged as authoritative
-          // for whichever uid it reports. If hostUid is unset, or differs
-          // from this uid, self-correct hostUid to match — this uid IS
-          // the one actually delivering video, which is the ground truth
-          // we actually care about for rendering purposes.
-          if (slot.hostUid.value != uid) {
-            debugPrint(
-              '🔧 [Pool/${slot.currentPosition.name}] '
-              'hostUid correcting ${slot.hostUid.value} → $uid '
-              '(video state event is authoritative)',
-            );
-            slot.hostUid.value = uid;
-            // hostUid changed — PoolVideoView needs to rebuild its
-            // controller against the corrected uid.
-            _emit(slot, SlotEventKind.hostUidReady);
-          }
-
-          final videoOn =
-              state == RemoteVideoState.remoteVideoStateDecoding ||
-              state == RemoteVideoState.remoteVideoStateStarting;
-
-          final wasOff = !slot.hasVideo.value;
-          slot.hasVideo.value = videoOn;
-
-          if (videoOn && wasOff) {
-            debugPrint(
-              '🎬 [Pool/${slot.currentPosition.name}] first frame uid=$uid',
-            );
-            _emit(slot, SlotEventKind.videoReady);
-          }
-        },
-
-        onUserOffline: (conn, uid, reason) {
-          if (_disposed) return;
-          if (slot.hostUid.value == uid) {
-            slot.hostUid.value = null;
-            slot.hasVideo.value = false;
-          }
-        },
-
-        onLeaveChannel: (conn, stats) {
-          if (_disposed) return;
-          debugPrint('🚪 [Pool/${slot.currentPosition.name}] left');
-          _emit(slot, SlotEventKind.leftChannel);
-        },
-
-        onError: (code, msg) {
-          if (_disposed) return;
-          debugPrint(
-            '❌ [Pool/${slot.currentPosition.name}] error $code: ${msg ?? ""}',
-          );
-          if (slot.state == SlotJoinState.joining) {
-            slot.state = SlotJoinState.idle;
-          }
-          _emit(slot, SlotEventKind.joinFailed);
-        },
-
-        onNetworkQuality: (conn, uid, txQ, rxQ) {
-          if (_disposed) return;
-          if (uid != 0) return; // only handle self quality
-          final hostUid = slot.hostUid.value;
-          if (hostUid == null) return;
-          final isPoor = rxQ == QualityType.qualityPoor ||
-              rxQ == QualityType.qualityBad ||
-              rxQ == QualityType.qualityVbad ||
-              rxQ == QualityType.qualityDown;
-          slot.engine
-              .setRemoteVideoStreamType(
-                uid: hostUid,
-                streamType: isPoor
-                    ? VideoStreamType.videoStreamLow
-                    : (slot.currentPosition == SlotPosition.current
-                        ? VideoStreamType.videoStreamHigh
-                        : VideoStreamType.videoStreamLow),
-              )
-              .catchError((_) {});
-        },
+    await _engine.initialize(
+      RtcEngineContext(
+        appId: appId,
+        channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
       ),
     );
+    await _engine.setDefaultAudioRouteToSpeakerphone(true);
+    await _engine.enableAudio();
+    await _engine.enableVideo();
+
+    _engine.registerEventHandler(_buildEventHandler());
+
+    _engineContextReady = true;
+    debugPrint('🔧 [Pool] Engine context initialized, handler registered');
+  }
+
+  // ── Event handler — routes by RtcConnection (channelId+uid) ────────────────
+
+  RtcEngineEventHandler _buildEventHandler() {
+    return RtcEngineEventHandler(
+      onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
+        if (_disposed) return;
+        final slot = _identityForConnection(connection);
+        if (slot == null) return;
+        debugPrint(
+          '✅ [Pool/${slot.currentPosition.name}] joined '
+          'ch=${connection.channelId} uid=${connection.localUid}',
+        );
+        if (slot.state != SlotJoinState.unavailable) {
+          slot.state = SlotJoinState.joined;
+        }
+        _emit(slot, SlotEventKind.joined);
+      },
+
+      onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
+        if (_disposed) return;
+        final slot = _identityForConnection(connection);
+        if (slot == null) return;
+        if (slot.hostUid.value == null) {
+          slot.hostUid.value = remoteUid;
+          debugPrint(
+            '👤 [Pool/${slot.currentPosition.name}] hostUid=$remoteUid',
+          );
+          _emit(slot, SlotEventKind.hostUidReady);
+        } else if (slot.currentPosition == SlotPosition.current &&
+            slot.hostUid.value != remoteUid) {
+          // A second remote uid joined the current channel — this is the
+          // co-host/guest. Notify AgoraViewerService so it can render
+          // the guest video in DynamicSplitScreen.
+          debugPrint(
+            '👥 [Pool/current] guestUid=$remoteUid (second remote in channel)',
+          );
+          _onGuestUidChanged?.call(remoteUid);
+        }
+      },
+
+      onRemoteVideoStateChanged:
+          (
+            RtcConnection connection,
+            int uid,
+            RemoteVideoState state,
+            RemoteVideoStateReason reason,
+            int elapsed,
+          ) {
+            if (_disposed) return;
+            final slot = _identityForConnection(connection);
+            if (slot == null) return;
+            if (slot.hostUid.value != uid) return;
+
+            final videoOn =
+                state == RemoteVideoState.remoteVideoStateDecoding ||
+                state == RemoteVideoState.remoteVideoStateStarting;
+
+            final wasOff = !slot.hasVideo.value;
+            slot.hasVideo.value = videoOn;
+
+            if (videoOn && wasOff) {
+              debugPrint(
+                '🎬 [Pool/${slot.currentPosition.name}] first frame uid=$uid',
+              );
+              _emit(slot, SlotEventKind.videoReady);
+            }
+          },
+
+      onUserOffline:
+          (RtcConnection connection, int uid, UserOfflineReasonType reason) {
+            if (_disposed) return;
+            final slot = _identityForConnection(connection);
+            if (slot == null) return;
+            if (slot.hostUid.value == uid) {
+              slot.hostUid.value = null;
+              slot.hasVideo.value = false;
+            }
+          },
+
+      onLeaveChannel: (RtcConnection connection, RtcStats stats) {
+        if (_disposed) return;
+        final slot = _identityForConnection(connection);
+        if (slot == null) return;
+        debugPrint('🚪 [Pool/${slot.currentPosition.name}] left');
+        _emit(slot, SlotEventKind.leftChannel);
+      },
+
+      onError: (ErrorCodeType code, String msg) {
+        if (_disposed) return;
+        debugPrint('❌ [Pool] engine-level error: $code $msg');
+      },
+
+      onNetworkQuality:
+          (
+            RtcConnection connection,
+            int uid,
+            QualityType txQuality,
+            QualityType rxQuality,
+          ) {
+            if (_disposed) return;
+            if (uid != 0) return;
+            final slot = _identityForConnection(connection);
+            if (slot == null) return;
+            final hostUid = slot.hostUid.value;
+            if (hostUid == null) return;
+            final isPoor = rxQuality == QualityType.qualityPoor ||
+                rxQuality == QualityType.qualityBad ||
+                rxQuality == QualityType.qualityVbad ||
+                rxQuality == QualityType.qualityDown;
+            _engine
+                .setRemoteVideoStreamTypeEx(
+                  uid: hostUid,
+                  streamType: isPoor
+                      ? VideoStreamType.videoStreamLow
+                      : (slot.currentPosition == SlotPosition.current
+                          ? VideoStreamType.videoStreamHigh
+                          : VideoStreamType.videoStreamLow),
+                  connection: connection,
+                )
+                .catchError((_) {});
+          },
+    );
+  }
+
+  /// Matches an incoming callback's RtcConnection to the identity that
+  /// owns it. Matches on fixedLocalUid (permanently unique per
+  /// identity) plus channelId, for safety.
+  EngineSlot? _identityForConnection(RtcConnection connection) {
+    for (final slot in [_identityA, _identityB, _identityC]) {
+      if (slot.channelId == connection.channelId &&
+          slot.activeLocalUid == connection.localUid) {
+        return slot;
+      }
+    }
+    return null;
   }
 
   void _emit(EngineSlot slot, SlotEventKind kind) {
@@ -350,10 +416,12 @@ class AgoraEnginePool {
     ));
   }
 
-  // ── Join / leave ──────────────────────────────────────────────────────────
+  // ── Join / leave ─────────────────────────────────────────────────────────
 
   Future<void> _joinSlot(EngineSlot slot, StreamJoinRequest req) async {
     if (_disposed) return;
+
+    await _ensureEngineContext(req.appId);
 
     slot.resetForNewJoin();
     final myEpoch = slot.epoch;
@@ -363,87 +431,21 @@ class AgoraEnginePool {
 
     _emit(slot, SlotEventKind.joining);
 
+    final localUid = int.tryParse(req.rtcUid) ?? 0;
+    slot.activeLocalUid = localUid;
+
+    final connection = RtcConnection(
+      channelId: req.channel,
+      localUid: localUid,
+    );
+
     try {
-      // One-time engine + video pipeline setup per slot OBJECT (not per
-      // position, not per join). engineReady survives rotation AND
-      // survives repeated leave/rejoin cycles — we never re-issue these
-      // setup calls on an engine that's already had them applied.
-      //
-      // ROOT CAUSE FIX: enableAudio()/enableVideo()/setClientRole()/
-      // setVideoEncoderConfiguration() were previously called on EVERY
-      // _joinSlot() invocation — i.e. every single channel switch on a
-      // pooled engine. Since pooled engines are reused across many joins
-      // (that's the entire point of pooling), re-issuing enableVideo()
-      // and especially setVideoEncoderConfiguration() on an engine that
-      // already has an active video pipeline resets that pipeline at the
-      // native SDK level. This invalidated whatever surface/texture the
-      // previous AgoraVideoView had attached, even though neither the
-      // RtcEngine instance nor the Flutter-side VideoViewController
-      // object changed identity. Decoding kept succeeding (a new
-      // MediaCodec instance — mId incrementing each join — was silently
-      // created underneath) but nothing was ever rendered, because the
-      // surface binding these calls reset was never the one frames were
-      // actually being decoded into. The OLD single-engine path never
-      // hit this because AgoraViewerService only ever joined once per
-      // screen instance — these calls were never repeated on a live
-      // engine there.
-      if (!slot.engineReady) {
-        await slot.engine.initialize(
-          RtcEngineContext(
-            appId: req.appId,
-            channelProfile:
-                ChannelProfileType.channelProfileLiveBroadcasting,
-          ),
-        );
-
-        // FIX: register the event handler HERE, immediately after
-        // initialize() succeeds — not in pool-level initialize() where
-        // the engine was still raw/uninitialized. This is the actual
-        // fix for video never rendering: the handler registered on an
-        // uninitialized engine never attached to the native callback
-        // dispatch, so onJoinChannelSuccess/onUserJoined/
-        // onRemoteVideoStateChanged were silently never reaching Dart,
-        // even though the native engine genuinely joined and decoded
-        // frames the whole time.
-        if (!slot.handlersRegistered) {
-          _registerHandlers(slot);
-          slot.handlersRegistered = true;
-          debugPrint(
-            '🔗 [Pool/${slot.currentPosition.name}] event handler '
-            'registered (post-initialize)',
-          );
-        }
-
-        await slot.engine.setDefaultAudioRouteToSpeakerphone(true);
-        await slot.engine.enableAudio();
-        await slot.engine.enableVideo();
-        await slot.engine.setClientRole(
-          role: ClientRoleType.clientRoleAudience,
-        );
-        await slot.engine.setVideoEncoderConfiguration(
-          const VideoEncoderConfiguration(
-            dimensions: VideoDimensions(width: 360, height: 640),
-            frameRate: 20,
-            bitrate: 300,
-            orientationMode: OrientationMode.orientationModeAdaptive,
-          ),
-        );
-        slot.engineReady = true;
-        debugPrint(
-          '🔧 [Pool/${slot.currentPosition.name}] engine initialized '
-          '(one-time pipeline setup complete)',
-        );
-      }
-
-      final uid = int.tryParse(req.rtcUid) ?? 0;
-      await slot.engine.joinChannel(
+      await _engine.joinChannelEx(
         token: req.rtcToken,
-        channelId: req.channel,
-        uid: uid,
-        options: const ChannelMediaOptions(
+        connection: connection,
+        options: ChannelMediaOptions(
           clientRoleType: ClientRoleType.clientRoleAudience,
-          channelProfile:
-              ChannelProfileType.channelProfileLiveBroadcasting,
+          channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
           autoSubscribeAudio: true,
           autoSubscribeVideo: true,
           publishCameraTrack: false,
@@ -451,24 +453,20 @@ class AgoraEnginePool {
         ),
       );
 
-      // Current slot gets high-quality video; others get low to save CPU.
-      // setRemoteDefaultVideoStreamType is safe to call per-join — it
-      // doesn't touch the local pipeline/surface, only the requested
-      // remote stream quality.
-      await slot.engine.setRemoteDefaultVideoStreamType(
-        slot.currentPosition == SlotPosition.current
-            ? VideoStreamType.videoStreamHigh
-            : VideoStreamType.videoStreamLow,
-      );
+      // await _engine.setRemoteDefaultVideoStreamTypeEx(
+      //   streamType: slot.currentPosition == SlotPosition.current
+      //       ? VideoStreamType.videoStreamHigh
+      //       : VideoStreamType.videoStreamLow,
+      //   connection: connection,
+      // );
 
       debugPrint(
-        '🔌 [Pool/${slot.currentPosition.name}] join issued '
-        'ch=${req.channel} uid=$uid epoch=$myEpoch',
+        '🔌 [Pool/${slot.currentPosition.name}] joinChannelEx issued '
+        'ch=${req.channel} uid=$localUid epoch=$myEpoch',
       );
     } catch (e) {
       debugPrint('❌ [Pool/${slot.currentPosition.name}] join error: $e');
-      if (slot.epoch == myEpoch &&
-          slot.state != SlotJoinState.unavailable) {
+      if (slot.epoch == myEpoch && slot.state != SlotJoinState.unavailable) {
         slot.state = SlotJoinState.idle;
       }
       if (_eventsCtrl.isClosed) return;
@@ -483,13 +481,16 @@ class AgoraEnginePool {
   Future<void> _leaveSlot(EngineSlot slot) async {
     if (slot.state == SlotJoinState.idle ||
         slot.state == SlotJoinState.unavailable) return;
+    final connection = slot.connection;
+    if (connection == null) {
+      slot.softReset();
+      return;
+    }
     slot.state = SlotJoinState.leaving;
     try {
-      await slot.engine.leaveChannel();
+      await _engine.leaveChannelEx(connection: connection);
     } catch (e) {
-      debugPrint(
-        '⚠️ [Pool/${slot.currentPosition.name}] leave error: $e',
-      );
+      debugPrint('⚠️ [Pool/${slot.currentPosition.name}] leave error: $e');
     } finally {
       slot.softReset();
     }
@@ -505,7 +506,6 @@ class AgoraEnginePool {
     if (!_initialized) throw StateError('Call initialize() first.');
     _currentIndex = currentIndex;
 
-    // Join all 3 slots concurrently.
     await Future.wait([
       for (final position in SlotPosition.values)
         _joinPositionAt(position, currentIndex, itemCount, resolve),
@@ -536,6 +536,13 @@ class AgoraEnginePool {
   }
 
   // ── Rotation ──────────────────────────────────────────────────────────────
+  //
+  // Rotation relabels which PERMANENT identity (_identityA/B/C) plays
+  // which ROLE (previous/current/next) in the _map. The identities
+  // themselves — and their already-joined connections — are untouched
+  // by relabeling. Only the identity that falls OUTSIDE the new window
+  // needs an actual leave+rejoin, mirroring the original pool's
+  // single-step-swipe efficiency.
 
   Future<void> rotate({
     required int newIndex,
@@ -544,8 +551,7 @@ class AgoraEnginePool {
   }) async {
     _latestRequestedIndex = newIndex;
     if (_rotationInFlight != null) return _rotationInFlight;
-    _rotationInFlight =
-        _runRotation(itemCount: itemCount, resolve: resolve);
+    _rotationInFlight = _runRotation(itemCount: itemCount, resolve: resolve);
     try {
       await _rotationInFlight;
     } finally {
@@ -575,17 +581,6 @@ class AgoraEnginePool {
     final direction = newIndex > _currentIndex ? 1 : -1;
     _currentIndex = newIndex;
 
-    // ── Relabel slots ─────────────────────────────────────────────────
-    // Rotating forward (direction=1):
-    //   old current → new previous
-    //   old next    → new current   (already joined — zero latency!)
-    //   old previous → new next     (needs to leave old and join new)
-    //
-    // Rotating backward (direction=-1):
-    //   old current  → new next
-    //   old previous → new current  (already joined — zero latency!)
-    //   old next     → new previous (needs to leave old and join new)
-
     final oldCurrent = _map[SlotPosition.current]!;
     final oldNext = _map[SlotPosition.next]!;
     final oldPrevious = _map[SlotPosition.previous]!;
@@ -593,61 +588,68 @@ class AgoraEnginePool {
     EngineSlot newCurrentSlot;
     EngineSlot newPreviousSlot;
     EngineSlot newNextSlot;
-    EngineSlot recycledSlot; // the one that gets repurposed
+    EngineSlot recycledSlot; // the identity that falls outside the window
 
     if (direction > 0) {
-      // Scrolled forward
+      // Forward: old-next becomes current (already joined — instant).
       newCurrentSlot = oldNext;
       newPreviousSlot = oldCurrent;
-      recycledSlot = oldPrevious; // will leave its old channel, join new next
+      recycledSlot = oldPrevious; // needs to leave old, join new "next"
       newNextSlot = recycledSlot;
     } else {
-      // Scrolled backward
+      // Backward: old-previous becomes current (already joined — instant).
       newCurrentSlot = oldPrevious;
       newNextSlot = oldCurrent;
-      recycledSlot = oldNext; // will leave its old channel, join new previous
+      recycledSlot = oldNext; // needs to leave old, join new "previous"
       newPreviousSlot = recycledSlot;
     }
 
-    // Update position labels on the slot objects (fixes Bug 4).
+    // Relabel — this is the ENTIRE cost for the two identities that
+    // didn't change channel. Their RtcConnection (channelId + fixed
+    // uid) is untouched; only the `currentPosition` metadata changes,
+    // which affects video-quality preference and which position
+    // listeners treat as "visible."
     newCurrentSlot.currentPosition = SlotPosition.current;
     newPreviousSlot.currentPosition = SlotPosition.previous;
     newNextSlot.currentPosition = SlotPosition.next;
 
-    // Commit the new map.
     _map[SlotPosition.current] = newCurrentSlot;
     _map[SlotPosition.previous] = newPreviousSlot;
     _map[SlotPosition.next] = newNextSlot;
 
-    // Upgrade the new current to high-quality video immediately.
+    // Upgrade newly-current to high quality; downgrade the others.
+    final currentConn = newCurrentSlot.connection;
     if (newCurrentSlot.state == SlotJoinState.joined &&
-        newCurrentSlot.hostUid.value != null) {
-      newCurrentSlot.engine
-          .setRemoteVideoStreamType(
+        newCurrentSlot.hostUid.value != null &&
+        currentConn != null) {
+      _engine
+          .setRemoteVideoStreamTypeEx(
             uid: newCurrentSlot.hostUid.value!,
             streamType: VideoStreamType.videoStreamHigh,
+            connection: currentConn,
           )
           .catchError((_) {});
     }
-
-    // Downgrade non-current slots to low-quality.
     for (final slot in [newPreviousSlot, newNextSlot]) {
+      final conn = slot.connection;
       if (slot.state == SlotJoinState.joined &&
-          slot.hostUid.value != null) {
-        slot.engine
-            .setRemoteVideoStreamType(
+          slot.hostUid.value != null &&
+          conn != null) {
+        _engine
+            .setRemoteVideoStreamTypeEx(
               uid: slot.hostUid.value!,
               streamType: VideoStreamType.videoStreamLow,
+              connection: conn,
             )
             .catchError((_) {});
       }
     }
 
-    // Background work: leave the recycled slot's old channel and join
-    // the newly-exposed adjacent stream. The user doesn't wait for this.
-    final newExposedIndex = direction > 0
-        ? newIndex + 1  // new next after scrolling forward
-        : newIndex - 1; // new previous after scrolling backward
+    // Background: the recycled identity needs to leave its old stream
+    // (if any) and join the newly-exposed adjacent one. User doesn't
+    // wait for this — it's exactly the pre-join work that makes the
+    // NEXT swipe instant.
+    final newExposedIndex = direction > 0 ? newIndex + 1 : newIndex - 1;
 
     unawaited(_backgroundRejoin(
       slot: recycledSlot,
@@ -657,8 +659,7 @@ class AgoraEnginePool {
     ));
 
     debugPrint(
-      '🔄 [Pool] Rotated ${direction > 0 ? "→" : "←"} '
-      'to index=$newIndex',
+      '🔄 [Pool] Rotated ${direction > 0 ? "→" : "←"} to index=$newIndex',
     );
   }
 
@@ -682,13 +683,9 @@ class AgoraEnginePool {
       return;
     }
 
-    // Skip if already on the right channel (e.g. fast back-and-forth).
-    if (slot.channelId == req.channel &&
-        slot.state == SlotJoinState.joined) {
-      debugPrint(
-        '⚡ [Pool/${slot.currentPosition.name}] '
-        'already on ch=${req.channel} — skip rejoin',
-      );
+    if (slot.channelId == req.channel && slot.state == SlotJoinState.joined) {
+      // Fast back-and-forth landed back on the same stream this
+      // identity was already on — no work needed.
       return;
     }
 
@@ -708,9 +705,8 @@ class AgoraEnginePool {
   Future<void> onAppBackgrounded() async {
     if (_backgrounded) return;
     _backgrounded = true;
-    for (final slot in _allSlots) {
-      if (slot.currentPosition == SlotPosition.current) continue;
-      await _leaveSlot(slot);
+    for (final position in [SlotPosition.previous, SlotPosition.next]) {
+      await _leaveSlot(_map[position]!);
     }
     debugPrint('📴 [Pool] Backgrounded');
   }
@@ -730,19 +726,35 @@ class AgoraEnginePool {
     debugPrint('📲 [Pool] Foregrounded');
   }
 
+  /// Leaves all active slot connections without releasing the engine.
+  /// Call this when the viewer pager closes so audio/video stops, but
+  /// the engine stays alive for the next pager session.
+  Future<void> leaveAll() async {
+    if (_disposed) return;
+    for (final slot in [_identityA, _identityB, _identityC]) {
+      await _leaveSlot(slot);
+    }
+    debugPrint('🏊 [Pool] All connections left (engine retained)');
+  }
+
   // ── Teardown ──────────────────────────────────────────────────────────────
 
   Future<void> disposeAll() async {
     if (_disposed) return;
     _disposed = true;
-    for (final slot in _allSlots) {
-      try { await slot.engine.leaveChannel(); } catch (_) {}
-      try { await slot.engine.release(); } catch (_) {}
+    for (final slot in [_identityA, _identityB, _identityC]) {
+      final conn = slot.connection;
+      if (conn != null) {
+        try { await _engine.leaveChannelEx(connection: conn); } catch (_) {}
+      }
       slot.dispose();
+    }
+    if (_engineContextReady) {
+      try { await _engine.release(); } catch (_) {}
     }
     _map.clear();
     if (!_eventsCtrl.isClosed) await _eventsCtrl.close();
-    debugPrint('🏊 [Pool] All 3 engines disposed');
+    debugPrint('🏊 [Pool] Disposed shared engine and all connections');
   }
 }
 

@@ -43,6 +43,8 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart' show HostIn
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/live_stream_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/services/reconnection_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/role_change_service.dart';
 
 class LiveViewerPager extends StatefulWidget {
@@ -95,21 +97,50 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       repo.skipAgoraJoin = true;
     }
 
-    _pool = AgoraEnginePool();
+    // Pool is now a GetIt singleton registered in injection_container.dart.
+    // Do NOT create a new one here — it owns the shared RtcEngineEx, and
+    // only one engine may exist per app. The singleton is shared with
+    // AgoraViewerService (which also holds a reference to it for co-host
+    // publish via the same engine).
+    _pool = sl<AgoraEnginePool>();
     _resolver = PoolRtcResolver(http: sl<DioClient>());
 
     _controller.addListener(_onPageScrolled);
 
     // Initialize pool + join initial window after first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      final wasAlreadyInitialized = _pool.isInitialized;
       await _pool.initialize();
+
+      // Only register the event handler once per engine lifetime —
+      // re-registering on an already-running engine adds duplicate
+      // handlers which cause double-processing of every callback.
+      if (!wasAlreadyInitialized) {
+        sl<AgoraViewerService>().registerStandaloneEventHandler();
+      }
+
+      // Wire guest uid propagation: when the pool sees a co-host join
+      // the current channel, forward their uid to AgoraViewerService
+      // so DynamicSplitScreen can render the guest video.
+      _pool.setGuestUidCallback((guestUid) {
+        sl<AgoraViewerService>().setGuestUid(guestUid);
+      });
+
+      // Always (re)set the initial window, even if the pool was
+      // previously initialized by an earlier pager instance. The
+      // previous pager's connections may have been left mid-flight or
+      // on different streams entirely.
       await _pool.setInitialWindow(
         currentIndex: widget.initialIndex,
         itemCount: widget.items.length,
         resolve: (i) => _resolver.resolve(widget.items, i),
       );
       // Trigger non-Agora wiring (Pusher/chat/health) for the initial page.
-      _repos[widget.initialIndex].ensureWiredOnce();
+      if (mounted && widget.initialIndex < _repos.length) {
+        _repos[widget.initialIndex].ensureWiredOnce();
+      }
     });
   }
 
@@ -126,7 +157,11 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     }
 
     // Dispose the pool — leaves all channels, releases all 3 engines.
-    _pool.disposeAll();
+    // The pool is a GetIt singleton — do NOT call disposeAll() here, as
+    // that would tear down the shared engine for the whole app lifetime.
+    // BUT we must leave all active connections so Agora stops sending
+    // audio/video — otherwise streams keep playing after the page closes.
+    _pool.leaveAll();
     super.dispose();
   }
 
@@ -260,19 +295,11 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
               repo,
               agoraViewerService: sl<AgoraViewerService>(),
               liveStreamService: sl<LiveStreamService>(),
-              // FIX: suppress the legacy network monitor + reconnection
-              // services in pool mode. Both are app-wide singletons wired
-              // to the singleton AgoraViewerService (via LiveStreamService),
-              // which never joins anything when skipAgoraJoin=true. Left
-              // enabled, ReconnectionService's 5-second health-check timer
-              // sees "not connected" forever and fires a fake reconnection
-              // cycle on a loop — fighting with the pool's own engines and
-              // contributing to the video-never-renders symptom. The pool
-              // already does its own per-slot network quality handling
-              // (see onNetworkQuality in agora_engine_pool.dart), so these
-              // are both redundant and actively harmful here.
-              // ViewerBloc already null-checks both fields everywhere
-              // they're used, so passing null is fully safe.
+              // Pool mode: suppress both services — the pool owns the
+              // Agora connection; the singleton AgoraViewerService has
+              // no audience connection for these to monitor. Running
+              // them against an idle singleton causes the endless
+              // "Host disconnected → reconnecting" loop seen in logs.
               networkMonitorService: null,
               reconnectionService: null,
               roleChangeService: sl<RoleChangeService>(),

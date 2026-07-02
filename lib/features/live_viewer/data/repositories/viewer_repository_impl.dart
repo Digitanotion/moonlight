@@ -637,6 +637,17 @@ class ViewerRepositoryImpl implements ViewerRepository {
       }
     });
 
+    // FIX: tracks whether a promote/demote call is currently in flight,
+    // to guard against duplicate participant.role_changed events (seen
+    // in practice — Pusher or the backend can deliver this event twice
+    // in quick succession for a single role change) triggering
+    // _promoteCurrentUserToGuest()/_demoteCurrentUserToAudience() twice
+    // concurrently. The second concurrent call would race the first
+    // one's async _init()/joinChannel() sequence, finding _engine
+    // already non-null but not yet _joined — which surfaced as
+    // "engine exists but not joined" in AgoraViewerService.
+    bool roleChangeCallInFlight = false;
+
     bindEvent(chMeta, 'participant.role_changed', (m) async {
       _isRoleChangeInProgress = true;
       try {
@@ -647,10 +658,29 @@ class ViewerRepositoryImpl implements ViewerRepository {
 
         if (participantUuid == currentUuid) {
           _participantRoleCtrl.add(newRole);
-          if (newRole == 'guest' || newRole == 'cohost') {
-            await _promoteCurrentUserToGuest();
-          } else if (newRole == 'viewer' || newRole == 'audience') {
-            await _demoteCurrentUserToAudience();
+
+          // FIX: ignore this event entirely if a promote/demote call
+          // triggered by an earlier (possibly duplicate) event is still
+          // in flight. We still emit _participantRoleCtrl above so the
+          // BLoC/UI state stays in sync, but we don't fire a second
+          // concurrent Agora operation.
+          if (roleChangeCallInFlight) {
+            debugPrint(
+              '⚠️ [Repo] Ignoring duplicate role_changed event '
+              '(call already in flight) — role=$newRole',
+            );
+            return;
+          }
+
+          roleChangeCallInFlight = true;
+          try {
+            if (newRole == 'guest' || newRole == 'cohost') {
+              await _promoteCurrentUserToGuest();
+            } else if (newRole == 'viewer' || newRole == 'audience') {
+              await _demoteCurrentUserToAudience();
+            }
+          } finally {
+            roleChangeCallInFlight = false;
           }
         } else {
           if (newRole == 'guest' || newRole == 'cohost') {
@@ -740,8 +770,16 @@ class ViewerRepositoryImpl implements ViewerRepository {
         queryParameters: {'role': 'publisher'},
       );
       final rtcData = _asMap(rtcRes.data);
+      // FIX: pass appId/channel/uid through so AgoraViewerService can
+      // self-initialize its engine in pool mode (where joinAudience()
+      // never ran on the singleton — skipAgoraJoin=true). These fields
+      // are already present in the /rtc?role=publisher response; they
+      // were simply never forwarded before.
       await agoraViewerService.promoteToCoHost(
         rtcToken: rtcData['rtc_token'].toString(),
+        appId: rtcData['app_id']?.toString(),
+        channel: rtcData['channel']?.toString(),
+        uid: rtcData['rtc_uid']?.toString(),
       );
     } catch (e) {
       debugPrint('❌ Promotion failed: $e');

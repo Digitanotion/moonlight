@@ -31,6 +31,7 @@ import 'package:moonlight/core/network/interceptors/error_normalizer_interceptor
 import 'package:moonlight/core/network/interceptors/idempotency_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/request_id_interceptor.dart';
 import 'package:moonlight/core/network/interceptors/retry_interceptor.dart';
+import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/host_pusher_service.dart';
@@ -1053,26 +1054,30 @@ Future<void> _initPusher(RuntimeConfig cfg) async {
 // LIVE VIEWER SERVICES
 // =============================================================================
 void _initLiveViewerServices() {
-  _reg<AgoraViewerService>(
-    () => AgoraViewerService(
-      onTokenRefresh: (role) async {
-        try {
-          final channel = sl<AgoraViewerService>().channelId;
-          if (channel == null || channel.isEmpty) throw Exception('No channel');
-          final token = await sl<AuthLocalDataSource>().readToken();
-          final res = await sl<Dio>(instanceName: 'mainDio').post(
-            '/api/v1/live/refresh-token',
-            data: {'role': role, 'channel': channel},
-            options: Options(headers: {'Authorization': 'Bearer $token'}),
-          );
-          return (res.data as Map<String, dynamic>)['token'] as String;
-        } catch (e) {
-          debugPrint('❌ Token refresh: $e');
-          return '';
-        }
-      },
-    ),
-  );
+// Register the pool FIRST — AgoraViewerService depends on it.
+_reg<AgoraEnginePool>(() => AgoraEnginePool());
+
+_reg<AgoraViewerService>(
+  () => AgoraViewerService(
+    pool: sl<AgoraEnginePool>(),   // ← ADD THIS LINE
+    onTokenRefresh: (role) async {
+      try {
+        final channel = sl<AgoraViewerService>().channelId;
+        if (channel == null || channel.isEmpty) throw Exception('No channel');
+        final token = await sl<AuthLocalDataSource>().readToken();
+        final res = await sl<Dio>(instanceName: 'mainDio').post(
+          '/api/v1/live/refresh-token',
+          data: {'role': role, 'channel': channel},
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+        return (res.data as Map<String, dynamic>)['token'] as String;
+      } catch (e) {
+        debugPrint('❌ Token refresh: $e');
+        return '';
+      }
+    },
+  ),
+);
   _reg<LiveStreamService>(
     () => LiveStreamService(
       agoraService: sl<AgoraViewerService>(),

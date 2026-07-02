@@ -1,20 +1,24 @@
 // lib/features/live_viewer/presentation/widgets/pool_video_view.dart
 //
-// PRODUCTION VERSION — diagnostic logging stripped after confirming the
-// fix (event handler registration timing in agora_engine_pool.dart)
-// resolved video rendering. Core logic is unchanged from the verified
-// version: build the controller once per (epoch, uid) pair, mount
-// AgoraVideoView as soon as the controller exists (loading spinner
-// overlaid on top, not replacing it), seed from current slot state on
-// attach to catch up on anything that fired before this widget mounted.
+// Updated for RtcEngineEx architecture: slot.engine no longer exists
+// (there is only one shared engine on the pool). We now use:
+//   - pool.sharedEngine  →  the single RtcEngineEx
+//   - slot.connection    →  RtcConnection(channelId, fixedLocalUid)
+//   - VideoViewController.remote(..., connection: slot.connection)
 
 import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
+import 'package:moonlight/core/services/agora_viewer_service.dart';
 
 class PoolVideoView extends StatefulWidget {
-  const PoolVideoView({super.key, required this.pool, required this.channelId});
+  const PoolVideoView({
+    super.key,
+    required this.pool,
+    required this.channelId,
+  });
 
   final AgoraEnginePool pool;
   final String channelId;
@@ -67,7 +71,18 @@ class _PoolVideoViewState extends State<PoolVideoView> {
   void _seedFromCurrentSlotState() {
     final slot = widget.pool.slotFor(SlotPosition.current);
     if (slot == null) return;
-    if (slot.channelId != widget.channelId) return;
+
+    // In co-host mode the pool slot was left — fall back to the co-host
+    // connection which still receives the host's video.
+    final viewerService = sl<AgoraViewerService>();
+    if (slot.channelId != widget.channelId ||
+        slot.state == SlotJoinState.idle ||
+        slot.state == SlotJoinState.unavailable) {
+      if (viewerService.isCoHostActive) {
+        _buildControllerFromCoHostConnection(viewerService);
+      }
+      return;
+    }
 
     if ((slot.state == SlotJoinState.joined ||
             slot.state == SlotJoinState.joining) &&
@@ -80,24 +95,54 @@ class _PoolVideoViewState extends State<PoolVideoView> {
     }
   }
 
+  void _buildControllerFromCoHostConnection(AgoraViewerService viewerService) {
+    final conn = viewerService.coHostConnection;
+    final hostUid = widget.pool.slotFor(SlotPosition.current)?.hostUid.value;
+    if (conn == null || hostUid == null) return;
+    if (_controller != null) return; // already built
+
+    try {
+      final controller = VideoViewController.remote(
+        rtcEngine: widget.pool.sharedEngine,
+        useFlutterTexture: true,
+        canvas: VideoCanvas(uid: hostUid),
+        connection: conn,
+      );
+      if (mounted) {
+        setState(() {
+          _controller = controller;
+          _hasVideo = true;
+        });
+      } else {
+        _controller = controller;
+      }
+      debugPrint('🎬 [PoolVideoView] Using co-host connection for host video');
+    } catch (e) {
+      debugPrint('❌ [PoolVideoView] Co-host controller build failed: \$e');
+    }
+  }
+
   void _onEvent(SlotEvent event) {
     if (_disposed || !mounted) return;
     if (event.position != SlotPosition.current) return;
 
     final slot = widget.pool.slotFor(SlotPosition.current);
     if (slot == null) return;
-
-    // Epoch guard — drop stale events from a superseded join attempt.
     if (event.epoch != slot.epoch) return;
-
-    // Channel guard — confirm this slot is actually for our stream.
     if (slot.channelId != widget.channelId) return;
 
     switch (event.kind) {
       case SlotEventKind.joined:
-        slot.engine
-            .setRemoteDefaultVideoStreamType(VideoStreamType.videoStreamHigh)
-            .catchError((_) {});
+        final conn = slot.connection;
+        if (conn != null && slot.hostUid.value != null) {
+          widget.pool.sharedEngine
+              .setRemoteVideoStreamTypeEx(
+                uid: slot.hostUid.value!,
+                streamType: VideoStreamType.videoStreamHigh,
+                connection: conn,
+              )
+              .catchError((_) {});
+        }
         if (slot.hostUid.value != null) _buildControllerOnce(slot);
 
       case SlotEventKind.hostUidReady:
@@ -113,7 +158,14 @@ class _PoolVideoViewState extends State<PoolVideoView> {
       case SlotEventKind.leftChannel:
       case SlotEventKind.joinFailed:
         _disposeController();
-        if (mounted) setState(() => _hasVideo = false);
+        // Check if we left because of co-host promotion — if so,
+        // build a controller from the co-host connection instead.
+        final viewerService = sl<AgoraViewerService>();
+        if (viewerService.isCoHostActive) {
+          _buildControllerFromCoHostConnection(viewerService);
+        } else if (mounted) {
+          setState(() => _hasVideo = false);
+        }
 
       case SlotEventKind.joining:
         break;
@@ -123,6 +175,9 @@ class _PoolVideoViewState extends State<PoolVideoView> {
   void _buildControllerOnce(EngineSlot slot) {
     final hostUid = slot.hostUid.value;
     if (hostUid == null) return;
+
+    final connection = slot.connection;
+    if (connection == null) return;
 
     if (_controllerEpoch == slot.epoch &&
         _controllerUid == hostUid &&
@@ -134,10 +189,10 @@ class _PoolVideoViewState extends State<PoolVideoView> {
 
     try {
       final controller = VideoViewController.remote(
-        rtcEngine: slot.engine,
+        rtcEngine: widget.pool.sharedEngine,
         useFlutterTexture: true,
         canvas: VideoCanvas(uid: hostUid),
-        connection: RtcConnection(channelId: widget.channelId),
+        connection: connection,
       );
 
       _controllerEpoch = slot.epoch;

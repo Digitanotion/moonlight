@@ -134,9 +134,11 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
       ViewMode.guest || ViewMode.cohost => GuestModeScreen(
         key: const ValueKey('guest_mode'),
         repository: widget.repository,
-        // Guest mode still uses AgoraViewerService for co-host video —
-        // pool only manages audience-side (host) video rendering.
-        // Co-host publish/preview path is unchanged.
+        // Pass pool/channelId so the TOP half (host video) can render
+        // from the pool's current slot — same engine already showing
+        // the host in viewer mode, before promotion.
+        pool: widget.pool,
+        channelId: widget.channelId,
       ),
     };
   }
