@@ -74,8 +74,8 @@ class DynamicSplitScreen extends StatelessWidget {
       // Current user is a viewer watching someone else as guest:
       // show the remote guest video + their mic/cam status.
       return _buildVideoSection(
-        videoWidget: agoraService.buildGuestVideo() ??
-            _buildVideoPlaceholder('GUEST'),
+        videoWidget:
+            agoraService.buildGuestVideo() ?? _buildVideoPlaceholder('GUEST'),
         label: 'GUEST',
         isHost: false,
         // Non-guest viewers see the guest's mute status via guestHasVideo
