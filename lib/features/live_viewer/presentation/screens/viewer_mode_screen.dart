@@ -1,4 +1,5 @@
 // lib/features/live_viewer/presentation/screens/viewer_mode_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -44,8 +45,6 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   final TextEditingController _commentCtrl = TextEditingController();
   bool _immersive = false;
   bool _overlayShown = false;
-
-  // Premium payment UI state (local — not in BLoC)
   bool _isProcessingPayment = false;
   String? _paymentError;
 
@@ -68,15 +67,11 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-      '🔬 [ViewerModeScreen] pool=${widget.pool != null ? "present" : "NULL"} '
-      'channelId=${widget.channelId ?? "NULL"}',
-    );
     final bloc = context.read<ViewerBloc>();
 
     return MultiBlocListener(
       listeners: [
-        // ── Stream ended ──────────────────────────────────────────────────
+        // Stream ended
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => !p.isEnded && n.isEnded,
           listener: (ctx, state) async {
@@ -91,7 +86,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
           },
         ),
 
-        // ── Stream unstable / recovered ───────────────────────────────────
+        // Stream unstable / recovered
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => p.isStreamUnstable != n.isStreamUnstable,
           listener: (ctx, state) {
@@ -108,7 +103,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
           },
         ),
 
-        // ── Premium access required ───────────────────────────────────────
+        // Premium access required
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) =>
               !p.requiresPremiumPayment && n.requiresPremiumPayment,
@@ -121,7 +116,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
           },
         ),
 
-        // ── Removal overlay ───────────────────────────────────────────────
+        // Removal overlay
         BlocListener<ViewerBloc, ViewerState>(
           listenWhen: (p, n) => p.showRemovalOverlay != n.showRemovalOverlay,
           listener: (ctx, state) {
@@ -164,27 +159,26 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                 bottom: false,
                 child: Stack(
                   children: [
-                    // ── Video — pool-aware ──────────────────────────────────
-                    // Pool mode: PoolVideoView renders from the pre-joined
-                    // pool engine for this channel (fast, no join latency).
-                    // Standalone mode: HostVideoContainer uses the singleton
-                    // AgoraViewerService (original path, no regression).
-                    if (widget.pool != null && widget.channelId != null)
-                      Builder(
-                        builder: (_) {
-                          debugPrint(
-                            '🔬🔬 [Stack] ABOUT TO BUILD PoolVideoView NOW',
-                          );
-                          return PoolVideoView(
-                            pool: widget.pool!,
-                            channelId: widget.channelId!,
-                          );
-                        },
+                    // ── Video — pool-aware ──────────────────────────────
+                    // Pool mode: PoolVideoView always renders the pool's
+                    // CURRENT slot — no channelId matching needed.
+                    // Standalone mode: HostVideoContainer (unchanged).
+                    // Video — pool-aware.
+                    // Key uses channelId so each page has its OWN
+                    // PoolVideoView State that is stable for that page
+                    // but distinct from other pages. When this page's
+                    // PoolVideoView is visible, it seeds from the pool's
+                    // current slot (which the pager ensures matches this
+                    // page's channel via rotation).
+                    if (widget.pool != null)
+                      PoolVideoView(
+                        key: ValueKey('pv_${widget.channelId}'),
+                        pool: widget.pool!,
                       )
                     else
                       HostVideoContainer(repository: widget.repository),
 
-                    // ── Normal viewer UI ────────────────────────────────────
+                    // ── Normal viewer UI ────────────────────────────────
                     if (!_immersive && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
                       const GuestJoinedBanner(),
@@ -192,7 +186,6 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       const PauseOverlay(),
                       const RoleChangeToast(),
                       const ReconnectionOverlay(),
-
                       if (state.isStreamUnstable) const _UnstableBanner(),
 
                       // Chat
@@ -235,7 +228,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       ),
                     ],
 
-                    // ── Premium paywall — always on top ─────────────────────
+                    // Premium paywall — always on top
                     if (state.requiresPremiumPayment)
                       Positioned.fill(
                         child: PremiumOverlay(
@@ -258,6 +251,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   }
 
   // ── Payment handler ───────────────────────────────────────────────────────
+
   Future<void> _handlePremiumPayment(BuildContext context) async {
     setState(() {
       _isProcessingPayment = true;
@@ -301,16 +295,13 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
+
   void _performCleanupAndExit(BuildContext context) async {
     final livestreamId = widget.repository.livestreamIdNumeric;
     widget.repository.dispose();
 
-    // FIX: Only call the singleton AgoraViewerService.leave() in
-    // non-pool mode. In pool mode the pool owns all Agora join/leave —
-    // calling leave() on the singleton here would have no effect on the
-    // pool's engines and could corrupt the singleton's internal state
-    // (leaving it thinking it's disconnected when it may not even have
-    // been the engine serving this stream).
+    // Only call singleton leave() in non-pool mode. In pool mode the
+    // pool owns all Agora connections.
     if (widget.pool == null) {
       try {
         await sl<AgoraViewerService>().leave();
@@ -342,7 +333,8 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   }
 }
 
-// ── Inline unstable banner ────────────────────────────────────────────────────
+// ── Inline unstable banner ────────────────────────────────────────────────
+
 class _UnstableBanner extends StatelessWidget {
   const _UnstableBanner();
 
@@ -357,7 +349,9 @@ class _UnstableBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF4A3A0F).withOpacity(0.92),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFFFA726).withOpacity(0.4)),
+          border: Border.all(
+            color: const Color(0xFFFFA726).withOpacity(0.4),
+          ),
         ),
         child: const Row(
           children: [

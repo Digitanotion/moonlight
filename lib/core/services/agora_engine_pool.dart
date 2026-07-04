@@ -292,6 +292,9 @@ class AgoraEnginePool {
         if (_disposed) return;
         final slot = _identityForConnection(connection);
         if (slot == null) return;
+        // Accept the first remote uid as the host regardless of whether
+        // this is a fresh join or the host was already in the channel.
+        // Agora fires onUserJoined for pre-existing participants too.
         if (slot.hostUid.value == null) {
           slot.hostUid.value = remoteUid;
           debugPrint(
@@ -321,11 +324,23 @@ class AgoraEnginePool {
             if (_disposed) return;
             final slot = _identityForConnection(connection);
             if (slot == null) return;
-            if (slot.hostUid.value != uid) return;
 
             final videoOn =
                 state == RemoteVideoState.remoteVideoStateDecoding ||
                 state == RemoteVideoState.remoteVideoStateStarting;
+
+            // If hostUid was never set (host was already in channel when
+            // we joined — onUserJoined won't fire in that case), set it
+            // now from the first remote video state change we receive.
+            if (slot.hostUid.value == null && videoOn) {
+              slot.hostUid.value = uid;
+              debugPrint(
+                '👤 [Pool/${slot.currentPosition.name}] hostUid=$uid (from videoState — joined after host)',
+              );
+              _emit(slot, SlotEventKind.hostUidReady);
+            }
+
+            if (slot.hostUid.value != uid) return;
 
             final wasOff = !slot.hasVideo.value;
             slot.hasVideo.value = videoOn;
@@ -550,10 +565,14 @@ class AgoraEnginePool {
     required Future<StreamJoinRequest?> Function(int index) resolve,
   }) async {
     _latestRequestedIndex = newIndex;
-    if (_rotationInFlight != null) return _rotationInFlight;
+    // If a rotation is already running, just update the target index —
+    // _runRotation's while loop will pick it up and rotate to the latest.
+    if (_rotationInFlight != null) return;
     _rotationInFlight = _runRotation(itemCount: itemCount, resolve: resolve);
     try {
       await _rotationInFlight;
+    } catch (e) {
+      debugPrint('❌ [Pool] rotation error: \$e');
     } finally {
       _rotationInFlight = null;
     }
@@ -661,6 +680,21 @@ class AgoraEnginePool {
     debugPrint(
       '🔄 [Pool] Rotated ${direction > 0 ? "→" : "←"} to index=$newIndex',
     );
+
+    // CRITICAL: emit a synthetic event for the newly-current slot so
+    // PoolVideoView knows to re-seed its controller from the new slot.
+    // Without this, PoolVideoView keeps waiting for events that fired
+    // BEFORE this slot became current (on its old position label) and
+    // never renders the new stream.
+    if (newCurrentSlot.state == SlotJoinState.joined) {
+      if (newCurrentSlot.hasVideo.value) {
+        _emit(newCurrentSlot, SlotEventKind.videoReady);
+      } else if (newCurrentSlot.hostUid.value != null) {
+        _emit(newCurrentSlot, SlotEventKind.hostUidReady);
+      } else {
+        _emit(newCurrentSlot, SlotEventKind.joined);
+      }
+    }
   }
 
   Future<void> _backgroundRejoin({
@@ -724,6 +758,23 @@ class AgoraEnginePool {
       resolve: resolve,
     );
     debugPrint('📲 [Pool] Foregrounded');
+  }
+
+  /// Fully releases the shared engine so another engine (e.g. AgoraService
+  /// for the host go-live screen) can be created. The pool resets to an
+  /// uninitialized state — the next call to initialize() will create a
+  /// fresh engine. Call this BEFORE opening the host/go-live screen.
+  Future<void> release() async {
+    if (_disposed || !_initialized) return;
+    await leaveAll();
+    if (_engineContextReady) {
+      try { await _engine.release(); } catch (_) {}
+      _engineContextReady = false;
+    }
+    _initialized = false;
+    _onGuestUidChanged = null;
+    _map.clear();
+    debugPrint('🏊 [Pool] Engine released (host mode)');
   }
 
   /// Leaves all active slot connections without releasing the engine.

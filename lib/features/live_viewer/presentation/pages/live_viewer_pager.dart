@@ -33,6 +33,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/pool_video_view.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -114,29 +115,27 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       final wasAlreadyInitialized = _pool.isInitialized;
       await _pool.initialize();
 
-      // Only register the event handler once per engine lifetime —
-      // re-registering on an already-running engine adds duplicate
-      // handlers which cause double-processing of every callback.
-      if (!wasAlreadyInitialized) {
-        sl<AgoraViewerService>().registerStandaloneEventHandler();
-      }
-
-      // Wire guest uid propagation: when the pool sees a co-host join
-      // the current channel, forward their uid to AgoraViewerService
-      // so DynamicSplitScreen can render the guest video.
+      // Wire guest uid propagation before setInitialWindow.
       _pool.setGuestUidCallback((guestUid) {
         sl<AgoraViewerService>().setGuestUid(guestUid);
       });
 
-      // Always (re)set the initial window, even if the pool was
-      // previously initialized by an earlier pager instance. The
-      // previous pager's connections may have been left mid-flight or
-      // on different streams entirely.
+      // Always (re)set the initial window. This triggers _ensureEngineContext
+      // which initializes the native engine context — handler registration
+      // MUST happen after this, not before, to avoid a double-initialize.
       await _pool.setInitialWindow(
         currentIndex: widget.initialIndex,
         itemCount: widget.items.length,
         resolve: (i) => _resolver.resolve(widget.items, i),
       );
+
+      // Register the standalone event handler AFTER setInitialWindow so
+      // the engine context is fully initialized before we attach handlers.
+      // Registering before _ensureEngineContext causes a second initialize
+      // call which resets the engine state and breaks video rendering.
+      if (!wasAlreadyInitialized) {
+        sl<AgoraViewerService>().registerStandaloneEventHandler();
+      }
       // Trigger non-Agora wiring (Pusher/chat/health) for the initial page.
       if (mounted && widget.initialIndex < _repos.length) {
         _repos[widget.initialIndex].ensureWiredOnce();
@@ -295,16 +294,10 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
               repo,
               agoraViewerService: sl<AgoraViewerService>(),
               liveStreamService: sl<LiveStreamService>(),
-              // Pool mode: suppress both services — the pool owns the
-              // Agora connection; the singleton AgoraViewerService has
-              // no audience connection for these to monitor. Running
-              // them against an idle singleton causes the endless
-              // "Host disconnected → reconnecting" loop seen in logs.
               networkMonitorService: null,
               reconnectionService: null,
               roleChangeService: sl<RoleChangeService>(),
             ),
-            // Pass pool + channel to the screen so it can use PoolVideoView.
             child: LiveViewerScreen(
               repository: repo,
               routeArgs: routeArgs,

@@ -1,27 +1,48 @@
 // lib/features/live_viewer/presentation/widgets/pool_video_view.dart
 //
-// Updated for RtcEngineEx architecture: slot.engine no longer exists
-// (there is only one shared engine on the pool). We now use:
-//   - pool.sharedEngine  →  the single RtcEngineEx
-//   - slot.connection    →  RtcConnection(channelId, fixedLocalUid)
-//   - VideoViewController.remote(..., connection: slot.connection)
+// REDESIGNED — no channelId matching, no per-item event filtering.
+//
+// The previous design had PoolVideoView keyed to a specific channelId,
+// filtering pool events by channel. This was fragile: after rotation,
+// the slot's channel changes but the widget's channelId doesn't, so
+// events were silently dropped and the video never updated.
+//
+// New design: ONE widget that always renders the pool's CURRENT slot,
+// whatever that is. It listens to the pool event stream and rebuilds
+// whenever anything about the current slot changes — no channel guard,
+// no epoch guard at the event level. The VideoViewController is rebuilt
+// only when the actual (channel, hostUid) pair changes, which is the
+// correct deduplication boundary.
+//
+// Usage: place ONE instance of this in ViewerModeScreen. Do NOT create
+// one per PageView item. The PageView handles navigation; this widget
+// handles video rendering for whichever stream is currently visible.
 
 import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
-import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
-import 'package:moonlight/core/services/agora_viewer_service.dart';
 
 class PoolVideoView extends StatefulWidget {
   const PoolVideoView({
     super.key,
     required this.pool,
-    required this.channelId,
   });
 
   final AgoraEnginePool pool;
-  final String channelId;
+
+  /// The channel this widget instance is responsible for rendering.
+  /// Derived from the key — used to filter events so only the visible
+  /// page's PoolVideoView reacts when the pool's current slot changes.
+  String? get _expectedChannel {
+    final k = key;
+    if (k is ValueKey) {
+      final v = k.value?.toString() ?? '';
+      // key format: 'pv_live_XwHXCQYGprrQ'
+      if (v.startsWith('pv_')) return v.substring(3);
+    }
+    return null;
+  }
 
   @override
   State<PoolVideoView> createState() => _PoolVideoViewState();
@@ -32,95 +53,53 @@ class _PoolVideoViewState extends State<PoolVideoView> {
   VideoViewController? _controller;
   bool _hasVideo = false;
   bool _disposed = false;
-  int? _controllerEpoch;
+
+  // Track what the controller was built for — rebuild only on actual change.
+  String? _controllerChannel;
   int? _controllerUid;
 
   @override
   void initState() {
     super.initState();
-    _attach();
+    _sub = widget.pool.events.listen(_onEvent);
+    _seedFromCurrentSlot();
   }
 
   @override
   void didUpdateWidget(PoolVideoView old) {
     super.didUpdateWidget(old);
-    if (old.channelId != widget.channelId || old.pool != widget.pool) {
-      _detach();
-      _attach();
+    if (old.pool != widget.pool) {
+      _sub?.cancel();
+      _sub = widget.pool.events.listen(_onEvent);
+      _seedFromCurrentSlot();
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _detach();
+    _sub?.cancel();
+    _disposeController();
     super.dispose();
   }
 
-  void _attach() {
-    _sub = widget.pool.events.listen(_onEvent);
-    _seedFromCurrentSlotState();
-  }
+  // ── Seed from whatever state the current slot is already in ───────────────
 
-  void _detach() {
-    _sub?.cancel();
-    _sub = null;
-    _disposeController();
-  }
-
-  void _seedFromCurrentSlotState() {
+  void _seedFromCurrentSlot() {
     final slot = widget.pool.slotFor(SlotPosition.current);
     if (slot == null) return;
-
-    // In co-host mode the pool slot was left — fall back to the co-host
-    // connection which still receives the host's video.
-    final viewerService = sl<AgoraViewerService>();
-    if (slot.channelId != widget.channelId ||
-        slot.state == SlotJoinState.idle ||
-        slot.state == SlotJoinState.unavailable) {
-      if (viewerService.isCoHostActive) {
-        _buildControllerFromCoHostConnection(viewerService);
-      }
-      return;
+    // Only seed if this page's channel matches the current slot.
+    final expected = widget._expectedChannel;
+    if (expected != null && slot.channelId != null && slot.channelId != expected) return;
+    if (slot.hostUid.value != null) {
+      _buildController(slot);
     }
-
-    if ((slot.state == SlotJoinState.joined ||
-            slot.state == SlotJoinState.joining) &&
-        slot.hostUid.value != null) {
-      _buildControllerOnce(slot);
-    }
-
     if (slot.hasVideo.value && mounted) {
       setState(() => _hasVideo = true);
     }
   }
 
-  void _buildControllerFromCoHostConnection(AgoraViewerService viewerService) {
-    final conn = viewerService.coHostConnection;
-    final hostUid = widget.pool.slotFor(SlotPosition.current)?.hostUid.value;
-    if (conn == null || hostUid == null) return;
-    if (_controller != null) return; // already built
-
-    try {
-      final controller = VideoViewController.remote(
-        rtcEngine: widget.pool.sharedEngine,
-        useFlutterTexture: true,
-        canvas: VideoCanvas(uid: hostUid),
-        connection: conn,
-      );
-      if (mounted) {
-        setState(() {
-          _controller = controller;
-          _hasVideo = true;
-        });
-      } else {
-        _controller = controller;
-      }
-      debugPrint('🎬 [PoolVideoView] Using co-host connection for host video');
-    } catch (e) {
-      debugPrint('❌ [PoolVideoView] Co-host controller build failed: \$e');
-    }
-  }
+  // ── Event handler — no channel guard, just position guard ─────────────────
 
   void _onEvent(SlotEvent event) {
     if (_disposed || !mounted) return;
@@ -128,11 +107,26 @@ class _PoolVideoViewState extends State<PoolVideoView> {
 
     final slot = widget.pool.slotFor(SlotPosition.current);
     if (slot == null) return;
-    if (event.epoch != slot.epoch) return;
-    if (slot.channelId != widget.channelId) return;
+
+    // Only the page whose channel matches the pool's current slot
+    // should react. This stops multiple PoolVideoView instances
+    // (one per keepAlive page) from fighting each other.
+    final expected = widget._expectedChannel;
+    if (expected != null && slot.channelId != expected) return;
 
     switch (event.kind) {
+      case SlotEventKind.joining:
+        // Only clear if this is OUR channel starting a fresh join.
+        // Do NOT clear if it's a different channel joining — that's
+        // the background pre-join for another page, not us.
+        if (slot.channelId == widget._expectedChannel && 
+            slot.channelId != _controllerChannel) {
+          _disposeController();
+          if (mounted) setState(() => _hasVideo = false);
+        }
+
       case SlotEventKind.joined:
+        // Upgrade to high quality on current slot.
         final conn = slot.connection;
         if (conn != null && slot.hostUid.value != null) {
           widget.pool.sharedEngine
@@ -142,61 +136,66 @@ class _PoolVideoViewState extends State<PoolVideoView> {
                 connection: conn,
               )
               .catchError((_) {});
+          _buildController(slot);
         }
-        if (slot.hostUid.value != null) _buildControllerOnce(slot);
+        // hostUidReady will fire shortly after if uid not yet known — handled below.
 
       case SlotEventKind.hostUidReady:
-        _buildControllerOnce(slot);
+        _buildController(slot);
 
       case SlotEventKind.videoReady:
-        if (_controllerEpoch != slot.epoch ||
-            _controllerUid != slot.hostUid.value) {
-          _buildControllerOnce(slot);
-        }
-        if (mounted) setState(() => _hasVideo = true);
+        _buildController(slot);
+        if (mounted && !_hasVideo) setState(() => _hasVideo = true);
 
       case SlotEventKind.leftChannel:
       case SlotEventKind.joinFailed:
-        _disposeController();
-        // Check if we left because of co-host promotion — if so,
-        // build a controller from the co-host connection instead.
-        final viewerService = sl<AgoraViewerService>();
-        if (viewerService.isCoHostActive) {
-          _buildControllerFromCoHostConnection(viewerService);
-        } else if (mounted) {
-          setState(() => _hasVideo = false);
+        // Only clear if the slot that left/failed is OUR channel.
+        if (slot.channelId == widget._expectedChannel || 
+            slot.channelId == _controllerChannel) {
+          _disposeController();
+          if (mounted) setState(() => _hasVideo = false);
         }
-
-      case SlotEventKind.joining:
-        break;
     }
   }
 
-  void _buildControllerOnce(EngineSlot slot) {
+  // ── Controller management ─────────────────────────────────────────────────
+
+  void _buildController(EngineSlot slot) {
     final hostUid = slot.hostUid.value;
-    if (hostUid == null) return;
+    final channel = slot.channelId;
+    if (hostUid == null || channel == null) return;
 
-    final connection = slot.connection;
-    if (connection == null) return;
+    // Only build for our expected channel.
+    final expected = widget._expectedChannel;
+    if (expected != null && channel != expected) return;
 
-    if (_controllerEpoch == slot.epoch &&
+    // Already have a controller for this exact (channel, uid) — skip.
+    if (_controllerChannel == channel &&
         _controllerUid == hostUid &&
         _controller != null) {
+      debugPrint('🎮 [PoolVideoView] controller reuse: ch=$channel uid=$hostUid');
       return;
     }
 
     _disposeController();
 
+    final connection = slot.connection;
+    if (connection == null) return;
+
     try {
       final controller = VideoViewController.remote(
         rtcEngine: widget.pool.sharedEngine,
-        useFlutterTexture: true,
+        useFlutterTexture: false,
         canvas: VideoCanvas(uid: hostUid),
         connection: connection,
       );
 
-      _controllerEpoch = slot.epoch;
+      _controllerChannel = channel;
       _controllerUid = hostUid;
+
+      debugPrint(
+        '🎮 [PoolVideoView] controller built: ch=$channel uid=$hostUid',
+      );
 
       if (mounted) {
         setState(() {
@@ -212,13 +211,13 @@ class _PoolVideoViewState extends State<PoolVideoView> {
   }
 
   void _disposeController() {
-    try {
-      _controller?.dispose();
-    } catch (_) {}
+    try { _controller?.dispose(); } catch (_) {}
     _controller = null;
-    _controllerEpoch = null;
+    _controllerChannel = null;
     _controllerUid = null;
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -231,11 +230,15 @@ class _PoolVideoViewState extends State<PoolVideoView> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          AgoraVideoView(
-            key: ValueKey(
-              'pool_${widget.channelId}_${_controllerEpoch}_$_controllerUid',
+          // Wrap in a UniqueKey-keyed container to force full native
+          // SurfaceView recreation when the stream changes. Without this,
+          // Android reuses the same SurfaceView and the new stream's
+          // frames never paint over the old surface.
+          KeyedSubtree(
+            key: ValueKey('surface_${_controllerChannel}_$_controllerUid'),
+            child: AgoraVideoView(
+              controller: _controller!,
             ),
-            controller: _controller!,
           ),
           if (!_hasVideo) const _LoadingPlaceholder(),
         ],
