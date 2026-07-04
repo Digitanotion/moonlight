@@ -1,15 +1,4 @@
 // lib/core/services/ad_service.dart
-//
-// CHANGES vs previous version:
-//   1. Real Android ad unit IDs filled in (from your AdMob console).
-//   2. _useTestAds is STILL TRUE — your app is in the "Requires review"
-//      period and these ad units need up to an hour to activate. Flip
-//      this to false only once BOTH of these are true:
-//        a) AdMob no longer shows "Requires review" for this app
-//        b) At least an hour has passed since the ad units were created
-//   3. iOS prod constants are left as placeholders — you haven't created
-//      iOS ad units yet (this app is currently Android-only per the
-//      AdMob screenshots). Fill these in later if you ship iOS.
 
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -18,30 +7,24 @@ class AdService {
   AdService._();
   static final AdService instance = AdService._();
 
-  // ── CONFIG ────────────────────────────────────────────────────────────
-  // Keep this TRUE until:
-  //   1. AdMob no longer shows "Requires review" for Moonlight Livestream App
-  //   2. At least 1 hour has passed since you created these ad units
-  // Then flip to false to start serving real ads and earning revenue.
+  // ── CONFIG ──────────────────────────────────────────────────────────────
   static const bool _useTestAds = false;
 
-  // Google's official test ad unit IDs (safe to use during development).
+  // Google's official test ad unit IDs.
   static const String _testInterstitialAndroid =
       'ca-app-pub-3940256099942544/1033173712';
   static const String _testInterstitialIOS =
       'ca-app-pub-3940256099942544/4411468910';
   static const String _testBannerAndroid =
       'ca-app-pub-3940256099942544/6300978111';
-  static const String _testBannerIOS = 'ca-app-pub-3940256099942544/2934735716';
+  static const String _testBannerIOS =
+      'ca-app-pub-3940256099942544/2934735716';
 
-  // ── REAL ad unit IDs (from AdMob console) ────────────────────────────
+  // Real ad unit IDs (from AdMob console).
   static const String _prodInterstitialAndroid =
       'ca-app-pub-9544684683357809/8071794223';
   static const String _prodBannerAndroid =
       'ca-app-pub-9544684683357809/7658263624';
-
-  // iOS: no ad units created yet. Fill these in if/when you ship iOS,
-  // and create the corresponding ad units in AdMob console first.
   static const String _prodInterstitialIOS = 'REPLACE_WITH_REAL_ID';
   static const String _prodBannerIOS = 'REPLACE_WITH_REAL_ID';
 
@@ -67,21 +50,23 @@ class AdService {
         : _prodBannerAndroid;
   }
 
-  // ── Interstitial cadence ──────────────────────────────────────────────
-  static const int postsPerInterstitial = 9; // every 8-10 posts (midpoint)
+  // ── Interstitial cadence ─────────────────────────────────────────────────
+  // Show an interstitial every N stream views.
+  static const int postsPerInterstitial = 9;
 
   int _postsSinceLastAd = 0;
   InterstitialAd? _cachedInterstitial;
   bool _isLoadingInterstitial = false;
 
-  /// Call once at app startup, before runApp(). Safe to call multiple
-  /// times — MobileAds.instance.initialize() is idempotent internally.
+  /// Call once at app startup, before runApp().
   Future<void> init() async {
     await MobileAds.instance.initialize();
     _preloadInterstitial();
   }
 
   void _preloadInterstitial() {
+    // Guard: don't start a second load if one is already in flight
+    // or an ad is already cached and ready to show.
     if (_isLoadingInterstitial || _cachedInterstitial != null) return;
     _isLoadingInterstitial = true;
 
@@ -95,73 +80,77 @@ class AdService {
 
           ad.fullScreenContentCallback = FullScreenContentCallback(
             onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              _cachedInterstitial = null;
-              _preloadInterstitial(); // immediately start loading the next one
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              debugPrint('⚠️ [Ads] Interstitial failed to show: $error');
+              // Ad was dismissed — dispose it and immediately preload the
+              // next one so it's ready before the user hits the threshold.
               ad.dispose();
               _cachedInterstitial = null;
               _preloadInterstitial();
             },
+            onAdFailedToShowFullScreenContent: (ad, error) {
+              debugPrint('⚠️ [AdService] Interstitial failed to show: $error');
+              ad.dispose();
+              _cachedInterstitial = null;
+              // Retry preload so we recover from transient failures.
+              _preloadInterstitial();
+            },
+            onAdShowedFullScreenContent: (_) {
+              debugPrint('✅ [AdService] Interstitial shown');
+            },
           );
         },
         onAdFailedToLoad: (error) {
-          debugPrint('⚠️ [Ads] Interstitial failed to load: $error');
           _isLoadingInterstitial = false;
           _cachedInterstitial = null;
-          // Don't hammer retries — try again next time onPostViewed() fires
-          // and finds no cached ad.
+          debugPrint('⚠️ [AdService] Interstitial failed to load: $error');
+          // Retry after a delay to avoid hammering AdMob on repeated failures.
+          Future.delayed(const Duration(minutes: 1), _preloadInterstitial);
         },
       ),
     );
   }
 
-  /// Call every time a post is opened/viewed. Internally tracks a
-  /// counter and shows the pre-loaded interstitial once the threshold
-  /// is hit. No-ops silently if no ad is ready yet (never blocks UI
-  /// waiting for an ad — that would feel laggy and broken).
+  /// Call every time a stream/post is viewed. Shows a pre-loaded
+  /// interstitial once the threshold is reached. Never blocks the UI.
   void onPostViewed() {
     _postsSinceLastAd++;
     if (_postsSinceLastAd < postsPerInterstitial) return;
 
     final ad = _cachedInterstitial;
     if (ad == null) {
-      // Not ready yet — try loading for next time, don't block.
+      // No ad cached yet — reset counter so we try again after the
+      // next N views, and kick off a preload if one isn't already running.
+      _postsSinceLastAd = 0;
       _preloadInterstitial();
       return;
     }
 
+    // Reset counter and show. The fullScreenContentCallback above handles
+    // disposal and reloading after the ad is dismissed.
     _postsSinceLastAd = 0;
+    _cachedInterstitial = null; // clear before show so callbacks are clean
     ad.show();
   }
 
-  /// Resets the counter without showing an ad — useful if you ever want
-  /// to manually suppress the next scheduled interstitial (e.g. right
-  /// after a purchase flow, to avoid bad timing).
+  /// Resets the counter without showing — useful after purchase flows.
   void resetCounter() => _postsSinceLastAd = 0;
 
-  // ── Banner factory ────────────────────────────────────────────────────
+  // ── Banner factory ───────────────────────────────────────────────────────
 
-  /// Creates a fresh standard banner (320x50). The returned BannerAd must
-  /// be disposed by the caller (typically in a StatefulWidget's dispose()).
-  /// [onLoaded]/[onFailed] let the caller show a placeholder until the ad
-  /// is actually ready, avoiding a blank-box flash.
+  /// Creates and loads a standard 320×50 banner. The caller must call
+  /// dispose() on it in their widget's dispose() method.
   BannerAd createBannerAd({
     required VoidCallback onLoaded,
-    required VoidCallback onFailed,
+    required void Function(Ad, LoadAdError) onFailed,
   }) {
     return BannerAd(
-      size: AdSize.banner, // 320x50 — the compact standard size
+      size: AdSize.banner,
       adUnitId: bannerUnitId,
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (_) => onLoaded(),
         onAdFailedToLoad: (ad, error) {
-          debugPrint('⚠️ [Ads] Banner failed to load: $error');
           ad.dispose();
-          onFailed();
+          onFailed(ad, error);
         },
       ),
     )..load();
