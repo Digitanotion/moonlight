@@ -105,23 +105,20 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(8, 12, 16, 8),
       child: Row(
         children: [
-          const Expanded(
-            child: Text(
-              'Notifications',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-              ),
-            ),
-          ),
           IconButton(
-            icon: const Icon(Icons.done_all_rounded, color: AppColors.primary_),
-            onPressed: () => context.read<NotificationsBloc>().add(
-              MarkAllNotificationsRead(),
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'Notifications',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -129,7 +126,6 @@ class _Header extends StatelessWidget {
     );
   }
 }
-
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 

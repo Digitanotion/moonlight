@@ -57,7 +57,11 @@ class FeedPostCard extends StatelessWidget {
           color: _C.accent.withOpacity(0.16),
           border: Border.all(color: _C.accent.withOpacity(0.3)),
         ),
-        child: const Icon(Icons.person_rounded, color: Colors.white70, size: 20),
+        child: const Icon(
+          Icons.person_rounded,
+          color: Colors.white70,
+          size: 20,
+        ),
       );
     }
     return Container(
@@ -180,7 +184,7 @@ class FeedPostCard extends StatelessWidget {
                 _LikeMetric(
                   isLiked: post.isLiked,
                   count: post.likes,
-                  onTap: onLike,
+                  onTap: onOpenPost, // ← tapping heart opens post, not likes it
                 ),
                 const SizedBox(width: 18),
                 _Metric(
@@ -189,10 +193,7 @@ class FeedPostCard extends StatelessWidget {
                   onTap: onOpenPost,
                 ),
                 const SizedBox(width: 18),
-                _Metric(
-                  icon: Icons.visibility_rounded,
-                  label: '${post.views}',
-                ),
+                _Metric(icon: Icons.visibility_rounded, label: '${post.views}'),
               ],
             ),
           ),
@@ -671,10 +672,7 @@ class _ParticleBurst extends StatelessWidget {
               child: Container(
                 width: 4,
                 height: 4,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                ),
+                decoration: BoxDecoration(shape: BoxShape.circle, color: color),
               ),
             ),
           );

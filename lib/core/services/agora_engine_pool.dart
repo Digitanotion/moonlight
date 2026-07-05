@@ -455,13 +455,18 @@ class AgoraEnginePool {
     );
 
     try {
+      // Only subscribe to audio on the current slot — previous/next
+      // slots are pre-joined silently (video only) to avoid all streams
+      // playing audio simultaneously.
+      final isCurrent = slot.currentPosition == SlotPosition.current;
+
       await _engine.joinChannelEx(
         token: req.rtcToken,
         connection: connection,
         options: ChannelMediaOptions(
           clientRoleType: ClientRoleType.clientRoleAudience,
           channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
-          autoSubscribeAudio: true,
+          autoSubscribeAudio: isCurrent,   // ← only current plays audio
           autoSubscribeVideo: true,
           publishCameraTrack: false,
           publishMicrophoneTrack: false,
@@ -636,24 +641,35 @@ class AgoraEnginePool {
     _map[SlotPosition.previous] = newPreviousSlot;
     _map[SlotPosition.next] = newNextSlot;
 
-    // Upgrade newly-current to high quality; downgrade the others.
+    // Upgrade newly-current to high quality + unmute audio.
+    // Downgrade previous/next to low quality + mute audio so only
+    // the visible stream is heard.
     final currentConn = newCurrentSlot.connection;
-    if (newCurrentSlot.state == SlotJoinState.joined &&
-        newCurrentSlot.hostUid.value != null &&
-        currentConn != null) {
+    if (currentConn != null) {
+      if (newCurrentSlot.state == SlotJoinState.joined &&
+          newCurrentSlot.hostUid.value != null) {
+        _engine
+            .setRemoteVideoStreamTypeEx(
+              uid: newCurrentSlot.hostUid.value!,
+              streamType: VideoStreamType.videoStreamHigh,
+              connection: currentConn,
+            )
+            .catchError((_) {});
+      }
+      // Unmute audio on the newly-current slot.
       _engine
-          .setRemoteVideoStreamTypeEx(
-            uid: newCurrentSlot.hostUid.value!,
-            streamType: VideoStreamType.videoStreamHigh,
+          .updateChannelMediaOptionsEx(
             connection: currentConn,
+            options: const ChannelMediaOptions(autoSubscribeAudio: true),
           )
           .catchError((_) {});
     }
+
     for (final slot in [newPreviousSlot, newNextSlot]) {
       final conn = slot.connection;
+      if (conn == null) continue;
       if (slot.state == SlotJoinState.joined &&
-          slot.hostUid.value != null &&
-          conn != null) {
+          slot.hostUid.value != null) {
         _engine
             .setRemoteVideoStreamTypeEx(
               uid: slot.hostUid.value!,
@@ -662,6 +678,13 @@ class AgoraEnginePool {
             )
             .catchError((_) {});
       }
+      // Mute audio on non-current slots.
+      _engine
+          .updateChannelMediaOptionsEx(
+            connection: conn,
+            options: const ChannelMediaOptions(autoSubscribeAudio: false),
+          )
+          .catchError((_) {});
     }
 
     // Background: the recycled identity needs to leave its old stream
@@ -782,6 +805,19 @@ class AgoraEnginePool {
   /// the engine stays alive for the next pager session.
   Future<void> leaveAll() async {
     if (_disposed) return;
+    // Immediately mute all audio before leaving so there's no gap
+    // where audio plays while leaveChannelEx is completing.
+    for (final slot in [_identityA, _identityB, _identityC]) {
+      final conn = slot.connection;
+      if (conn != null) {
+        _engine
+            .updateChannelMediaOptionsEx(
+              connection: conn,
+              options: const ChannelMediaOptions(autoSubscribeAudio: false),
+            )
+            .catchError((_) {});
+      }
+    }
     for (final slot in [_identityA, _identityB, _identityC]) {
       await _leaveSlot(slot);
     }
