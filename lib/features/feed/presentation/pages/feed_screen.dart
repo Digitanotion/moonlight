@@ -65,16 +65,11 @@ class _FeedScreenState extends State<FeedScreen> {
           parent: AlwaysScrollableScrollPhysics(),
         ),
         slivers: [
-          _FeedAppBar(
-            onRefresh: () => context.read<FeedCubit>().refresh(),
-          ),
+          _FeedAppBar(onRefresh: () => context.read<FeedCubit>().refresh()),
           BlocBuilder<FeedCubit, FeedState>(
             builder: (context, s) {
               if (s.initialLoading) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: FeedSkeletonList(count: 6),
-                );
+                return SliverToBoxAdapter(child: FeedSkeletonList(count: 6));
               }
 
               if (s.items.isEmpty) {
@@ -113,20 +108,20 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
- Future<void> _openPostAndBump(int index, Post p) async {
+  Future<void> _openPostAndBump(int index, Post p) async {
     context.read<FeedCubit>().incrementViewsAt(index);
- 
+
     // Tracks the "posts viewed" counter; shows a cached interstitial once
     // every ~9 posts. No-ops instantly if no ad is cached yet — never
     // blocks navigation waiting for an ad to load.
     AdService.instance.onPostViewed();
- 
+
     final updated = await Navigator.pushNamed(
       context,
       RouteNames.postView,
       arguments: {'postId': p.id},
     );
- 
+
     if (!mounted) return;
     if (updated is Post) {
       context.read<FeedCubit>().replaceAt(index, updated);
@@ -137,7 +132,10 @@ class _FeedScreenState extends State<FeedScreen> {
     Navigator.pushNamed(
       context,
       RouteNames.profileView,
-      arguments: {'userUuid': p.author.id.toString(), 'user_slug': p.author.name},
+      arguments: {
+        'userUuid': p.author.id.toString(),
+        'user_slug': p.author.name,
+      },
     );
   }
 }
@@ -411,14 +409,14 @@ class _EmptyFeedView extends StatelessWidget {
                               ? Icons.cloud_off_rounded
                               : Icons.auto_awesome_rounded,
                           size: 32,
-                          color: hasError
-                              ? Colors.white38
-                              : _FeedColors.accent,
+                          color: hasError ? Colors.white38 : _FeedColors.accent,
                         ),
                       ),
                       const SizedBox(height: 22),
                       Text(
-                        hasError ? "Couldn't load the feed" : 'Nothing here yet',
+                        hasError
+                            ? "Couldn't load the feed"
+                            : 'Nothing here yet',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,

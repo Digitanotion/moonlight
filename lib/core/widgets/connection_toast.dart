@@ -1,17 +1,18 @@
 // lib/core/widgets/connection_toast.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/services/connection_monitor.dart';
-import 'package:moonlight/core/theme/app_colors.dart';
 
-// Alternative ConnectionToast that doesn't use overlay
 class SimpleConnectionToast extends StatefulWidget {
   final Widget child;
-
   const SimpleConnectionToast({super.key, required this.child});
 
   @override
   _SimpleConnectionToastState createState() => _SimpleConnectionToastState();
+
+  /// Set to true when PiP is active — toast is fully removed from layout.
+  static final ValueNotifier<bool> pipActive = ValueNotifier(false);
 }
 
 class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
@@ -28,143 +29,21 @@ class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
 
   void _listenToConnection() {
     final monitor = ConnectionMonitor();
-
     _subscription = monitor.statusStream.listen((status) {
       if (!mounted) return;
-
-      if (_currentStatus != status) {
-        _currentStatus = status;
-
-        // Show toast
-        setState(() {
-          _showToast = true;
-        });
-
-        // Auto-hide for connected/slow status
-        if (status == ConnectionStatus.connected) {
-          _hideTimer = Timer(const Duration(seconds: 2), () {
-            if (mounted) {
-              setState(() {
-                _showToast = false;
-              });
-            }
-          });
-        } else if (status == ConnectionStatus.slow) {
-          _hideTimer = Timer(const Duration(seconds: 3), () {
-            if (mounted) {
-              setState(() {
-                _showToast = false;
-              });
-            }
-          });
-        }
-        // Disconnected stays until manually dismissed
-      }
+      if (_currentStatus == status) return;
+      _currentStatus = status;
+      _hideTimer?.cancel();
+      setState(() => _showToast = true);
+      final duration = switch (status) {
+        ConnectionStatus.disconnected => const Duration(seconds: 4),
+        ConnectionStatus.slow        => const Duration(seconds: 3),
+        _                            => const Duration(seconds: 2),
+      };
+      _hideTimer = Timer(duration, () {
+        if (mounted) setState(() => _showToast = false);
+      });
     });
-  }
-
-  Widget _buildToast() {
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
-      bottom: _showToast ? 16 : -100,
-      left: 16,
-      right: 16,
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: _getBackgroundColor(),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Icon(_getIcon(), color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _getTitle(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      _getMessage(),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              if (_currentStatus == ConnectionStatus.disconnected)
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 18),
-                  onPressed: () {
-                    setState(() {
-                      _showToast = false;
-                    });
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _getBackgroundColor() {
-    switch (_currentStatus) {
-      case ConnectionStatus.connected:
-        return Colors.green;
-      case ConnectionStatus.disconnected:
-        return Colors.red;
-      case ConnectionStatus.slow:
-        return Colors.orange;
-    }
-  }
-
-  IconData _getIcon() {
-    switch (_currentStatus) {
-      case ConnectionStatus.connected:
-        return Icons.wifi;
-      case ConnectionStatus.disconnected:
-        return Icons.wifi_off;
-      case ConnectionStatus.slow:
-        return Icons.signal_cellular_alt;
-    }
-  }
-
-  String _getTitle() {
-    switch (_currentStatus) {
-      case ConnectionStatus.connected:
-        return 'Connected';
-      case ConnectionStatus.disconnected:
-        return 'No Connection';
-      case ConnectionStatus.slow:
-        return 'Slow Network';
-    }
-  }
-
-  String _getMessage() {
-    switch (_currentStatus) {
-      case ConnectionStatus.connected:
-        return 'You\'re back online';
-      case ConnectionStatus.disconnected:
-        return 'Check your internet connection';
-      case ConnectionStatus.slow:
-        return 'Connection is slow';
-    }
   }
 
   @override
@@ -174,15 +53,79 @@ class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
     super.dispose();
   }
 
+  Color _bgColor() => switch (_currentStatus) {
+    ConnectionStatus.connected    => Colors.green,
+    ConnectionStatus.disconnected => Colors.red,
+    ConnectionStatus.slow         => Colors.orange,
+  };
+
+  IconData _icon() => switch (_currentStatus) {
+    ConnectionStatus.connected    => Icons.wifi,
+    ConnectionStatus.disconnected => Icons.wifi_off,
+    ConnectionStatus.slow         => Icons.signal_cellular_alt,
+  };
+
+  String _title() => switch (_currentStatus) {
+    ConnectionStatus.connected    => 'Connected',
+    ConnectionStatus.disconnected => 'No Connection',
+    ConnectionStatus.slow         => 'Slow Network',
+  };
+
+  String _message() => switch (_currentStatus) {
+    ConnectionStatus.connected    => "You're back online",
+    ConnectionStatus.disconnected => 'Check your internet connection',
+    ConnectionStatus.slow         => 'Connection is slow',
+  };
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Main content
         widget.child,
-
-        // Toast
-        _buildToast(),
+        ValueListenableBuilder<bool>(
+          valueListenable: SimpleConnectionToast.pipActive,
+          builder: (_, inPip, __) {
+            // Offstage completely removes from layout when PiP is active
+            // or toast is hidden — no overlap with video possible.
+            if (inPip || !_showToast) return const SizedBox.shrink();
+            return Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _bgColor(),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Row(children: [
+                    Icon(_icon(), color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_title(), style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w600)),
+                        Text(_message(), style: const TextStyle(
+                            color: Colors.white, fontSize: 12)),
+                      ],
+                    )),
+                  ]),
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }

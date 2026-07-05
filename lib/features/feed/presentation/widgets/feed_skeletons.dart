@@ -1,3 +1,9 @@
+// lib/features/feed/presentation/widgets/feed_skeletons.dart
+//
+// FeedSkeletonList uses Column instead of ListView so it works correctly
+// inside both SliverToBoxAdapter and SliverFillRemaining without causing
+// "unbounded height" or "intrinsic dimensions" viewport errors.
+
 import 'package:flutter/material.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -9,11 +15,17 @@ class FeedSkeletonList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Skeletonizer(
       enabled: true,
-      child: ListView.separated(
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 120),
-        itemCount: count,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, __) => _CardSkeleton(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < count; i++) ...[
+              _CardSkeleton(),
+              if (i < count - 1) const SizedBox(height: 12),
+            ],
+          ],
+        ),
       ),
     );
   }
