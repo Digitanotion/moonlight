@@ -1,3 +1,5 @@
+// lib/features/profile_view/presentation/pages/profile_view_page.dart
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -14,6 +16,7 @@ import 'package:moonlight/features/profile_view/data/datasources/follow_list_rem
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/follow_list_screen.dart';
+import 'package:moonlight/features/profile_view/presentation/widgets/user_clubs_section.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
@@ -27,6 +30,11 @@ class ProfileViewPage extends StatefulWidget {
 class _ProfileViewPageState extends State<ProfileViewPage> {
   int _tabIndex = 0;
   String? _userUuid;
+
+  // Tracks how many clubs the user belongs to, reported asynchronously
+  // by UserClubsSection once its own fetch completes. Starts null so the
+  // tab shows no count until we actually know it (avoids a misleading "0").
+  int? _clubsCount;
 
   final _scroll = ScrollController();
   // Add a GlobalKey for the navigator
@@ -325,20 +333,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                               ],
                             ),
                           ),
-                          // const PopupMenuItem<String>(
-                          //   value: 'report',
-                          //   child: Row(
-                          //     children: [
-                          //       Icon(
-                          //         Icons.report,
-                          //         color: Colors.orange,
-                          //         size: 20,
-                          //       ),
-                          //       SizedBox(width: 8),
-                          //       Text('Report'),
-                          //     ],
-                          //   ),
-                          // ),
                         ],
                       ),
                     ],
@@ -350,7 +344,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           const SizedBox(height: 6),
-                          // REPLACE the old avatar Container with this widget
                           Container(
                             padding: const EdgeInsets.all(3),
                             decoration: const BoxDecoration(
@@ -366,7 +359,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                               radius: 33,
                             ),
                           ),
-
                           const SizedBox(height: 14),
                           Text(
                             user?.handle ?? '@user',
@@ -448,8 +440,7 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
 
                                     return _OutlineButton(
                                       text: 'Message',
-                                      targetUserUuid:
-                                          targetUserUuid, // Pass the UUID
+                                      targetUserUuid: targetUserUuid,
                                       onPressed: () => _startConversation(
                                         context,
                                         targetUserUuid,
@@ -491,10 +482,24 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                       child: _Tabs(
                         index: _tabIndex,
                         onChanged: (i) => setState(() => _tabIndex = i),
+                        items: [
+                          _TabItem(
+                            label: 'Posts',
+                            icon: Icons.grid_view_rounded,
+                            count: s.posts.length,
+                          ),
+                          _TabItem(
+                            label: 'Clubs',
+                            icon: Icons.groups_rounded,
+                            // null while UserClubsSection hasn't reported
+                            // back yet, so we don't flash a false "0".
+                            count: _clubsCount,
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 14)),
                   if (_tabIndex == 0)
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -507,10 +512,13 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _PlaceholderCard(
-                          text: _tabIndex == 1
-                              ? 'No clubs yet'
-                              : 'No live replays yet',
+                        child: UserClubsSection(
+                          userUuid: user?.uuid ?? '',
+                          onCountLoaded: (count) {
+                            if (mounted && _clubsCount != count) {
+                              setState(() => _clubsCount = count);
+                            }
+                          },
                         ),
                       ),
                     ),
@@ -527,11 +535,9 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
   void _startConversation(BuildContext context, String targetUserUuid) async {
     if (targetUserUuid.isEmpty) {
       TopSnack.error(context, 'Unable to start conversation');
-
       return;
     }
 
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -555,30 +561,24 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
       ),
     );
 
-    // Declare variables at the top level so they're accessible in all scopes
     StreamSubscription? subscription;
     ChatCubit? chatCubit;
 
     try {
-      // Create a new ChatCubit instance directly
       final chatRepository = GetIt.I<ChatRepository>();
       chatCubit = ChatCubit(chatRepository);
 
-      // Listen for the conversation creation
       subscription = chatCubit.stream.listen(
         (state) {
           if (state is ChatDirectConversationStarted) {
-            // Close loading dialog
             Navigator.pop(context);
 
-            // Navigate to chat screen with the real conversation
             Navigator.pushNamed(
               context,
               RouteNames.chat,
               arguments: {'conversation': state.conversation, 'isClub': false},
             );
 
-            // Clean up
             subscription?.cancel();
             chatCubit?.close();
           } else if (state is ChatError) {
@@ -606,17 +606,13 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
         },
       );
 
-      // Start direct conversation
       chatCubit.startDirectConversation(targetUserUuid);
     } catch (e) {
-      // Clean up in case of exception
       subscription?.cancel();
       chatCubit?.close();
 
-      // Close loading dialog
       Navigator.pop(context);
 
-      // Show error
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to start conversation: ${e.toString()}'),
@@ -637,15 +633,10 @@ class _ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasUrl = (avatarUrl != null && avatarUrl!.trim().isNotEmpty);
-
-    // size of outer widget (diameter)
     final size = radius * 2;
-
-    // circle background color used when no avatar is present
     const placeholderBg = Colors.black12;
 
     if (!hasUrl) {
-      // No URL at all — show placeholder icon immediately
       return CircleAvatar(
         radius: radius,
         backgroundColor: placeholderBg,
@@ -653,7 +644,6 @@ class _ProfileAvatar extends StatelessWidget {
       );
     }
 
-    // When we have a URL, use CachedNetworkImage so we can show an error widget
     return SizedBox(
       width: size,
       height: size,
@@ -663,14 +653,12 @@ class _ProfileAvatar extends StatelessWidget {
           fit: BoxFit.cover,
           width: size,
           height: size,
-          // When the image successfully loads, this builder uses it as the avatar.
           imageBuilder: (context, imageProvider) => Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
             ),
           ),
-          // while loading show a subtle background
           placeholder: (context, url) => Container(
             color: placeholderBg,
             alignment: Alignment.center,
@@ -680,7 +668,6 @@ class _ProfileAvatar extends StatelessWidget {
               size: radius * 0.9,
             ),
           ),
-          // on error (e.g., network/auth failure) show the icon placeholder
           errorWidget: (context, url, error) => Container(
             color: placeholderBg,
             alignment: Alignment.center,
@@ -724,12 +711,12 @@ class _OutlineButton extends StatelessWidget {
   const _OutlineButton({
     required this.text,
     required this.onPressed,
-    required this.targetUserUuid, // Add this parameter
+    required this.targetUserUuid,
   });
 
   final String text;
   final VoidCallback onPressed;
-  final String targetUserUuid; // Add this
+  final String targetUserUuid;
 
   @override
   Widget build(BuildContext context) {
@@ -805,14 +792,12 @@ class _StatsCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Fans → opens followers tab (index 0)
           Expanded(
             child: _StatItem(
               stat: stats[0],
               onTap: () => _openFollowList(context, initialTab: 0),
             ),
           ),
-          // Following → opens following tab (index 1)
           Expanded(
             child: _StatItem(
               stat: stats[1],
@@ -892,51 +877,145 @@ class _StatItem extends StatelessWidget {
   }
 }
 
+/// Data for a single segment in [_Tabs]. `count` is nullable so a tab
+/// can render without a badge until its real count is known (avoids a
+/// misleading "0" flash while data is still loading).
+class _TabItem {
+  const _TabItem({required this.label, required this.icon, this.count});
+  final String label;
+  final IconData icon;
+  final int? count;
+}
+
+/// Row of independent floating pill chips — one per tab — rather than a
+/// single shared track. Each chip carries its own icon, label, and a
+/// distinct rounded count-badge, giving Posts and Clubs clear visual
+/// separation instead of crowding into one shared bar.
 class _Tabs extends StatelessWidget {
-  const _Tabs({required this.index, required this.onChanged});
+  const _Tabs({
+    required this.index,
+    required this.onChanged,
+    required this.items,
+  });
+
   final int index;
   final ValueChanged<int> onChanged;
+  final List<_TabItem> items;
+
   @override
   Widget build(BuildContext context) {
-    final labels = const [
-      'Posts',
-      'Clubs',
-    ]; //const ['Posts', 'Clubs', 'Live Replays'];
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.all(6),
-      child: Row(
-        children: List.generate(labels.length, (i) {
-          final selected = index == i;
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: GestureDetector(
-                onTap: () => onChanged(i),
+    return Row(
+      children: List.generate(items.length, (i) {
+        final selected = index == i;
+        final item = items[i];
+
+        return Padding(
+          padding: EdgeInsets.only(right: i == items.length - 1 ? 0 : 10),
+          child: _TabChip(
+            item: item,
+            selected: selected,
+            onTap: () => onChanged(i),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _TabChip extends StatelessWidget {
+  const _TabChip({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _TabItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(
+                  colors: [Color(0xFFFF7A00), Color(0xFFFF9A3D)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected ? null : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: selected
+                ? Colors.transparent
+                : Colors.white.withOpacity(0.08),
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFFF7A00).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              item.icon,
+              size: 16,
+              color: selected ? Colors.white : Colors.white54,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              item.label,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+              ),
+            ),
+            if (item.count != null) ...[
+              const SizedBox(width: 7),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
                 child: Container(
-                  height: 36,
-                  alignment: Alignment.center,
+                  key: ValueKey('${item.label}_${item.count}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: selected
-                        ? const Color(0xFFFF7A00)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
+                        ? Colors.white.withOpacity(0.25)
+                        : Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    labels[i],
+                    '${item.count}',
                     style: TextStyle(
-                      color: selected ? Colors.white : Colors.white70,
+                      color: selected ? Colors.white : Colors.white54,
                       fontWeight: FontWeight.w700,
+                      fontSize: 11,
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-        }),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -950,7 +1029,6 @@ class _PostsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (posts.isEmpty && loading) {
-      // simple skeleton grid
       return SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
@@ -999,14 +1077,13 @@ class _PostsGrid extends StatelessWidget {
 
 class PostTile extends StatefulWidget {
   const PostTile({required this.post, Key? key}) : super(key: key);
-  final dynamic post; // expect Post domain entity
+  final dynamic post;
 
   @override
   State<PostTile> createState() => _PostTileState();
 }
 
 class _PostTileState extends State<PostTile> {
-  // simple in-memory cache across all PostTile instances
   static final Map<String, Uint8List?> _thumbCache = {};
   Uint8List? _thumb;
   bool _loading = false;
@@ -1019,7 +1096,6 @@ class _PostTileState extends State<PostTile> {
 
   Future<void> _ensureThumb() async {
     final p = widget.post;
-    // resolve id & media url defensively
     final id = (p is dynamic)
         ? (p.id?.toString() ??
               p.uuid?.toString() ??
@@ -1030,14 +1106,11 @@ class _PostTileState extends State<PostTile> {
         : p.toString();
     final thumbUrl = (p is dynamic) ? (p.thumbUrl?.toString() ?? '') : '';
 
-    // if not a video, nothing to generate
     final isVideo = (p is dynamic) ? (p.isVideo == true) : false;
     if (!isVideo) return;
 
-    // if backend provided a thumbnail URL, don't generate — UI will load network image
     if (thumbUrl.isNotEmpty) return;
 
-    // if already cached, use it
     if (_thumbCache.containsKey(id)) {
       setState(() {
         _thumb = _thumbCache[id];
@@ -1045,7 +1118,6 @@ class _PostTileState extends State<PostTile> {
       return;
     }
 
-    // generate thumbnail asynchronously
     setState(() => _loading = true);
     try {
       final bytes = await VideoThumbnail.thumbnailData(
@@ -1077,7 +1149,6 @@ class _PostTileState extends State<PostTile> {
     final thumbUrl = (p is dynamic) ? (p.thumbUrl?.toString() ?? '') : '';
 
     if (isVideo) {
-      // if we have generated bytes, show them; otherwise use provided thumbUrl or fallback to mediaUrl
       if (_thumb != null) {
         return Stack(
           fit: StackFit.expand,
@@ -1123,7 +1194,6 @@ class _PostTileState extends State<PostTile> {
       }
     }
 
-    // non-video: regular network image
     return CachedNetworkImage(
       imageUrl: mediaUrl,
       fit: BoxFit.cover,

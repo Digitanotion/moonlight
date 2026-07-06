@@ -8,8 +8,6 @@ class ProfileRemoteDataSource {
   final DioClient http;
   ProfileRemoteDataSource(this.http);
 
-  // ── Existing methods (unchanged) ──────────────────────────────────────────
-
   Future<Map<String, dynamic>> getUser(String uuid) async {
     final res = await http.dio.get('/api/v1/users/$uuid');
     return _toMap(res.data);
@@ -47,11 +45,22 @@ class ProfileRemoteDataSource {
     return _toMap(res.data);
   }
 
-  // ── New: follow-list datasource (shared instance) ─────────────────────────
+  /// Fetch clubs the user is a member of.
+  /// Requires the backend endpoint: GET /api/v1/users/{uuid}/clubs
+  Future<List<Map<String, dynamic>>> getUserClubs(String uuid) async {
+    try {
+      final res = await http.dio.get('/api/v1/users/$uuid/clubs');
+      final body = _toMap(res.data);
+      // Handle both paginated { data: [...] } and plain array responses
+      final list = body['data'] as List? ?? (res.data as List?) ?? const [];
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return const [];
+    }
+  }
 
-  late final FollowListRemoteDataSource followList = FollowListRemoteDataSource(
-    http,
-  );
+  late final FollowListRemoteDataSource followList =
+      FollowListRemoteDataSource(http);
 
   Map<String, dynamic> _toMap(dynamic raw) {
     return raw is Map

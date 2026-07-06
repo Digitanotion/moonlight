@@ -1,3 +1,5 @@
+// lib/features/profile_view/data/repositories/profile_repository_impl.dart
+
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/domain/entities/user.dart';
@@ -22,7 +24,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
       country: '${d['country'] ?? ''}',
       followers: (d['followers_count'] as num?)?.toInt() ?? 0,
       following: (d['following_count'] as num?)?.toInt() ?? 0,
-      isFollowing: d['followed_by_me'],
+      isFollowing: d['followed_by_me'] == true,
       roleLabel: d['role_label'],
     );
   }
@@ -30,7 +32,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
   @override
   Future<UserProfile> followUser(String uuid) async {
     final map = await remote.followUser(uuid);
-
     return UserProfile(
       uuid: uuid,
       handle: '',
@@ -47,7 +48,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
   @override
   Future<UserProfile> unfollowUser(String uuid) async {
     final map = await remote.unfollowUser(uuid);
-
     return UserProfile(
       uuid: uuid,
       handle: '',
@@ -73,7 +73,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final posts = dataList.map<Post>((m) {
       final au = (m['author'] as Map).cast<String, dynamic>();
       final user = AppUser(
-        id: "0",
+        id: '0',
         name: '${au['name']}',
         avatarUrl: '${au['avatarUrl']}',
         countryFlagEmoji: '${au['countryFlagEmoji']}',
@@ -87,7 +87,8 @@ class ProfileRepositoryImpl implements ProfileRepository {
         mediaUrl: '${m['mediaUrl']}',
         caption: '${m['caption']}',
         tags: (m['tags'] as List).map((e) => '$e').toList(),
-        createdAt: DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),
         likes: (m['likes'] as num?)?.toInt() ?? 0,
         commentsCount: (m['commentsCount'] as num?)?.toInt() ?? 0,
         shares: (m['shares'] as num?)?.toInt() ?? 0,
@@ -106,5 +107,11 @@ class ProfileRepositoryImpl implements ProfileRepository {
   @override
   Future<void> blockUser(String uuid, {String? reason}) async {
     await remote.blockUser(uuid, reason: reason);
+  }
+
+  @override
+  Future<List<ProfileClub>> getUserClubs(String uuid) async {
+    final list = await remote.getUserClubs(uuid);
+    return list.map(ProfileClub.fromJson).toList();
   }
 }
