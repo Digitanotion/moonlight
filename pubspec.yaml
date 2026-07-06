@@ -1,6 +1,6 @@
 name: moonlight
 description: Moonlight Livestream App MVP
-version: 1.4.1+41
+version: 1.4.2+42
 
 # ==== ENVIRONMENT SECTION ====
 environment:

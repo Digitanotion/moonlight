@@ -79,7 +79,7 @@ android {
 
     defaultConfig {
         applicationId = "com.app.moonlightstream"
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = 35
         versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName
