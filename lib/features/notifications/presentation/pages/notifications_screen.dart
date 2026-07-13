@@ -211,6 +211,38 @@ class _NotificationTile extends StatelessWidget {
     return const Color(0xFF8B8FB8);
   }
 
+  /// Every tap opens the detail sheet — a single, predictable entry
+  /// point for reading the full message, whether or not the notification
+  /// has a destination screen.
+  void _handleTap(BuildContext context) {
+    if (!notification.isRead) {
+      context.read<NotificationsBloc>().add(MarkNotificationRead(notification.id));
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => _NotificationDetailSheet(
+        notification: notification,
+        isNavigable: _isNavigable,
+        accentColor: _colorFor(notification.type),
+        icon: _iconFor(notification.type),
+        ctaLabel: _ctaLabel(notification.type),
+        onCta: () {
+          Navigator.pop(sheetContext); // close sheet first
+          final handled = NotificationNavigator.navigate(context, notification);
+          if (!handled) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(notification.title),
+              backgroundColor: const Color(0xFF0E1024),
+              behavior: SnackBarBehavior.floating,
+            ));
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final n = notification;
@@ -218,30 +250,7 @@ class _NotificationTile extends StatelessWidget {
     final accentColor = _colorFor(n.type);
 
     return InkWell(
-      onTap: _isNavigable
-          ? () {
-              // Mark read first
-              if (unread) {
-                context
-                    .read<NotificationsBloc>()
-                    .add(MarkNotificationRead(n.id));
-              }
-              // Navigate
-              final handled = NotificationNavigator.navigate(context, n);
-              if (!handled) {
-                // Fallback snack for unhandled types
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(n.title),
-                  backgroundColor: const Color(0xFF0E1024),
-                  behavior: SnackBarBehavior.floating,
-                ));
-              }
-            }
-          : unread
-              ? () => context
-                  .read<NotificationsBloc>()
-                  .add(MarkNotificationRead(n.id))
-              : null,
+      onTap: () => _handleTap(context),
       splashColor: accentColor.withOpacity(0.08),
       highlightColor: accentColor.withOpacity(0.04),
       child: Container(
@@ -292,6 +301,17 @@ class _NotificationTile extends StatelessWidget {
                         color: Color(0xFF8B8FB8),
                         fontSize: 13,
                         height: 1.4)),
+              ],
+              // "Read more" affordance appears whenever the body is long
+              // enough that it's likely truncated at 2 lines above — a
+              // cheap length check rather than measuring text layout.
+              if (n.body.length > 80) ...[
+                const SizedBox(height: 4),
+                Text('Read more',
+                    style: TextStyle(
+                        color: accentColor,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700)),
               ],
               if (_isNavigable) ...[
                 const SizedBox(height: 6),
@@ -388,4 +408,197 @@ class _NotificationTile extends StatelessWidget {
     'auth.password_changed'=> 'Review security',
     _                      => 'View',
   };
+}
+
+// ── Notification detail sheet ─────────────────────────────────────────────────
+
+/// Bottom sheet shown on tap, before any navigation happens. Gives the
+/// person the full title + body (never truncated), who it's from, and
+/// when — then a single clear CTA if there's somewhere to go. This
+/// replaces the old behavior of either silently marking read or jumping
+/// straight to another screen with no context.
+class _NotificationDetailSheet extends StatelessWidget {
+  final NotificationModel notification;
+  final bool isNavigable;
+  final Color accentColor;
+  final IconData icon;
+  final String ctaLabel;
+  final VoidCallback onCta;
+
+  const _NotificationDetailSheet({
+    required this.notification,
+    required this.isNavigable,
+    required this.accentColor,
+    required this.icon,
+    required this.ctaLabel,
+    required this.onCta,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final n = notification;
+    final avatarUrl = n.actor?.avatarUrl ?? '';
+    final hasAvatar = avatarUrl.isNotEmpty &&
+        Uri.tryParse(avatarUrl)?.hasScheme == true;
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0E1024),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFF1A1D3D)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 4),
+              child: Container(
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Stack(clipBehavior: Clip.none, children: [
+                          Container(
+                            width: 50, height: 50,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: const Color(0xFF1A1D3D), width: 1.5),
+                            ),
+                            child: ClipOval(
+                              child: hasAvatar
+                                  ? CachedNetworkImage(
+                                      imageUrl: avatarUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(
+                                          color: accentColor.withOpacity(0.15),
+                                          child: Icon(Icons.person_rounded,
+                                              size: 24, color: Colors.white54)),
+                                      errorWidget: (_, __, ___) => Container(
+                                          color: accentColor.withOpacity(0.15),
+                                          child: Icon(Icons.person_rounded,
+                                              size: 24, color: Colors.white54)),
+                                    )
+                                  : Container(
+                                      color: accentColor.withOpacity(0.15),
+                                      child: Icon(icon,
+                                          size: 24, color: accentColor)),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: -2, right: -2,
+                            child: Container(
+                              width: 20, height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: accentColor,
+                                border: Border.all(
+                                    color: const Color(0xFF0E1024), width: 1.5),
+                              ),
+                              child: Icon(icon, size: 11, color: Colors.white),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((n.actor?.fullname ?? '').isNotEmpty)
+                                Text(n.actor!.fullname,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w700)),
+                              Text(timeAgoFrom(n.createdAt),
+                                  style: const TextStyle(
+                                      color: Color(0xFF8B8FB8), fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(n.title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            height: 1.35)),
+                    if (n.body.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(n.body,
+                          style: const TextStyle(
+                              color: Color(0xFFC5C8D6),
+                              fontSize: 14.5,
+                              height: 1.55)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        side: BorderSide(color: Colors.white.withOpacity(0.15)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Close',
+                          style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  if (isNavigable) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: onCta,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentColor,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        child: Text(ctaLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -1709,6 +1709,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.0"
+  tenjin_plugin:
+    dependency: "direct main"
+    description:
+      name: tenjin_plugin
+      sha256: c74ca8c8a4325ef50abcaf3959586d6047200f335e877be022b7fe35c93911c0
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.0"
   term_glyph:
     dependency: transitive
     description:

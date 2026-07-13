@@ -8,6 +8,11 @@
 //      boot order exactly: the bare splash still renders on frame 1,
 //      nothing here blocks that, and ad init is just one more background
 //      task alongside the ones you already have.
+//   3. Added import for TenjinService, plus a new _initTenjin() task
+//      added to the same Future.wait(...). This was the actual bug:
+//      TenjinService.initialize() existed in the codebase but was never
+//      called from anywhere — that's why none of its debug prints ever
+//      showed up in your console.
 //
 // Nothing else changed — same two-phase boot, same DependencyManager gate,
 // same Firebase/FCM setup.
@@ -21,12 +26,13 @@ import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/app_router.dart';
 import 'package:moonlight/core/routing/route_names.dart';
-import 'package:moonlight/core/services/ad_service.dart'; // ← NEW
+import 'package:moonlight/core/services/ad_service.dart';
 import 'package:moonlight/core/services/connection_monitor.dart';
 import 'package:moonlight/core/services/notification_handler_service.dart';
 import 'package:moonlight/core/services/notification_service.dart';
 import 'package:moonlight/core/services/runtime_config_refresh_service.dart';
 import 'package:moonlight/core/services/service_registration_manager.dart';
+import 'package:moonlight/core/services/tenjin_service.dart'; // ← NEW
 import 'package:moonlight/core/services/token_registration_service.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 import 'package:moonlight/core/widgets/connection_toast.dart';
@@ -161,13 +167,14 @@ Future<void> _initEverything() async {
   try {
     debugPrint('🔄 Background init starting...');
 
-    // Firebase, remaining GetIt registrations, and ad SDK init all run
-    // in parallel — none of these block the splash, which is already
-    // on screen by this point.
+    // Firebase, remaining GetIt registrations, ad SDK init, and Tenjin
+    // attribution SDK init all run in parallel — none of these block the
+    // splash, which is already on screen by this point.
     await Future.wait([
       _initFirebase(),
       SplashOptimizer.loadRemainingDependencies(),
-      _initAds(), // ← NEW
+      _initAds(),
+      _initTenjin(), // ← NEW
     ]);
 
     // Update FCM token registration base URL.
@@ -203,7 +210,6 @@ Future<void> _initFirebase() async {
   }
 }
 
-// ── NEW ──────────────────────────────────────────────────────────────────
 // Initializes the Google Mobile Ads SDK and pre-loads the first
 // interstitial. Wrapped in try/catch so an ad-network hiccup (e.g. no
 // network yet, SDK init failure on a weird device) never blocks app
@@ -215,6 +221,24 @@ Future<void> _initAds() async {
     debugPrint('✅ Ads initialized');
   } catch (e) {
     debugPrint('⚠️ Ads init error (non-fatal): $e');
+  }
+}
+
+// ── NEW ──────────────────────────────────────────────────────────────────
+// Initializes the Tenjin attribution SDK. This was previously defined in
+// TenjinService but never invoked anywhere in the app, which is why none
+// of its debug output ever appeared in the console. Wrapped in try/catch
+// for the same reason as _initAds() — attribution tracking must never
+// block or crash app startup. TenjinService.initialize() already logs
+// its own success/failure internally (look for lines prefixed with
+// "🎯 [Tenjin]" or "🔴 [Tenjin]"), so this wrapper just adds the
+// higher-level ✅/⚠️ line consistent with the other init steps here.
+Future<void> _initTenjin() async {
+  try {
+    await TenjinService.initialize();
+    debugPrint('✅ Tenjin initialized');
+  } catch (e) {
+    debugPrint('⚠️ Tenjin init error (non-fatal): $e');
   }
 }
 

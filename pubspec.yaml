@@ -1,6 +1,6 @@
 name: moonlight
 description: Moonlight Livestream App MVP
-version: 1.4.2+42
+version: 1.4.3+43
 
 # ==== ENVIRONMENT SECTION ====
 environment:
@@ -64,6 +64,7 @@ dependencies:
   visibility_detector: ^0.4.0+2
   pip_view: ^0.9.7
   cached_video_player_plus: ^4.1.0
+  tenjin_plugin: ^1.4.0
 
 dev_dependencies:
   flutter_test:
