@@ -68,7 +68,61 @@ class PostCubit extends Cubit<PostState> {
   final String postId;
   bool _liking = false; // debounce
 
-  PostCubit(this.repo, this.postId) : super(const PostState());
+  /// [initialPost] — when the caller already has this post in memory
+  /// (e.g. tapped from the feed list, which already fetched it), pass it
+  /// here. The cubit seeds its state with it immediately so
+  /// PostViewScreen can render caption/author/counts on the very first
+  /// frame, skipping the full-screen skeleton entirely. A background
+  /// fetch still runs to reconcile any drift (fresh like/comment counts,
+  /// edits made elsewhere since the feed last loaded) — but it updates
+  /// the UI quietly instead of showing a loading state over content the
+  /// user can already see and interact with.
+  PostCubit(this.repo, this.postId, {Post? initialPost})
+      : super(
+          initialPost != null
+              ? PostState(post: initialPost, loading: false)
+              : const PostState(),
+        ) {
+    if (initialPost != null) {
+      // Seeded — reconcile silently in the background rather than
+      // re-running the full load() flow, which would flip loading=true
+      // and hide the content we just showed.
+      _reconcileSilently();
+    }
+  }
+
+  /// Background refresh used only when the screen opened with a seeded
+  /// [initialPost]. Fetches the authoritative post + first comments page
+  /// without ever setting `loading: true`, so nothing visible flickers
+  /// or gets replaced by a skeleton — it just quietly updates counts/
+  /// content if the server has something newer than what the feed had.
+  Future<void> _reconcileSilently() async {
+    try {
+      final mem = GetIt.I<LikeMemory>();
+      final post = await repo.getPost(postId);
+      final hydrated =
+          mem.isLiked(post.id) ? post.copyWith(isLiked: true) : post;
+
+      final page1 = await repo.getComments(postId, page: 1, perPage: 50);
+      final updatedPost = hydrated.copyWith(commentsCount: page1.total);
+
+      emit(
+        state.copyWith(
+          post: updatedPost,
+          comments: page1.data,
+          commentsLoading: false,
+          commentsHasNext: page1.hasNext,
+          commentsPage: page1.currentPage,
+        ),
+      );
+    } catch (e) {
+      // Silent by design: the seeded post is still shown, so a failed
+      // background reconcile is a non-event from the user's perspective.
+      // Comments simply stay empty until a manual retry/scroll triggers
+      // loadMoreComments(), or the user pulls to refresh if that's wired
+      // up at the screen level.
+    }
+  }
 
   /// clear one-shot action
   void consumeAction() {
@@ -86,11 +140,8 @@ class PostCubit extends Cubit<PostState> {
           ? post.copyWith(isLiked: true)
           : post;
 
-      // fetch first comments page; CommentsPageResult.total will prefer
-      // total_comments_and_replies if the API provides it (see datasource).
       final page1 = await repo.getComments(postId, page: 1, perPage: 50);
 
-      // Keep post.commentsCount in sync with page total (combined comments+replies)
       final updatedPost = hydrated.copyWith(commentsCount: page1.total);
 
       emit(
@@ -115,7 +166,6 @@ class PostCubit extends Cubit<PostState> {
       final nextPage = state.commentsPage + 1;
       final res = await repo.getComments(postId, page: nextPage, perPage: 50);
 
-      // sync post commentsCount with backend's page total (may be combined)
       final updatedPost =
           state.post?.copyWith(commentsCount: res.total) ?? state.post;
 
@@ -141,7 +191,6 @@ class PostCubit extends Cubit<PostState> {
     try {
       final updated = await repo.toggleLike(postId);
 
-      // ✅ Force a new object by creating it fresh
       emit(
         state.copyWith(
           post: Post(
@@ -174,11 +223,9 @@ class PostCubit extends Cubit<PostState> {
   Future<void> addComment(String text) async {
     try {
       final created = await repo.addComment(postId, text);
-      // Refresh both post & first comments page to get updated counts
       final post = await repo.getPost(postId);
       final page1 = await repo.getComments(postId, page: 1, perPage: 50);
 
-      // sync post commentsCount to page total
       final updatedPost = post.copyWith(commentsCount: page1.total);
 
       emit(
@@ -219,7 +266,6 @@ class PostCubit extends Cubit<PostState> {
     emit(state.copyWith(deletingPost: true, lastAction: null));
     try {
       await repo.deletePost(postId);
-      // emit a fresh empty state with PostDeleted action
       emit(const PostState(lastAction: PostDeleted()));
     } catch (e) {
       final msg = _friendly(e.toString());
@@ -237,7 +283,6 @@ class PostCubit extends Cubit<PostState> {
   Future<void> addReply(String commentId, String text) async {
     try {
       final created = await repo.addReply(postId, commentId, text);
-      // Re-fetch first page to get updated comment list & combined count
       final page1 = await repo.getComments(postId, page: 1, perPage: 50);
       final updatedPost =
           state.post?.copyWith(commentsCount: page1.total) ?? state.post;
@@ -272,7 +317,6 @@ class PostCubit extends Cubit<PostState> {
   Future<void> editComment(String commentId, String text) async {
     try {
       final updated = await repo.editComment(postId, commentId, text);
-      // Refresh page1 to reflect edit and keep totals in sync
       final page1 = await repo.getComments(postId, page: 1, perPage: 50);
       final updatedPost =
           state.post?.copyWith(commentsCount: page1.total) ?? state.post;
@@ -331,10 +375,7 @@ class PostCubit extends Cubit<PostState> {
   bool _applyLike(List<Comment> list, String id, int likes, bool liked) {
     for (var i = 0; i < list.length; i++) {
       if (list[i].id == id) {
-        list[i] = list[i].copyWith(
-          likes: likes,
-          isLiked: liked, // ← Use the server's liked state
-        );
+        list[i] = list[i].copyWith(likes: likes, isLiked: liked);
         return true;
       }
       final child = [...list[i].replies];

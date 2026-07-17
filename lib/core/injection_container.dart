@@ -94,6 +94,7 @@ import 'package:moonlight/features/notifications/data/repositories/notifications
 import 'package:moonlight/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:moonlight/features/post_view/data/datasources/post_remote_datasource.dart';
 import 'package:moonlight/features/post_view/data/repositories/post_repository_impl.dart';
+import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
 import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
 import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
@@ -955,9 +956,13 @@ void _initPostsModule() {
   _reg<PostRepository>(() => PostRepositoryImpl(sl<PostRemoteDataSource>()));
 
   if (!sl.isRegistered<PostCubit>()) {
-    sl.registerFactoryParam<PostCubit, String, void>(
-      (postId, _) => PostCubit(sl<PostRepository>(), postId),
-    );
+    sl.registerFactoryParam<PostCubit, String, Post?>(
+  (postId, initialPost) => PostCubit(
+    sl<PostRepository>(),
+    postId,
+    initialPost: initialPost,
+  ),
+);
   }
 }
 

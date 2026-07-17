@@ -1,11 +1,15 @@
+// lib/features/feed/presentation/pages/feed_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/ad_service.dart';
+import 'package:moonlight/core/services/video_preload_service.dart'; // ← NEW
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_post_card.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_skeletons.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 // ── Design tokens ────────────────────────────────────────────────────────
 class _FeedColors {
@@ -25,9 +29,25 @@ class FeedScreen extends StatefulWidget {
 class _FeedScreenState extends State<FeedScreen> {
   final _scroll = ScrollController();
 
+  // How many items ahead of the current scroll position to keep
+  // preloaded. Widened slightly from 3→4 so fast scrolling/flinging
+  // still lands on a warmed video more often, without holding so many
+  // controllers alive that memory becomes a concern (see
+  // VideoPreloadService.maxCached).
+  static const int _preloadAhead = 4;
+  int _lastPreloadedIndex = -1;
+
   @override
   void initState() {
     super.initState();
+
+    // VisibilityDetector defaults to checking visibility roughly every
+    // 500ms, which reads as "autoplay lagging behind my scroll" on a
+    // fast fling. Tightening this makes the play/pause-on-scroll
+    // transition track the actual scroll position much more closely.
+    VisibilityDetectorController.instance.updateInterval =
+        const Duration(milliseconds: 100);
+
     context.read<FeedCubit>().loadFirstPage();
     _scroll.addListener(_onScroll);
   }
@@ -37,6 +57,35 @@ class _FeedScreenState extends State<FeedScreen> {
     if (c.pixels > c.maxScrollExtent * 0.7) {
       context.read<FeedCubit>().loadNextPage();
     }
+    _maybePreloadUpcoming();
+  }
+
+  /// Estimates which feed index is currently near the top of the
+  /// viewport and preloads video for the next few items past it. This is
+  /// intentionally approximate (based on scroll offset / average item
+  /// extent) rather than precise viewport tracking — precision isn't
+  /// needed here, we just want to warm "roughly what's coming next."
+  void _maybePreloadUpcoming() {
+    if (!_scroll.hasClients) return;
+    final state = context.read<FeedCubit>().state;
+    if (state.items.isEmpty) return;
+
+    // Rough average card extent (media + meta + separator). Doesn't need
+    // to be exact — this only decides *when* to trigger preloading, not
+    // which items get preloaded (that's index-based below).
+    const approxItemExtent = 480.0;
+    final estimatedIndex = (_scroll.offset / approxItemExtent).floor();
+
+    if (estimatedIndex <= _lastPreloadedIndex) return;
+    _lastPreloadedIndex = estimatedIndex;
+
+    final upcoming = state.items
+        .skip(estimatedIndex)
+        .take(_preloadAhead)
+        .map((p) => p.mediaUrl)
+        .where((url) => url.isNotEmpty);
+
+    VideoPreloadService.instance.preloadAll(upcoming);
   }
 
   @override
@@ -49,9 +98,6 @@ class _FeedScreenState extends State<FeedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _FeedColors.bg,
-      // FAB sits over the list; the empty-state CTA stays as-is inside
-      // _EmptyFeedView (when there are zero posts, the FAB would be
-      // redundant on top of an already-centered create-post prompt).
       floatingActionButton: BlocBuilder<FeedCubit, FeedState>(
         buildWhen: (p, n) => p.items.isEmpty != n.items.isEmpty,
         builder: (context, s) {
@@ -76,6 +122,16 @@ class _FeedScreenState extends State<FeedScreen> {
                 return SliverFillRemaining(
                   hasScrollBody: false,
                   child: _EmptyFeedView(error: s.error),
+                );
+              }
+
+              // Warm the very first few videos as soon as the feed loads,
+              // before the user has scrolled at all — otherwise the first
+              // tap of the session gets no preload head start.
+              if (s.items.isNotEmpty && _lastPreloadedIndex == -1) {
+                _lastPreloadedIndex = 0;
+                VideoPreloadService.instance.preloadAll(
+                  s.items.take(_preloadAhead).map((p) => p.mediaUrl),
                 );
               }
 
@@ -119,7 +175,16 @@ class _FeedScreenState extends State<FeedScreen> {
     final updated = await Navigator.pushNamed(
       context,
       RouteNames.postView,
-      arguments: {'postId': p.id},
+      arguments: {
+        'postId': p.id,
+        // Pass the full Post we already have in memory from the feed.
+        // PostViewScreen/PostCubit can seed its initial state with this
+        // immediately — caption, author, counts, tags all render on the
+        // very first frame instead of waiting for a network round trip.
+        // The cubit still re-fetches in the background to reconcile any
+        // drift (fresh like/comment counts, edits since the feed loaded).
+        'initialPost': p,
+      },
     );
 
     if (!mounted) return;
@@ -141,9 +206,6 @@ class _FeedScreenState extends State<FeedScreen> {
 }
 
 // ── New Post FAB ────────────────────────────────────────────────────────
-// Expands to show its label once on entrance (a single deliberate moment,
-// not a looping animation), then settles into a compact icon-only pill.
-// Tapping anytime — expanded or collapsed — navigates to createPost.
 class _NewPostFab extends StatefulWidget {
   const _NewPostFab();
 
@@ -162,12 +224,6 @@ class _NewPostFabState extends State<_NewPostFab>
     curve: Curves.easeOutCubic,
   );
 
-  // Tracks disposal explicitly. `mounted` alone isn't enough here because
-  // it can flip to false WHILE an awaited Future (forward()/reverse()/
-  // delayed()) is still in flight — the continuation after that await
-  // would otherwise touch a disposed controller/element, which is exactly
-  // what caused the '_elements.contains(element)' assertion when popping
-  // this screen mid-animation.
   bool _disposed = false;
 
   @override
@@ -183,7 +239,6 @@ class _NewPostFabState extends State<_NewPostFab>
     try {
       await _ctrl.forward().orCancel;
     } catch (_) {
-      // TickerCanceled (e.g. controller disposed mid-animation) — stop here.
       return;
     }
     if (_disposed) return;

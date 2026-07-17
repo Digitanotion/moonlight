@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
+import 'package:moonlight/core/services/video_preload_service.dart'; // ← NEW
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/core/widgets/sign_in_prompt.dart';
@@ -379,8 +380,6 @@ class _PostViewScreenState extends State<PostViewScreen> {
     }
 
     // In PiP mode: show only the video filling the entire screen.
-    // The CustomScrollView / Column structure is replaced with a plain
-    // Scaffold whose body IS the video — no appbar, no sliver overhead.
     if (_isInPipMode) {
       return Scaffold(
         backgroundColor: Colors.black,
@@ -621,9 +620,56 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     return uri != null && uri.hasScheme && uri.hasAuthority;
   }
 
-  void _initVideo() {
+  /// Attaches video for this post, preferring an already-initialized
+  /// controller from VideoPreloadService (warmed while the user was
+  /// still scrolling the feed) over starting a fresh network request.
+  ///
+  /// Three paths, in priority order:
+  ///  1. Fully preloaded & ready  → attach instantly, no wait at all.
+  ///  2. Preload still in flight  → await it, then attach (still much
+  ///     faster than a cold start, since the request was already made
+  ///     before the user tapped).
+  ///  3. Nothing preloaded (e.g. opened via deep link/notification,
+  ///     never appeared in a scrolled feed) → cold start exactly as
+  ///     the original implementation did.
+  Future<void> _initVideo() async {
     if (!_isVideo || !_isValidUrl(widget.post.mediaUrl)) return;
-    _vc = VideoPlayerController.networkUrl(Uri.parse(widget.post.mediaUrl))
+    final url = widget.post.mediaUrl;
+
+    final preloaded = VideoPreloadService.instance.takeIfReady(url);
+    if (preloaded != null) {
+      _vc = preloaded
+        ..addListener(_onVideoListener)
+        ..setVolume(1);
+      if (!mounted) return;
+      setState(() => _initialized = true);
+      _vc?.play();
+      _vc?.setLooping(true);
+      _autoHideControls();
+      _notifyPlayingState(true);
+      return;
+    }
+
+    final inFlight = VideoPreloadService.instance.inFlight(url);
+    if (inFlight != null) {
+      await inFlight;
+      if (!mounted) return;
+      final nowReady = VideoPreloadService.instance.takeIfReady(url);
+      if (nowReady != null) {
+        _vc = nowReady
+          ..addListener(_onVideoListener)
+          ..setVolume(1);
+        setState(() => _initialized = true);
+        _vc?.play();
+        _vc?.setLooping(true);
+        _autoHideControls();
+        _notifyPlayingState(true);
+        return;
+      }
+      // Preload failed — fall through to a normal cold start below.
+    }
+
+    _vc = VideoPlayerController.networkUrl(Uri.parse(url))
       ..addListener(_onVideoListener)
       ..initialize()
           .then((_) {
@@ -696,11 +742,24 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.of(context).size.width;
-    final mediaHeight = screenW * 0.75;
 
-    // PiP fillScreen mode: pure video that adapts to the PiP window size.
-    // SizedBox.expand fills the window; AspectRatio + FittedBox adapts the
-    // video to whatever dimensions Android gives the PiP window.
+    // Before the video is initialized, or for images, fall back to a
+    // fixed 4:3-ish box (unchanged from before). Once a video reports
+    // its real aspect ratio, size the box to match it instead — clamped
+    // to a sane range (16:9 wide ↔ 9:16 tall) so an unusually extreme
+    // clip doesn't take over the whole screen or shrink to a sliver.
+    // This is what actually fixes portrait videos losing their left/
+    // right edges: previously mediaHeight was fixed at screenW*0.75
+    // (a landscape-shaped box) and BoxFit.cover cropped anything taller
+    // than that to fit — now the box itself grows to match the video.
+    double mediaHeight = screenW * 0.75;
+    if (_isVideo && _initialized && _vc != null && _vc!.value.aspectRatio > 0) {
+      final rawHeight = screenW / _vc!.value.aspectRatio;
+      final minHeight = screenW * (9 / 16); // widest allowed (16:9 landscape)
+      final maxHeight = screenW * (16 / 9); // tallest allowed (9:16 portrait)
+      mediaHeight = rawHeight.clamp(minHeight, maxHeight);
+    }
+
     if (widget.fillScreen) {
       return ColoredBox(
         color: Colors.black,
@@ -773,17 +832,24 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
                       child: ShimmerBlock(width: screenW, height: mediaHeight),
                     ),
 
-            // Video
+            // Video — Twitter-style: black backdrop + BoxFit.contain, so
+            // the video's real aspect ratio is respected instead of being
+            // cropped to fill a fixed box. Portrait clips now show their
+            // full frame (letterboxed with black bars left/right) instead
+            // of losing their left/right edges to a landscape-shaped crop.
             if (_initialized)
               AnimatedOpacity(
                 opacity: 1.0,
                 duration: const Duration(milliseconds: 300),
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: _vc!.value.size.width,
-                    height: _vc!.value.size.height,
-                    child: VideoPlayer(_vc!),
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _vc!.value.aspectRatio > 0
+                          ? _vc!.value.aspectRatio
+                          : 16 / 9,
+                      child: VideoPlayer(_vc!),
+                    ),
                   ),
                 ),
               ),
@@ -848,70 +914,76 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
                 ),
               ),
 
-            // Bottom controls
+            // Mute toggle — Twitter-style: a small persistent pill in the
+            // top-right corner, always visible regardless of whether the
+            // rest of the controls have auto-hidden. This is deliberately
+            // NOT tied to _showControls, matching how X/Twitter always
+            // keeps the speaker icon reachable even mid-scroll.
             if (_initialized)
               Positioned(
-                left: 12,
+                top: 12,
+                right: 12,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _muted
+                          ? Icons.volume_off_rounded
+                          : Icons.volume_up_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+
+            // Bottom controls — PiP + fullscreen only; mute now lives in
+            // its own always-visible top-right badge above.
+            if (_initialized)
+              Positioned(
                 right: 12,
                 bottom: 28,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     GestureDetector(
-                      onTap: _toggleMute,
+                      onTap: () async {
+                        await _notifyPlayingState(true);
+                        await widget.pipChannel.invokeMethod('enterPip');
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: Colors.black54,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Icon(
-                          _muted
-                              ? Icons.volume_off_rounded
-                              : Icons.volume_up_rounded,
+                        child: const Icon(
+                          Icons.picture_in_picture_alt_rounded,
                           size: 20,
                           color: Colors.white,
                         ),
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: () async {
-                            await _notifyPlayingState(true);
-                            await widget.pipChannel.invokeMethod('enterPip');
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(
-                              Icons.picture_in_picture_alt_rounded,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                          ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _openFullscreen,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _openFullscreen,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(
-                              Icons.fullscreen_rounded,
-                              size: 22,
-                              color: Colors.white,
-                            ),
-                          ),
+                        child: const Icon(
+                          Icons.fullscreen_rounded,
+                          size: 22,
+                          color: Colors.white,
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),

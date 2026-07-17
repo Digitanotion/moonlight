@@ -108,6 +108,7 @@ import 'package:moonlight/features/withdrawal/data/repositories/withdrawal_repos
 import 'package:moonlight/features/withdrawal/presentation/cubit/withdrawal_cubit.dart';
 import 'package:http/http.dart' as http;
 import 'package:moonlight/features/withdrawal/presentation/pages/withdrawal_page.dart';
+import 'package:moonlight/features/post_view/domain/entities/post.dart';
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -423,40 +424,65 @@ class AppRouter {
           ),
         );
 
-      case RouteNames.postView:
-        {
-          final a = (settings.arguments as Map?) ?? const {};
-          final postId = (a['postId'] as String?) ?? 'demo-post-1';
-          final isOwner = (a['isOwner'] as bool?) ?? false;
 
-          if (postId.isEmpty) {
-            return MaterialPageRoute(
-              builder: (context) => const Scaffold(
-                body: Center(child: Text('Missing postId for PostView')),
-              ),
-            );
-          }
+case RouteNames.postView:
+  {
+    final a = (settings.arguments as Map?) ?? const {};
+    final postId = (a['postId'] as String?) ?? 'demo-post-1';
+    final isOwner = (a['isOwner'] as bool?) ?? false;
+    final initialPost = a['initialPost'] as Post?; // ← NEW
 
-          try {
-            return MaterialPageRoute(
-              builder: (context) => BlocProvider(
-                create: (context) => sl<PostCubit>(param1: postId)..load(),
-                child: PostViewScreen(isOwner: isOwner, postId: postId),
-              ),
-              settings: settings,
+    if (postId.isEmpty) {
+      return MaterialPageRoute(
+        builder: (context) => const Scaffold(
+          body: Center(child: Text('Missing postId for PostView')),
+        ),
+      );
+    }
+
+    try {
+      return MaterialPageRoute(
+        builder: (context) => BlocProvider(
+          // NOTE: no more ..load() chained here — that used to force
+          // loading:true immediately after creation, which would have
+          // wiped out the seeded initialPost before it ever reached the
+          // screen. The cubit's constructor now handles both cases:
+          //  - initialPost != null → seeds state immediately, reconciles
+          //    silently in the background (see PostCubit._reconcileSilently)
+          //  - initialPost == null → falls through to calling load()
+          //    itself below, exactly like before (e.g. opened from a
+          //    push notification / deep link with no feed context)
+          create: (context) {
+            final cubit = sl<PostCubit>(
+              param1: postId,
+              param2: initialPost,
             );
-          } catch (e) {
-            debugPrint('❌ GetIt factory param failed: $e');
-            return MaterialPageRoute(
-              builder: (context) => BlocProvider(
-                create: (context) =>
-                    PostCubit(sl<PostRepository>(), postId)..load(),
-                child: PostViewScreen(isOwner: isOwner, postId: postId),
-              ),
-              settings: settings,
+            if (initialPost == null) cubit.load();
+            return cubit;
+          },
+          child: PostViewScreen(isOwner: isOwner, postId: postId),
+        ),
+        settings: settings,
+      );
+    } catch (e) {
+      debugPrint('❌ GetIt factory param failed: $e');
+      return MaterialPageRoute(
+        builder: (context) => BlocProvider(
+          create: (context) {
+            final cubit = PostCubit(
+              sl<PostRepository>(),
+              postId,
+              initialPost: initialPost,
             );
-          }
-        }
+            if (initialPost == null) cubit.load();
+            return cubit;
+          },
+          child: PostViewScreen(isOwner: isOwner, postId: postId),
+        ),
+        settings: settings,
+      );
+    }
+  }
 
       case RouteNames.giftCoins:
         return MaterialPageRoute(

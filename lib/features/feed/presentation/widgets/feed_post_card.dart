@@ -1,11 +1,16 @@
+// lib/features/feed/presentation/widgets/feed_post_card.dart
+
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 // ── Design tokens (shared with feed_screen.dart) ──────────────────────────
 class _C {
@@ -142,19 +147,19 @@ class FeedPostCard extends StatelessWidget {
             ),
           ),
 
-          // ── Media — edge-to-edge, no horizontal margin ──────────────────
+          // ── Media — adaptive to the asset's real aspect ratio, capped
+          // to a compact range so nothing dominates the feed the way a
+          // full-bleed square/portrait tile would. Videos autoplay
+          // (muted) once ~60% visible in the viewport and pause when
+          // scrolled away — same pattern as Twitter/IG feeds.
           GestureDetector(
-            onTap: onOpenPost,
+            onTap: _isVideo ? null : onOpenPost,
             child: Hero(
               tag: 'post_${post.id}',
-              child: AspectRatio(
-                aspectRatio: 16 / 11,
-                child: _isVideo
-                    ? _VideoThumbnailWidget(
-                        videoUrl: post.mediaUrl,
-                        serverThumbUrl: post.thumbUrl,
-                      )
-                    : _ImageWidget(url: post.mediaUrl),
+              child: _AdaptiveMedia(
+                post: post,
+                isVideo: _isVideo,
+                onOpenPost: onOpenPost,
               ),
             ),
           ),
@@ -198,6 +203,340 @@ class FeedPostCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Adaptive media container ──────────────────────────────────────────────
+// Sizes itself to the media's real aspect ratio (once known) instead of a
+// fixed 16:11 box, clamped to a compact range so the feed stays scannable
+// — a very wide or very tall asset never dominates the card the way an
+// unclamped natural size would.
+class _AdaptiveMedia extends StatefulWidget {
+  final Post post;
+  final bool isVideo;
+  final VoidCallback onOpenPost;
+  const _AdaptiveMedia({
+    required this.post,
+    required this.isVideo,
+    required this.onOpenPost,
+  });
+
+  @override
+  State<_AdaptiveMedia> createState() => _AdaptiveMediaState();
+}
+
+class _AdaptiveMediaState extends State<_AdaptiveMedia> {
+  double? _aspect; // width / height
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.isVideo) _resolveImageAspect();
+  }
+
+  void _resolveImageAspect() {
+    if (widget.post.mediaUrl.isEmpty) return;
+    final provider = CachedNetworkImageProvider(widget.post.mediaUrl);
+    final stream = provider.resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, _) {
+        if (mounted) {
+          setState(() => _aspect = info.image.width / info.image.height);
+        }
+        stream.removeListener(listener);
+      },
+      onError: (_, __) => stream.removeListener(listener),
+    );
+    stream.addListener(listener);
+  }
+
+  double _clampedHeight(double width) {
+    final ratio = _aspect ?? (4 / 5); // sensible default while unknown
+    final raw = width / ratio;
+    // Compact on purpose — "not big, like Twitter": floor keeps very wide
+    // media from becoming a thin sliver, ceiling keeps very tall media
+    // from taking over the whole card.
+    final minH = width * 0.62;
+    final maxH = width * 1.15;
+    return raw.clamp(minH, maxH);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = _clampedHeight(w);
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          width: w,
+          height: h,
+          child: widget.isVideo
+              ? _FeedVideoPlayer(
+                  post: widget.post,
+                  onOpenPost: widget.onOpenPost,
+                  onAspectKnown: (a) {
+                    if (mounted && _aspect == null) setState(() => _aspect = a);
+                  },
+                )
+              : _ImageWidget(url: widget.post.mediaUrl),
+        );
+      },
+    );
+  }
+}
+
+// ── Inline autoplay video player ───────────────────────────────────────────
+// Plays muted once ~60% visible in the viewport, pauses when scrolled
+// mostly out of view, and fully releases the controller when scrolled
+// completely offscreen (keeps memory bounded in a long feed). Reuses an
+// already-warmed controller from VideoPreloadService when one exists.
+class _FeedVideoPlayer extends StatefulWidget {
+  final Post post;
+  final VoidCallback onOpenPost;
+  final ValueChanged<double> onAspectKnown;
+  const _FeedVideoPlayer({
+    required this.post,
+    required this.onOpenPost,
+    required this.onAspectKnown,
+  });
+
+  @override
+  State<_FeedVideoPlayer> createState() => _FeedVideoPlayerState();
+}
+
+class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
+  VideoPlayerController? _vc;
+  bool _initialized = false;
+  bool _muted = true; // Twitter/IG default: autoplay starts muted
+  bool _currentlyVisible = false;
+  bool _loading = false;
+
+  // Fraction of the card that must be on-screen before it's considered
+  // "the one the user is looking at." Tuned lower than a naive 0.6 so the
+  // trigger fires right as a card becomes the dominant one in view,
+  // rather than waiting for it to be almost fully swallowed — this is
+  // the fix for playback feeling like it lags behind the actual scroll
+  // position.
+  static const double _visibleThreshold = 0.45;
+
+  @override
+  void dispose() {
+    _vc?.pause();
+    _vc?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _ensureController() async {
+    if (_vc != null || _loading) return;
+    _loading = true;
+    final url = widget.post.mediaUrl;
+
+    final preloaded = VideoPreloadService.instance.takeIfReady(url);
+    if (preloaded != null) {
+      _vc = preloaded;
+    } else {
+      final c = VideoPlayerController.networkUrl(Uri.parse(url));
+      try {
+        await c.initialize();
+        _vc = c;
+      } catch (_) {
+        _loading = false;
+        return;
+      }
+    }
+
+    _vc!.setLooping(true);
+    _vc!.setVolume(_muted ? 0 : 1);
+    _loading = false;
+
+    if (mounted) {
+      setState(() => _initialized = true);
+      if (_vc!.value.aspectRatio > 0) {
+        widget.onAspectKnown(_vc!.value.aspectRatio);
+      }
+    }
+  }
+
+  void _releaseController() {
+    _vc?.pause();
+    _vc?.dispose();
+    _vc = null;
+    if (mounted) setState(() => _initialized = false);
+  }
+
+  Future<void> _onVisibilityChanged(VisibilityInfo info) async {
+    final fraction = info.visibleFraction;
+
+    if (fraction > _visibleThreshold && !_currentlyVisible) {
+      _currentlyVisible = true;
+      if (mounted) setState(() {}); // reflect "now visible" for the loader
+      await _ensureController();
+      if (mounted && _vc != null) _vc!.play();
+    } else if (fraction <= _visibleThreshold && _currentlyVisible) {
+      _currentlyVisible = false;
+      _vc?.pause();
+      // Fully scrolled away — release the controller to keep memory
+      // bounded. Coming back into view later just re-fetches/re-preloads.
+      if (fraction == 0) _releaseController();
+      if (mounted) setState(() {}); // hide loader if it was mid-attach
+    }
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _muted = !_muted;
+      _vc?.setVolume(_muted ? 0 : 1);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return VisibilityDetector(
+      key: Key('feed_video_${widget.post.id}'),
+      onVisibilityChanged: _onVisibilityChanged,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: Colors.black),
+
+          if (_initialized && _vc != null)
+            Center(
+              child: AspectRatio(
+                aspectRatio: _vc!.value.aspectRatio > 0
+                    ? _vc!.value.aspectRatio
+                    : 9 / 16,
+                child: VideoPlayer(_vc!),
+              ),
+            )
+          else
+            _VideoThumbnailWidget(
+              videoUrl: widget.post.mediaUrl,
+              serverThumbUrl: widget.post.thumbUrl,
+            ),
+
+          // Tapping the video opens the full post — same single action
+          // as tapping an image, so the whole feed behaves consistently.
+          // Play/pause is no longer a separate inline interaction here.
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onOpenPost,
+            ),
+          ),
+
+          // Ultra-modern loading state — shown only while this card is
+          // actually in view AND the video hasn't attached yet (either
+          // still awaiting a preload in flight, or doing a cold fetch).
+          // Distinct from the static thumbnail pulse ring shown before
+          // the card ever scrolls into view — this is the "actively
+          // working on it right now" signal.
+          if (_currentlyVisible && !_initialized) const _ModernVideoLoader(),
+
+          // Persistent mute toggle — always visible while the video is
+          // active, independent of play/pause state.
+          if (_initialized)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: GestureDetector(
+                onTap: _toggleMute,
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Ultra-modern loading indicator ─────────────────────────────────────────
+// A soft glass disc with a slim rotating accent ring — shown only while a
+// visible video card is actively attaching/buffering. Deliberately quiet
+// and small rather than a big spinner, so it reads as "almost there"
+// rather than "long wait."
+class _ModernVideoLoader extends StatefulWidget {
+  const _ModernVideoLoader();
+
+  @override
+  State<_ModernVideoLoader> createState() => _ModernVideoLoaderState();
+}
+
+class _ModernVideoLoaderState extends State<_ModernVideoLoader>
+    with TickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
+
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          final scale = 0.94 + (_pulse.value * 0.08);
+          return Transform.scale(scale: scale, child: child);
+        },
+        child: Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withOpacity(0.45),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              RotationTransition(
+                turns: _ctrl,
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    strokeCap: StrokeCap.round,
+                    valueColor: AlwaysStoppedAnimation(_C.accent),
+                    backgroundColor: Colors.white.withOpacity(0.08),
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.play_arrow_rounded,
+                size: 16,
+                color: Colors.white.withOpacity(0.85),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -269,6 +608,7 @@ class _ImageWidget extends StatelessWidget {
 
 // ── Video thumbnail widget ───────────────────────────────────────────────
 // Priority: 1) serverThumbUrl  2) on-device generation  3) placeholder
+// Used as the "not yet playing" backdrop before autoplay kicks in.
 class _VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
   final String? serverThumbUrl;
@@ -393,7 +733,7 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget>
           ),
         ),
 
-        // ── Signature: soft pulsing ring around play icon ─────────────────
+        // ── Signature: soft pulsing ring, shown only before playback ────
         Center(
           child: AnimatedBuilder(
             animation: _pulse,
@@ -433,33 +773,6 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget>
                 ],
               );
             },
-          ),
-        ),
-
-        Positioned(
-          left: 10,
-          bottom: 10,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.videocam_rounded, size: 12, color: Colors.white),
-                SizedBox(width: 5),
-                Text(
-                  'Video',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ],

@@ -312,36 +312,36 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     const SizedBox(height: 10),
 
                     // ✅ MODIFIED SKIP BUTTON
-                    Center(
-                      child: TextButton(
-                        onPressed: () async {
-                          // Set hasCompletedProfile to true before navigating
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.setBool('hasCompletedProfile', true);
+                    // Center(
+                    //   child: TextButton(
+                    //     onPressed: () async {
+                    //       // Set hasCompletedProfile to true before navigating
+                    //       final prefs = await SharedPreferences.getInstance();
+                    //       await prefs.setBool('hasCompletedProfile', true);
 
-                          // Optional: Show a brief message
-                          if (mounted) {
-                            MoonSnack.warning(
-                              context,
-                              "You can complete your profile later in settings",
-                            );
-                          }
+                    //       // Optional: Show a brief message
+                    //       if (mounted) {
+                    //         MoonSnack.warning(
+                    //           context,
+                    //           "You can complete your profile later in settings",
+                    //         );
+                    //       }
 
-                          // Navigate to home
-                          if (mounted) {
-                            Navigator.pushReplacementNamed(
-                              context,
-                              RouteNames.home,
-                            );
-                          }
-                        },
-                        child: const Text(
-                          'Skip for now',
-                          style: TextStyle(color: Color(0xFF19D85E)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                    //       // Navigate to home
+                    //       if (mounted) {
+                    //         Navigator.pushReplacementNamed(
+                    //           context,
+                    //           RouteNames.home,
+                    //         );
+                    //       }
+                    //     },
+                    //     child: const Text(
+                    //       'Skip for now',
+                    //       style: TextStyle(color: Color(0xFF19D85E)),
+                    //     ),
+                    //   ),
+                    // ),
+                    // const SizedBox(height: 10),
                   ],
                 ),
               ),
