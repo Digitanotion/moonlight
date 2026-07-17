@@ -552,6 +552,18 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
   Timer? _controlsTimer;
   bool _wasPlayingBeforePause = false;
 
+  // True when _vc came from VideoPreloadService (either a feed-scroll
+  // preload, or a live hand-off donated by FeedPostCard the instant the
+  // user tapped to open this post). False when this screen had to cold-
+  // start its own controller (e.g. opened via deep link/notification,
+  // never appeared in a scrolled feed first).
+  //
+  // This matters entirely for dispose(): a borrowed controller gets
+  // donated BACK into the pool so the feed can reclaim it instantly on
+  // return (matching Twitter's instant-resume behavior); a cold-started
+  // one is genuinely ours to dispose, since nothing else is tracking it.
+  bool _borrowedFromPool = false;
+
   @override
   void initState() {
     super.initState();
@@ -579,7 +591,14 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
   }
 
   void _disposeVc() {
-    _vc?.dispose();
+    if (_vc == null) return;
+    if (_borrowedFromPool) {
+      debugPrint('🎬 [PostView] Returning borrowed controller to pool on close');
+      VideoPreloadService.instance.donate(widget.post.mediaUrl, _vc!);
+    } else {
+      debugPrint('🎬 [PostView] Disposing cold-started controller on close');
+      _vc!.dispose();
+    }
     _vc = null;
   }
 
@@ -638,6 +657,8 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
 
     final preloaded = VideoPreloadService.instance.takeIfReady(url);
     if (preloaded != null) {
+      debugPrint('🎬 [PostView] Attaching ALREADY-READY controller (instant)');
+      _borrowedFromPool = true;
       _vc = preloaded
         ..addListener(_onVideoListener)
         ..setVolume(1);
@@ -652,10 +673,13 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
 
     final inFlight = VideoPreloadService.instance.inFlight(url);
     if (inFlight != null) {
+      debugPrint('🎬 [PostView] Waiting on IN-FLIGHT preload before attaching');
       await inFlight;
       if (!mounted) return;
       final nowReady = VideoPreloadService.instance.takeIfReady(url);
       if (nowReady != null) {
+        debugPrint('🎬 [PostView] In-flight preload finished — attaching');
+        _borrowedFromPool = true;
         _vc = nowReady
           ..addListener(_onVideoListener)
           ..setVolume(1);
@@ -666,9 +690,13 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
         _notifyPlayingState(true);
         return;
       }
+      debugPrint('🎬 [PostView] In-flight preload failed — falling back to cold start');
       // Preload failed — fall through to a normal cold start below.
+    } else {
+      debugPrint('🎬 [PostView] Nothing preloaded/in-flight — COLD START');
     }
 
+    _borrowedFromPool = false;
     _vc = VideoPlayerController.networkUrl(Uri.parse(url))
       ..addListener(_onVideoListener)
       ..initialize()

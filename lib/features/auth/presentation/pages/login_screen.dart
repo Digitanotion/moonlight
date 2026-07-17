@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -28,6 +29,11 @@ class _LoginScreenState extends State<LoginScreen>
   late AnimationController _animController;
   late Animation<double> _fadeIn;
   late Animation<Offset> _slideUp;
+
+  // Guards against double-navigation if AuthBloc emits AuthAuthenticated
+  // more than once (e.g. a token-refresh emission) while we're still
+  // resolving the profile-completion check for the first one.
+  bool _resolvingPostLogin = false;
 
   @override
   void initState() {
@@ -84,6 +90,46 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  /// Runs the authoritative, live profile-completion check right after a
+  /// successful login, rather than trusting whatever value happened to
+  /// already be sitting in OnboardingBloc's state (which could easily be
+  /// stale — loaded from cache before this login ever happened). Bounded
+  /// by a short timeout so a slow/no connection can't hang the login
+  /// flow; on timeout it falls back to whatever the bloc already has
+  /// rather than blocking indefinitely.
+  Future<void> _resolvePostLoginRoute(BuildContext context) async {
+    if (_resolvingPostLogin) return;
+    _resolvingPostLogin = true;
+
+    final onboardingBloc = context.read<OnboardingBloc>();
+
+    try {
+      // Fire the live check and wait for the NEXT state it produces,
+      // rather than reading the bloc's current (possibly stale) state.
+      final updatedStateFuture = onboardingBloc.stream.first;
+      onboardingBloc.add(const CheckFirstLaunchStatus());
+
+      final updated = await updatedStateFuture.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => onboardingBloc.state,
+      );
+
+      if (!mounted) return;
+
+      debugPrint(
+        '🔐 Login success — hasCompletedProfile=${updated.hasCompletedProfile}',
+      );
+
+      if (!updated.hasCompletedProfile) {
+        Navigator.pushReplacementNamed(context, RouteNames.profile_setup);
+      } else {
+        Navigator.pushReplacementNamed(context, RouteNames.home);
+      }
+    } finally {
+      _resolvingPostLogin = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -124,27 +170,10 @@ class _LoginScreenState extends State<LoginScreen>
             child: BlocConsumer<AuthBloc, AuthState>(
               listener: (context, state) {
                 if (state is AuthAuthenticated) {
-                  // Check whether this user has completed profile setup.
-                  // OnboardingBloc loads 'hasCompletedProfile' from SharedPrefs.
-                  final hasCompletedProfile = context
-                      .read<OnboardingBloc>()
-                      .state
-                      .hasCompletedProfile;
-
-                  debugPrint(
-                    '\U0001f510 Login success — hasCompletedProfile=\$hasCompletedProfile',
-                  );
-
-                  if (!hasCompletedProfile) {
-                    // First login or profile was skipped — go to setup once.
-                    Navigator.pushReplacementNamed(
-                      context,
-                      RouteNames.profile_setup,
-                    );
-                  } else {
-                    // Returning user with profile done — straight to home.
-                    Navigator.pushReplacementNamed(context, RouteNames.home);
-                  }
+                  // Was: read OnboardingBloc's current (possibly stale)
+                  // cached state directly. Now: trigger + await a fresh
+                  // live check before deciding where to route.
+                  _resolvePostLoginRoute(context);
                 } else if (state is AuthFailure) {
                   debugPrint(state.message);
                   MoonSnack.error(context, state.message);

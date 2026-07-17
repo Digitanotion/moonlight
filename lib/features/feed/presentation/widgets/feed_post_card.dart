@@ -387,6 +387,31 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
     }
   }
 
+  /// Called when the user taps to open the full post. Hands the
+  /// currently-playing controller (if we have one) straight into the
+  /// shared pool BEFORE navigating, so PostViewScreen's own init picks
+  /// it up via VideoPreloadService.takeIfReady with zero delay — instead
+  /// of leaving it to the visibility detector's async pause/release
+  /// cycle, which would otherwise dispose it a beat too late or too
+  /// early relative to the navigation.
+  void _handleOpenPost() {
+    if (_initialized && _vc != null) {
+      debugPrint('🎬 [Feed→Post] Donating live controller for ${widget.post.id}');
+      VideoPreloadService.instance.donate(widget.post.mediaUrl, _vc!);
+      setState(() {
+        _vc = null;
+        _initialized = false;
+        _currentlyVisible = false;
+      });
+    } else {
+      debugPrint(
+        '🎬 [Feed→Post] Nothing to donate for ${widget.post.id} '
+        '(initialized=$_initialized, hasController=${_vc != null})',
+      );
+    }
+    widget.onOpenPost();
+  }
+
   void _toggleMute() {
     setState(() {
       _muted = !_muted;
@@ -421,11 +446,12 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
 
           // Tapping the video opens the full post — same single action
           // as tapping an image, so the whole feed behaves consistently.
-          // Play/pause is no longer a separate inline interaction here.
+          // Also hands off the live controller to PostViewScreen (see
+          // _handleOpenPost) so playback continues instantly there.
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: widget.onOpenPost,
+              onTap: _handleOpenPost,
             ),
           ),
 

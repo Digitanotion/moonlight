@@ -5,7 +5,12 @@
 //   - Stays visible until ALL of:
 //       1. DependencyManager ready (all GetIt registrations done)
 //       2. Auth bloc resolved (authenticated or unauthenticated)
-//       3. Onboarding bloc resolved (isFirstLaunch known)
+//       3. OnboardingBloc's AUTHORITATIVE check resolved — profileCheckResolved,
+//          not merely isFirstLaunch != null (see onboarding_state.dart for why
+//          that distinction matters: LoadOnboardingStatus sets isFirstLaunch
+//          using a stale cached value well before the live profile check
+//          even starts, and gating on isFirstLaunch alone let Splash
+//          navigate on that stale value before the live check could correct it)
 //       4. Minimum 1.5 s display time (prevents flash)
 //   - If network is down or registration fails, still navigates using
 //     whatever was resolved from disk cache (never hangs indefinitely)
@@ -32,11 +37,10 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _anim;
   late Animation<double> _fade;
 
-  // ── Four gates — ALL must be true before navigation ─────────────────────────
-  bool _depsReady = false; // GetIt Track 2 complete
-  bool _authDone = false; // AuthBloc emitted a terminal state
-  bool _onboardDone = false; // OnboardingBloc resolved isFirstLaunch
-  bool _minTimeDone = false; // minimum splash display time elapsed
+  bool _depsReady = false;
+  bool _authDone = false;
+  bool _onboardDone = false;
+  bool _minTimeDone = false;
 
   bool _navigated = false;
 
@@ -54,26 +58,20 @@ class _SplashScreenState extends State<SplashScreen>
     _fade = CurvedAnimation(parent: _anim, curve: Curves.easeIn);
     _anim.forward();
 
-    // Minimum display time (prevents splash flash on fast devices)
     _minTimer = Timer(const Duration(milliseconds: 1500), () {
       _minTimeDone = true;
       _tryNavigate();
     });
 
-    // Hard safety valve — if anything hangs, unblock after 12 s
     _safetyTimer = Timer(const Duration(seconds: 12), () {
       debugPrint('🚨 [Splash] Safety timeout — forcing navigation');
       _navigateNow(force: true);
     });
 
-    // Gate 1: wait for all GetIt registrations
     DependencyManager.waitForAllDependencies()
         .then((_) {
           debugPrint('✅ [Splash] GetIt dependencies ready');
           _depsReady = true;
-
-          // Now that deps are ready, fire auth + onboarding checks
-          // (they may already be running if the bloc was created earlier)
           if (mounted) {
             context.read<AuthBloc>().add(CheckAuthStatusEvent());
             context.read<OnboardingBloc>().add(const CheckFirstLaunchStatus());
@@ -81,7 +79,6 @@ class _SplashScreenState extends State<SplashScreen>
           _tryNavigate();
         })
         .catchError((e) {
-          // Dependency init had an error — still unblock so app doesn't hang
           debugPrint('⚠️ [Splash] Dependency error (continuing): $e');
           _depsReady = true;
           if (mounted) {
@@ -91,7 +88,6 @@ class _SplashScreenState extends State<SplashScreen>
           _tryNavigate();
         });
 
-    // Check if blocs already have resolved states from a previous run
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkBlocStates());
   }
 
@@ -102,7 +98,9 @@ class _SplashScreenState extends State<SplashScreen>
     if (auth is AuthAuthenticated || auth is AuthUnauthenticated) {
       _authDone = true;
     }
-    if (ob.isFirstLaunch != null) _onboardDone = true;
+    // Gate on the AUTHORITATIVE check having resolved, not merely on
+    // isFirstLaunch being non-null — see the header comment above.
+    if (ob.profileCheckResolved) _onboardDone = true;
     _tryNavigate();
   }
 
@@ -175,7 +173,15 @@ class _SplashScreenState extends State<SplashScreen>
         ),
         BlocListener<OnboardingBloc, OnboardingState>(
           listener: (_, state) {
-            if (state.isFirstLaunch != null) {
+            // Gate on the AUTHORITATIVE check having resolved, not
+            // merely on isFirstLaunch being non-null. LoadOnboardingStatus
+            // (fired 100ms after bloc creation) sets isFirstLaunch using
+            // a stale cached hasCompletedProfile value, well before the
+            // live check via CheckFirstLaunchStatus even starts — gating
+            // on isFirstLaunch alone let this fire early and lock in a
+            // stale routing decision that the live check would have
+            // corrected a moment later.
+            if (state.profileCheckResolved) {
               _onboardDone = true;
               _tryNavigate();
             }

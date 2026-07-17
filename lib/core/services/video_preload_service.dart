@@ -39,6 +39,37 @@ class VideoPreloadService {
         u.endsWith('.webm');
   }
 
+  /// Hands an already-initialized (and possibly currently playing)
+  /// controller back into the shared pool, keyed by [url]. This is the
+  /// mechanism that makes feed ↔ post-view transitions instant in both
+  /// directions: whichever screen currently owns the live controller for
+  /// a video donates it here right before it stops needing it (feed,
+  /// when the user taps to open the post; post-view, when the user
+  /// navigates back), and the next screen picks it up via
+  /// [takeIfReady] with zero re-buffering.
+  ///
+  /// If a different controller is already cached for this URL, the
+  /// incoming one is disposed instead of silently leaking — this should
+  /// only happen in rare races and is not the common path.
+  void donate(String url, VideoPlayerController controller) {
+    if (url.isEmpty) {
+      debugPrint('🎬 [Donate] IGNORED (empty url)');
+      controller.dispose();
+      return;
+    }
+    final existing = _controllers[url];
+    if (existing != null && existing != controller) {
+      debugPrint('🎬 [Donate] COLLISION — disposing incoming, keeping existing: ${_short(url)}');
+      controller.dispose();
+      return;
+    }
+    debugPrint('🎬 [Donate] STORED: ${_short(url)}');
+    _controllers[url] = controller;
+    _order.remove(url);
+    _order.add(url);
+    _evictIfNeeded();
+  }
+
   /// Kick off initialization for [url] if it's not already cached or in
   /// flight. Fire-and-forget — call this from feed scroll handling for
   /// the next few upcoming items. Safe to call repeatedly; it no-ops if
@@ -46,9 +77,12 @@ class VideoPreloadService {
   void preload(String url) {
     if (url.isEmpty || !_isVideoUrl(url)) return;
     if (_controllers.containsKey(url) || _initFutures.containsKey(url)) {
+      debugPrint('🎬 [Preload] SKIP (already cached/loading): ${_short(url)}');
       return;
     }
 
+    debugPrint('🎬 [Preload] START: ${_short(url)}');
+    final startedAt = DateTime.now();
     final controller = VideoPlayerController.networkUrl(Uri.parse(url));
     _controllers[url] = controller;
     _order.remove(url);
@@ -57,14 +91,12 @@ class VideoPreloadService {
     final future = controller
         .initialize()
         .then((_) {
-          // Keep it muted and paused — this is a background warm-up, not
-          // playback. The screen that actually uses it decides play state.
           controller.setVolume(0);
+          final ms = DateTime.now().difference(startedAt).inMilliseconds;
+          debugPrint('🎬 [Preload] READY (${ms}ms): ${_short(url)}');
         })
         .catchError((e, st) {
-          debugPrint('⚠️ [VideoPreload] Failed to preload $url: $e');
-          // Clean up a failed preload so a later real attempt isn't stuck
-          // pointing at a broken controller.
+          debugPrint('⚠️ [Preload] FAILED: ${_short(url)} — $e');
           _controllers.remove(url);
           _order.remove(url);
         });
@@ -73,6 +105,11 @@ class VideoPreloadService {
     future.whenComplete(() => _initFutures.remove(url));
 
     _evictIfNeeded();
+  }
+
+  String _short(String url) {
+    final tail = url.length > 40 ? url.substring(url.length - 40) : url;
+    return '…$tail';
   }
 
   /// Preload several upcoming URLs at once — convenience for feed scroll
@@ -90,9 +127,16 @@ class VideoPreloadService {
   /// happened, just without the head start.
   VideoPlayerController? takeIfReady(String url) {
     final c = _controllers[url];
-    if (c == null) return null;
-    if (!c.value.isInitialized) return null;
+    if (c == null) {
+      debugPrint('🎬 [TakeIfReady] MISS (not cached): ${_short(url)}');
+      return null;
+    }
+    if (!c.value.isInitialized) {
+      debugPrint('🎬 [TakeIfReady] MISS (cached but not initialized yet): ${_short(url)}');
+      return null;
+    }
 
+    debugPrint('🎬 [TakeIfReady] HIT: ${_short(url)}');
     // Hand ownership to the caller: remove from our cache so we don't
     // dispose it out from under whoever is now using it, and so a repeat
     // visit to the same post starts a fresh controller rather than

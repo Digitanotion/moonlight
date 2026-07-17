@@ -341,9 +341,11 @@ class SplashOptimizer {
 
       // Blocs registered as factories — each screen gets its own instance
       if (!sl.isRegistered<OnboardingBloc>()) {
-        sl.registerFactory<OnboardingBloc>(
-          () => OnboardingBloc(repository: sl()),
-        );
+        if (!sl.isRegistered<OnboardingBloc>()) {
+          sl.registerFactory(
+            () => OnboardingBloc(repository: sl<OnboardingRepository>()),
+          );
+        }
       }
       if (!sl.isRegistered<AuthBloc>()) {
         sl.registerFactory<AuthBloc>(
@@ -799,9 +801,9 @@ void _initClubsModule() {
     );
   }
 
-sl.registerLazySingleton<ClubTreasuryRemoteDataSource>(
-  () => ClubTreasuryRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
-);
+  sl.registerLazySingleton<ClubTreasuryRemoteDataSource>(
+    () => ClubTreasuryRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
+  );
   if (!sl.isRegistered<DonateClubCubit>()) {
     sl.registerFactoryParam<DonateClubCubit, String, void>(
       (club, _) => DonateClubCubit(repository: sl(), club: club),
@@ -957,12 +959,9 @@ void _initPostsModule() {
 
   if (!sl.isRegistered<PostCubit>()) {
     sl.registerFactoryParam<PostCubit, String, Post?>(
-  (postId, initialPost) => PostCubit(
-    sl<PostRepository>(),
-    postId,
-    initialPost: initialPost,
-  ),
-);
+      (postId, initialPost) =>
+          PostCubit(sl<PostRepository>(), postId, initialPost: initialPost),
+    );
   }
 }
 
@@ -1059,30 +1058,30 @@ Future<void> _initPusher(RuntimeConfig cfg) async {
 // LIVE VIEWER SERVICES
 // =============================================================================
 void _initLiveViewerServices() {
-// Register the pool FIRST — AgoraViewerService depends on it.
-_reg<AgoraEnginePool>(() => AgoraEnginePool());
+  // Register the pool FIRST — AgoraViewerService depends on it.
+  _reg<AgoraEnginePool>(() => AgoraEnginePool());
 
-_reg<AgoraViewerService>(
-  () => AgoraViewerService(
-    pool: sl<AgoraEnginePool>(),   // ← ADD THIS LINE
-    onTokenRefresh: (role) async {
-      try {
-        final channel = sl<AgoraViewerService>().channelId;
-        if (channel == null || channel.isEmpty) throw Exception('No channel');
-        final token = await sl<AuthLocalDataSource>().readToken();
-        final res = await sl<Dio>(instanceName: 'mainDio').post(
-          '/api/v1/live/refresh-token',
-          data: {'role': role, 'channel': channel},
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
-        );
-        return (res.data as Map<String, dynamic>)['token'] as String;
-      } catch (e) {
-        debugPrint('❌ Token refresh: $e');
-        return '';
-      }
-    },
-  ),
-);
+  _reg<AgoraViewerService>(
+    () => AgoraViewerService(
+      pool: sl<AgoraEnginePool>(), // ← ADD THIS LINE
+      onTokenRefresh: (role) async {
+        try {
+          final channel = sl<AgoraViewerService>().channelId;
+          if (channel == null || channel.isEmpty) throw Exception('No channel');
+          final token = await sl<AuthLocalDataSource>().readToken();
+          final res = await sl<Dio>(instanceName: 'mainDio').post(
+            '/api/v1/live/refresh-token',
+            data: {'role': role, 'channel': channel},
+            options: Options(headers: {'Authorization': 'Bearer $token'}),
+          );
+          return (res.data as Map<String, dynamic>)['token'] as String;
+        } catch (e) {
+          debugPrint('❌ Token refresh: $e');
+          return '';
+        }
+      },
+    ),
+  );
   _reg<LiveStreamService>(
     () => LiveStreamService(
       agoraService: sl<AgoraViewerService>(),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/widgets/country_picker_field.dart';
 import 'package:moonlight/widgets/moon_snack.dart';
 import '../cubit/edit_profile_cubit.dart';
 
@@ -30,6 +31,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _bio.dispose();
     _phone.dispose();
     super.dispose();
+  }
+
+  void _openCountryPicker() async {
+    final iso = await showCountryPickerSheet(
+      context,
+      // Matches this screen's own navy/orange palette rather than the
+      // onboarding screen's palette, since showCountryPickerSheet is
+      // shared and theme-agnostic via these params.
+      bg: const Color(0xFF0A0A0F),
+      surface: const Color(0xFF151626),
+      border: const Color(0x29FFFFFF),
+      accent: const Color(0xFFFF7A00),
+      textSecondary: Colors.white70,
+    );
+    if (iso != null && mounted) {
+      context.read<EditProfileCubit>().setCountry(iso);
+    }
   }
 
   @override
@@ -179,14 +197,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           ),
                           const SizedBox(height: 14),
 
-                          // Country dropdown
-                          _Dropdown(
-                            label: 'Country',
-                            hint: 'Select your country',
-                            value: state.country,
-                            items: state.countries,
-                            onChanged: (v) =>
-                                context.read<EditProfileCubit>().setCountry(v),
+                          // Country — searchable, flag-labeled, ISO2-backed.
+                          // Was a DropdownButton against a bare-names list
+                          // from CountryLocalDataSource, which crashed
+                          // because state.country holds an ISO2 code
+                          // ("AD") that never appeared in that names list.
+                          Text(
+                            'Country',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          CountrySelectField(
+                            iso2: state.country,
+                            onTap: _openCountryPicker,
+                            background: Colors.white.withOpacity(0.06),
+                            border: const Color(0x29FFFFFF),
+                            textSecondary: Colors.white54,
                           ),
                           const SizedBox(height: 14),
 
@@ -374,70 +403,6 @@ class _Input extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: color, width: 1),
       );
-}
-
-class _Dropdown extends StatelessWidget {
-  final String label;
-  final String hint;
-  final String? value;
-  final List<String> items;
-  final ValueChanged<String?> onChanged;
-  const _Dropdown({
-    super.key,
-    required this.label,
-    required this.hint,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0x29FFFFFF)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              isExpanded: true,
-              dropdownColor: const Color(0xFF151626),
-              hint: Text(hint, style: const TextStyle(color: Colors.white54)),
-              items: items
-                  .map(
-                    (e) => DropdownMenuItem(
-                      value: e,
-                      child: Text(
-                        e,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: onChanged,
-              icon: const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Colors.white70,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _RadioChip extends StatelessWidget {
