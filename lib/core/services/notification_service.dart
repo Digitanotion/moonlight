@@ -3,9 +3,105 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/call_kit_service.dart';
 import 'package:moonlight/core/services/notification_handler_service.dart';
+import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+// Runs action-button taps (Accept/Decline) even if the app process was
+// killed and this fires in a constrained background isolate — must be a
+// top-level function, same pattern as the FCM background handler.
+// Deliberately makes a raw, direct HTTP call rather than going through
+// GetIt/VideoCallBloc, since we can't be certain the full app's DI graph
+// is available in this isolate context. This is the fallback path's
+// whole purpose: work even when the "normal" app-context flow can't be
+// trusted to be ready.
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {
+  _handleActionTap(response);
+}
+
+void _handleActionTap(NotificationResponse response) {
+  if (response.actionId != 'ACCEPT_CALL' && response.actionId != 'DECLINE_CALL') {
+    return; // plain tap, not an action button — handled elsewhere
+  }
+  if (response.payload == null) return;
+
+  Map<String, dynamic>? data;
+  try {
+    data = jsonDecode(response.payload!) as Map<String, dynamic>;
+  } catch (_) {
+    return;
+  }
+
+  final sessionUuid = data['session_uuid'] as String?;
+  final apiBaseUrl = data['api_base_url'] as String?;
+  if (sessionUuid == null || apiBaseUrl == null) return;
+
+  final action = response.actionId == 'ACCEPT_CALL' ? 'accept' : 'reject';
+
+  // Keep CallKit's native UI in sync too — the user resolved this call
+  // via the notification specifically, so the separate native full-screen
+  // layer needs to be told explicitly to stop, or it just sits there
+  // ringing/showing even though the call was already handled here.
+  try {
+    CallKitService().endCall(sessionUuid);
+  } catch (_) {}
+
+  // GUARANTEED path — always runs, regardless of whether the bloc/GetIt
+  // happens to be reachable from whatever isolate this callback executes
+  // in. Confirmed by testing that notification-action-tap callbacks
+  // don't reliably run in the same isolate as the main app, even when
+  // the app is technically "open" — so this can never be skipped in
+  // favor of only the bloc path, or the server-side call succeeds while
+  // our local bloc state silently never finds out, leaving it stuck
+  // "busy" forever (exactly what caused every later incoming call to be
+  // ignored in this same session).
+  SharedPreferences.getInstance().then((prefs) {
+    final token = prefs.getString('auth_token');
+    if (token == null || token.isEmpty) return;
+    http.post(
+      Uri.parse('$apiBaseUrl/api/v1/video-call/$sessionUuid/$action'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+  });
+
+  // Prefer dispatching through the actual VideoCallBloc when it's
+  // available — best-effort, since this callback's isolate context has
+  // proven unreliable for reaching GetIt (confirmed via testing: CallKit's
+  // own native event stream reaches the bloc fine from the same "app is
+  // open" state; this notification-action-tap callback specifically does
+  // not, reliably).
+  try {
+    final bloc = sl<VideoCallBloc>();
+    if (response.actionId == 'ACCEPT_CALL') {
+      bloc.add(CallAcceptRequested(sessionUuid));
+    } else {
+      bloc.add(CallRejectRequested(sessionUuid));
+    }
+  } catch (_) {
+    // GUARANTEED fallback for the accept case specifically: persist a
+    // marker that the app's resume handler (already proven reliable —
+    // same mechanism used for CallKit's own "missed accepted call"
+    // check) will pick up and act on the next time the app is actually
+    // in the main isolate. Reject doesn't need this — the guaranteed
+    // HTTP call above already fully resolves it server-side, and there's
+    // no local screen state to sync afterward (the receiver isn't
+    // entering anything).
+    if (response.actionId == 'ACCEPT_CALL') {
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString('pending_join_session_uuid', sessionUuid);
+      });
+    }
+  }
+}
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -38,7 +134,26 @@ class NotificationService {
       onDidReceiveNotificationResponse: (NotificationResponse details) async {
         print('🎯 NOTIFICATION CLICKED!');
 
+        if (details.actionId == 'ACCEPT_CALL' || details.actionId == 'DECLINE_CALL') {
+          _handleActionTap(details);
+          return;
+        }
+
+        // Plain tap on the notification BODY (not an action button). For
+        // the incoming-call notification specifically, this should be a
+        // genuine no-op — the user should only ever resolve a call via
+        // the explicit Accept/Decline buttons, not by tapping the body.
+        // Detect this by payload shape (has session_uuid, no 'type' key
+        // — unlike every other notification type in the app) and return
+        // immediately, before falling through to generic navigation
+        // handling.
         final payload = _parseNotificationPayload(details.payload);
+        if (payload != null &&
+            payload.containsKey('session_uuid') &&
+            !payload.containsKey('type')) {
+          print('📞 Incoming-call notification body tapped — ignoring (use Accept/Decline)');
+          return;
+        }
 
         if (payload != null) {
           print('✅ Parsed payload: $payload');
@@ -47,10 +162,12 @@ class NotificationService {
           print('❌ Could not parse payload: ${details.payload}');
         }
       },
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
     // Create notification channel for Android 8.0+
     await _createNotificationChannel();
+    await _createIncomingCallChannel();
 
     print('✅ NotificationService initialized');
   }
@@ -95,7 +212,7 @@ class NotificationService {
       }
     }
 
-    return null;
+  return null;
   }
 
   Future<void> _createNotificationChannel() async {
@@ -117,6 +234,103 @@ class NotificationService {
         ?.createNotificationChannel(channel);
 
     print('✅ Notification channel created');
+  }
+
+  // Dedicated channel for the fallback incoming-call notification —
+  // deliberately separate from 'high_importance_channel', so if that
+  // channel ever ends up stuck with wrong sound/importance settings (as
+  // happened with CallKit's own channel — channel settings are
+  // permanently sticky once created), this one still works independently.
+  Future<void> _createIncomingCallChannel() async {
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'incoming_call_fallback_v1',
+      'Incoming Calls (Notification)',
+      description:
+          'Fallback actionable notification for incoming video calls, shown alongside the full-screen ringing UI.',
+      importance: Importance.max,
+      enableVibration: true,
+      playSound: true,
+    );
+
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(channel);
+  }
+
+  /// Shows an actionable Accept/Decline notification for an incoming
+  /// video call, as a fallback running ALONGSIDE CallKit's full-screen
+  /// UI — not a replacement. If CallKit's native UI fails to render for
+  /// any device-specific reason (which we've seen happen intermittently
+  /// across different manufacturer restrictions), this guarantees the
+  /// user still gets something actionable rather than a silent missed
+  /// call.
+  Future<void> showIncomingCallNotification({
+    required String sessionUuid,
+    required String callerName,
+    required String apiBaseUrl,
+  }) async {
+    final payload = jsonEncode({
+      'session_uuid': sessionUuid,
+      'api_base_url': apiBaseUrl,
+    });
+
+    final androidDetails = AndroidNotificationDetails(
+      'incoming_call_fallback_v1',
+      'Incoming Calls (Notification)',
+      channelDescription:
+          'Fallback actionable notification for incoming video calls.',
+      importance: Importance.max,
+      priority: Priority.max,
+      category: AndroidNotificationCategory.call,
+      fullScreenIntent: false, // CallKit already owns the full-screen UI; this is the plain-notification fallback
+      playSound: true,
+      enableVibration: true,
+      ongoing: true,
+      autoCancel: false,
+      actions: const [
+        AndroidNotificationAction(
+          'ACCEPT_CALL',
+          'Accept',
+          showsUserInterface: true,
+          cancelNotification: true,
+        ),
+        AndroidNotificationAction(
+          'DECLINE_CALL',
+          'Decline',
+          // Changed from false to true — Accept (which already uses
+          // true) is confirmed working reliably; Decline (which was
+          // false) doesn't respond at all. showsUserInterface:false
+          // routes the action through a different, apparently less
+          // reliable background-only callback path. Declining doesn't
+          // functionally need the app in foreground, but our code
+          // already treats it as a pure no-op for navigation (nothing
+          // gets pushed), so this trades a negligible UX difference for
+          // actual functional reliability.
+          showsUserInterface: true,
+          cancelNotification: true,
+        ),
+      ],
+    );
+
+    await _notificationsPlugin.show(
+      // Use a stable, deterministic ID derived from the session so a
+      // later dismiss()/cancel() call (once the call is answered
+      // elsewhere or times out) can target this exact notification.
+      sessionUuid.hashCode,
+      '$callerName is calling',
+      'Incoming video call',
+      NotificationDetails(android: androidDetails),
+      payload: payload,
+    );
+  }
+
+  /// Dismisses the fallback notification — call this once the call is
+  /// resolved through any path (CallKit accept/decline, timeout, etc.)
+  /// so it doesn't linger after the call is no longer relevant.
+  Future<void> dismissIncomingCallNotification(String sessionUuid) async {
+    await _notificationsPlugin.cancel(sessionUuid.hashCode);
   }
 
   Future<void> showNotification({

@@ -1,11 +1,16 @@
 // lib/core/services/notification_handler_service.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_from_notification.dart';
 import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/profile_view.dart';
 import 'package:moonlight/features/post_view/presentation/pages/post_view_screen.dart';
+import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:moonlight/features/video_call/presentation/pages/active_call_screen.dart';
+import 'package:moonlight/features/video_call/presentation/pages/incoming_call_screen.dart';
 import 'package:moonlight/main.dart' as main_app;
 
 class NotificationHandlerService {
@@ -52,6 +57,14 @@ class NotificationHandlerService {
         break;
       case 'new_gift':
         _handleGiftNotification(payload);
+        break;
+
+      // Video Call Notifications
+      case 'video_call_incoming':
+        _handleVideoCallIncomingNotification(payload);
+        break;
+      case 'video_call_accepted':
+        _handleVideoCallAcceptedNotification(payload);
         break;
 
       default:
@@ -252,6 +265,74 @@ class NotificationHandlerService {
     // Navigate to wallet to see gifts
     WidgetsBinding.instance.addPostFrameCallback((_) {
       main_app.MyApp.navigatorKey.currentState?.pushNamed(RouteNames.wallet);
+    });
+  }
+
+  void _handleVideoCallIncomingNotification(Map<String, dynamic> payload) {
+    // Payload shape mirrors notify()'s meta object, but FCM data payloads
+    // are always flat strings — check both a nested 'meta' map (foreground
+    // Pusher delivery) and flat top-level keys (FCM data payload) so this
+    // works whether the app was foregrounded or cold-started.
+    final meta = (payload['meta'] as Map?)?.cast<String, dynamic>() ?? payload;
+    final sessionUuid = (meta['session_uuid'] ?? payload['session_uuid'] ?? '')
+        .toString();
+
+    if (sessionUuid.isEmpty) {
+      print('❌ No session_uuid in video_call_incoming payload');
+      return;
+    }
+
+    print('📞 Opening incoming call screen: $sessionUuid');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navContext = main_app.MyApp.navigatorKey.currentContext;
+      if (navContext == null) return;
+
+      // Same app-wide VideoCallBloc every other video-call screen uses —
+      // never create a second instance here.
+      sl<VideoCallBloc>().add(CallResumeFromNotification(sessionUuid));
+
+      main_app.MyApp.navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => BlocProvider.value(
+            value: sl<VideoCallBloc>(),
+            child: const IncomingCallScreen(),
+          ),
+          fullscreenDialog: true,
+        ),
+      );
+    });
+  }
+
+  void _handleVideoCallAcceptedNotification(Map<String, dynamic> payload) {
+    final meta = (payload['meta'] as Map?)?.cast<String, dynamic>() ?? payload;
+    final sessionUuid = (meta['session_uuid'] ?? payload['session_uuid'] ?? '')
+        .toString();
+
+    if (sessionUuid.isEmpty) {
+      print('❌ No session_uuid in video_call_accepted payload');
+      return;
+    }
+
+    print('📞 Resuming into active call: $sessionUuid');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navContext = main_app.MyApp.navigatorKey.currentContext;
+      if (navContext == null) return;
+
+      // She already accepted — this is the caller's side, so join
+      // directly rather than showing accept/reject.
+      sl<VideoCallBloc>().add(CallJoinRequested(sessionUuid));
+
+      main_app.MyApp.navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => BlocProvider.value(
+            value: sl<VideoCallBloc>(),
+            child: const ActiveCallScreen(),
+          ),
+          fullscreenDialog: true,
+        ),
+      );
     });
   }
 }

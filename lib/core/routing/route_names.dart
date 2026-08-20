@@ -61,5 +61,7 @@ class RouteNames {
   static const clubWithdrawalRequest = '/club/withdrawal-request';
   static const clubTreasury = '/club/treasury';
   static const String clubPendingRequests = '/club/pending-requests';
+  static const String videoCallDirectory = '/video-call/directory';
+  static const String videoCallSettings = '/video-call/settings';
   // static const transactionReceipt = '/transactionReceipt';
 }

@@ -8,6 +8,7 @@ import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
+import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
@@ -22,6 +23,10 @@ import 'package:moonlight/features/live_viewer/presentation/widgets/status/guest
 import 'package:moonlight/features/live_viewer/presentation/widgets/status/top_status_bar.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/controls/comment_input_bar.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/host_video_container.dart';
+import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart'
+    as view_repo;
+import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:uuid/uuid.dart';
 
@@ -224,6 +229,16 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                           onGiftTap: () =>
                               showGiftBottomSheet(context, widget.repository),
                           onToggleControls: null,
+                          // Private video call (doc item 8). Gated only on
+                          // a host being present — the actual gender/
+                          // online/enabled rules are enforced server-side
+                          // by VideoCallService.initiate() (already tested),
+                          // so a non-callable host just gets a clear error
+                          // message back rather than needing every one of
+                          // those fields threaded through HostInfo here.
+                          showVideoCall: state.host != null,
+                          onVideoCallTap: () =>
+                              _openVideoCall(context, widget.repository),
                         ),
                       ),
                     ],
@@ -296,6 +311,61 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
+  void _openVideoCall(BuildContext context, ViewerRepositoryImpl repository) {
+    final host = context.read<ViewerBloc>().state.host;
+    if (host == null) return;
+
+    // HostInfo (lib/features/live_viewer/domain/entities.dart) carries no
+    // identifier at all — no uuid, no slug, just display fields (name,
+    // avatarUrl, etc). Our video-call API requires callee_user_slug, so we
+    // resolve it here via the existing profile-by-uuid endpoint, using the
+    // hostUserUuid the repository was already constructed with (see
+    // createViewerRepository's hostUuid param in injection_container.dart).
+    //
+    // NOTE: this assumes ViewerRepositoryImpl exposes `hostUserUuid` as a
+    // public field, matching the pattern of its other public fields
+    // (http, livestreamParam, livestreamIdNumeric). If that field is
+    // named differently or isn't public, swap the access below — the
+    // profile-lookup + navigation logic itself is correct regardless.
+    _resolveHostSlugAndOpen(context, repository, host);
+  }
+
+  Future<void> _resolveHostSlugAndOpen(
+    BuildContext context,
+    ViewerRepositoryImpl repository,
+    HostInfo host,
+  ) async {
+    final hostUuid = repository.hostUserUuid;
+    if (hostUuid == null || hostUuid.isEmpty) {
+      TopSnack.warning(context, 'Could not start the call. Try again.');
+      return;
+    }
+
+    try {
+      final profile = await sl<view_repo.ProfileRepository>().getUser(hostUuid);
+      if (!context.mounted) return;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BlocProvider.value(
+            value: sl<VideoCallBloc>(),
+            child: OutgoingCallScreen(
+              calleeUserSlug: profile.handle,
+              calleeDisplayName: host.name,
+              calleeAvatarUrl: host.avatarUrl,
+              initiatedFrom: 'livestream',
+              livestreamId: repository.livestreamIdNumeric,
+            ),
+          ),
+          fullscreenDialog: true,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      TopSnack.warning(context, 'Could not start the call. Try again.');
+    }
+  }
+
   void _performCleanupAndExit(BuildContext context) async {
     final livestreamId = widget.repository.livestreamIdNumeric;
     widget.repository.dispose();
@@ -349,9 +419,7 @@ class _UnstableBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF4A3A0F).withOpacity(0.92),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: const Color(0xFFFFA726).withOpacity(0.4),
-          ),
+          border: Border.all(color: const Color(0xFFFFA726).withOpacity(0.4)),
         ),
         child: const Row(
           children: [

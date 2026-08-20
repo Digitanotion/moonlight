@@ -71,6 +71,11 @@ class _HomeAppBarState extends State<HomeAppBar> {
                 onTap: () => _navigateToSearch(context),
               ),
               const SizedBox(width: 14),
+              _TopIcon(
+                icon: Icons.videocam_outlined,
+                onTap: () => _navigateToVideoCall(context),
+              ),
+              const SizedBox(width: 14),
               // Notification icon with badge
               ValueListenableBuilder<int>(
                 valueListenable: _unreadService.notificationUnreadCount,
@@ -113,6 +118,10 @@ class _HomeAppBarState extends State<HomeAppBar> {
 
   void _navigateToSearch(BuildContext context) {
     Navigator.pushNamed(context, RouteNames.search);
+  }
+
+  void _navigateToVideoCall(BuildContext context) {
+    Navigator.pushNamed(context, RouteNames.videoCallDirectory);
   }
 
   void _navigateToNotification(BuildContext context) {

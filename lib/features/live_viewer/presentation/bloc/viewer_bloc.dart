@@ -235,9 +235,25 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
 
   // ── Health service ────────────────────────────────────────────────────────
 
-  void _startHealthService() {
+void _startHealthService() {
     if (repo is! ViewerRepositoryImpl) return;
     final implRepo = repo as ViewerRepositoryImpl;
+
+    // CRITICAL: stop and dispose any existing health service BEFORE
+    // creating a new one. This method overwrote _streamHealthService
+    // unconditionally before — if it's ever called more than once on the
+    // same bloc instance (which happens whenever ViewerBloc is reused
+    // across different viewing sessions, rather than recreated fresh per
+    // stream), the PREVIOUS service's Timer.periodic was orphaned with
+    // no reference left to stop it, and kept polling that old stream's
+    // /status endpoint forever in the background. Confirmed as the
+    // direct cause of a production incident: multiple orphaned timers
+    // for different streams accumulated over a long testing session and
+    // eventually saturated the PHP-FPM worker pool.
+    _healthSub?.cancel();
+    _healthSub = null;
+    _streamHealthService?.dispose();
+    _streamHealthService = null;
 
     _streamHealthService = StreamHealthService(
       http: implRepo.http,
@@ -271,7 +287,6 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     _streamHealthService!.start();
     _logEvent('HEALTH_SERVICE', 'Polling every 12s');
   }
-
   // ── Stream health handlers ────────────────────────────────────────────────
 
   Future<void> _onStreamWentOffline(

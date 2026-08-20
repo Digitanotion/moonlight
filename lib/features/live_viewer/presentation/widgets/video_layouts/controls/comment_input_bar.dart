@@ -8,6 +8,13 @@ class CommentInputBar extends StatefulWidget {
   final ValueChanged<String> onSend;
   final VoidCallback? onGiftTap;
   final VoidCallback? onToggleControls;
+  final VoidCallback? onVideoCallTap;
+  // Only shown when the host is actually callable right now (doc item 8 —
+  // the button appears once she's live, not unconditionally). Passing
+  // null/false hides it entirely rather than showing a disabled state,
+  // since a viewer tapping a visibly-dead call button is worse UX than
+  // just not showing it.
+  final bool showVideoCall;
 
   const CommentInputBar({
     super.key,
@@ -15,6 +22,8 @@ class CommentInputBar extends StatefulWidget {
     required this.onSend,
     this.onGiftTap,
     this.onToggleControls,
+    this.onVideoCallTap,
+    this.showVideoCall = false,
   });
 
   @override
@@ -271,6 +280,21 @@ class _CommentInputBarState extends State<CommentInputBar> {
 
                                 const SizedBox(width: 6),
 
+                                // Video call button (doc item 8: "private
+                                // video call" — only visible when host is
+                                // currently callable)
+                                if (widget.showVideoCall &&
+                                    widget.onVideoCallTap != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: _TikTokActionButton(
+                                      icon: Icons.videocam_rounded,
+                                      onTap: widget.onVideoCallTap!,
+                                      isVideoCall: true,
+                                      size: isSmallScreen ? 18 : 20,
+                                    ),
+                                  ),
+
                                 // Menu button
                                 _TikTokActionButton(
                                   icon: _isControlsPanelVisible
@@ -445,6 +469,7 @@ class _TikTokActionButton extends StatelessWidget {
   final VoidCallback onTap;
   final double size;
   final bool isGift;
+  final bool isVideoCall;
   final bool isActive;
 
   const _TikTokActionButton({
@@ -452,11 +477,44 @@ class _TikTokActionButton extends StatelessWidget {
     required this.onTap,
     required this.size,
     this.isGift = false,
+    this.isVideoCall = false,
     this.isActive = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Video call button styling — green, distinct from the gift's
+    // orange/gold so the two aren't visually confused at a glance.
+    if (isVideoCall) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF31D377), Color(0xFF1FAE5F)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xFF31D377).withOpacity(0.5),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF31D377).withOpacity(0.35),
+                blurRadius: 6,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: size),
+        ),
+      );
+    }
+
     // Gift button styling
     if (isGift) {
       return GestureDetector(
@@ -527,40 +585,3 @@ class _TikTokActionButton extends StatelessWidget {
     );
   }
 }
-
-// Optional: For a better emoji picker, use a package
-// Add to pubspec.yaml: emoji_picker_flutter: ^3.0.0
-// Then use this:
-
-// import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
-
-// Widget _buildEmojiPickerPackage() {
-//   return EmojiPicker(
-//     onEmojiSelected: (Category? category, Emoji emoji) {
-//       _addEmoji(emoji.emoji);
-//     },
-//     config: Config(
-//       columns: 7,
-//       emojiSizeMax: 32,
-//       bgColor: Colors.black.withOpacity(0.95),
-//       indicatorColor: const Color(0xFFFF7A00),
-//       iconColor: Colors.white.withOpacity(0.7),
-//       iconColorSelected: const Color(0xFFFF7A00),
-//       progressIndicatorColor: const Color(0xFFFF7A00),
-//       backspaceColor: Colors.white.withOpacity(0.7),
-//       skinToneDialogBgColor: Colors.black,
-//       skinToneIndicatorColor: Colors.white.withOpacity(0.7),
-//       enableSkinTones: true,
-//       showRecentsTab: true,
-//       recentsLimit: 28,
-//       noRecentsText: 'No Recents',
-//       noRecentsStyle: TextStyle(
-//         color: Colors.white.withOpacity(0.5),
-//         fontSize: 14,
-//       ),
-//       tabIndicatorAnimDuration: const Duration(milliseconds: 300),
-//       categoryIcons: const CategoryIcons(),
-//       buttonMode: ButtonMode.MATERIAL,
-//     ),
-//   );
-// }

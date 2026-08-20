@@ -86,7 +86,8 @@ android {
         multiDexEnabled = true
 
         manifestPlaceholders += mapOf(
-            "appAuthRedirectScheme" to "com.app.moonlightstream"
+            "appAuthRedirectScheme" to "com.app.moonlightstream",
+            "applicationName" to "com.app.moonlightstream.MainApplication"
         )
     }
 }

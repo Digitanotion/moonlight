@@ -92,11 +92,16 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         'user': data['user'],
       });
     } on DioException catch (e) {
-      throw ServerException(
-        e.response?.data['message'] ?? 'Login failed',
-        statusCode: e.response?.statusCode,
-      );
-    }
+  debugPrint('🔴 LOGIN ERROR TYPE: ${e.type}');
+  debugPrint('🔴 LOGIN ERROR MESSAGE: ${e.message}');
+  debugPrint('🔴 LOGIN ERROR RESPONSE: ${e.response}');
+  debugPrint('🔴 LOGIN ERROR (raw): ${e.error}');
+  debugPrint('🔴 LOGIN ERROR (raw type): ${e.error?.runtimeType}');
+  throw ServerException(
+    e.response?.data['message'] ?? 'Login failed',
+    statusCode: e.response?.statusCode,
+  );
+}
   }
 
   @override

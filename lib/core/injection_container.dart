@@ -40,6 +40,7 @@ import 'package:moonlight/core/services/realtime_unread_service.dart';
 import 'package:moonlight/core/services/runtime_config_refresh_service.dart';
 import 'package:moonlight/core/services/token_registration_service.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
+import 'package:moonlight/core/services/video_call_agora_service.dart';
 import 'package:moonlight/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:moonlight/features/chat/data/services/chat_api_service.dart';
 import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
@@ -113,6 +114,9 @@ import 'package:moonlight/features/settings/domain/usecases/update_notification_
 import 'package:moonlight/features/settings/presentation/cubit/blocked_users_cubit.dart';
 import 'package:moonlight/features/settings/presentation/cubit/change_email_cubit.dart';
 import 'package:moonlight/features/settings/presentation/cubit/change_username_cubit.dart';
+import 'package:moonlight/features/video_call/data/repositories/video_call_repository_impl.dart';
+import 'package:moonlight/features/video_call/domain/repositories/video_call_repository.dart';
+import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/wallet/data/datasources/local_wallet_datasource.dart';
 import 'package:moonlight/features/wallet/data/datasources/pin_remote_datasource.dart';
 import 'package:moonlight/features/wallet/data/datasources/remote_wallet_datasource.dart';
@@ -444,8 +448,8 @@ class SplashOptimizer {
     final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
+        connectTimeout: const Duration(seconds: 90),
+        receiveTimeout: const Duration(seconds: 90),
         headers: {'Accept': 'application/json'},
       ),
     );
@@ -474,8 +478,8 @@ Future<RuntimeConfig> _loadRuntimeConfig() async {
       final dio = Dio(
         BaseOptions(
           baseUrl: '$_fallbackHost/api',
-          connectTimeout: const Duration(seconds: 8),
-          receiveTimeout: const Duration(seconds: 8),
+          connectTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 90),
         ),
       );
       try {
@@ -565,6 +569,7 @@ Future<void> _initFullGraph() async {
   _initSettingsModule();
   _initClubsModule();
   _initLiveModule(); // registers AgoraService, ParticipantsRepository
+  _initVideoCallModule(); // registers VideoCallAgoraService, VideoCallRepository, VideoCallBloc
   _initWalletModule();
   _initTransferModule();
   _initWithdrawalModule();
@@ -861,6 +866,43 @@ void _initLiveModule() {
   }
 }
 
+
+void _initVideoCallModule() {
+  // VideoCallAgoraService — factory, NOT singleton. A fresh engine per
+  // call, since AgoraService (livestream host) may already be active on
+  // this device when a call comes in mid-stream; these must not collide.
+  sl.registerFactory<VideoCallAgoraService>(() => VideoCallAgoraService());
+
+  // VideoCallRepository — singleton (via _reg), since incoming-call
+  // notifications must be heard app-wide, not just while a call screen
+  // is open.
+  _reg<VideoCallRepository>(
+    () => VideoCallRepositoryImpl(
+      sl<DioClient>(),
+      sl<PusherService>(),
+      myUserUuid: sl<CurrentUserService>().getCurrentUserId() ?? '',
+    ),
+  );
+
+  // VideoCallBloc — factory. Each screen that needs call state gets its
+  // own instance via BlocProvider, but since VideoCallRepository underneath
+  // is a singleton, the incoming-call/accepted streams are still heard
+  // regardless of which (if any) VideoCallBloc instance currently exists.
+  //
+  // IMPORTANT: for incoming calls to be caught even when no video-call
+  // screen is open, provide ONE long-lived VideoCallBloc high in the
+  // widget tree (e.g. alongside your root MaterialApp/authenticated shell)
+  // rather than only creating one inside the directory/call screens.
+if (!sl.isRegistered<VideoCallBloc>()) {
+  sl.registerLazySingleton<VideoCallBloc>(
+    () => VideoCallBloc(
+      sl<VideoCallRepository>(),
+      sl<VideoCallAgoraService>(),
+      sl<RuntimeConfig>(),
+    ),
+  );
+}
+}
 void _initWalletModule() {
   _reg<RemoteWalletDataSource>(
     () => RemoteWalletDataSource(client: sl<Dio>(instanceName: 'mainDio')),

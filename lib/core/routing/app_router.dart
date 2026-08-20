@@ -94,6 +94,9 @@ import 'package:moonlight/features/settings/presentation/pages/change_username_p
 import 'package:moonlight/features/tests/debug_screen.dart';
 import 'package:moonlight/features/user_interest/presentation/cubit/user_interest_cubit.dart';
 import 'package:moonlight/features/user_interest/presentation/pages/user_interest_screen.dart';
+import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:moonlight/features/video_call/presentation/pages/video_call_directory_screen.dart';
+import 'package:moonlight/features/video_call/presentation/pages/video_call_settings_screen.dart';
 import 'package:moonlight/features/wallet/domain/models/transaction_model.dart';
 import 'package:moonlight/features/wallet/presentation/cubit/wallet_cubit.dart';
 import 'package:moonlight/features/wallet/presentation/pages/buy_coins_screen.dart';
@@ -135,8 +138,29 @@ class AppRouter {
           ),
         );
 
-      case RouteNames.home:
-        return MaterialPageRoute(builder: (context) => const AppShell());
+     case RouteNames.home:
+        return MaterialPageRoute(
+          builder: (context) => BlocProvider<VideoCallBloc>(
+            // Single app-wide VideoCallBloc — safe to be eager (lazy: false)
+            // HERE specifically, because this route is only ever reached
+            // after the splash screen has awaited
+            // DependencyManager.waitForAllDependencies(), which means
+            // Track 2 (and therefore _initVideoCallModule()'s
+            // registrations) is guaranteed complete. Providing this at
+            // main.dart's top level instead — before the splash gate —
+            // crashes, since VideoCallBloc/VideoCallRepository aren't
+            // registered in GetIt until Track 2 finishes.
+            //
+            // Every video-call screen (directory, outgoing, incoming,
+            // active) reads this SAME instance via
+            // context.read<VideoCallBloc>() — never create a second
+            // instance elsewhere, or an incoming call could be
+            // double-handled by two blocs racing to join Agora.
+            create: (_) => sl<VideoCallBloc>(),
+            lazy: false,
+            child: const AppShell(),
+          ),
+        );
       case RouteNames.debugScreen:
         return MaterialPageRoute(builder: (context) => const DebugScreen());
 
@@ -860,6 +884,22 @@ case RouteNames.postView:
 
       case RouteNames.resetPin:
         return MaterialPageRoute(builder: (context) => const ResetPinPage());
+
+      case RouteNames.videoCallDirectory:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(
+            child: const VideoCallDirectoryScreen(),
+          ),
+          settings: settings,
+        );
+
+      case RouteNames.videoCallSettings:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(
+            child: const VideoCallSettingsScreen(),
+          ),
+          settings: settings,
+        );
 
       default:
         return MaterialPageRoute(
