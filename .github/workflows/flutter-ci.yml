@@ -42,7 +42,7 @@ env:
   FLUTTER_VERSION: "3.47.1"
 
 jobs:
-  # JOB 1: TESTING — only runs on push/PR, skipped on workflow_dispatch.  hhh
+  # JOB 1: TESTING — only runs on push/PR, skipped on workflow_dispatch.
   test:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest

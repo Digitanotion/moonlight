@@ -7,7 +7,7 @@ class AdService {
   AdService._();
   static final AdService instance = AdService._();
 
-  // ── CONFIG ──────────────────────────────────────────────────────────────
+  // ── CONFIG ────────────────────────────────────────────────────
   static const bool _useTestAds = false;
 
   // Google's official test ad unit IDs.
