@@ -7,6 +7,7 @@ import 'package:moonlight/core/services/ringtone_player.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart';
 import 'package:moonlight/features/video_call/presentation/pages/active_call_screen.dart';
 
 class IncomingCallScreen extends StatefulWidget {
@@ -32,16 +33,16 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    // This screen only shows while the app is genuinely foregrounded (see
-    // main.dart's _startGlobalVideoCallListeners) — the main isolate,
-    // never the FCM background isolate that previously caused
-    // RingtonePlayer to leave the shared audio session broken. Safe here.
-    RingtonePlayer().play();
+    // Hide IncomingCallBanner while this full-screen variant (reached by
+    // explicitly tapping a call notification/CallResumeFromNotification)
+    // is showing — both react to the same bloc phase, so without this
+    // they'd render simultaneously for the same call.
+    IncomingCallBanner.suppressed.value = true;
   }
 
   @override
   void dispose() {
-    RingtonePlayer().stop();
+    IncomingCallBanner.suppressed.value = false;
     _ringController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -53,12 +54,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     return BlocConsumer<VideoCallBloc, VideoCallState>(
       listenWhen: (prev, curr) => prev.phase != curr.phase,
       listener: (context, state) {
-        // Stop ringing the moment the call resolves — don't wait for
-        // dispose(), which only fires once the navigation transition
-        // below actually completes.
-        if (state.phase != VideoCallPhase.ringingIncoming) {
-          RingtonePlayer().stop();
-        }
         if (state.phase == VideoCallPhase.active) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -246,18 +241,30 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                               label: 'Decline',
                               loading: state.actionLoading,
                               onTap: () {
+                                // Unconditional, regardless of whether
+                                // session data actually loaded for this
+                                // screen (e.g. opened via notification for
+                                // a call that had already resolved server
+                                // -side by the time this screen appeared —
+                                // confirmed by testing to leave session
+                                // null here) — the user tapped Decline,
+                                // ringtone stops, full stop, no exceptions.
+                                // main.dart's global idle-phase handler is
+                                // the real backstop for this regardless,
+                                // but don't wait on that async round trip
+                                // when we can do it synchronously right now.
+                                RingtonePlayer().stop();
                                 final uuid = state.session?.uuid;
                                 if (uuid != null) {
-                                  // Stop immediately on tap — _onReject
-                                  // doesn't flip the phase away from
-                                  // ringingIncoming until its network call
-                                  // resolves, so waiting on the bloc
-                                  // listener alone would keep the
-                                  // ringtone going through that round trip.
-                                  RingtonePlayer().stop();
                                   context
                                       .read<VideoCallBloc>()
                                       .add(CallRejectRequested(uuid));
+                                } else {
+                                  // No session to reject — still force
+                                  // this screen closed rather than leaving
+                                  // the user stuck on a dead-end Decline
+                                  // button that visibly does nothing.
+                                  context.read<VideoCallBloc>().add(CallDismissed());
                                 }
                               },
                             ),

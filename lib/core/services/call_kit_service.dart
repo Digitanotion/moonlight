@@ -15,6 +15,7 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:flutter_callkit_incoming/entities/entities.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/notification_service.dart';
+import 'package:moonlight/core/services/ringtone_player.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 
 class CallKitService {
@@ -55,6 +56,36 @@ class CallKitService {
       return null;
     } catch (e) {
       debugPrint('⚠️ CallKit activeCalls() check failed: $e');
+      return null;
+    }
+  }
+
+  /// Same idea as checkForActiveAcceptedCall, but for a call that's still
+  /// ringing (not yet accepted). A call that arrives while the app is
+  /// genuinely backgrounded/killed only ever reaches CallKit directly —
+  /// the FCM background isolate that shows it can't safely touch
+  /// VideoCallBloc at all (separate isolate, no reliable GetIt access —
+  /// see _firebaseMessagingBackgroundHandler's doc comment in main.dart).
+  /// So the bloc can be completely unaware a call is ringing even while
+  /// CallKit's native UI is showing it. Without this, backgrounding
+  /// CallKit's screen and reopening the app left no in-app way back to
+  /// Accept/Decline — only CallKit's own screen or the fallback
+  /// notification. Called on resume/cold-start to reconcile the two.
+  Future<String?> checkForActiveRingingCall() async {
+    try {
+      final calls = await FlutterCallkitIncoming.activeCalls();
+      if (calls is! List || calls.isEmpty) return null;
+
+      final first = calls.first;
+      if (first is! CallKitParams) return null;
+
+      if (!first.isAccepted && first.id.isNotEmpty) {
+        debugPrint('📞 [CallKit] Found still-ringing call on resume: ${first.id}');
+        return first.id;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ CallKit activeCalls() ringing check failed: $e');
       return null;
     }
   }
@@ -138,8 +169,35 @@ class CallKitService {
 
   /// Programmatically ends the native call UI — used when the caller
   /// cancels before the callee answers, or the call times out server-side.
+  ///
+  /// FlutterCallkitIncoming.endCall() is NOT what actually dismisses the
+  /// Android UI — the package's own doc comment on that method says so
+  /// outright: "On Android, Nothing (only callback event listener)". It
+  /// was being relied on as if it did, which is exactly why the incoming
+  /// screen kept sitting there after the other party ended the call.
+  /// hideCallkitIncoming() is the one explicitly documented as doing this
+  /// ("Hide notification call for Android. Only Android"). Also fire
+  /// endCall() (harmless, and correct on iOS) and endAllCalls() as a
+  /// last-resort safety net given this device's separately-confirmed
+  /// unreliable Telecom/ConnectionService integration.
   Future<void> endCall(String sessionUuid) async {
-    await FlutterCallkitIncoming.endCall(sessionUuid);
+    try {
+      await FlutterCallkitIncoming.hideCallkitIncoming(
+        CallKitParams(id: sessionUuid),
+      );
+    } catch (e) {
+      debugPrint('⚠️ CallKit hideCallkitIncoming failed: $e');
+    }
+    try {
+      await FlutterCallkitIncoming.endCall(sessionUuid);
+    } catch (e) {
+      debugPrint('⚠️ CallKit endCall failed: $e');
+    }
+    try {
+      await FlutterCallkitIncoming.endAllCalls();
+    } catch (e) {
+      debugPrint('⚠️ CallKit endAllCalls failed: $e');
+    }
   }
 
   /// Starts listening for Accept/Decline/Timeout events from the native
@@ -164,6 +222,7 @@ class CallKitService {
             // just lingers (and keeps making sound) even though the
             // call was already answered elsewhere.
             NotificationService().dismissIncomingCallNotification(callKitParams.id);
+            RingtonePlayer().stop();
           }
 
         case CallEventActionCallDecline(:final callKitParams):
@@ -171,11 +230,13 @@ class CallKitService {
             debugPrint('📞 [CallKit] Declined: ${callKitParams.id}');
             bloc.add(CallRejectRequested(callKitParams.id));
             NotificationService().dismissIncomingCallNotification(callKitParams.id);
+            RingtonePlayer().stop();
           }
 
         case CallEventActionCallTimeout(:final id):
           debugPrint('📞 [CallKit] Timed out: $id');
           NotificationService().dismissIncomingCallNotification(id);
+          RingtonePlayer().stop();
           // No explicit bloc event required if backend handles timeout tracking
 
         default:

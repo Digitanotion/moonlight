@@ -8,6 +8,7 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/call_kit_service.dart';
 import 'package:moonlight/core/services/notification_handler_service.dart';
+import 'package:moonlight/core/services/ringtone_player.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,6 +53,13 @@ void _handleActionTap(NotificationResponse response) {
     CallKitService().endCall(sessionUuid);
   } catch (_) {}
 
+  // Same reasoning as CallKit above, but for the native ringtone —
+  // RingtonePlayer routes through a real plugin (packages/ringtone_native),
+  // reachable from this isolate same as everything else here.
+  try {
+    RingtonePlayer().stop();
+  } catch (_) {}
+
   // GUARANTEED path — always runs, regardless of whether the bloc/GetIt
   // happens to be reachable from whatever isolate this callback executes
   // in. Confirmed by testing that notification-action-tap callbacks
@@ -82,7 +90,18 @@ void _handleActionTap(NotificationResponse response) {
   try {
     final bloc = sl<VideoCallBloc>();
     if (response.actionId == 'ACCEPT_CALL') {
-      bloc.add(CallAcceptRequested(sessionUuid));
+      // NOT CallAcceptRequested — the guaranteed HTTP call above already
+      // accepted this session server-side. Dispatching CallAcceptRequested
+      // here made the bloc call repo.accept() a SECOND time for an
+      // already-accepted session, which the backend correctly rejects —
+      // silently leaving the receiver stuck (never joining Agora) while
+      // the caller, who only ever saw the first successful accept, moves
+      // on waiting for someone who never shows up. This is the same
+      // "already accepted, just fetch status and join" event the
+      // SharedPreferences fallback below eventually triggers via the
+      // app-resume handler — dispatching it directly here does the same
+      // thing immediately, without waiting for a resume cycle.
+      bloc.add(CallResumeAfterNotificationAccept(sessionUuid));
     } else {
       bloc.add(CallRejectRequested(sessionUuid));
     }
@@ -140,18 +159,25 @@ class NotificationService {
         }
 
         // Plain tap on the notification BODY (not an action button). For
-        // the incoming-call notification specifically, this should be a
-        // genuine no-op — the user should only ever resolve a call via
-        // the explicit Accept/Decline buttons, not by tapping the body.
-        // Detect this by payload shape (has session_uuid, no 'type' key
-        // — unlike every other notification type in the app) and return
-        // immediately, before falling through to generic navigation
-        // handling.
+        // the incoming-call notification specifically, this now doubles
+        // as the fullScreenIntent target (see showIncomingCallNotification)
+        // — the primary way locked/backgrounded calls actually reach the
+        // user on devices where CallKit's Telecom registration is
+        // rejected. Open IncomingCallScreen so there's something to land
+        // on either way; Accept/Decline still work from there same as
+        // always.
         final payload = _parseNotificationPayload(details.payload);
         if (payload != null &&
             payload.containsKey('session_uuid') &&
             !payload.containsKey('type')) {
-          print('📞 Incoming-call notification body tapped — ignoring (use Accept/Decline)');
+          final sessionUuid = payload['session_uuid']?.toString();
+          if (sessionUuid != null && sessionUuid.isNotEmpty) {
+            print('📞 Incoming-call notification opened: $sessionUuid');
+            NotificationHandlerService().handleNotificationClick({
+              'type': 'video_call_incoming',
+              'session_uuid': sessionUuid,
+            });
+          }
           return;
         }
 
@@ -168,6 +194,28 @@ class NotificationService {
     // Create notification channel for Android 8.0+
     await _createNotificationChannel();
     await _createIncomingCallChannel();
+
+    // Cold-start counterpart to the live tap handler above — the app was
+    // fully killed and this notification (tapped, or auto-launched via
+    // fullScreenIntent while locked) is what's starting it. Nothing else
+    // picks this up: it's a plain local notification, not an FCM one, so
+    // FCM's own getInitialMessage() never sees it.
+    try {
+      final launchDetails = await _notificationsPlugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true) {
+        final payload = _parseNotificationPayload(launchDetails!.notificationResponse?.payload);
+        final sessionUuid = payload?['session_uuid']?.toString();
+        if (sessionUuid != null && sessionUuid.isNotEmpty) {
+          print('📞 Cold-started via incoming-call notification: $sessionUuid');
+          NotificationHandlerService().handleNotificationClick({
+            'type': 'video_call_incoming',
+            'session_uuid': sessionUuid,
+          });
+        }
+      }
+    } catch (e) {
+      print('⚠️ getNotificationAppLaunchDetails failed: $e');
+    }
 
     print('✅ NotificationService initialized');
   }
@@ -284,7 +332,16 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.max,
       category: AndroidNotificationCategory.call,
-      fullScreenIntent: false, // CallKit already owns the full-screen UI; this is the plain-notification fallback
+      // true: this is now the PRIMARY mechanism for locked/backgrounded
+      // calls, not just a plain-notification fallback alongside CallKit.
+      // Android only auto-launches a full-screen-intent notification's
+      // target when the device is locked/screen-off — entirely
+      // independent of CallKit's Telecom/ConnectionService integration,
+      // which some devices/OEMs reject outright
+      // (onCreateIncomingConnectionFailed) with no app-code workaround.
+      // CallKit still runs alongside where Telecom cooperates; this
+      // covers the rest.
+      fullScreenIntent: true,
       playSound: true,
       enableVibration: true,
       ongoing: true,

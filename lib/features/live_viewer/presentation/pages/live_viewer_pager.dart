@@ -151,6 +151,13 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
 
     // Hard dispose all repos (Pusher/events cleanup).
     for (final repo in _repos) {
+      // Stop this page's health-check polling BEFORE disposing — dispose()
+      // closes the stream this signal travels through, so calling it after
+      // would throw. This is the actual fix for streams left orphaned and
+      // still polling even after the whole pager (not just one page) is
+      // closed — the earlier fix only handled swiping between pages within
+      // an active session, never closing the pager entirely.
+      try { repo.pauseHealthCheck(); } catch (_) {}
       repo.keepAlive = false;
       try { repo.dispose(); } catch (_) {}
     }
@@ -214,10 +221,13 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       debugPrint('🔄 [Pager] Swipe back to page $nearestPage — resetting wiring');
       repo.resetWiring();
     }
-
+      if (previousPage >= 0 && previousPage < _repos.length && previousPage != nearestPage) {
+    _repos[previousPage].pauseHealthCheck();
+  }
     // Wire the newly-visible page's non-Agora concerns (Pusher/chat/health).
     if (nearestPage >= 0 && nearestPage < _repos.length) {
       _repos[nearestPage].ensureWiredOnce();
+      _repos[nearestPage].resumeHealthCheck();
     }
   }
 

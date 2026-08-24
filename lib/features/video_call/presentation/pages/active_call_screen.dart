@@ -547,7 +547,20 @@ class CallSummaryScreen extends StatelessWidget {
                           ),
                           onPressed: () {
                             context.read<VideoCallBloc>().add(CallDismissed());
-                            Navigator.of(context).popUntil((r) => r.isFirst);
+                            // Popping all the way to root was correct for a
+                            // normal directory/profile call, but destroyed
+                            // the callee's own LiveHostPage (and, via its
+                            // bloc's close(), genuinely ended her livestream
+                            // on the backend) whenever the call happened
+                            // while she was live. Just pop back to whatever
+                            // she was on before in that case — her stream
+                            // is still there underneath, exactly as it
+                            // should be.
+                            if (session?.initiatedFrom == 'livestream') {
+                              Navigator.of(context).pop();
+                            } else {
+                              Navigator.of(context).popUntil((r) => r.isFirst);
+                            }
                           },
                           child: Text(
                             'Done',

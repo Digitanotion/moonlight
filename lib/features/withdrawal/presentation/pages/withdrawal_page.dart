@@ -574,8 +574,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Minimum: \$100.00',
+           const Text(
+            'Minimum: \$1.00',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ],
@@ -712,8 +712,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     if (v == null || v.isEmpty) return 'Enter an amount';
                     final dollars = double.tryParse(v) ?? 0.0;
                     final cents = (dollars * 100).round();
-                    if (cents < 10000) {
-                      return 'Minimum withdrawal is \$100.00';
+                   if (cents < 100) {
+                      return 'Minimum withdrawal is \$1.00';
                     }
                     if (cents > _withdrawableCents) {
                       return 'Exceeds your available balance of '

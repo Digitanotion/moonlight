@@ -570,6 +570,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _isVideo = _detectVideo(widget.post);
     _initVideo();
+    _startFreezeWatchdog();
   }
 
   @override
@@ -582,9 +583,87 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     }
   }
 
+  // Bumped every time a fresh reinit attempt starts, so a stale delayed
+  // retry recognizes it's no longer relevant (screen navigated away from
+  // this post, media URL changed, etc.) and bails out instead of
+  // clobbering whatever's happening now.
+  int _reinitGeneration = 0;
+
+  // ── Self-healing freeze watchdog ─────────────────────────────────────
+  //
+  // video_player (ExoPlayer under Android) can lose its hardware decoder
+  // to contention from ANY cause — a video call, another app grabbing
+  // the camera, general OS resource pressure — and does not reliably
+  // self-heal from it: the controller keeps reporting isPlaying=true
+  // forever, but the texture simply never updates again, indistinguishable
+  // on screen from a paused video. Trying to synchronize a fix with every
+  // possible external cause is exactly what kept racing on timing (a call
+  // signal firing a beat too early or late relative to the actual
+  // hardware state). This instead watches the ONE thing that actually
+  // matters directly — is playback position genuinely advancing — and
+  // recovers the moment it isn't, regardless of why. Zero knowledge of
+  // video calls, Agora, or anything else in the app; this would recover
+  // from a freeze caused by literally anything.
+  Timer? _freezeWatchdog;
+  Duration? _lastKnownPosition;
+  int _stallTicks = 0;
+  static const _watchdogInterval = Duration(seconds: 2);
+  static const _stallTicksBeforeRecovery = 2; // ~4s of genuinely no progress
+
+  void _startFreezeWatchdog() {
+    _freezeWatchdog?.cancel();
+    _lastKnownPosition = null;
+    _stallTicks = 0;
+    _freezeWatchdog = Timer.periodic(_watchdogInterval, (_) {
+      if (!mounted || _vc == null) return;
+      final value = _vc!.value;
+      // Only a claim of "actively playing" can be frozen — paused,
+      // buffering, or not-yet-initialized are all legitimately static.
+      if (!value.isInitialized || !value.isPlaying || value.isBuffering) {
+        _stallTicks = 0;
+        _lastKnownPosition = null;
+        return;
+      }
+      if (_lastKnownPosition != null && value.position == _lastKnownPosition) {
+        _stallTicks++;
+        if (_stallTicks >= _stallTicksBeforeRecovery) {
+          debugPrint('🎬 [PostView] Playback frozen (position stuck at '
+              '${value.position}) — self-healing');
+          _stallTicks = 0;
+          _disposeVc();
+          setState(() => _initialized = false);
+          _recoverFrozenPlayback();
+        }
+      } else {
+        _stallTicks = 0;
+      }
+      _lastKnownPosition = value.position;
+    });
+  }
+
+  /// Separate from _initVideo()'s normal cold-start path — reinitializing
+  /// the INSTANT a freeze is detected can race whatever transient
+  /// condition caused it in the first place (e.g. hardware decoder still
+  /// being released by whatever grabbed it). A short grace delay avoids
+  /// that race in the common case; one retry with a longer delay covers
+  /// it if the condition takes longer to clear.
+  Future<void> _recoverFrozenPlayback() async {
+    final generation = ++_reinitGeneration;
+    for (final delay in const [
+      Duration(milliseconds: 700),
+      Duration(milliseconds: 1500),
+    ]) {
+      await Future.delayed(delay);
+      if (!mounted || generation != _reinitGeneration) return;
+      await _initVideo();
+      if (_vc != null) return;
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _freezeWatchdog?.cancel();
     _controlsTimer?.cancel();
     _disposeVc();
     super.dispose();

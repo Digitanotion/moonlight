@@ -44,7 +44,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
   // Health service
   StreamHealthService? _streamHealthService;
   StreamSubscription<StreamHealthResult>? _healthSub;
-
+  StreamSubscription<bool>? _healthPauseSub;
   bool _isClosing = false;
   bool _isStarted = false;
   final List<String> _eventLog = [];
@@ -255,6 +255,7 @@ void _startHealthService() {
     _streamHealthService?.dispose();
     _streamHealthService = null;
 
+
     _streamHealthService = StreamHealthService(
       http: implRepo.http,
       livestreamUuid: implRepo.livestreamParam,
@@ -285,6 +286,16 @@ void _startHealthService() {
     }, onError: (e) => _logEvent('HEALTH_ERROR', 'Error: $e'));
 
     _streamHealthService!.start();
+      _healthPauseSub?.cancel();
+    _healthPauseSub = repo.healthPauseStream.listen((paused) {
+      if (paused) {
+        _streamHealthService?.stop();
+        _logEvent('HEALTH_SERVICE', 'Paused (page scrolled out of view)');
+      } else {
+        _streamHealthService?.start();
+        _logEvent('HEALTH_SERVICE', 'Resumed (page scrolled back into view)');
+      }
+    });
     _logEvent('HEALTH_SERVICE', 'Polling every 12s');
   }
   // ── Stream health handlers ────────────────────────────────────────────────
@@ -1077,6 +1088,7 @@ void _startHealthService() {
 
     // Health service
     _healthSub?.cancel();
+    _healthPauseSub?.cancel();
     _streamHealthService?.dispose();
 
     // Service subscriptions

@@ -31,6 +31,7 @@ const _kPrefBrightLevel = 'beauty_bright_level';
 class LiveHostState {
   final bool isLive;
   final bool isPaused;
+  final bool needsManualRejoin;
   final int elapsedSeconds;
   final int viewers;
   final String topic;
@@ -60,6 +61,7 @@ class LiveHostState {
   const LiveHostState({
     required this.isLive,
     required this.isPaused,
+    this.needsManualRejoin = false,
     required this.elapsedSeconds,
     required this.viewers,
     required this.topic,
@@ -84,6 +86,7 @@ class LiveHostState {
   LiveHostState copyWith({
     bool? isLive,
     bool? isPaused,
+    bool? needsManualRejoin,
     int? elapsedSeconds,
     int? viewers,
     String? topic,
@@ -110,6 +113,7 @@ class LiveHostState {
     return LiveHostState(
       isLive: isLive ?? this.isLive,
       isPaused: isPaused ?? this.isPaused,
+      needsManualRejoin: needsManualRejoin ?? this.needsManualRejoin,
       elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
       viewers: viewers ?? this.viewers,
       topic: topic ?? this.topic,
@@ -193,6 +197,8 @@ class IncomingMessage extends LiveHostEvent {
 }
 
 class TogglePause extends LiveHostEvent {}
+
+class RejoinLivestreamRequested extends LiveHostEvent {}
 
 class ToggleChatVisibility extends LiveHostEvent {}
 
@@ -323,6 +329,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     });
 
     on<TogglePause>(_onTogglePause);
+    on<RejoinLivestreamRequested>(_onRejoinLivestream);
     on<ToggleChatVisibility>(
       (e, emit) => emit(state.copyWith(chatVisible: !state.chatVisible)),
     );
@@ -333,8 +340,18 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     );
     on<AcceptJoinRequest>(_onAccept);
     on<DeclineJoinRequest>(_onDecline);
-    on<PauseStatusChanged>(
-      (e, emit) => emit(state.copyWith(isPaused: e.paused)),
+   on<PauseStatusChanged>(
+      (e, emit) => emit(state.copyWith(
+        isPaused: e.paused,
+        // Resuming (paused -> false) after a video call is exactly when
+        // her own camera isn't actually reconnected to the stream yet
+        // (see _joinAgoraFromSession's leave() call on the video call
+        // side) — flag it so the UI can show a "rejoin" prompt. Doesn't
+        // fire on a genuine manual pause/unpause by the host herself,
+        // since that goes through TogglePause/_onTogglePause instead,
+        // a completely separate event.
+        needsManualRejoin: !e.paused,
+      )),
     );
 
     // NEW handlers
@@ -854,6 +871,28 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     await repo.togglePause(); // server will broadcast too
   }
 
+  Future<void> _onRejoinLivestream(
+    RejoinLivestreamRequested e,
+    Emitter<LiveHostState> emit,
+  ) async {
+    if (_isDisposed) return;
+    try {
+      final creds = await repo.fetchPublisherCredentials();
+      await agoraService.startPublishing(
+        appId: (creds['app_id'] ?? '').toString(),
+        channel: (creds['channel'] ?? '').toString(),
+        token: (creds['rtc_token'] ?? '').toString(),
+        uidType: 'uid',
+        uid: '${creds['rtc_uid'] ?? ''}',
+      );
+      emit(state.copyWith(needsManualRejoin: false));
+      debugPrint('✅ Manually rejoined livestream');
+    } catch (err) {
+      debugPrint('⚠️ Manual rejoin failed: $err');
+      // Leave needsManualRejoin true — banner stays up, she can retry.
+    }
+  }
+
   Future<void> _onEnd(EndPressed e, Emitter<LiveHostState> emit) async {
     if (_isDisposed) return;
 
@@ -937,6 +976,8 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
 
   @override
   Future<void> close() async {
+    debugPrint('🚨🚨🚨 LiveHostBloc.close() CALLED 🚨🚨🚨');
+    debugPrint(StackTrace.current.toString());
     _isDisposed = true;
 
     _timer?.cancel();

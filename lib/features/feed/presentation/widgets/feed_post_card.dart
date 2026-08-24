@@ -1,5 +1,6 @@
 // lib/features/feed/presentation/widgets/feed_post_card.dart
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
@@ -325,7 +326,97 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   static const double _visibleThreshold = 0.45;
 
   @override
+  void initState() {
+    super.initState();
+    _startFreezeWatchdog();
+  }
+
+  // Bumped every time we start a fresh recovery attempt, so a stale
+  // delayed retry (from an earlier freeze, or from scrolling away and
+  // back) can recognize it's no longer relevant and bail out instead of
+  // clobbering whatever's happening now.
+  int _reinitGeneration = 0;
+
+  // ── Self-healing freeze watchdog ─────────────────────────────────────
+  //
+  // video_player (ExoPlayer under Android) can lose its hardware decoder
+  // to contention from ANY cause — a video call, another app grabbing
+  // the camera, general OS resource pressure — and does not reliably
+  // self-heal from it: the controller keeps reporting isPlaying=true
+  // forever, but the texture simply never updates again, indistinguishable
+  // on screen from a paused video. Trying to synchronize a fix with every
+  // possible external cause is exactly what kept racing on timing. This
+  // instead watches the ONE thing that actually matters directly — is
+  // playback position genuinely advancing — and recovers the moment it
+  // isn't, regardless of why. Zero knowledge of video calls, Agora, or
+  // anything else in the app; this would recover from a freeze caused by
+  // literally anything. Mirrors _PostMediaState's identical watchdog in
+  // post_view_screen.dart.
+  Timer? _freezeWatchdog;
+  Duration? _lastKnownPosition;
+  int _stallTicks = 0;
+  static const _watchdogInterval = Duration(seconds: 2);
+  static const _stallTicksBeforeRecovery = 2; // ~4s of genuinely no progress
+
+  void _startFreezeWatchdog() {
+    _freezeWatchdog?.cancel();
+    _lastKnownPosition = null;
+    _stallTicks = 0;
+    _freezeWatchdog = Timer.periodic(_watchdogInterval, (_) {
+      if (!mounted || _vc == null) return;
+      final value = _vc!.value;
+      // Only a claim of "actively playing" can be frozen — paused,
+      // buffering, or not-yet-initialized are all legitimately static.
+      if (!value.isInitialized || !value.isPlaying || value.isBuffering) {
+        _stallTicks = 0;
+        _lastKnownPosition = null;
+        return;
+      }
+      if (_lastKnownPosition != null && value.position == _lastKnownPosition) {
+        _stallTicks++;
+        if (_stallTicks >= _stallTicksBeforeRecovery) {
+          debugPrint('🎬 [Feed] Playback frozen (position stuck at '
+              '${value.position}) — self-healing');
+          _stallTicks = 0;
+          _releaseController();
+          _recoverFrozenPlayback();
+        }
+      } else {
+        _stallTicks = 0;
+      }
+      _lastKnownPosition = value.position;
+    });
+  }
+
+  /// Separate from the plain _ensureController() the visibility detector
+  /// uses — reinitializing the INSTANT a freeze is detected can race
+  /// whatever transient condition caused it in the first place. A short
+  /// grace delay avoids that race in the common case; one retry with a
+  /// longer delay covers it if the condition takes longer to clear.
+  /// Failing both, this gives up quietly rather than leaving the card
+  /// visibly broken forever — the visibility detector's own normal
+  /// scroll-away/back cycle will pick it up later regardless.
+  Future<void> _recoverFrozenPlayback() async {
+    final generation = ++_reinitGeneration;
+    for (final delay in const [
+      Duration(milliseconds: 700),
+      Duration(milliseconds: 1500),
+    ]) {
+      await Future.delayed(delay);
+      if (!mounted || generation != _reinitGeneration || !_currentlyVisible) {
+        return;
+      }
+      await _ensureController();
+      if (_vc != null) {
+        if (mounted && _currentlyVisible) _vc!.play();
+        return;
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    _freezeWatchdog?.cancel();
     _vc?.pause();
     _vc?.dispose();
     super.dispose();

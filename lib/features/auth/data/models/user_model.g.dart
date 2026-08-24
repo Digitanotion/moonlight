@@ -51,6 +51,8 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
   expiresIn: json['expiresIn'] as String?,
   followersCount: (json['followers_count'] as num?)?.toInt(),
   followingCount: (json['following_count'] as num?)?.toInt(),
+  isVideoCallOnline: json['is_video_call_online'] as bool?,
+  videoCallEnabled: json['video_call_enabled'] as bool?,
 );
 
 Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
@@ -77,6 +79,8 @@ Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
   'updated_at': instance.updatedAt,
   'followers_count': instance.followersCount,
   'following_count': instance.followingCount,
+  'is_video_call_online': instance.isVideoCallOnline,
+  'video_call_enabled': instance.videoCallEnabled,
   'authToken': instance.authToken,
   'tokenType': instance.tokenType,
   'expiresIn': instance.expiresIn,

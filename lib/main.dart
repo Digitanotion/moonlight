@@ -15,6 +15,7 @@ import 'package:moonlight/core/services/connection_monitor.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/notification_handler_service.dart';
 import 'package:moonlight/core/services/notification_service.dart';
+import 'package:moonlight/core/services/ringtone_player.dart';
 import 'package:moonlight/core/services/runtime_config_refresh_service.dart';
 import 'package:moonlight/core/services/service_registration_manager.dart';
 import 'package:moonlight/core/services/tenjin_service.dart';
@@ -27,7 +28,6 @@ import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.
 import 'package:moonlight/features/video_call/domain/repositories/video_call_repository.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/active_call_screen.dart'; // ← NEW
-import 'package:moonlight/features/video_call/presentation/pages/incoming_call_screen.dart'; // ← NEW
 import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart'; // ← NEW
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -42,12 +42,20 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // app fully launching first.
   final data = message.data;
   if (data['type'] == 'video_call_incoming') {
-    // RingtonePlayer/audioplayers usage removed — confirmed via testing
-    // that it leaves the app's shared audio session broken even after
-    // calling stop(), breaking the existing posts-feed video player.
-    // Reverting to relying on the fallback notification's own sound as
-    // the stable, working solution — a worse ringtone experience is a
-    // much better trade-off than breaking core existing functionality.
+    // An earlier attempt used audioplayers here — that package shares
+    // Flutter's own audio engine (video_player included), which reliably
+    // broke the feed's video/audio playback even after calling stop().
+    // RingtonePlayer now goes through packages/ringtone_native instead:
+    // a real FlutterPlugin (not a MainActivity-only channel), so it's
+    // reachable from this exact background isolate, and plays on
+    // Android's own ringtone audio stream — confirmed by testing not to
+    // touch the feed's playback at all.
+    try {
+      await RingtonePlayer().play();
+    } catch (e) {
+      debugPrint('⚠️ Ringtone background start failed: $e');
+    }
+
     try {
       await CallKitService().showIncomingCall(
         sessionUuid: data['session_uuid'] ?? '',
@@ -61,7 +69,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     }
 
     // Fallback, alongside CallKit — see NotificationService's own doc
-    // comment for why this exists.
+    // comment for why this exists. On devices where CallKit's Telecom
+    // registration is rejected (onCreateIncomingConnectionFailed — an
+    // OEM/device-level restriction, not something app code controls),
+    // this full-screen-intent notification is the one actually reaching
+    // the user: it wakes the lock screen independently of Telecom, and
+    // opens straight into IncomingCallScreen.
     try {
       await NotificationService().showIncomingCallNotification(
         sessionUuid: data['session_uuid'] ?? '',
@@ -70,6 +83,34 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       );
     } catch (e) {
       debugPrint('⚠️ Fallback notification (background) failed: $e');
+    }
+  } else if (data['type'] == 'video_call_ended' ||
+      data['type'] == 'video_call_rejected') {
+    // Matching cleanup for the call this same background isolate started
+    // ringing above — this was missing entirely. Without it, a call
+    // ended/rejected while the app is genuinely backgrounded (not just
+    // minimized-but-alive) never reaches anything that stops the
+    // ringtone: _onResolvedByOtherParty in VideoCallBloc only fires once
+    // the MAIN app engine gets the event via Pusher/foreground-FCM,
+    // which isn't guaranteed while truly backgrounded — this background
+    // isolate is the one place guaranteed to see it.
+    final sessionUuid = (data['session_uuid'] ?? '').toString();
+    try {
+      await RingtonePlayer().stop();
+    } catch (e) {
+      debugPrint('⚠️ Ringtone background stop failed: $e');
+    }
+    if (sessionUuid.isNotEmpty) {
+      try {
+        await CallKitService().endCall(sessionUuid);
+      } catch (e) {
+        debugPrint('⚠️ CallKit background dismiss failed: $e');
+      }
+      try {
+        await NotificationService().dismissIncomingCallNotification(sessionUuid);
+      } catch (e) {
+        debugPrint('⚠️ Notification background dismiss failed: $e');
+      }
     }
   }
 }
@@ -182,72 +223,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _checkForMissedAcceptedCall() async {
-    final sessionUuid = await CallKitService().checkForActiveAcceptedCall();
-
-    if (sessionUuid != null) {
-      if (sessionUuid == _lastActiveNavigatedSessionUuid) return; // already handled
-      try {
-        sl<VideoCallBloc>().add(CallJoinRequested(sessionUuid));
-      } catch (e) {
-        debugPrint('⚠️ Failed to join missed accepted call: $e');
-      }
-      return;
-    }
-
-    // Check for a pending accept from the fallback notification — set by
-    // NotificationService when its own Accept button's direct bloc
-    // dispatch failed (the notification-action-tap isolate has proven
-    // unreliable for reaching GetIt). This is the guaranteed path: by
-    // the time the app actually resumes here, we're reliably back in the
-    // main isolate.
-    final prefs = await SharedPreferences.getInstance();
-    final pendingUuid = prefs.getString('pending_join_session_uuid');
-    if (pendingUuid != null && pendingUuid.isNotEmpty) {
-      await prefs.remove('pending_join_session_uuid');
-      if (pendingUuid != _lastActiveNavigatedSessionUuid) {
-        try {
-          debugPrint('📞 [main] Joining pending call from notification accept: $pendingUuid');
-          sl<VideoCallBloc>().add(CallResumeAfterNotificationAccept(pendingUuid));
-        } catch (e) {
-          debugPrint('⚠️ Failed to join pending call: $e');
-        }
-      }
-      return;
-    }
-
-    // Safety net for the exact bug we hit: an action-button tap
-    // (Accept/Decline from the fallback notification) can succeed
-    // server-side via the guaranteed HTTP path while the bloc's local
-    // state never finds out, because that isolate context doesn't
-    // reliably have GetIt access. Left unresolved, the bloc stays
-    // stuck "busy" and silently ignores every future incoming call for
-    // the rest of the app session.
-    //
-    // IMPORTANT: only reset `active`/`connecting` — NOT `ringingIncoming`
-    // or `ringingOutgoing`. This method runs on EVERY app resume, which
-    // can happen for all sorts of incidental reasons (notification shade,
-    // screen lock/unlock, split-screen) — including the exact moment a
-    // real call is legitimately ringing. The original version reset ANY
-    // non-idle phase unconditionally, which meant a real incoming call
-    // could get silently wiped out mid-ring by a coincidental resume
-    // event, causing exactly the "call not showing" + "state becomes
-    // unreliable afterward" regression this caused. `active`/`connecting`
-    // are the only phases that should ALWAYS correspond to a real
-    // CallKit-tracked call — if CallKit shows nothing active while we're
-    // in one of those specifically, that's genuinely suspicious/stale.
-    try {
-      final bloc = sl<VideoCallBloc>();
-      final suspiciousPhase = bloc.state.phase == VideoCallPhase.active ||
-          bloc.state.phase == VideoCallPhase.connecting;
-      if (suspiciousPhase) {
-        debugPrint('📞 [main] Resetting stale non-idle bloc state on resume (no real active call found)');
-        bloc.add(CallDismissed());
-      }
-    } catch (e) {
-      debugPrint('⚠️ Stale-state reset check failed: $e');
-    }
-  }
+  Future<void> _checkForMissedAcceptedCall() => _reconcileVideoCallState();
 
   @override
   Widget build(BuildContext context) {
@@ -359,29 +335,24 @@ Future<void> _initEverything() async {
     // fallback notification), and THIS is the very first app launch
     // since (so there's no "resume" event to catch it, only this
     // initial cold boot).
-    unawaited(() async {
-      final sessionUuid = await CallKitService().checkForActiveAcceptedCall();
-      if (sessionUuid != null) {
-        try {
-          sl<VideoCallBloc>().add(CallJoinRequested(sessionUuid));
-        } catch (e) {
-          debugPrint('⚠️ Failed to join missed accepted call (cold start): $e');
-        }
-        return;
-      }
+    unawaited(_reconcileVideoCallState());
 
-      final prefs = await SharedPreferences.getInstance();
-      final pendingUuid = prefs.getString('pending_join_session_uuid');
-      if (pendingUuid != null && pendingUuid.isNotEmpty) {
-        await prefs.remove('pending_join_session_uuid');
-        try {
-          debugPrint('📞 [main] Joining pending call from notification accept (cold start): $pendingUuid');
-          sl<VideoCallBloc>().add(CallResumeAfterNotificationAccept(pendingUuid));
-        } catch (e) {
-          debugPrint('⚠️ Failed to join pending call (cold start): $e');
-        }
-      }
-    }());
+    // Also run it continuously, not just on resume/cold-start. Confirmed
+    // gap: a call delivered purely through the FCM background handler
+    // (app was already backgrounded when it arrived) never touches
+    // VideoCallBloc at all — its phase stays idle the entire time, so
+    // VideoCallBloc's own resolution-poll fallback (which only starts
+    // once phase reaches ringingIncoming/ringingOutgoing) never engages
+    // either. If the user never manually resumes the app — just sits on
+    // CallKit's screen — nothing was ever reconciling that call against
+    // reality. This closes that: the moment reconciliation notices a
+    // CallKit-known call the bloc doesn't, it dispatches
+    // CallResumeFromNotification, which itself starts that same
+    // resolution poll — so from here on, either mechanism catches the
+    // call ending even if the user never touches anything.
+    Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_reconcileVideoCallState());
+    });
 
     // Connection monitoring.
     unawaited(
@@ -403,6 +374,118 @@ Future<void> _initEverything() async {
 // or navigation twice for the same call.
 String? _lastRingingSessionUuid;
 String? _lastActiveNavigatedSessionUuid;
+
+// Debounce for _reconcileVideoCallState's continuous polling — confirmed
+// by testing to otherwise race its own cleanup: CallKit's native
+// activeCalls() state doesn't always update instantly after we call
+// endCall()/hideCallkitIncoming() (this device's Telecom integration is
+// already confirmed flaky), so the NEXT reconciliation tick can
+// re-discover a call we just locally declined as "still ringing" from
+// CallKit's stale point of view, and restart the entire ringing flow —
+// ringtone included — moments after it was correctly stopped. Recording
+// what we just resolved locally, and skipping reconciliation from
+// reviving that exact session for a short grace window, closes it.
+String? _lastLocallyResolvedSessionUuid;
+DateTime? _lastLocallyResolvedAt;
+
+/// Shared by both the cold-start path (_initEverything, below) and every
+/// app-resume (_MyAppState.didChangeAppLifecycleState) — used to matter
+/// only on resume, but a stuck bloc doesn't wait for a resume event to
+/// happen: it silently drops every incoming call from the moment it gets
+/// wedged, cold-start included, so this now runs at both.
+///
+/// 1. If CallKit has an already-accepted call our own flow might have
+///    missed (native lock-screen Accept while Dart wasn't listening
+///    yet), join it.
+/// 2. Else, if the fallback notification's Accept succeeded server-side
+///    but couldn't reach the bloc directly (that isolate's GetIt access
+///    isn't reliable), pick up the pending join it persisted.
+/// 3. Else, safety net: if the bloc is stuck in `active`/`connecting`
+///    with no real CallKit call behind it — e.g. _onJoin/_onAccept threw
+///    and (before this was fixed) never reset the phase back to idle —
+///    reset it. Deliberately NOT `ringingIncoming`/`ringingOutgoing`:
+///    those can be genuinely legitimate at the exact moment this runs.
+Future<void> _reconcileVideoCallState() async {
+  final sessionUuid = await CallKitService().checkForActiveAcceptedCall();
+
+  if (sessionUuid != null) {
+    if (sessionUuid == _lastActiveNavigatedSessionUuid) return; // already handled
+    // Same debounce as the ringing-call branch below — CallKit's native
+    // state can lag behind a call we JUST ended/resolved locally.
+    final recentlyResolved = sessionUuid == _lastLocallyResolvedSessionUuid &&
+        _lastLocallyResolvedAt != null &&
+        DateTime.now().difference(_lastLocallyResolvedAt!) < const Duration(seconds: 15);
+    if (recentlyResolved) {
+      debugPrint('📞 [main] Skipping reconcile (accepted) — $sessionUuid was just resolved locally');
+      return;
+    }
+    try {
+      sl<VideoCallBloc>().add(CallJoinRequested(sessionUuid));
+    } catch (e) {
+      debugPrint('⚠️ Failed to join missed accepted call: $e');
+    }
+    return;
+  }
+
+  final prefs = await SharedPreferences.getInstance();
+  final pendingUuid = prefs.getString('pending_join_session_uuid');
+  if (pendingUuid != null && pendingUuid.isNotEmpty) {
+    await prefs.remove('pending_join_session_uuid');
+    if (pendingUuid != _lastActiveNavigatedSessionUuid) {
+      try {
+        debugPrint('📞 [main] Joining pending call from notification accept: $pendingUuid');
+        sl<VideoCallBloc>().add(CallResumeAfterNotificationAccept(pendingUuid));
+      } catch (e) {
+        debugPrint('⚠️ Failed to join pending call: $e');
+      }
+    }
+    return;
+  }
+
+  try {
+    final bloc = sl<VideoCallBloc>();
+    // REMOVED: this used to force-reset phase to idle whenever it was
+    // active/connecting with nothing in CallKit's activeCalls(). That
+    // premise only holds for the CALLEE — CallKit is never invoked at
+    // all for a call THIS device initiated, so on the caller's side
+    // "CallKit shows nothing" is the permanent, expected state for every
+    // genuinely active outgoing call, not a sign of anything stuck.
+    // Confirmed by testing: this fired within 5s of every successful
+    // outgoing call connecting and force-dismissed it — call connects,
+    // shows video, disappears a second later. The actual bug this was
+    // meant to catch (phase never resetting after a failed
+    // accept/join/end) is now fixed at its real source — the missing
+    // phase resets in _onJoin/_onAccept/_onEnd's own error handlers —
+    // so this blunt, wrongly-targeted safety net is no longer needed.
+
+    // A call that started ringing while the app was fully backgrounded —
+    // CallKit is showing it, but the bloc has no idea (see
+    // checkForActiveRingingCall's doc comment). Fetch the real session
+    // and populate ringingIncoming so IncomingCallBanner has something
+    // to show once the user is back in the app, instead of leaving only
+    // CallKit's own screen or the fallback notification as a way in.
+    if (bloc.state.phase == VideoCallPhase.idle) {
+      final ringingUuid = await CallKitService().checkForActiveRingingCall();
+      if (ringingUuid != null) {
+        // Debounce — see _lastLocallyResolvedSessionUuid's doc comment.
+        // CallKit's native state can lag behind a resolve we JUST did
+        // locally; without this, this exact tick can restart the whole
+        // ringing flow (ringtone included) for a call already handled.
+        final recentlyResolved = ringingUuid == _lastLocallyResolvedSessionUuid &&
+            _lastLocallyResolvedAt != null &&
+            DateTime.now().difference(_lastLocallyResolvedAt!) < const Duration(seconds: 15);
+        if (recentlyResolved) {
+          debugPrint('📞 [main] Skipping reconcile — $ringingUuid was just resolved locally');
+        } else {
+          debugPrint('📞 [main] Reconciling still-ringing call CallKit knows about: $ringingUuid');
+          bloc.add(CallResumeFromNotification(ringingUuid));
+        }
+      }
+    }
+  } catch (e) {
+    debugPrint('⚠️ Stale-state reset check failed: $e');
+  }
+}
 
 /// Two things this covers, both because VideoCallBloc is a global
 /// singleton with no guaranteed screen listening to it at all times:
@@ -458,8 +541,27 @@ void _startGlobalVideoCallListeners() {
         }
       }
     } else if (state.phase == VideoCallPhase.idle) {
-      if (_lastRingingSessionUuid != null) {
-        NotificationService().dismissIncomingCallNotification(_lastRingingSessionUuid!);
+      // Single authoritative rule, not another scattered call site: the
+      // instant the bloc says idle, by ANY path whatsoever (successful
+      // reject, a reject that failed 4xx/429 but still resets local
+      // state, resolved-by-other-party, dismissed, a poll catching what
+      // a broadcast missed...), ringtone/CallKit/notification must all
+      // be off. Confirmed by testing that individual call sites scattered
+      // across every handler are too easy to miss one of — this can't be
+      // missed, since every single path to idle flows through this one
+      // listener. Fully idempotent either way (safe no-op if already
+      // stopped/dismissed), so unconditional here is never wasted.
+      try {
+        RingtonePlayer().stop();
+      } catch (_) {}
+      final uuidToDismiss = _lastRingingSessionUuid ?? state.session?.uuid;
+      if (uuidToDismiss != null) {
+        _lastLocallyResolvedSessionUuid = uuidToDismiss;
+        _lastLocallyResolvedAt = DateTime.now();
+        try {
+          CallKitService().endCall(uuidToDismiss);
+        } catch (_) {}
+        NotificationService().dismissIncomingCallNotification(uuidToDismiss);
       }
       _lastRingingSessionUuid = null;
       _lastActiveNavigatedSessionUuid = null;

@@ -108,6 +108,14 @@ class UserModel extends Equatable {
   @JsonKey(name: 'following_count')
   final int? followingCount;
 
+  // Video call directory status — present in UserResource (profile/me,
+  // directory listing, etc.) but not the login response, so nullable.
+  @JsonKey(name: 'is_video_call_online')
+  final bool? isVideoCallOnline;
+
+  @JsonKey(name: 'video_call_enabled')
+  final bool? videoCallEnabled;
+
   // Filled via LoginResponseModel
   final String? authToken;
   final String? tokenType;
@@ -140,6 +148,8 @@ class UserModel extends Equatable {
     this.expiresIn,
     this.followersCount,
     this.followingCount,
+    this.isVideoCallOnline,
+    this.videoCallEnabled,
   });
 
   /// CopyWith (keeps immutability)
@@ -169,6 +179,8 @@ class UserModel extends Equatable {
     String? expiresIn,
     int? followersCount,
     int? followingCount,
+    bool? isVideoCallOnline,
+    bool? videoCallEnabled,
   }) {
     return UserModel(
       uuid: uuid ?? this.uuid,
@@ -196,6 +208,8 @@ class UserModel extends Equatable {
       expiresIn: expiresIn ?? this.expiresIn,
       followersCount: followersCount ?? this.followersCount,
       followingCount: followingCount ?? this.followingCount,
+      isVideoCallOnline: isVideoCallOnline ?? this.isVideoCallOnline,
+      videoCallEnabled: videoCallEnabled ?? this.videoCallEnabled,
     );
   }
 
@@ -233,6 +247,8 @@ class UserModel extends Equatable {
     avatar: null,
     followersCount: json['followers_count'] as int? ?? 0,
     followingCount: json['following_count'] as int? ?? 0,
+    isVideoCallOnline: json['is_video_call_online'] as bool?,
+    videoCallEnabled: json['video_call_enabled'] as bool?,
   );
 
   Map<String, dynamic> toJson() => _$UserModelToJson(this);
@@ -255,6 +271,8 @@ class UserModel extends Equatable {
     referredBy: referredBy?.toString(),
     emailVerifiedAt: emailVerifiedAt,
     authToken: authToken,
+    isVideoCallOnline: isVideoCallOnline,
+    videoCallEnabled: videoCallEnabled,
   );
 
   /// Display helpers
@@ -286,6 +304,8 @@ class UserModel extends Equatable {
     authToken,
     tokenType,
     expiresIn,
+    isVideoCallOnline,
+    videoCallEnabled,
   ];
 }
 
@@ -309,5 +329,7 @@ extension UserEntityX on User {
     referredBy: referredBy,
     emailVerifiedAt: emailVerifiedAt,
     authToken: authToken,
+    isVideoCallOnline: isVideoCallOnline,
+    videoCallEnabled: videoCallEnabled,
   );
 }

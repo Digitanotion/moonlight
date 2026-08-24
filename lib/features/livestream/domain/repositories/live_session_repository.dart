@@ -26,6 +26,7 @@ abstract class LiveSessionRepository {
   Future<void> startSession({required String topic});
   Future<void> endSession();
   Future<void> togglePause();
+  Future<Map<String, dynamic>> fetchPublisherCredentials();
   void setLocalPause(bool paused);
 
   // Join moderation

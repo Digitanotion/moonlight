@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/settings/presentation/cubit/account_settings_cubit.dart';
 import 'package:moonlight/features/settings/presentation/widgets/delete_account_flow.dart';
+import 'package:moonlight/features/video_call/presentation/pages/video_call_settings_screen.dart';
 import 'package:moonlight/widgets/ml_confirm_dialog.dart';
 
 // Import new pages
@@ -120,6 +123,29 @@ class AccountSettingsPage extends StatelessWidget {
                       ),
                     ],
                   ),
+                  // Video Call settings (online/enabled toggles) — only
+                  // relevant for female users, per the client's spec that
+                  // females are automatically callable by default and can
+                  // manually opt out. Hidden for other users rather than
+                  // showing an irrelevant toggle.
+                  if (sl<CurrentUserService>().currentUser?.gender == 'female')
+                    _Section(
+                      title: 'Video Call',
+                      children: [
+                        _NavTile(
+                          icon: Icons.video_call_rounded,
+                          title: 'Video Call Settings',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const VideoCallSettingsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   _Section(
                     title: 'Notifications',
                     children: [

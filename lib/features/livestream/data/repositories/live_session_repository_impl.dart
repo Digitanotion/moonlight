@@ -1294,6 +1294,15 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> fetchPublisherCredentials() async {
+    final res = await _client.dio.get(
+      '/api/v1/live/$_id/rtc',
+      queryParameters: {'role': 'publisher'},
+    );
+    return (res.data is Map) ? Map<String, dynamic>.from(res.data as Map) : {};
+  }
+
+  @override
   Future<void> sendChatMessage(String text) async {
     final trimmedText = text.trim();
     if (trimmedText.isEmpty) return;

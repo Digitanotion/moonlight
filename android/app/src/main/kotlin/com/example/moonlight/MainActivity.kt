@@ -14,6 +14,12 @@ class MainActivity : FlutterActivity() {
     private var methodChannel: MethodChannel? = null
     private var isVideoPlaying = false
 
+    // Ringtone playback moved to packages/ringtone_native — a real
+    // FlutterPlugin, not a channel scoped to this Activity's own engine,
+    // so it's also reachable from the headless engine firebase_messaging
+    // uses to run the background message handler (where an incoming call
+    // is first known about while the app is backgrounded/locked).
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 

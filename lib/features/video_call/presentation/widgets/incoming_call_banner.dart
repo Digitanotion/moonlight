@@ -51,6 +51,19 @@ class _IncomingCallBannerState extends State<IncomingCallBanner> {
   @override
   void initState() {
     super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    // This widget wraps MaterialApp's builder, so it mounts on MyApp's
+    // very first build — right after the bare splash frame, well before
+    // background init (_initEverything in main.dart) has finished
+    // registering VideoCallBloc and its dependencies in GetIt. Wait for
+    // the same readiness gate the splash route itself waits on before
+    // ever touching sl<VideoCallBloc>() (calling it earlier throws:
+    // "VideoCallBloc is not registered inside GetIt").
+    await DependencyManager.waitForAllDependencies();
+    if (!mounted) return;
     final bloc = sl<VideoCallBloc>();
     _applyState(bloc.state);
     _sub = bloc.stream.listen(_applyState);

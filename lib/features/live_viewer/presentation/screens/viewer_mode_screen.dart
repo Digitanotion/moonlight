@@ -350,7 +350,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
           builder: (_) => BlocProvider.value(
             value: sl<VideoCallBloc>(),
             child: OutgoingCallScreen(
-              calleeUserSlug: profile.handle,
+              calleeUserSlug: (profile.handle ?? '').replaceFirst('@', ''),
               calleeDisplayName: host.name,
               calleeAvatarUrl: host.avatarUrl,
               initiatedFrom: 'livestream',

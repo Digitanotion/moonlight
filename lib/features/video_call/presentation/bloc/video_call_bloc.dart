@@ -4,7 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
 import 'package:moonlight/core/config/runtime_config.dart';
+import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/services/agora_service.dart';
 import 'package:moonlight/core/services/call_kit_service.dart';
+import 'package:moonlight/core/services/notification_service.dart';
+import 'package:moonlight/core/services/ringtone_player.dart';
 import 'package:moonlight/core/services/video_call_agora_service.dart';
 import 'package:moonlight/features/video_call/data/models/video_call_session_model.dart';
 import 'package:moonlight/features/video_call/domain/repositories/video_call_repository.dart';
@@ -165,6 +170,14 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
   StreamSubscription<Map<String, dynamic>>? _acceptedSub;
   StreamSubscription<Map<String, dynamic>>? _resolvedSub;
   Timer? _tickTimer;
+  // Fallback for a confirmed gap: broadcasts between the two parties on
+  // a call can fail to arrive via Pusher at all — first confirmed for
+  // reject events reaching the caller, but the same unreliability should
+  // be assumed in either direction (a caller's end/cancel reaching the
+  // callee is the same class of gap). Runs whenever either party is
+  // ringing/connecting/active, independent of any live event ever
+  // arriving — see _startResolutionPoll's doc comment.
+  Timer? _resolutionPollTimer;
   bool _isDisposed = false;
 
   VideoCallBloc(this.repo, this.agora, this.runtimeConfig)
@@ -216,6 +229,8 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     final resolvedUuid = (meta['session_uuid'] ?? '').toString();
     if (resolvedUuid.isEmpty) return;
 
+    _stopResolutionPoll();
+
     // Dismiss CallKit's NATIVE UI unconditionally, using the uuid from
     // the event itself — NOT gated on matching local bloc state. Calls
     // shown via the native FCM background path (app was backgrounded or
@@ -233,6 +248,14 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
       debugPrint('❌ [CallKit] Stack: $st');
     }
 
+    // Same reasoning as CallKit above — unconditional, not gated on
+    // matching local state, since a call ringing purely via the
+    // background isolate path never populates local state at all.
+    try {
+      RingtonePlayer().stop();
+      NotificationService().dismissIncomingCallNotification(resolvedUuid);
+    } catch (_) {}
+
     final currentUuid = state.session?.uuid;
 
     // The actual Dart-side STATE transition below still needs the match
@@ -242,10 +265,17 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     if (currentUuid == null || resolvedUuid != currentUuid) return;
 
     if (state.phase == VideoCallPhase.active) {
-      // Try to leave the Agora channel gracefully — best-effort, since
-      // the other party is already gone either way.
+      // Leave AND dispose — matches _onEnd exactly. Leaving alone (the
+      // original version here) never released the engine's camera/mic
+      // hardware locks, which is what left the feed's own video/audio
+      // playback broken after a call the OTHER party ended (_onEnd's
+      // own local-hangup path already did this correctly; this path,
+      // for the other party hanging up, was the one place it was
+      // missed). Best-effort either way, since the other party is
+      // already gone.
       try {
         await agora.leave();
+        await agora.disposeEngine();
       } catch (_) {}
       emit(state.copyWith(phase: VideoCallPhase.ended, actionLoading: false));
     } else {
@@ -284,6 +314,13 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
           phase: VideoCallPhase.ringingOutgoing,
         ),
       );
+      // Belt-and-suspenders for the exact gap just confirmed by testing:
+      // the caller can go the ENTIRE ring without ever receiving the
+      // Pusher event for the callee's response (accept OR reject) — no
+      // client-side fix can make a socket event arrive that the backend
+      // never sent, so poll status() as a fallback the live event isn't
+      // required for.
+      _startResolutionPoll(session.uuid);
     } catch (err) {
       emit(
         state.copyWith(
@@ -299,6 +336,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     CallAcceptRequested e,
     Emitter<VideoCallState> emit,
   ) async {
+    _stopResolutionPoll();
     emit(
       state.copyWith(
         actionLoading: true,
@@ -336,6 +374,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     CallResumeAfterNotificationAccept e,
     Emitter<VideoCallState> emit,
   ) async {
+    _stopResolutionPoll();
     emit(
       state.copyWith(
         actionLoading: true,
@@ -369,6 +408,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     CallRejectRequested e,
     Emitter<VideoCallState> emit,
   ) async {
+    _stopResolutionPoll();
     emit(state.copyWith(actionLoading: true, clearError: true));
     try {
       await repo.reject(e.sessionUuid);
@@ -383,6 +423,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     CallJoinRequested e,
     Emitter<VideoCallState> emit,
   ) async {
+    _stopResolutionPoll();
     emit(
       state.copyWith(
         actionLoading: true,
@@ -402,15 +443,46 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
       );
       _startTicking();
     } catch (err) {
-      emit(state.copyWith(actionLoading: false, error: _msg(err)));
+      // Unlike _onAccept/_onResumeAfterNotificationAccept, this used to
+      // leave `phase` at `connecting` on failure instead of resetting it.
+      // With no screen open to catch it (this fires from a cold-start
+      // background dispatch, not a user tap), the bloc — a global
+      // singleton — got permanently wedged "busy", silently dropping
+      // every subsequent incoming call for the rest of the app session.
+      emit(
+        state.copyWith(
+          actionLoading: false,
+          error: _msg(err),
+          phase: VideoCallPhase.idle,
+        ),
+      );
     }
   }
 
-  Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
+Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
     final creds = session.agora;
     if (creds == null || creds.token.isEmpty) {
       throw StateError('No Agora credentials in session response');
     }
+
+    // If this call came in while the callee was actively livestreaming,
+    // her device already has a separate Agora engine (AgoraService, the
+    // livestream host's) connected to her stream's channel. Agora's SDK
+    // only allows ONE active channel join per app process regardless of
+    // how many separate Dart-level "engine" objects exist — a second,
+    // independent join here gets rejected with error -17
+    // (ERR_JOIN_CHANNEL_REJECTED), confirmed via real device logs. This
+    // is why accept/pause/resume all worked correctly server-side, but
+    // her own call screen never actually connected. Release her
+    // livestream engine's channel first so this join can succeed.
+    if (session.initiatedFrom == 'livestream') {
+      try {
+        await sl<AgoraService>().leave();
+      } catch (e) {
+        debugPrint('⚠️ Failed to release livestream Agora engine before call join: $e');
+      }
+    }
+
     // appId is app-wide config, not per-session — read from wherever the
     // app already stores RuntimeConfig.agoraAppId (same value used by
     // AgoraService/AgoraViewerService).
@@ -446,14 +518,68 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     }
   }
 
+  // Confirmed by testing: _CallTicked fires every second while active, and
+  // once the countdown hits zero it dispatches CallEndRequested — but
+  // _onEnd doesn't move `phase` away from `active` until its network
+  // round trip completes, so on a slow connection EVERY tick in that
+  // window queues yet another CallEndRequested. Bloc's default sequential
+  // transformer processes all of them one after another regardless of
+  // the first one having already succeeded — three redundant /end
+  // requests, minutes of the screen never resolving. This guard makes
+  // _onEnd a no-op while one is already in flight, independent of how
+  // many times it gets dispatched or from where (tick flood, an
+  // impatient repeated tap, PopScope firing again — doesn't matter).
+  bool _endInFlight = false;
+
   Future<void> _onEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
+    if (_endInFlight) return;
+    _endInFlight = true;
+    try {
+      await _doEnd(e, emit);
+    } finally {
+      _endInFlight = false;
+    }
+  }
+
+Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     final sessionUuid = state.session?.uuid;
     // Capture this BEFORE resetting anything below — determines which
     // phase to land on once the end() call completes.
     final wasActive = state.phase == VideoCallPhase.active;
+    final endingSession = state.session;
     _tickTimer?.cancel();
+    _stopResolutionPoll();
     await agora.leave();
     await agora.disposeEngine();
+
+    // If this call happened while the callee was livestreaming, her own
+    // Agora engine (AgoraService) was released before the call's engine
+    // joined (see _joinAgoraFromSession). Now that the call's over,
+    // reconnect her to her own stream — fetch a fresh publisher token
+    // (the original one may be long expired by now) and rejoin. Wrapped
+    // in try/catch: a failure here shouldn't block the call itself from
+    // finishing cleanly — worst case, she has to manually restart her
+    // stream, same as before this fix existed.
+    if (endingSession?.initiatedFrom == 'livestream' &&
+        endingSession?.livestreamId != null) {
+      try {
+        final res = await sl<DioClient>().dio.get(
+          '/api/v1/live/${endingSession!.livestreamId}/rtc',
+          queryParameters: {'role': 'publisher'},
+        );
+        final data = (res.data is Map) ? res.data as Map : const {};
+        await sl<AgoraService>().startPublishing(
+          appId: (data['app_id'] ?? '').toString(),
+          channel: (data['channel'] ?? '').toString(),
+          token: (data['rtc_token'] ?? '').toString(),
+          uidType: 'uid',
+          uid: '${data['rtc_uid'] ?? ''}',
+        );
+        debugPrint('✅ Rejoined livestream after call ended');
+      } catch (err) {
+        debugPrint('⚠️ Failed to rejoin livestream after call: $err');
+      }
+    }
 
     if (sessionUuid == null) {
       emit(VideoCallState.initial());
@@ -480,7 +606,19 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
         ),
       );
     } catch (err) {
-      emit(state.copyWith(actionLoading: false, error: _msg(err)));
+      // Same bug class as _onJoin's fix — leaving phase wherever it was
+      // (active/connecting) on a failed end() call wedges the bloc
+      // permanently, silently dropping every future incoming call under
+      // the "already busy" guard for the rest of the session. The Agora
+      // engine is already torn down above regardless of this call's
+      // outcome, so idle is always safe to land on here.
+      emit(
+        state.copyWith(
+          actionLoading: false,
+          error: _msg(err),
+          phase: VideoCallPhase.idle,
+        ),
+      );
     }
   }
 
@@ -543,6 +681,12 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
         ),
       ),
     );
+    // See _startResolutionPoll's doc comment — the same broadcast
+    // unreliability confirmed for reject-reaching-the-caller applies
+    // here too: without this, a caller cancelling before this device
+    // answers has no guaranteed way to close the banner/ringtone if that
+    // specific event also fails to arrive.
+    _startResolutionPoll(sessionUuid);
   }
 
   void _onAcceptedReceived(
@@ -586,6 +730,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
           phase: VideoCallPhase.ringingIncoming,
         ),
       );
+      _startResolutionPoll(e.sessionUuid);
     } catch (err) {
       emit(state.copyWith(actionLoading: false, error: _msg(err)));
     }
@@ -596,6 +741,85 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!_isDisposed) add(_CallTicked());
     });
+  }
+
+  /// Fallback for a confirmed gap: a broadcast between the two parties
+  /// on a call — confirmed for reject-reaching-the-caller, and assumed
+  /// unreliable in either direction — can fail to arrive via Pusher for
+  /// the ENTIRE duration of the ring, leaving whichever screen is
+  /// waiting (OutgoingCallScreen, or IncomingCallBanner/IncomingCallScreen
+  /// on the other side) sitting there indefinitely with no live event
+  /// ever telling it otherwise. No client-side fix can make a socket
+  /// event arrive that the backend never actually sent — so this polls
+  /// status() instead, which doesn't depend on that broadcast at all.
+  /// Started from every entry point into ringingOutgoing/ringingIncoming
+  /// (_onInitiate, _onIncomingReceived, _onResumeFromNotification),
+  /// stopped the moment that call leaves the ring by any path — a
+  /// background poll for a call the UI has already moved on from would
+  /// be pure waste.
+  void _startResolutionPoll(String sessionUuid) {
+    _stopResolutionPoll();
+    _resolutionPollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (_isDisposed) return;
+      try {
+        final session = await repo.status(sessionUuid);
+
+        // Timer.cancel() only stops FUTURE ticks — it can't abort a tick
+        // whose callback is already mid-await when _stopResolutionPoll()
+        // runs (e.g. accept happens right as a poll's repo.status() call
+        // is in flight). That stale response can still land afterward.
+        // Confirmed by testing TWICE now: `connecting` used to be
+        // included below on the theory that it's also "still waiting" —
+        // but `connecting` is exactly the narrow instant _onAccept/_onJoin
+        // call _stopResolutionPoll(), i.e. exactly the race window this
+        // guard exists for. Trusting a stale poll response during it
+        // meant a stale tick could fire _CallResolvedByOtherParty (tearing
+        // down the Agora engine) the instant EITHER side taps Accept —
+        // both screens disappearing right as the call connects. Only
+        // ringingOutgoing/ringingIncoming are phases where the poll is
+        // actually the intended safety net; by `connecting`,
+        // _onResolvedByOtherParty's own live-event path (which has its
+        // own session-match check) is the real safety net, not this poll.
+        final stillWaiting = const {
+          VideoCallPhase.ringingOutgoing,
+          VideoCallPhase.ringingIncoming,
+        }.contains(state.phase);
+        final stillSameSession = state.session?.uuid == sessionUuid || state.session == null;
+        if (!stillWaiting || !stillSameSession) return;
+
+        if (session.status == 'active') {
+          // The callee accepted, but 'video_call_accepted' never arrived
+          // either — same gap, self-heal the same way that event would
+          // have: join directly.
+          if (state.phase == VideoCallPhase.ringingOutgoing) {
+            add(CallJoinRequested(sessionUuid));
+          }
+        } else if (const {
+          'rejected',
+          'no_answer',
+          'cancelled',
+          'completed',
+        }.contains(session.status)) {
+          // Reuse the exact same cleanup _onResolvedByOtherParty already
+          // does for a live event — CallKit dismiss, ringtone stop,
+          // notification dismiss, phase transition — rather than
+          // duplicating any of it here.
+          add(
+            _CallResolvedByOtherParty({
+              'meta': {'session_uuid': sessionUuid},
+            }),
+          );
+        }
+      } catch (_) {
+        // Transient network hiccup — next tick retries. Never tear
+        // anything down over a single failed poll.
+      }
+    });
+  }
+
+  void _stopResolutionPoll() {
+    _resolutionPollTimer?.cancel();
+    _resolutionPollTimer = null;
   }
 
   void _onTick(_CallTicked e, Emitter<VideoCallState> emit) {
@@ -632,6 +856,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
   Future<void> close() async {
     _isDisposed = true;
     _tickTimer?.cancel();
+    _stopResolutionPoll();
     await _incomingSub?.cancel();
     await _acceptedSub?.cancel();
     await _resolvedSub?.cancel();

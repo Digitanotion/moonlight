@@ -122,6 +122,7 @@ class WalletRemoteMapper {
     }();
 
     // ── coinsChange ─────────────────────────────────────────────────────────────
+   // ── coinsChange ─────────────────────────────────────────────────────────────
     final coinsChange = () {
       final v =
           txnJson['coins_change'] ??
@@ -129,8 +130,30 @@ class WalletRemoteMapper {
           txnJson['coins_added'] ??
           txnJson['coins'] ??
           0;
-      if (v is num) return v.toInt();
-      return int.tryParse(v.toString()) ?? 0;
+      final resolved = (v is num) ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
+
+      // Earning-type transactions (video call, gift received) deliberately
+      // store coins_change as 0 on the backend — the actual earned amount
+      // goes into a separate earnings_cents ledger instead, since it
+      // doesn't touch the recipient's spendable coins balance. That's
+      // correct for the wallet's own accounting, but meant the earner's
+      // transaction history always showed "+0" instead of what they
+      // actually earned. The real figure is still recorded in meta.coins
+      // for exactly this display purpose — use it here specifically when
+      // coins_change resolved to a genuine 0, without touching the
+      // backend field itself (it's summed elsewhere for admin financial
+      // reporting on the actual coins currency, so changing it there
+      // would have been wrong).
+      if (resolved == 0) {
+        final metaCoins = meta['coins'];
+        if (metaCoins is num && metaCoins != 0) return metaCoins.toInt();
+        if (metaCoins != null) {
+          final parsed = int.tryParse(metaCoins.toString());
+          if (parsed != null && parsed != 0) return parsed;
+        }
+      }
+
+      return resolved;
     }();
 
     // ── balanceAfter ────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart';
 
 abstract class ViewerRepository {
   Future<HostInfo> fetchHostInfo();
-
+ Stream<bool> get healthPauseStream;
   Stream<Duration> watchLiveClock();
   Stream<int> watchViewerCount();
   Stream<ChatMessage> watchChat();

@@ -1,6 +1,7 @@
 // lib/features/video_call/presentation/pages/video_call_settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/video_call/domain/repositories/video_call_repository.dart';
@@ -21,6 +22,20 @@ class _VideoCallSettingsScreenState extends State<VideoCallSettingsScreen> {
   bool _busy = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    // Bug: these were previously always hardcoded to false, never actually
+    // read from the real, current user data — the screen only ever WROTE
+    // toggle changes, it never READ the existing state on open. Both
+    // fields already exist in every /profile/me response (confirmed via
+    // UserResource), just weren't wired into the User entity/model at
+    // all before now.
+    final user = sl<CurrentUserService>().currentUser;
+    _online = user?.isVideoCallOnline ?? false;
+    _enabled = user?.videoCallEnabled ?? false;
+  }
+
   Future<void> _toggleOnline(bool value) async {
     setState(() {
       _online = value; // optimistic
@@ -29,6 +44,16 @@ class _VideoCallSettingsScreenState extends State<VideoCallSettingsScreen> {
     });
     try {
       await _repo.toggleOnline(value);
+      // Keep the cached CurrentUserService in sync with what the
+      // backend just confirmed — without this, the API call succeeds
+      // but re-opening this screen later reads the STALE cached user
+      // object (only refreshed at login/app-launch), showing the old
+      // value again even though the change genuinely took effect.
+      final service = sl<CurrentUserService>();
+      final current = service.currentUser;
+      if (current != null) {
+        service.setUser(current.copyWith(isVideoCallOnline: value));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -48,6 +73,11 @@ class _VideoCallSettingsScreenState extends State<VideoCallSettingsScreen> {
     });
     try {
       await _repo.toggleEnabled(value);
+      final service = sl<CurrentUserService>();
+      final current = service.currentUser;
+      if (current != null) {
+        service.setUser(current.copyWith(videoCallEnabled: value));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {

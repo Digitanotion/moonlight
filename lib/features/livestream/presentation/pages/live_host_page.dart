@@ -302,6 +302,11 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   @override
   void dispose() {
+    // TEMP DIAGNOSTIC — confirming whether the whole page disposes
+    // alongside LiveHostBloc.close(), or just the bloc independently.
+    debugPrint('🚨🚨🚨 _LiveHostPageState.dispose() CALLED 🚨🚨🚨');
+    debugPrint(StackTrace.current.toString());
+
     _beautyAppliedOnJoin = false;
     agora.removeListener(_onAgoraStateChanged);
 
@@ -546,491 +551,564 @@ class _LiveHostPageState extends State<LiveHostPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: MultiBlocListener(
-        listeners: [
-          BlocListener<LiveHostBloc, LiveHostState>(
-            listenWhen: (p, c) =>
-                p.isLive != c.isLive || p.endAnalytics != c.endAnalytics,
-            listener: (context, state) {
-              if (!state.isLive) {
-                if (state.endAnalytics != null) {
-                  Navigator.of(context).pushReplacementNamed(
-                    RouteNames.livestreamEnded,
-                    arguments: state.endAnalytics,
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Live stream has ended'),
-                      behavior: SnackBarBehavior.floating,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                  Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil(RouteNames.home, (r) => false);
-                }
-              }
-            },
-          ),
-          // Listen for beauty prefs updates from BLoC → apply to Agora
-          BlocListener<LiveHostBloc, LiveHostState>(
-            listenWhen: (p, c) =>
-                p.faceCleanEnabled != c.faceCleanEnabled ||
-                p.faceCleanLevel != c.faceCleanLevel ||
-                p.brightenEnabled != c.brightenEnabled ||
-                p.brightenLevel != c.brightenLevel,
-            listener: (context, state) {
-              _faceCleanEnabled = state.faceCleanEnabled;
-              _faceCleanLevel = state.faceCleanLevel;
-              _brightenEnabled = state.brightenEnabled;
-              _brightenLevel = state.brightenLevel;
-              _applyEffects();
-            },
-          ),
-        ],
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragEnd: (details) {
-            final v = details.primaryVelocity ?? 0;
-            if (v > 300)
-              setState(() => _immersive = true);
-            else if (v < -300)
-              setState(() => _immersive = false);
-          },
-          child: Stack(
-            children: [
-              // ── CAMERA PREVIEW ─────────────────────────────────────────────
-              // _StableCameraPreview only rebuilds when agora.joined flips.
-              // It is completely isolated from:
-              //   • BLoC timer ticks (elapsedSeconds every second)
-              //   • Beauty operations (no notifyListeners from beauty)
-              //   • Mic/camera mute events
-              // Camera layout — uses GlobalKey to keep the native surface
-              // alive across solo/two-up layout switches. Never recreated.
-              Positioned.fill(child: _buildCameraLayout()),
-
-              // ── UI OVERLAY — only when not immersive ───────────────────────
-              if (!_immersive) ...[
-                // Header bar — scoped BlocBuilder for time + viewers only
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  top: MediaQuery.of(context).padding.top + 8,
-                  child: BlocBuilder<LiveHostBloc, LiveHostState>(
-                    buildWhen: (p, c) =>
-                        p.elapsedSeconds != c.elapsedSeconds ||
-                        p.viewers != c.viewers ||
-                        p.isPremium != c.isPremium,
-                    builder: (context, state) => _HeaderBar(
-                      hostName: widget.hostName,
-                      hostBadge: widget.hostBadge,
-                      avatarUrl: widget.avatarUrl,
-                      timeText: _mmss(state.elapsedSeconds),
-                      viewersText: _formatViewers(state.viewers),
-                      onEnd: () {
-                        try {
-                          context.read<LiveHostBloc>().add(EndPressed());
-                        } catch (e) {
-                          TopSnack.error(context, 'Error ending stream: $e');
-                        }
-                        _repoImpl.safeEndSession();
-                      },
-                    ),
-                  ),
-                ),
-
-                // Connection status
-                Positioned(
-                  top: MediaQuery.of(context).padding.top + 8,
-                  left: MediaQuery.of(context).size.width / 2 - 50,
-                  child: Builder(
-                    builder: (context) {
-                      final pusher = GetIt.I<PusherService>();
-                      if (pusher.isConnected) return const SizedBox.shrink();
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.wifi_off, size: 14, color: Colors.white),
-                            SizedBox(width: 6),
-                            Text(
-                              'Reconnecting...',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+      body: Stack(
+        children: [
+          MultiBlocListener(
+            listeners: [
+              BlocListener<LiveHostBloc, LiveHostState>(
+                listenWhen: (p, c) =>
+                    p.isLive != c.isLive || p.endAnalytics != c.endAnalytics,
+                listener: (context, state) {
+                  if (!state.isLive) {
+                    if (state.endAnalytics != null) {
+                      Navigator.of(context).pushReplacementNamed(
+                        RouteNames.livestreamEnded,
+                        arguments: state.endAnalytics,
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Live stream has ended'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 2),
                         ),
                       );
-                    },
-                  ),
-                ),
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil(RouteNames.home, (r) => false);
+                    }
+                  }
+                },
+              ),
+              // Listen for beauty prefs updates from BLoC → apply to Agora
+              BlocListener<LiveHostBloc, LiveHostState>(
+                listenWhen: (p, c) =>
+                    p.faceCleanEnabled != c.faceCleanEnabled ||
+                    p.faceCleanLevel != c.faceCleanLevel ||
+                    p.brightenEnabled != c.brightenEnabled ||
+                    p.brightenLevel != c.brightenLevel,
+                listener: (context, state) {
+                  _faceCleanEnabled = state.faceCleanEnabled;
+                  _faceCleanLevel = state.faceCleanLevel;
+                  _brightenEnabled = state.brightenEnabled;
+                  _brightenLevel = state.brightenLevel;
+                  _applyEffects();
+                },
+              ),
+            ],
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragEnd: (details) {
+                final v = details.primaryVelocity ?? 0;
+                if (v > 300)
+                  setState(() => _immersive = true);
+                else if (v < -300)
+                  setState(() => _immersive = false);
+              },
+              child: Stack(
+                children: [
+                  // ── CAMERA PREVIEW ─────────────────────────────────────────────
+                  // _StableCameraPreview only rebuilds when agora.joined flips.
+                  // It is completely isolated from:
+                  //   • BLoC timer ticks (elapsedSeconds every second)
+                  //   • Beauty operations (no notifyListeners from beauty)
+                  //   • Mic/camera mute events
+                  // Camera layout — uses GlobalKey to keep the native surface
+                  // alive across solo/two-up layout switches. Never recreated.
+                  Positioned.fill(child: _buildCameraLayout()),
 
-                // Premium badge
-                BlocBuilder<LiveHostBloc, LiveHostState>(
-                  buildWhen: (p, c) => p.isPremium != c.isPremium,
-                  builder: (context, state) {
-                    if (!state.isPremium) return const SizedBox.shrink();
-                    return Positioned(
-                      top: MediaQuery.of(context).padding.top + 100,
-                      right: 20,
-                      child: GestureDetector(
-                        onTap: _showCancelPremiumBottomSheet,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.25),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.redAccent,
-                              width: 1.25,
-                            ),
-                          ),
-                          child: const Text(
-                            'PREMIUM',
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                // Dim layer when paused
-                BlocBuilder<LiveHostBloc, LiveHostState>(
-                  buildWhen: (p, c) => p.isPaused != c.isPaused,
-                  builder: (context, state) {
-                    if (!state.isPaused) return const SizedBox.shrink();
-                    return Positioned.fill(
-                      child: Container(color: Colors.black.withOpacity(0.55)),
-                    );
-                  },
-                ),
-
-                // Topic chip
-                BlocBuilder<LiveHostBloc, LiveHostState>(
-                  buildWhen: (p, c) => false, // static, never changes
-                  builder: (context, state) => Positioned(
-                    top: 92,
-                    left: 12,
-                    right: 12,
-                    child: _Glass(
-                      radius: 18,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      child: Text(
-                        widget.topic,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13.5,
+                  // ── UI OVERLAY — only when not immersive ───────────────────────
+                  if (!_immersive) ...[
+                    // Header bar — scoped BlocBuilder for time + viewers only
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      top: MediaQuery.of(context).padding.top + 8,
+                      child: BlocBuilder<LiveHostBloc, LiveHostState>(
+                        buildWhen: (p, c) =>
+                            p.elapsedSeconds != c.elapsedSeconds ||
+                            p.viewers != c.viewers ||
+                            p.isPremium != c.isPremium,
+                        builder: (context, state) => _HeaderBar(
+                          hostName: widget.hostName,
+                          hostBadge: widget.hostBadge,
+                          avatarUrl: widget.avatarUrl,
+                          timeText: _mmss(state.elapsedSeconds),
+                          viewersText: _formatViewers(state.viewers),
+                          onEnd: () {
+                            try {
+                              context.read<LiveHostBloc>().add(EndPressed());
+                            } catch (e) {
+                              TopSnack.error(
+                                context,
+                                'Error ending stream: $e',
+                              );
+                            }
+                            _repoImpl.safeEndSession();
+                          },
                         ),
                       ),
                     ),
-                  ),
-                ),
 
-                // Gift overlay
-                if (_currentGift != null && _giftAnimController != null)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 64,
-                    left: 18,
-                    right: 18,
-                    child: RepaintBoundary(
-                      child: AnimatedBuilder(
-                        animation: _giftAnimController!,
-                        builder: (context, _) {
-                          final t = _giftAnimController!.value;
-                          final entrancePortion =
-                              350 /
-                              _giftAnimController!.duration!.inMilliseconds;
-                          final exitPortion =
-                              250 /
-                              _giftAnimController!.duration!.inMilliseconds;
-                          double opacity = 1.0;
-                          double translateY = 0.0;
-                          if (t < entrancePortion) {
-                            final nt = t / entrancePortion;
-                            opacity = nt;
-                            translateY = 40 * (1 - _evalEntrance(nt));
-                          } else if (t > (1 - exitPortion)) {
-                            final nt = (t - (1 - exitPortion)) / exitPortion;
-                            opacity = 1 - _evalExit(nt);
-                            translateY = 20 * nt;
-                          }
-                          return Opacity(
-                            opacity: opacity,
-                            child: Transform.translate(
-                              offset: Offset(0, translateY),
-                              child: Center(
-                                child: _Glass(
-                                  radius: 18,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
+                    // Connection status
+                    Positioned(
+                      top: MediaQuery.of(context).padding.top + 8,
+                      left: MediaQuery.of(context).size.width / 2 - 50,
+                      child: Builder(
+                        builder: (context) {
+                          final pusher = GetIt.I<PusherService>();
+                          if (pusher.isConnected)
+                            return const SizedBox.shrink();
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.wifi_off,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Reconnecting...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 22,
-                                        backgroundImage:
-                                            _currentGift!.senderAvatar != null
-                                            ? NetworkImage(
-                                                _currentGift!.senderAvatar!,
-                                              )
-                                            : const AssetImage(
-                                                    'assets/images/logo.png',
-                                                  )
-                                                  as ImageProvider,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    // Premium badge
+                    BlocBuilder<LiveHostBloc, LiveHostState>(
+                      buildWhen: (p, c) => p.isPremium != c.isPremium,
+                      builder: (context, state) {
+                        if (!state.isPremium) return const SizedBox.shrink();
+                        return Positioned(
+                          top: MediaQuery.of(context).padding.top + 100,
+                          right: 20,
+                          child: GestureDetector(
+                            onTap: _showCancelPremiumBottomSheet,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.redAccent,
+                                  width: 1.25,
+                                ),
+                              ),
+                              child: const Text(
+                                'PREMIUM',
+                                style: TextStyle(
+                                  color: Colors.redAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Dim layer when paused
+                    BlocBuilder<LiveHostBloc, LiveHostState>(
+                      buildWhen: (p, c) => p.isPaused != c.isPaused,
+                      builder: (context, state) {
+                        if (!state.isPaused) return const SizedBox.shrink();
+                        return Positioned.fill(
+                          child: Container(
+                            color: Colors.black.withOpacity(0.55),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Topic chip
+                    BlocBuilder<LiveHostBloc, LiveHostState>(
+                      buildWhen: (p, c) => false, // static, never changes
+                      builder: (context, state) => Positioned(
+                        top: 92,
+                        left: 12,
+                        right: 12,
+                        child: _Glass(
+                          radius: 18,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            widget.topic,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Gift overlay
+                    if (_currentGift != null && _giftAnimController != null)
+                      Positioned(
+                        top: MediaQuery.of(context).padding.top + 64,
+                        left: 18,
+                        right: 18,
+                        child: RepaintBoundary(
+                          child: AnimatedBuilder(
+                            animation: _giftAnimController!,
+                            builder: (context, _) {
+                              final t = _giftAnimController!.value;
+                              final entrancePortion =
+                                  350 /
+                                  _giftAnimController!.duration!.inMilliseconds;
+                              final exitPortion =
+                                  250 /
+                                  _giftAnimController!.duration!.inMilliseconds;
+                              double opacity = 1.0;
+                              double translateY = 0.0;
+                              if (t < entrancePortion) {
+                                final nt = t / entrancePortion;
+                                opacity = nt;
+                                translateY = 40 * (1 - _evalEntrance(nt));
+                              } else if (t > (1 - exitPortion)) {
+                                final nt =
+                                    (t - (1 - exitPortion)) / exitPortion;
+                                opacity = 1 - _evalExit(nt);
+                                translateY = 20 * nt;
+                              }
+                              return Opacity(
+                                opacity: opacity,
+                                child: Transform.translate(
+                                  offset: Offset(0, translateY),
+                                  child: Center(
+                                    child: _Glass(
+                                      radius: 18,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
                                       ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              '@${_currentGift!.senderDisplayName}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Row(
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 22,
+                                            backgroundImage:
+                                                _currentGift!.senderAvatar !=
+                                                    null
+                                                ? NetworkImage(
+                                                    _currentGift!.senderAvatar!,
+                                                  )
+                                                : const AssetImage(
+                                                        'assets/images/logo.png',
+                                                      )
+                                                      as ImageProvider,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    'sent ${_currentGift!.giftCode} to you',
-                                                    style: const TextStyle(
-                                                      color: Colors.white70,
-                                                      fontSize: 13.5,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
+                                                Text(
+                                                  '@${_currentGift!.senderDisplayName}',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 14,
                                                   ),
                                                 ),
-                                                const SizedBox(width: 8),
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 6,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFFFF6A00,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        'sent ${_currentGift!.giftCode} to you',
+                                                        style: const TextStyle(
+                                                          color: Colors.white70,
+                                                          fontSize: 13.5,
+                                                          fontWeight:
+                                                              FontWeight.w600,
                                                         ),
-                                                  ),
-                                                  child: Text(
-                                                    '+${_currentGift!.coinsSpent}',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      fontSize: 12,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
                                                     ),
-                                                  ),
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 6,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(
+                                                          0xFFFF6A00,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                      child: Text(
+                                                        '+${_currentGift!.coinsSpent}',
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Container(
-                                        width: 84,
-                                        height: 84,
-                                        padding: const EdgeInsets.all(6),
-                                        child:
-                                            _currentGiftWidget ??
-                                            const SizedBox.shrink(),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      if (_currentGift!.quantity > 1)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 6,
                                           ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white24,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
+                                          const SizedBox(width: 12),
+                                          Container(
+                                            width: 84,
+                                            height: 84,
+                                            padding: const EdgeInsets.all(6),
+                                            child:
+                                                _currentGiftWidget ??
+                                                const SizedBox.shrink(),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          if (_currentGift!.quantity > 1)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 6,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white24,
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: Text(
+                                                'x${_currentGift!.quantity}',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                          child: Text(
-                                            'x${_currentGift!.quantity}',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                // Join request card
-                BlocBuilder<LiveHostBloc, LiveHostState>(
-                  buildWhen: (p, c) =>
-                      p.pendingRequest != c.pendingRequest ||
-                      p.isPaused != c.isPaused,
-                  builder: (context, state) {
-                    if (state.pendingRequest == null || state.isPaused) {
-                      return const SizedBox.shrink();
-                    }
-                    return Positioned(
-                      top: 120,
-                      left: 16,
-                      right: 16,
-                      child: _JoinRequestCard(
-                        req: state.pendingRequest!,
-                        onAccept: () => context.read<LiveHostBloc>().add(
-                          AcceptJoinRequest(state.pendingRequest!.id),
-                        ),
-                        onDecline: () => context.read<LiveHostBloc>().add(
-                          DeclineJoinRequest(state.pendingRequest!.id),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                // Chat overlay
-                BlocBuilder<LiveHostBloc, LiveHostState>(
-                  buildWhen: (p, c) =>
-                      p.chatVisible != c.chatVisible ||
-                      p.messages.length != c.messages.length ||
-                      p.isPaused != c.isPaused,
-                  builder: (context, state) {
-                    if (!state.chatVisible || state.isPaused) {
-                      return const SizedBox.shrink();
-                    }
-                    return Positioned(
-                      left: 7,
-                      right: 7,
-                      bottom: 100,
-                      child: _HostChatWidget(
-                        messages: state.messages,
-                        onSendMessage: (text) {
-                          context.read<LiveHostBloc>().add(
-                            SendChatMessage(text),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-
-                // Bottom actions — uses AnimatedBuilder on agora for mic/cam icons only
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: SafeArea(
-                      top: false,
-                      child: BlocBuilder<LiveHostBloc, LiveHostState>(
-                        buildWhen: (p, c) =>
-                            p.isPaused != c.isPaused ||
-                            p.chatVisible != c.chatVisible ||
-                            p.isPremium != c.isPremium,
-                        builder: (context, state) => _BottomActions(
-                          isPaused: state.isPaused,
-                          onPause: () =>
-                              context.read<LiveHostBloc>().add(TogglePause()),
-                          onChatToggle: () => context.read<LiveHostBloc>().add(
-                            ToggleChatVisibility(),
+                              );
+                            },
                           ),
-                          onGifts: () {
-                            final tracker = sl<LiveSessionTracker>();
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => LiveGiftsPage(
-                                  livestreamId: tracker.current!.livestreamId,
-                                ),
+                        ),
+                      ),
+
+                    // Join request card
+                    BlocBuilder<LiveHostBloc, LiveHostState>(
+                      buildWhen: (p, c) =>
+                          p.pendingRequest != c.pendingRequest ||
+                          p.isPaused != c.isPaused,
+                      builder: (context, state) {
+                        if (state.pendingRequest == null || state.isPaused) {
+                          return const SizedBox.shrink();
+                        }
+                        return Positioned(
+                          top: 120,
+                          left: 16,
+                          right: 16,
+                          child: _JoinRequestCard(
+                            req: state.pendingRequest!,
+                            onAccept: () => context.read<LiveHostBloc>().add(
+                              AcceptJoinRequest(state.pendingRequest!.id),
+                            ),
+                            onDecline: () => context.read<LiveHostBloc>().add(
+                              DeclineJoinRequest(state.pendingRequest!.id),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Chat overlay
+                    BlocBuilder<LiveHostBloc, LiveHostState>(
+                      buildWhen: (p, c) =>
+                          p.chatVisible != c.chatVisible ||
+                          p.messages.length != c.messages.length ||
+                          p.isPaused != c.isPaused,
+                      builder: (context, state) {
+                        if (!state.chatVisible || state.isPaused) {
+                          return const SizedBox.shrink();
+                        }
+                        return Positioned(
+                          left: 7,
+                          right: 7,
+                          bottom: 100,
+                          child: _HostChatWidget(
+                            messages: state.messages,
+                            onSendMessage: (text) {
+                              context.read<LiveHostBloc>().add(
+                                SendChatMessage(text),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Bottom actions — uses AnimatedBuilder on agora for mic/cam icons only
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SafeArea(
+                          top: false,
+                          child: BlocBuilder<LiveHostBloc, LiveHostState>(
+                            buildWhen: (p, c) =>
+                                p.isPaused != c.isPaused ||
+                                p.chatVisible != c.chatVisible ||
+                                p.isPremium != c.isPremium,
+                            builder: (context, state) => _BottomActions(
+                              isPaused: state.isPaused,
+                              onPause: () => context.read<LiveHostBloc>().add(
+                                TogglePause(),
                               ),
-                            );
-                          },
-                          onViewers: () {
-                            _registerParticipantsForCurrentSession();
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (_) => const ViewersListSheet(),
-                            );
-                          },
-                          onPremium: _showPremiumBottomSheet,
-                          onSettings: _toggleSettingsMenu,
-                          agora: agora,
+                              onChatToggle: () => context
+                                  .read<LiveHostBloc>()
+                                  .add(ToggleChatVisibility()),
+                              onGifts: () {
+                                final tracker = sl<LiveSessionTracker>();
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => LiveGiftsPage(
+                                      livestreamId:
+                                          tracker.current!.livestreamId,
+                                    ),
+                                  ),
+                                );
+                              },
+                              onViewers: () {
+                                _registerParticipantsForCurrentSession();
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (_) => const ViewersListSheet(),
+                                );
+                              },
+                              onPremium: _showPremiumBottomSheet,
+                              onSettings: _toggleSettingsMenu,
+                              agora: agora,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
 
-                // Settings menu
-                if (_showSettingsMenu)
-                  LiveSettingsMenu(
-                    onClose: () => setState(() => _showSettingsMenu = false),
-                    agora: agora,
-                  ),
+                    // Settings menu
+                    if (_showSettingsMenu)
+                      LiveSettingsMenu(
+                        onClose: () =>
+                            setState(() => _showSettingsMenu = false),
+                        agora: agora,
+                      ),
 
-                // Paused overlay
-                BlocBuilder<LiveHostBloc, LiveHostState>(
-                  buildWhen: (p, c) => p.isPaused != c.isPaused,
-                  builder: (context, state) {
-                    if (!state.isPaused) return const SizedBox.shrink();
-                    return _PausedOverlay(
-                      onResume: () =>
-                          context.read<LiveHostBloc>().add(TogglePause()),
-                    );
-                  },
-                ),
-              ],
+                    // Paused overlay
+                    BlocBuilder<LiveHostBloc, LiveHostState>(
+                      buildWhen: (p, c) => p.isPaused != c.isPaused,
+                      builder: (context, state) {
+                        if (!state.isPaused) return const SizedBox.shrink();
+                        return _PausedOverlay(
+                          onResume: () =>
+                              context.read<LiveHostBloc>().add(TogglePause()),
+                        );
+                      },
+                    ),
+                  ],
 
-              if (!_immersive) GiftToast(),
-            ],
+                  if (!_immersive) GiftToast(),
+                ],
+              ),
+            ),
           ),
-        ),
+          // NEW — rejoin banner, shown after a video call ends while she
+          // was live, since her camera isn't automatically reconnected
+          // to the stream (leave() was called on her Agora engine
+          // before the call joined). Automatic rejoin is attempted first
+          // (see VideoCallBloc._doEnd) — this is the guaranteed manual
+          // fallback if that doesn't succeed for any reason.
+          BlocBuilder<LiveHostBloc, LiveHostState>(
+            builder: (context, state) {
+              if (!state.needsManualRejoin) return const SizedBox.shrink();
+              return Positioned(
+                top: MediaQuery.of(context).padding.top + 12,
+                left: 16,
+                right: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.videocam_off_rounded,
+                          color: Colors.orangeAccent,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Your camera isn\'t showing on your stream.',
+                            style: TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            context.read<LiveHostBloc>().add(
+                              RejoinLivestreamRequested(),
+                            );
+                          },
+                          child: const Text('Rejoin'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

@@ -80,6 +80,29 @@ class ViewerRepositoryImpl implements ViewerRepository {
     } catch (_) {}
   }
 
+  // ── Health-check pause/resume ────────────────────────────────────────────
+  // Lets the pager tell this page's bloc to stop/restart its
+  // StreamHealthService polling when the page scrolls out of/into view,
+  // without the pager needing a direct reference to the bloc itself (it
+  // only holds repo references). The bloc subscribes to this stream
+  // once health-checking actually starts for its session — see
+  // ViewerBloc._startHealthService().
+  final _healthPauseCtrl = StreamController<bool>.broadcast();
+  Stream<bool> get healthPauseStream => _healthPauseCtrl.stream;
+
+  /// Call when this page scrolls out of view — stops its health polling
+  /// without tearing down anything else (Pusher, chat, etc. stay wired).
+  void pauseHealthCheck() {
+    debugPrint('⏸️ [Repository] pauseHealthCheck: $livestreamParam');
+    _healthPauseCtrl.add(true);
+  }
+
+  /// Call when this page scrolls back into view after being paused.
+  void resumeHealthCheck() {
+    debugPrint('▶️ [Repository] resumeHealthCheck: $livestreamParam');
+    _healthPauseCtrl.add(false);
+  }
+
   // ── State flags ───────────────────────────────────────────────────────────
   bool _hasStarted = false;
   bool _hasEnded = false;
@@ -963,6 +986,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     _errorCtrl.close();
     _participantRoleCtrl.close();
     _participantRemovedCtrl.close();
+    _healthPauseCtrl.close();
 
     debugPrint('🗑️ Repository hard disposed: $livestreamParam');
   }

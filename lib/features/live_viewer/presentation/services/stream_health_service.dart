@@ -63,6 +63,12 @@ class StreamHealthService {
   int _consecutiveFailures = 0;
   static const int _failureThreshold = 2;
 
+  // Same idea as _consecutiveFailures, but specifically for genuine
+  // "offline" API responses \u2014 avoids kicking a viewer out on a single
+  // momentary heartbeat glitch from the host. See _fetchStreamStatus()
+  // for the full reasoning.
+  int _consecutiveOfflineReadings = 0;
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   void start() {
@@ -164,6 +170,9 @@ class StreamHealthService {
 
       switch (rawStatus) {
         case 'online':
+          // Genuine confirmed recovery — clear any prior offline strikes
+          // too, not just the generic failure counter.
+          _consecutiveOfflineReadings = 0;
           return StreamHealthResult(
             status: StreamHealthStatus.online,
             isPremium: isPremium,
@@ -171,10 +180,29 @@ class StreamHealthService {
           );
         case 'offline':
         case 'ended':
+          // Require CONSECUTIVE offline readings before actually treating
+          // the stream as ended — the backend's own "online" determination
+          // is heartbeat-based (host sends one every ~15s), so a single
+          // delayed/dropped heartbeat can cause a false-positive "offline"
+          // reading even though the stream is still genuinely live. This
+          // was kicking viewers out of stable streams on nothing more
+          // than a momentary network blip. Mirrors the exact same
+          // consecutive-confirmation pattern already used for 'unstable'
+          // below — first offline reading just shows as degraded/
+          // reconnecting, only a SECOND consecutive one actually ends
+          // the session.
+          _consecutiveOfflineReadings++;
+          if (_consecutiveOfflineReadings >= _failureThreshold) {
+            return StreamHealthResult(
+              status: StreamHealthStatus.offline,
+              message: (data['message'] as String?) ?? 'Stream has ended.',
+              isPremium: isPremium,
+            );
+          }
           return StreamHealthResult(
-            status: StreamHealthStatus.offline,
-            message: (data['message'] as String?) ?? 'Stream has ended.',
+            status: StreamHealthStatus.unstable,
             isPremium: isPremium,
+            message: 'Reconnecting to the stream…',
           );
         default:
           _consecutiveFailures++;

@@ -66,7 +66,13 @@ dependencies:
   cached_video_player_plus: ^4.1.0
   tenjin_plugin: ^1.4.0
   flutter_callkit_incoming: ^3.1.5
-  audioplayers: ^6.8.1
+  # Native ringtone playback (own audio stream, separate from Flutter's
+  # audio engine — see packages/ringtone_native's doc comment) — replaced
+  # the audioplayers-based approach, which reliably broke the feed's
+  # video/audio playback and couldn't reach the FCM background isolate at
+  # all (a MethodChannel scoped to MainActivity only, not a real plugin).
+  ringtone_native:
+    path: packages/ringtone_native
 
 dev_dependencies:
   flutter_test:

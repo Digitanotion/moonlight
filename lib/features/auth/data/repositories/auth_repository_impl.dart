@@ -43,13 +43,28 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  @override
+@override
   Future<Either<Failure, User>> getCurrentUser() async {
+    // Prefer a fresh fetch from the server, and update the local cache
+    // with it. Falls back to the local cache only if the network call
+    // itself fails (offline, timeout, etc.) — better than the previous
+    // behavior of ALWAYS reading local cache, which meant any user
+    // already logged in when the app updates never sees new profile
+    // fields until they manually log out and back in. This fixes that
+    // for this field and any future one, not just today's issue.
     try {
-      final userModel = await localDataSource.getCurrentUser();
-      return Right(userModel.toEntity());
-    } on CacheException catch (e) {
-      return Left(CacheFailure(e.message));
+      final freshUser = await remoteDataSource.fetchMe();
+      await localDataSource.cacheUser(freshUser);
+      return Right(freshUser.toEntity());
+    } on Exception catch (_) {
+      // Network/server issue — fall back to whatever's cached locally
+      // rather than failing the whole auth check outright.
+      try {
+        final cachedUser = await localDataSource.getCurrentUser();
+        return Right(cachedUser.toEntity());
+      } on CacheException catch (e) {
+        return Left(CacheFailure(e.message));
+      }
     }
   }
 

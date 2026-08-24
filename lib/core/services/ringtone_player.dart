@@ -1,81 +1,68 @@
 // lib/core/services/ringtone_player.dart
 //
-// Plays our own looping ringtone audio, entirely independent of CallKit's
-// native sound handling and the fallback notification's sound — both of
-// which proved unreliable across today's testing on this device/plugin
-// combination, despite exhausting every documented fix. This gives us
-// full programmatic control: genuine continuous ringing until the call
-// is resolved (accept/decline/timeout/cancelled), then an explicit stop.
+// Plays the incoming-call ringtone NATIVELY on Android (see MainActivity's
+// "com.app.moonlightstream/ringtone" channel), NOT through Flutter's own
+// audio engine. A first attempt used the audioplayers package here — that
+// shares its audio session with the rest of the Flutter engine, including
+// video_player, and reliably broke the feed's video/audio playback (even
+// after calling stop()) once a ringtone was played. Routing this through a
+// separate native MediaPlayer on AudioAttributes.USAGE_NOTIFICATION_RINGTONE
+// puts it on Android's own ringtone stream, entirely outside that shared
+// session — confirmed by testing not to touch the feed's playback at all.
 //
-// RELIABILITY NOTE: this is confirmed reliable while the app process is
-// genuinely alive (foreground or backgrounded). For a FULLY KILLED app,
-// background isolates have real, documented restrictions on plugin
-// access — the same class of uncertainty we hit with GetIt access
-// earlier. This has NOT been verified to work reliably from that fully
-// killed context; if it doesn't fire there, the fallback notification's
-// own single-chime sound is still what plays in that specific case.
-import 'package:audioplayers/audioplayers.dart';
+// Deliberately NO Dart-side "am I playing" guard — confirmed by testing to
+// be actively wrong, not just unnecessary. A Dart singleton (`factory ()
+// => _instance`) only gives ONE instance PER ISOLATE, not one for the
+// whole app process. play() is routinely called from the FCM background
+// handler's isolate; stop() is routinely called from the main app
+// isolate's CallKitService listener — two completely separate Dart
+// memory spaces, each with its own independent copy of any instance
+// field. A local `_isPlaying` flag set by play() in one isolate is
+// invisible to stop() running in the other, so stop() would see "not
+// playing" and return without ever reaching the native channel — leaving
+// the ringtone silenced only by the native 60s safety timeout, never by
+// the actual resolution event. The native side (packages/ringtone_native)
+// already handles idempotency correctly and process-wide (a real shared
+// singleton via Kotlin's companion object) — every call here just
+// forwards to it unconditionally and lets it decide.
+//
+// iOS: not wired up yet — this is currently Android-only (no matching
+// MethodChannel handler on the iOS side). play()/stop() are safe no-ops
+// there (the channel call simply won't be handled), but the incoming call
+// itself still works; it just rings silently on iOS for now.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class RingtonePlayer {
   static final RingtonePlayer _instance = RingtonePlayer._internal();
   factory RingtonePlayer() => _instance;
   RingtonePlayer._internal();
 
-  final AudioPlayer _player = AudioPlayer();
-  bool _isPlaying = false;
+  static const _channel = MethodChannel('com.app.moonlightstream/ringtone');
 
-  /// Starts looping the ringtone. Safe to call repeatedly — a no-op if
-  /// already playing, so multiple event sources (foreground listener,
-  /// notification handler) can all call this without needing to
-  /// coordinate who's "responsible" for starting it.
+  /// Starts looping the ringtone natively. Safe to call repeatedly from
+  /// any isolate — the native side is the single source of truth for
+  /// whether it's already playing.
   Future<void> play() async {
-    if (_isPlaying) return;
-    _isPlaying = true;
     try {
-      // TEMPORARILY REMOVED — setAudioContext() call below is suspected
-      // of hanging indefinitely (neither succeeding nor throwing) on
-      // this device. Reverting to the simpler version that at least
-      // reliably completed before, to isolate whether this specific
-      // addition is the actual cause before trying anything else.
-      //
-      // await _player.setAudioContext(
-      //   AudioContext(
-      //     android: AudioContextAndroid(
-      //       isSpeakerphoneOn: true,
-      //       stayAwake: true,
-      //       contentType: AndroidContentType.sonification,
-      //       usageType: AndroidUsageType.notificationRingtone,
-      //       audioFocus: AndroidAudioFocus.gainTransient,
-      //     ),
-      //   ),
-      // );
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.play(AssetSource('audio/ringtone_default.mp3'));
-      debugPrint('🔔 [Ringtone] Started looping playback');
+      await _channel.invokeMethod('play');
+      debugPrint('🔔 [Ringtone] play() sent');
     } catch (e) {
       debugPrint('⚠️ [Ringtone] Failed to start: $e');
-      _isPlaying = false;
     }
   }
 
-  /// Stops playback immediately. Safe to call even if never started, or
-  /// called multiple times from different resolution paths (accept,
-  /// decline, timeout, other-party-ended) — all of which should call
-  /// this unconditionally rather than trying to track which one "owns"
-  /// stopping it.
+  /// Stops playback immediately. Safe to call even if never started (on
+  /// THIS isolate or any other), or called multiple times from different
+  /// resolution paths (accept, decline, timeout, other-party-ended) —
+  /// all of which should call this unconditionally rather than trying to
+  /// track which one "owns" stopping it.
   Future<void> stop() async {
-    if (!_isPlaying) return;
-    _isPlaying = false;
     try {
-      await _player.stop();
-      debugPrint('🔕 [Ringtone] Stopped');
+      await _channel.invokeMethod('stop');
+      debugPrint('🔕 [Ringtone] stop() sent');
     } catch (e) {
       debugPrint('⚠️ [Ringtone] Failed to stop: $e');
     }
-  }
-
-  void dispose() {
-    _player.dispose();
   }
 }
