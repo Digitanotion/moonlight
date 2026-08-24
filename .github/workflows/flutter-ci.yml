@@ -39,7 +39,7 @@ on:
 
 env:
   PROJECT_PATH: "."
-  FLUTTER_VERSION: "3.32.7"
+  FLUTTER_VERSION: "3.47.1"
 
 jobs:
   # JOB 1: TESTING — only runs on push/PR, skipped on workflow_dispatch
