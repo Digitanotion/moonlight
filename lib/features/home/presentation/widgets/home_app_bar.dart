@@ -98,13 +98,17 @@ class _HomeAppBarState extends State<HomeAppBar> {
               ),
               const SizedBox(width: 14),
               // Message icon with badge
-              ValueListenableBuilder<int>(
+                           ValueListenableBuilder<int>(
                 valueListenable: _unreadService.messageUnreadCount,
                 builder: (context, count, child) {
                   return _TopIconWithBadge(
                     icon: Icons.chat_bubble_outline,
                     badgeCount: count,
-                    showSmallDot: true,
+                    // Was true — meant the actual count silently became
+                    // a plain dot once it exceeded 9, even though
+                    // _ModernBadge already renders real numbers fine
+                    // (up to "99+"). Always show the number.
+                    showSmallDot: false,
                     onTap: () => _navigateToConversations(context),
                   );
                 },

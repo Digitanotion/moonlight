@@ -1,6 +1,6 @@
 name: moonlight
 description: Moonlight Livestream App MVP
-version: 1.4.4+44
+version: 1.4.5+45
 
 # ==== ENVIRONMENT SECTION ====
 environment:
@@ -52,7 +52,7 @@ dependencies:
   in_app_purchase: ^3.2.3
   uuid: ^4.5.2
   fluttertoast: ^9.0.0
-  file_picker: ^10.3.8
+  file_picker: ^11.0.2
   email_validator: ^3.0.0
   lottie: ^3.1.2
   connectivity_plus: ^7.0.0
@@ -66,6 +66,7 @@ dependencies:
   cached_video_player_plus: ^4.1.0
   tenjin_plugin: ^1.4.0
   flutter_callkit_incoming: ^3.1.5
+  screen_protector: ^1.5.3
   # Native ringtone playback (own audio stream, separate from Flutter's
   # audio engine — see packages/ringtone_native's doc comment) — replaced
   # the audioplayers-based approach, which reliably broke the feed's

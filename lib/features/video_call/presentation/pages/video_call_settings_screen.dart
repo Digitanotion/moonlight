@@ -1,6 +1,7 @@
 // lib/features/video_call/presentation/pages/video_call_settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
@@ -254,6 +255,21 @@ class _VideoCallSettingsScreenState extends State<VideoCallSettingsScreen> {
                 ],
               ),
               const SizedBox(height: 8),
+
+                            GestureDetector(
+                onTap: () => Navigator.of(context).pushNamed(RouteNames.editProfile),
+                child: _ActionCard(
+                  icon: Icons.photo_camera_rounded,
+                  iconColor: AppColors.accentGreen,
+                  title: 'Change your profile picture',
+                  subtitle: 'Update the photo callers see in the directory',
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white38,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               _SectionCard(
                 child: Column(
@@ -530,3 +546,4 @@ class _MiniButton extends StatelessWidget {
     );
   }
 }
+

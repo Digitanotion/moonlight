@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
@@ -12,6 +13,7 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/follow_prompt_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/gift_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/pause_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/premium_overlay.dart';
@@ -27,7 +29,9 @@ import 'package:moonlight/features/profile_view/domain/repositories/profile_repo
     as view_repo;
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
+import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+import 'package:screen_protector/screen_protector.dart';
 import 'package:uuid/uuid.dart';
 
 class ViewerModeScreen extends StatefulWidget {
@@ -56,6 +60,12 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   @override
   void initState() {
     super.initState();
+    // Doc item 11: "Nobody will be able to screenshot or video record
+    // a streamer. Enable zero screenshot or record of livestream." —
+    // applied for the duration this viewer screen is on-screen only,
+    // not app-wide, and reversed in dispose() below so other screens
+    // are unaffected.
+    ScreenProtector.protectDataLeakageOn();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<ViewerBloc>();
       if (bloc.state.giftCatalog.isEmpty) {
@@ -66,6 +76,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
 
   @override
   void dispose() {
+    ScreenProtector.protectDataLeakageOff();
     _commentCtrl.dispose();
     super.dispose();
   }
@@ -186,6 +197,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                     // ── Normal viewer UI ────────────────────────────────
                     if (!_immersive && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
+                      const FollowPromptOverlay(),
                       const GuestJoinedBanner(),
                       const GiftOverlay(),
                       const PauseOverlay(),
@@ -330,6 +342,21 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
     _resolveHostSlugAndOpen(context, repository, host);
   }
 
+  Future<int?> _fetchCoinBalance() async {
+    try {
+      final res = await sl<DioClient>().dio.get('/api/v1/wallet');
+      final data = res.data;
+      final map = data is Map ? data.cast<String, dynamic>() : {};
+      final inner = map['data'];
+      final innerMap = inner is Map ? inner.cast<String, dynamic>() : {};
+      final coins = innerMap['balance'];
+      return int.tryParse('${coins ?? 0}') ?? 0;
+    } catch (e) {
+      debugPrint('⚠️ Failed to fetch wallet balance: $e');
+      return null;
+    }
+  }
+
   Future<void> _resolveHostSlugAndOpen(
     BuildContext context,
     ViewerRepositoryImpl repository,
@@ -345,6 +372,26 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
       final profile = await sl<view_repo.ProfileRepository>().getUser(hostUuid);
       if (!context.mounted) return;
 
+      final balance = await _fetchCoinBalance();
+      if (!context.mounted) return;
+
+      if (balance == null) {
+        TopSnack.warning(
+          context,
+          'Could not load your coin balance. Try again.',
+        );
+        return;
+      }
+
+      final minutes = await DurationPickerSheet.show(
+        context,
+        calleeDisplayName: host.name,
+        ratePerMinute: 100,
+        callerCoinBalance: balance,
+      );
+
+      if (minutes == null || !context.mounted) return;
+
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => BlocProvider.value(
@@ -355,6 +402,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
               calleeAvatarUrl: host.avatarUrl,
               initiatedFrom: 'livestream',
               livestreamId: repository.livestreamIdNumeric,
+              initialMinutes: minutes,
             ),
           ),
           fullscreenDialog: true,

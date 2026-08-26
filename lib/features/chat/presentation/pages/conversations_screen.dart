@@ -19,6 +19,12 @@ class ConversationsScreen extends StatefulWidget {
 class _ConversationsScreenState extends State<ConversationsScreen> {
   int _selectedTab = 0; // 0: Messages, 1: Clubs
 
+  // Keeps the last successfully-loaded list on screen even if a later
+  // refresh/action fails — errors show as a small dismissable banner
+  // instead of replacing the whole screen with a blocking error view.
+  List<ChatConversations> _lastKnownConversations = [];
+  String? _bannerError;
+
   @override
   void initState() {
     super.initState();
@@ -124,43 +130,16 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     }
 
     if (state is ChatError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: AppColors.textRed),
-            SizedBox(height: 16),
-            Text(
-              'Error loading conversations',
-              style: TextStyle(color: AppColors.textRed, fontSize: 16),
-            ),
-            SizedBox(height: 8),
-            Text(
-              state.message,
-              style: TextStyle(
-                color: AppColors.textSecondary.withOpacity(0.7),
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => _refreshConversations(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary_,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: Text('Retry', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      );
+      // No longer replaces the screen — if we have nothing at all to
+      // show yet (first load genuinely failed), fall through below to
+      // render an empty list with the banner. Otherwise the last-known
+      // list underneath just keeps showing.
     }
 
-    if (state is ChatConversationsLoaded) {
-      final conversations = state.conversations;
+    if (state is ChatConversationsLoaded || state is ChatError) {
+      final conversations = state is ChatConversationsLoaded
+          ? state.conversations
+          : _lastKnownConversations;
 
       // Filter based on selected tab
       final filteredConvs = conversations
@@ -179,8 +158,29 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         return bTime.compareTo(aTime); // Most recent first
       });
 
-      if (filteredConvs.isEmpty) {
-        return Center(
+            if (filteredConvs.isEmpty) {
+        return Column(
+          children: [
+            if (_bannerError != null) _buildErrorBanner(),
+            Expanded(child: _buildEmptyState()),
+          ],
+        );
+      }
+
+      return Column(
+        children: [
+          if (_bannerError != null) _buildErrorBanner(),
+          Expanded(child: _buildConversationsList(filteredConvs)),
+        ],
+      );
+    }
+
+    // Initial state
+    return Center(child: CircularProgressIndicator(color: AppColors.primary_));
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -199,7 +199,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               Text(
                 _selectedTab == 0
                     ? 'Start a conversation with someone!'
-                    : 'Join a club to start chatting',
+                     : 'Join a club to start chatting',
                 style: TextStyle(
                   color: AppColors.textSecondary.withOpacity(0.7),
                   fontSize: 14,
@@ -208,50 +208,72 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             ],
           ),
         );
-      }
-
-      return RefreshIndicator(
-        color: AppColors.primary_,
-        onRefresh: () => _refreshConversations(context),
-        child: ListView.separated(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          itemCount: filteredConvs.length,
-          separatorBuilder: (context, index) => SizedBox(height: 4),
-          itemBuilder: (context, index) {
-            final conversation = filteredConvs[index];
-            return ConversationItem(
-              conversation: conversation,
-              onTap: () => _navigateToChat(conversation),
-              onLongPress: () {
-                final renderBox = context.findRenderObject() as RenderBox;
-                final localPosition = renderBox.globalToLocal(
-                  renderBox.localToGlobal(Offset.zero),
-                );
-                _showContextMenu(context, conversation, localPosition);
-              },
-            );
-          },
-        ),
-      );
-    }
-
-    // Initial state
-    return Center(child: CircularProgressIndicator(color: AppColors.primary_));
   }
 
+  Widget _buildConversationsList(List<ChatConversations> filteredConvs) {
+    return RefreshIndicator(
+      color: AppColors.primary_,
+      onRefresh: () => _refreshConversations(context),
+      child: ListView.separated(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        itemCount: filteredConvs.length,
+        separatorBuilder: (context, index) => SizedBox(height: 4),
+        itemBuilder: (context, index) {
+          final conversation = filteredConvs[index];
+          return ConversationItem(
+            conversation: conversation,
+            onTap: () => _navigateToChat(conversation),
+            onLongPress: () {
+              final renderBox = context.findRenderObject() as RenderBox;
+              final localPosition = renderBox.globalToLocal(
+                renderBox.localToGlobal(Offset.zero),
+              );
+              _showContextMenu(context, conversation, localPosition);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.textRed.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.textRed.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wifi_off_rounded, color: AppColors.textRed, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _bannerError ?? 'Something went wrong',
+              style: TextStyle(color: AppColors.textRed, fontSize: 12.5),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _bannerError = null),
+            child: Icon(Icons.close, color: AppColors.textRed, size: 16),
+          ),
+        ],
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<ChatCubit, ChatState>(
-      listener: (context, state) {
-        // Handle any side effects from state changes
-        if (state is ChatError) {
-          // Show error snackbar
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: AppColors.textRed,
-            ),
-          );
+        listener: (context, state) {
+        if (state is ChatConversationsLoaded) {
+          _lastKnownConversations = state.conversations;
+          if (_bannerError != null) setState(() => _bannerError = null);
+        } else if (state is ChatError) {
+          setState(() => _bannerError = state.message);
         }
       },
       builder: (context, state) {

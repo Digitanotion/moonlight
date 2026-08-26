@@ -6,10 +6,12 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
+import 'package:moonlight/core/utils/countries.dart';
 import 'package:moonlight/features/video_call/data/models/video_call_session_model.dart';
 import 'package:moonlight/features/video_call/domain/repositories/video_call_repository.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
+import 'package:moonlight/features/video_call/presentation/pages/video_call_settings_screen.dart';
 import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -115,6 +117,18 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
             style: AppTextStyles.titleLarge.copyWith(color: Colors.white),
           ),
           const Spacer(),
+          // Entry point to manage own video call settings (online status,
+          // call-button visibility, boost, broadcast, and — per phase 2
+          // requirement — change profile picture) directly from this
+          // page, rather than only reachable via Account Settings.
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const VideoCallSettingsScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+          ),
           IconButton(
             onPressed: _showCountryPicker,
             icon: Icon(
@@ -194,7 +208,7 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
     );
   }
 
- Widget _buildShimmerGrid() {
+  Widget _buildShimmerGrid() {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -206,7 +220,11 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
       itemCount: 6,
       itemBuilder: (_, __) => Shimmer(
         gradient: const LinearGradient(
-          colors: [Color.fromARGB(255, 144, 144, 144), Color(0xffE25279), Color(0xffF0793B)],
+          colors: [
+            Color.fromARGB(255, 144, 144, 144),
+            Color(0xffE25279),
+            Color(0xffF0793B),
+          ],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
@@ -253,56 +271,124 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
   }
 
   void _showCountryPicker() {
-    // Reuses the same bottom-sheet pattern LiveNowSection uses for its
-    // country filter, kept lightweight here rather than duplicating the
-    // full CountryPickerSheet widget — swap in that shared widget if you'd
-    // rather keep the two filters visually identical.
+    // Rebuilt to use the shared countries.dart utility — was previously
+    // a free-text field that sent whatever the user typed directly to
+    // the backend's country filter, with no normalization to the ISO2
+    // codes the backend actually expects, meaning most typed input
+    // silently matched nothing. Now a proper searchable list, flag +
+    // name + code, matching the same display style used on the cards.
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Filter by country',
-                style: AppTextStyles.titleMedium.copyWith(color: Colors.white),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'e.g. Nigeria, NG',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-                  border: InputBorder.none,
+      builder: (sheetContext) {
+        final searchCtrl = TextEditingController();
+        var filtered = allCountriesSorted();
+
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            void onSearch(String query) {
+              setSheetState(() {
+                filtered = allCountriesSorted()
+                    .where((e) =>
+                        e.value.toLowerCase().contains(query.toLowerCase()) ||
+                        e.key.toLowerCase().contains(query.toLowerCase()))
+                    .toList();
+              });
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.75,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (_, scrollController) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text(
+                          'Filter by country',
+                          style: AppTextStyles.titleMedium
+                              .copyWith(color: Colors.white),
+                        ),
+                        const Spacer(),
+                        if (_country != null)
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _country = null);
+                              Navigator.of(sheetContext).pop();
+                              _load();
+                            },
+                            child: const Text('Clear filter'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: searchCtrl,
+                      onChanged: onSearch,
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Search country...',
+                        hintStyle:
+                            TextStyle(color: Colors.white.withOpacity(0.4)),
+                        prefixIcon: Icon(Icons.search,
+                            color: Colors.white.withOpacity(0.5)),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.06),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: scrollController,
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final entry = filtered[i];
+                          return ListTile(
+                            leading: Text(
+                              isoToFlagEmoji(entry.key),
+                              style: const TextStyle(fontSize: 22),
+                            ),
+                            title: Text(
+                              entry.value,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            trailing: Text(
+                              entry.key,
+                              style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5)),
+                            ),
+                            onTap: () {
+                              setState(() => _country = entry.key);
+                              Navigator.of(sheetContext).pop();
+                              _load();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                onSubmitted: (value) {
-                  setState(
-                    () => _country = value.trim().isEmpty ? null : value.trim(),
-                  );
-                  Navigator.of(sheetContext).pop();
-                  _load();
-                },
               ),
-              if (_country != null)
-                TextButton(
-                  onPressed: () {
-                    setState(() => _country = null);
-                    Navigator.of(sheetContext).pop();
-                    _load();
-                  },
-                  child: const Text('Clear filter'),
-                ),
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -357,7 +443,8 @@ class _UserCard extends StatelessWidget {
     final minutes = await DurationPickerSheet.show(
       context,
       calleeDisplayName: user.displayName,
-      ratePerMinute: 100, // TODO: source from a pricing/config endpoint if one exists, instead of hardcoding
+      ratePerMinute:
+          100, // TODO: source from a pricing/config endpoint if one exists, instead of hardcoding
       callerCoinBalance: balance,
     );
 
@@ -413,7 +500,10 @@ class _UserCard extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     stops: const [0.5, 1.0],
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.85),
+                    ],
                   ),
                 ),
               ),
@@ -504,8 +594,8 @@ class _UserCard extends StatelessWidget {
                   Text(
                     [
                       if (user.age != null) '${user.age}',
-                      if (user.country != null && user.country!.isNotEmpty)
-                        user.country!,
+                      if (normalizeCountryToIso2(user.country) != null)
+                        '${isoToFlagEmoji(normalizeCountryToIso2(user.country)!)} ${normalizeCountryToIso2(user.country)}',
                     ].join(' • '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -532,7 +622,11 @@ class _UserCard extends StatelessWidget {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.videocam_rounded, color: Colors.white, size: 16),
+                      Icon(
+                        Icons.videocam_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                       SizedBox(width: 6),
                       Text(
                         'Call',

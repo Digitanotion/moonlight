@@ -6,6 +6,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/ad_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart'; // ← NEW
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
+import 'package:moonlight/features/feed/presentation/pages/video_feed_screen.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_post_card.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_skeletons.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
@@ -145,12 +146,13 @@ class _FeedScreenState extends State<FeedScreen> {
                         child: FeedSkeletonList(count: 2),
                       );
                     }
-                    final post = s.items[i];
+                                        final post = s.items[i];
                     return FeedPostCard(
                       post: post,
                       onLike: () => context.read<FeedCubit>().toggleLikeAt(i),
                       onOpenPost: () => _openPostAndBump(i, post),
                       onOpenProfile: () => _openProfile(post),
+                      onOpenVideoFeed: () => _openVideoFeed(i),
                     );
                   },
                   separatorBuilder: (_, __) => const SizedBox(height: 14),
@@ -191,6 +193,33 @@ class _FeedScreenState extends State<FeedScreen> {
     if (updated is Post) {
       context.read<FeedCubit>().replaceAt(index, updated);
     }
+  }
+
+    void _openVideoFeed(int tappedIndex) {
+    final state = context.read<FeedCubit>().state;
+    final videoIndices = <int>[];
+    final videoPosts = <Post>[];
+    for (var idx = 0; idx < state.items.length; idx++) {
+      if (state.items[idx].isVideo) {
+        videoIndices.add(idx);
+        videoPosts.add(state.items[idx]);
+      }
+    }
+    final startIndex = videoIndices.indexOf(tappedIndex);
+    if (startIndex == -1) return; // shouldn't happen — only videos call this
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: context.read<FeedCubit>(),
+          child: VideoFeedScreen(
+            videoPosts: videoPosts,
+            originalIndices: videoIndices,
+            initialIndex: startIndex,
+          ),
+        ),
+      ),
+    );
   }
 
   void _openProfile(Post p) {

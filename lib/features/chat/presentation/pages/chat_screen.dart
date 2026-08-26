@@ -56,6 +56,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   AnimationController? _indicatorAnimationController;
 
+  // Keeps the last successfully-loaded messages on screen even if a
+  // later action (send, load-more, refresh) fails — errors show as a
+  // small dismissable banner instead of replacing the whole screen.
+  List<Message> _lastKnownMessages = [];
+  String? _bannerError;
+
   @override
   void initState() {
     super.initState();
@@ -594,31 +600,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         hasMore = false;
       }
     } else if (state is ChatError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: AppColors.textRed),
-            SizedBox(height: 16),
-            Text(
-              'Error loading messages',
-              style: TextStyle(color: Colors.white),
-            ),
-            SizedBox(height: 8),
-            Text(
-              state.message,
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => context.read<ChatCubit>().loadMessages(
-                widget.conversation.uuid,
-              ),
-              child: Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      // No longer a full-screen blocking view — keeps showing whatever
+      // was last successfully loaded (empty on a genuine first-load
+      // failure), with a small dismissable banner surfacing the error
+      // instead, wired in via the Stack in the main build() method.
+      messages = _lastKnownMessages;
+      hasMore = false;
+      currentConversationUuid = widget.conversation.uuid;
+      isLoadingMore = false;
     } else if (state is ChatUploadingMedia) {
       // Convert the map values to a list for iteration
       final uploads = state.uploads.values.toList();
@@ -679,6 +668,77 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       hasMore,
       currentConversationUuid,
       isLoadingMore,
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Positioned(
+      top: 8,
+      left: 12,
+      right: 12,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF241428), // solid, dark — readable on any content behind it
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.textRed.withOpacity(0.4)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.wifi_off_rounded, color: AppColors.textRed, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _bannerError ?? 'Something went wrong',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  setState(() => _bannerError = null);
+                  context.read<ChatCubit>().loadMessages(widget.conversation.uuid);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary_,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Text(
+                    'Retry',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _bannerError = null),
+                child: Icon(Icons.close, color: Colors.white70, size: 18),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2411,12 +2471,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     return BlocConsumer<ChatCubit, ChatState>(
       listener: (context, state) {
         if (state is ChatError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: AppColors.textRed,
-            ),
-          );
+          setState(() => _bannerError = state.message);
         } else if (state is ChatTypingStarted) {
           final typingUserUuid = state.userUuid;
           final currentUserUuid = _getCurrentUserUuid(context);
@@ -2424,18 +2479,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             // Show typing indicator
           }
         } else if (state is ChatMessagesLoaded) {
+          _lastKnownMessages = state.messages;
+          if (_bannerError != null) setState(() => _bannerError = null);
           // Initial load or refresh - scroll to bottom
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
             _hideNewMessageIndicator();
           });
         } else if (state is ChatMessageSent) {
+          _lastKnownMessages = state.messages;
           // Message sent by user - scroll to bottom
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
             _hideNewMessageIndicator();
           });
         } else if (state is ChatMessageReceived) {
+          _lastKnownMessages = state.messages;
           // Message received from other user
           if (_shouldAutoScroll) {
             // User is near bottom, auto-scroll
@@ -2504,6 +2563,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       children: [
                         // Messages List
                         _buildContent(context, state),
+
+                        if (_bannerError != null) _buildErrorBanner(),
 
                         // WhatsApp-style scroll to bottom indicator
                         if (_showScrollToBottomIndicator)

@@ -858,7 +858,7 @@ void _startHealthService() {
 
   // ── User action handlers ──────────────────────────────────────────────────
 
-  Future<void> _onFollowToggled(
+   Future<void> _onFollowToggled(
     FollowToggled e,
     Emitter<ViewerState> emit,
   ) async {
@@ -870,6 +870,10 @@ void _startHealthService() {
       );
     } catch (e) {
       _logEvent('FOLLOW_FAILED', '$e');
+      _safeEmit(
+        emit,
+        state.copyWith(followErrorMessage: 'Could not follow — try again'),
+      );
     }
   }
 

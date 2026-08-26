@@ -20,10 +20,14 @@ class VideoPreloadService {
   static final VideoPreloadService instance = VideoPreloadService._();
 
   /// Max number of initialized controllers kept alive at once. Each one
-  /// holds a decoder + buffered frames, so keep this modest. Bumped
-  /// slightly to comfortably fit the feed's preload-ahead window (4
-  /// items) without evicting one that's about to be needed.
-  static const int maxCached = 6;
+  /// holds a decoder + buffered frames, so keep this modest. Was 6,
+  /// sized only for the regular feed's single-direction preload (4
+  /// items ahead). VideoFeedScreen preloads BOTH directions (up to 4
+  /// next + 4 previous = 8 simultaneously) — at 6, the cache was
+  /// silently evicting/disposing controllers before the user ever
+  /// scrolled to them, showing as cache misses despite preloading
+  /// having genuinely run and completed for them moments earlier.
+  static const int maxCached = 12;
 
   final Map<String, VideoPlayerController> _controllers = {};
   final Map<String, Future<void>> _initFutures = {};

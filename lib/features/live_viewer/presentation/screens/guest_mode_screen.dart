@@ -24,6 +24,7 @@ import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dar
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/glass.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/follow_prompt_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/gift_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/loading_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/pause_overlay.dart';
@@ -36,6 +37,7 @@ import 'package:moonlight/features/live_viewer/presentation/widgets/video_layout
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/controls/guest_control_panel.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/dynamic_split_screen.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+import 'package:screen_protector/screen_protector.dart';
 import 'package:uuid/uuid.dart';
 
 class GuestModeScreen extends StatefulWidget {
@@ -68,6 +70,10 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   @override
   void initState() {
     super.initState();
+    // Doc item 11: "Nobody will be able to screenshot or video record
+    // a streamer." — same protection as ViewerModeScreen, since this
+    // is also a livestream-viewing screen (just for guest/co-host role).
+    ScreenProtector.protectDataLeakageOn();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<ViewerBloc>();
       if (bloc.state.giftCatalog.isEmpty) {
@@ -78,6 +84,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
 
   @override
   void dispose() {
+    ScreenProtector.protectDataLeakageOff();
     _commentCtrl.dispose();
     super.dispose();
   }
@@ -226,6 +233,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
 
                     if (!_immersive && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
+                      const FollowPromptOverlay(),
                       if (state.isStreamUnstable) const _UnstableBanner(),
                       const _GiftToast(),
                       const GiftOverlay(),

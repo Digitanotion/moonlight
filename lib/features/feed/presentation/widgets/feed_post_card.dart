@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
+import 'package:moonlight/features/post_view/presentation/widgets/comment_bottom_sheet.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -28,12 +29,17 @@ class FeedPostCard extends StatelessWidget {
     required this.onLike,
     required this.onOpenPost,
     required this.onOpenProfile,
+    this.onOpenVideoFeed,
   });
 
   final Post post;
   final VoidCallback onLike;
   final VoidCallback onOpenPost;
   final VoidCallback onOpenProfile;
+  // Doc item 5 — tapping a video opens the TikTok-style video feed
+  // instead of doing nothing. Optional/nullable so this card still
+  // works anywhere it's used without this wired up.
+  final VoidCallback? onOpenVideoFeed;
 
   bool get _isVideo {
     final t = post.mediaType?.toLowerCase() ?? '';
@@ -154,13 +160,14 @@ class FeedPostCard extends StatelessWidget {
           // (muted) once ~60% visible in the viewport and pause when
           // scrolled away — same pattern as Twitter/IG feeds.
           GestureDetector(
-            onTap: _isVideo ? null : onOpenPost,
+            onTap: _isVideo ? onOpenVideoFeed : onOpenPost,
             child: Hero(
               tag: 'post_${post.id}',
               child: _AdaptiveMedia(
                 post: post,
                 isVideo: _isVideo,
                 onOpenPost: onOpenPost,
+                onOpenVideoFeed: onOpenVideoFeed,
               ),
             ),
           ),
@@ -196,7 +203,11 @@ class FeedPostCard extends StatelessWidget {
                 _Metric(
                   icon: Icons.mode_comment_rounded,
                   label: '${post.commentsCount}',
-                  onTap: onOpenPost,
+                  onTap: () => CommentBottomSheet.show(
+                    context,
+                    postId: post.id,
+                    initialPost: post,
+                  ),
                 ),
                 const SizedBox(width: 18),
                 _Metric(icon: Icons.visibility_rounded, label: '${post.views}'),
@@ -218,10 +229,12 @@ class _AdaptiveMedia extends StatefulWidget {
   final Post post;
   final bool isVideo;
   final VoidCallback onOpenPost;
+  final VoidCallback? onOpenVideoFeed;
   const _AdaptiveMedia({
     required this.post,
     required this.isVideo,
     required this.onOpenPost,
+    this.onOpenVideoFeed,
   });
 
   @override
@@ -242,15 +255,12 @@ class _AdaptiveMediaState extends State<_AdaptiveMedia> {
     final provider = CachedNetworkImageProvider(widget.post.mediaUrl);
     final stream = provider.resolve(const ImageConfiguration());
     late final ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (info, _) {
-        if (mounted) {
-          setState(() => _aspect = info.image.width / info.image.height);
-        }
-        stream.removeListener(listener);
-      },
-      onError: (_, __) => stream.removeListener(listener),
-    );
+    listener = ImageStreamListener((info, _) {
+      if (mounted) {
+        setState(() => _aspect = info.image.width / info.image.height);
+      }
+      stream.removeListener(listener);
+    }, onError: (_, __) => stream.removeListener(listener));
     stream.addListener(listener);
   }
 
@@ -277,9 +287,10 @@ class _AdaptiveMediaState extends State<_AdaptiveMedia> {
           width: w,
           height: h,
           child: widget.isVideo
-              ? _FeedVideoPlayer(
+              ? FeedVideoPlayer(
                   post: widget.post,
                   onOpenPost: widget.onOpenPost,
+                  onTapOverride: widget.onOpenVideoFeed,
                   onAspectKnown: (a) {
                     if (mounted && _aspect == null) setState(() => _aspect = a);
                   },
@@ -296,24 +307,58 @@ class _AdaptiveMediaState extends State<_AdaptiveMedia> {
 // mostly out of view, and fully releases the controller when scrolled
 // completely offscreen (keeps memory bounded in a long feed). Reuses an
 // already-warmed controller from VideoPreloadService when one exists.
-class _FeedVideoPlayer extends StatefulWidget {
+class FeedVideoPlayer extends StatefulWidget {
   final Post post;
   final VoidCallback onOpenPost;
   final ValueChanged<double> onAspectKnown;
-  const _FeedVideoPlayer({
+  // Made public + this override added so VideoFeedScreen (TikTok-style
+  // fullscreen video feed, doc item 5) can reuse this widget's playback,
+  // preload, and freeze-recovery logic as-is rather than duplicating it.
+  // When null (the original feed card's usage, unchanged), tapping the
+  // video still opens the full post exactly as before. VideoFeedScreen
+  // passes a play/pause toggle instead, since "open the post" makes no
+  // sense from inside an already-fullscreen video view.
+  final VoidCallback? onTapOverride;
+  // When true, a tap toggles play/pause on the video itself (briefly
+  // showing a play/pause icon overlay), instead of calling onOpenPost
+  // or onTapOverride at all. Used by VideoFeedScreen — tapping a
+  // fullscreen video should control playback, not navigate anywhere.
+  final bool enableTapToPlayPause;
+  // Mute icon's top offset — defaults to the original 10px, correct for
+  // the regular feed card (already sits below the status bar, inside a
+  // scrollable list under its own app bar). VideoFeedScreen is a true
+  // edge-to-edge fullscreen view with no SafeArea, so it passes a
+  // larger, safe-area-aware value instead — otherwise this icon renders
+  // right under the notch/status bar and is invisible in practice.
+    final double muteIconTopOffset;
+  // Lets a parent (VideoFeedScreen) seed this video's initial mute state
+  // from a shared, session-wide preference instead of each instance
+  // always defaulting to muted — and be notified when the user toggles
+  // it, so that preference can propagate to every other video in the
+  // swipe flow, not just the one currently on screen. Left null (the
+  // regular feed's usage, unchanged) means each card keeps its own
+  // independent muted-by-default behavior exactly as before.
+  final bool? initialMuted;
+  final ValueChanged<bool>? onMuteChanged;
+  const FeedVideoPlayer({
+    super.key,
     required this.post,
     required this.onOpenPost,
     required this.onAspectKnown,
+    this.onTapOverride,
+    this.enableTapToPlayPause = false,
+    this.muteIconTopOffset = 10,
+    this.initialMuted,
+    this.onMuteChanged,
   });
-
   @override
-  State<_FeedVideoPlayer> createState() => _FeedVideoPlayerState();
+  State<FeedVideoPlayer> createState() => _FeedVideoPlayerState();
 }
 
-class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
+class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
   VideoPlayerController? _vc;
   bool _initialized = false;
-  bool _muted = true; // Twitter/IG default: autoplay starts muted
+  late bool _muted = widget.initialMuted ?? true; // Twitter/IG default: autoplay starts muted
   bool _currentlyVisible = false;
   bool _loading = false;
 
@@ -375,8 +420,10 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
       if (_lastKnownPosition != null && value.position == _lastKnownPosition) {
         _stallTicks++;
         if (_stallTicks >= _stallTicksBeforeRecovery) {
-          debugPrint('🎬 [Feed] Playback frozen (position stuck at '
-              '${value.position}) — self-healing');
+          debugPrint(
+            '🎬 [Feed] Playback frozen (position stuck at '
+            '${value.position}) — self-healing',
+          );
           _stallTicks = 0;
           _releaseController();
           _recoverFrozenPlayback();
@@ -417,6 +464,7 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   @override
   void dispose() {
     _freezeWatchdog?.cancel();
+    _playPauseIconTimer?.cancel();
     _vc?.pause();
     _vc?.dispose();
     super.dispose();
@@ -485,9 +533,38 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   /// of leaving it to the visibility detector's async pause/release
   /// cycle, which would otherwise dispose it a beat too late or too
   /// early relative to the navigation.
+  bool _showPlayPauseIcon = false;
+  Timer? _playPauseIconTimer;
+
+  void _handleTap() {
+    if (widget.enableTapToPlayPause) {
+      if (_vc == null || !_initialized) return;
+      setState(() {
+        if (_vc!.value.isPlaying) {
+          _vc!.pause();
+        } else {
+          _vc!.play();
+        }
+        _showPlayPauseIcon = true;
+      });
+      _playPauseIconTimer?.cancel();
+      _playPauseIconTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => _showPlayPauseIcon = false);
+      });
+      return;
+    }
+    _handleOpenPost();
+  }
+
   void _handleOpenPost() {
+    if (widget.onTapOverride != null) {
+      widget.onTapOverride!();
+      return;
+    }
     if (_initialized && _vc != null) {
-      debugPrint('🎬 [Feed→Post] Donating live controller for ${widget.post.id}');
+      debugPrint(
+        '🎬 [Feed→Post] Donating live controller for ${widget.post.id}',
+      );
       VideoPreloadService.instance.donate(widget.post.mediaUrl, _vc!);
       setState(() {
         _vc = null;
@@ -508,6 +585,7 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
       _muted = !_muted;
       _vc?.setVolume(_muted ? 0 : 1);
     });
+    widget.onMuteChanged?.call(_muted);
   }
 
   @override
@@ -542,9 +620,27 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _handleOpenPost,
+              onTap: _handleTap,
             ),
           ),
+
+          if (_showPlayPauseIcon)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _vc?.value.isPlaying == true
+                      ? Icons.play_arrow_rounded
+                      : Icons.pause_rounded,
+                  color: Colors.white,
+                  size: 40,
+                ),
+              ),
+            ),
 
           // Ultra-modern loading state — shown only while this card is
           // actually in view AND the video hasn't attached yet (either
@@ -558,7 +654,7 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
           // active, independent of play/pause state.
           if (_initialized)
             Positioned(
-              top: 10,
+              top: widget.muteIconTopOffset,
               right: 10,
               child: GestureDetector(
                 onTap: _toggleMute,

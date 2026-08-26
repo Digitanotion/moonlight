@@ -79,7 +79,7 @@ class FeedRepositoryImpl implements FeedRepository {
       likes: (res['likes'] as num?)?.toInt() ?? 0,
       commentsCount: 0,
       shares: 0,
-      isLiked: (res['liked'] == true),
+      isLiked: (res['isLiked'] == true),
     );
   }
 

@@ -37,6 +37,7 @@ class ViewerState extends Equatable {
   final bool showRemovalOverlay;
   final bool shouldNavigateBack;
   final String? activeGuestUuid;
+  final String? followErrorMessage;
 
   // ============ ENHANCED ============
   final ViewMode viewMode;
@@ -87,6 +88,7 @@ class ViewerState extends Equatable {
     this.showRemovalOverlay = false,
     this.shouldNavigateBack = false,
     this.activeGuestUuid,
+    this.followErrorMessage,
     // Enhanced
     this.viewMode = ViewMode.viewer,
     this.networkStatus = const NetworkStatus(
@@ -169,6 +171,7 @@ class ViewerState extends Equatable {
     bool? showRemovalOverlay,
     bool? shouldNavigateBack,
     String? activeGuestUuid,
+    String? followErrorMessage,
     // Enhanced
     ViewMode? viewMode,
     NetworkStatus? networkStatus,
@@ -217,6 +220,7 @@ class ViewerState extends Equatable {
       showRemovalOverlay: showRemovalOverlay ?? this.showRemovalOverlay,
       shouldNavigateBack: shouldNavigateBack ?? this.shouldNavigateBack,
       activeGuestUuid: activeGuestUuid ?? this.activeGuestUuid,
+      followErrorMessage: followErrorMessage ?? this.followErrorMessage,
       viewMode: viewMode ?? this.viewMode,
       networkStatus: networkStatus ?? this.networkStatus,
       guestControls: guestControls ?? this.guestControls,

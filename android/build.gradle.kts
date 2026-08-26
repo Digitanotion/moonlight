@@ -31,6 +31,24 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Targets ONLY the screen_protector module — the one new dependency
+// added today that actually needs a forced Kotlin target (it defaults
+// to whatever JDK is active on the build machine, 21, conflicting with
+// the app's own 17). Deliberately NOT applied project-wide — an earlier
+// version of this fix forced Kotlin to 17 for every subproject, which
+// broke previously-working plugins (file_picker, flutter_callkit_incoming)
+// that hardcode their own Java side at 1.8 and had never needed any
+// override before.
+project(":screen_protector") {
+    afterEvaluate {
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+            compilerOptions {
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

@@ -129,6 +129,9 @@ class HostInfo extends Equatable {
   final String badge;
   final String avatarUrl;
   final bool isFollowed;
+  final String? uuid;
+  final int? fans;
+  final String? country;
 
   const HostInfo({
     required this.name,
@@ -137,6 +140,9 @@ class HostInfo extends Equatable {
     required this.badge,
     required this.avatarUrl,
     this.isFollowed = false,
+    this.uuid,
+    this.fans,
+    this.country,
   });
 
   HostInfo copyWith({bool? isFollowed}) => HostInfo(
@@ -146,6 +152,9 @@ class HostInfo extends Equatable {
     badge: badge,
     avatarUrl: avatarUrl,
     isFollowed: isFollowed ?? this.isFollowed,
+    uuid: uuid,
+    fans: fans,
+    country: country,
   );
 
   @override
@@ -156,6 +165,9 @@ class HostInfo extends Equatable {
     badge,
     avatarUrl,
     isFollowed,
+    uuid,
+    fans,
+    country,
   ];
 }
 

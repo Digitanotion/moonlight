@@ -15,6 +15,9 @@ class UserProfile {
   final int following;
   final bool isFollowing;
   final String? roleLabel;
+  final String? gender;
+  final bool? isVideoCallOnline;
+  final bool? videoCallEnabled;
 
   UserProfile({
     required this.uuid,
@@ -27,6 +30,9 @@ class UserProfile {
     required this.following,
     this.isFollowing = false,
     this.roleLabel = 'Nominal Member',
+    this.gender,
+    this.isVideoCallOnline,
+    this.videoCallEnabled,
   });
 }
 

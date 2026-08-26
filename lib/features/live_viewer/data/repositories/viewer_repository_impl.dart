@@ -177,7 +177,14 @@ class ViewerRepositoryImpl implements ViewerRepository {
 
   @override
   Future<HostInfo> fetchHostInfo() async {
-    if (initialHost != null) return initialHost!;
+    // Was previously short-circuiting here whenever the screen was
+    // seeded with initialHost, meaning the real API call — the one that
+    // returns the actual profile avatar, correct name, fans, country,
+    // and uuid — never ran at all for anyone entering via the pager
+    // (the most common entry path). initialHost was only ever built as
+    // a quick placeholder (livestream cover as "avatar", role string as
+    // "name") for instant first paint, not accurate profile data. Now
+    // used only as a fallback if the real fetch genuinely fails.
     try {
       final res = await http.dio.get('${_basePath}/viewer/host-info');
       final data = _asMap(res.data);
@@ -193,14 +200,24 @@ class ViewerRepositoryImpl implements ViewerRepository {
             'Live Stream',
         subtitle: hostData['subtitle']?.toString() ?? '',
         badge: hostData['badge']?.toString() ?? 'Superstar',
+        // Backend (ViewerController::hostInfo) returns this field as
+        // 'avatarUrl' (camelCase) — 'avatar'/'avatar_url' never matched
+        // anything, always silently falling through to the placeholder.
         avatarUrl:
+            hostData['avatarUrl']?.toString() ??
             hostData['avatar']?.toString() ??
             hostData['avatar_url']?.toString() ??
             'https://via.placeholder.com/120x120.png?text=LIVE',
         isFollowed: hostData['is_followed'] == true,
+        uuid: hostData['uuid']?.toString(),
+        fans: hostData['fans'] == null
+            ? null
+            : int.tryParse('${hostData['fans']}'),
+        country: hostData['country']?.toString(),
       );
     } catch (e) {
       debugPrint('⚠️ Failed to fetch host info: $e');
+      if (initialHost != null) return initialHost!;
       return const HostInfo(
         name: 'Host',
         title: 'Live Stream',
@@ -355,19 +372,20 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
   }
 
-  @override
-  Future<bool> toggleFollow(bool follow) async {
+   Future<bool> toggleFollow(bool follow) async {
     try {
-      if (follow) {
-        await http.dio.post('$_basePath/unfollow');
-        return false;
-      } else {
-        await http.dio.post('$_basePath/follow');
-        return true;
-      }
+      // Was previously calling $_basePath/follow and /unfollow — two
+      // separate, unrelated pre-existing endpoints (GET-only, judging
+      // by the 405 this produced) that were never meant for this
+      // action. The real, correctly-routed endpoint toggles internally
+      // server-side based on current state and returns the confirmed
+      // result directly, rather than us guessing/assuming success.
+      final res = await http.dio.post('$_basePath/viewer/follow-toggle');
+      final data = _asMap(res.data);
+      return data['isFollowed'] == true;
     } catch (e) {
       debugPrint('⚠️ toggleFollow failed: $e');
-      return follow;
+      rethrow;
     }
   }
 
@@ -643,7 +661,9 @@ class ViewerRepositoryImpl implements ViewerRepository {
       if (participantUuid == currentUuid) {
         // In pool mode, skip the singleton leave — the pool handles it.
         if (!skipAgoraJoin) {
-          try { agoraViewerService.leave(); } catch (_) {}
+          try {
+            agoraViewerService.leave();
+          } catch (_) {}
         }
         try {
           await pusher.unsubscribeAll();
@@ -931,9 +951,10 @@ class ViewerRepositoryImpl implements ViewerRepository {
   String _genIdempotencyKey() {
     final r = Random();
     final ts = DateTime.now().microsecondsSinceEpoch;
-    final salt = List.generate(8, (_) => r.nextInt(16))
-        .map((n) => n.toRadixString(16))
-        .join();
+    final salt = List.generate(
+      8,
+      (_) => r.nextInt(16),
+    ).map((n) => n.toRadixString(16)).join();
     return 'ml-$ts-$salt';
   }
 

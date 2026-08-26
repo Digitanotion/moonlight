@@ -8,15 +8,21 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
+import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/profile_cubit.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/follow_list_screen.dart';
 import 'package:moonlight/features/profile_view/presentation/widgets/user_clubs_section.dart';
+import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
+import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
@@ -283,7 +289,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
     _scroll.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -396,7 +401,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                                   builder: (context, s) {
                                     final isFollowing =
                                         s.user?.isFollowing == true;
-
                                     return SizedBox(
                                       height: 46,
                                       child: ElevatedButton(
@@ -437,7 +441,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                                 child: BlocBuilder<ProfileCubit, ProfileState>(
                                   builder: (context, s) {
                                     final targetUserUuid = s.user?.uuid ?? '';
-
                                     return _OutlineButton(
                                       text: 'Message',
                                       targetUserUuid: targetUserUuid,
@@ -448,6 +451,45 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                                     );
                                   },
                                 ),
+                              ),
+                              // Call — only for female profiles currently
+                              // online and accepting calls, per phase 2
+                              // requirement F ("Call from profile page
+                              // if online").
+                              BlocBuilder<ProfileCubit, ProfileState>(
+                                builder: (context, s) {
+                                  final target = s.user;
+                                  final canCall = target != null &&
+                                      target.gender == 'female' &&
+                                      target.isVideoCallOnline == true &&
+                                      target.videoCallEnabled == true;
+                                  if (!canCall) return const SizedBox.shrink();
+                                  return Row(
+                                    children: [
+                                      const SizedBox(width: 14),
+                                      SizedBox(
+                                        height: 46,
+                                        width: 46,
+                                        child: ElevatedButton(
+                                          onPressed: () =>
+                                              _openVideoCall(context, target),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                const Color(0xFFFF7A00),
+                                            foregroundColor: Colors.white,
+                                            shape: const CircleBorder(),
+                                            padding: EdgeInsets.zero,
+                                            elevation: 0,
+                                          ),
+                                          child: const Icon(
+                                            Icons.videocam_rounded,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -491,8 +533,6 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                           _TabItem(
                             label: 'Clubs',
                             icon: Icons.groups_rounded,
-                            // null while UserClubsSection hasn't reported
-                            // back yet, so we don't flash a false "0".
                             count: _clubsCount,
                           ),
                         ],
@@ -531,6 +571,8 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
       ),
     );
   }
+
+}
 
   void _startConversation(BuildContext context, String targetUserUuid) async {
     if (targetUserUuid.isEmpty) {
@@ -621,7 +663,60 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
       );
     }
   }
-}
+
+  Future<int?> _fetchCoinBalance() async {
+    try {
+      final res = await sl<DioClient>().dio.get('/api/v1/wallet');
+      final data = res.data;
+      final map = data is Map ? data.cast<String, dynamic>() : {};
+      final inner = map['data'];
+      final innerMap = inner is Map ? inner.cast<String, dynamic>() : {};
+      final coins = innerMap['balance'];
+      return int.tryParse('${coins ?? 0}') ?? 0;
+    } catch (e) {
+      debugPrint('⚠️ Failed to fetch wallet balance: $e');
+      return null;
+    }
+  }
+
+  Future<void> _openVideoCall(BuildContext context, UserProfile targetUser) async {
+    final balance = await _fetchCoinBalance();
+    if (!context.mounted) return;
+
+    if (balance == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not load your coin balance. Try again.'),
+        ),
+      );
+      return;
+    }
+
+    final minutes = await DurationPickerSheet.show(
+      context,
+      calleeDisplayName: targetUser.fullName,
+      ratePerMinute: 100, // TODO: same hardcoded rate as the directory screen — source from config if one exists
+      callerCoinBalance: balance,
+    );
+
+    if (minutes == null || !context.mounted) return; // user cancelled
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: sl<VideoCallBloc>(),
+          child: OutgoingCallScreen(
+            calleeUserSlug: targetUser.handle.replaceFirst('@', ''),
+            calleeDisplayName: targetUser.fullName,
+            calleeAvatarUrl: targetUser.avatarUrl,
+            initiatedFrom: 'profile',
+            initialMinutes: minutes,
+          ),
+        ),
+        fullscreenDialog: true,
+      ),
+    );
+  }
 
 class _ProfileAvatar extends StatelessWidget {
   final String? avatarUrl;

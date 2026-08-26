@@ -15,7 +15,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final map = await remote.getUser(uuid);
     final d = (map['data'] as Map).cast<String, dynamic>();
 
-    return UserProfile(
+      return UserProfile(
       uuid: '${d['uuid']}',
       handle: '@${d['user_slug']}',
       fullName: '${d['fullname'] ?? d['user_slug']}',
@@ -26,6 +26,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
       following: (d['following_count'] as num?)?.toInt() ?? 0,
       isFollowing: d['followed_by_me'] == true,
       roleLabel: d['role_label'],
+      gender: d['gender']?.toString(),
+      isVideoCallOnline: d['is_video_call_online'] == true,
+      videoCallEnabled: d['video_call_enabled'] == true,
     );
   }
 

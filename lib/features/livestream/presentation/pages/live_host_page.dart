@@ -31,6 +31,7 @@ import 'package:moonlight/features/livestream/presentation/widgets/confirm_end_s
 import 'package:moonlight/features/livestream/presentation/widgets/gift_toast.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/live_settings_menu.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+import 'package:screen_protector/screen_protector.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
 import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
@@ -185,9 +186,12 @@ class _LiveHostPageState extends State<LiveHostPage>
   DateTime? _lastEffectApplyTime;
   static const Duration _minEffectApplyInterval = Duration(milliseconds: 500);
 
-  @override
   void initState() {
     super.initState();
+    // Doc item 11: "Nobody will be able to screenshot or video record
+    // a streamer." Applied here too (her own device), alongside the
+    // viewer-side screens, for consistent protection either way.
+    ScreenProtector.protectDataLeakageOn();
     _giftToast = GiftToast();
     WidgetsBinding.instance.addObserver(this);
     agora.addListener(_onAgoraStateChanged);
@@ -300,13 +304,8 @@ class _LiveHostPageState extends State<LiveHostPage>
     _connectionListener = connectionListener;
   }
 
-  @override
-  void dispose() {
-    // TEMP DIAGNOSTIC — confirming whether the whole page disposes
-    // alongside LiveHostBloc.close(), or just the bloc independently.
-    debugPrint('🚨🚨🚨 _LiveHostPageState.dispose() CALLED 🚨🚨🚨');
-    debugPrint(StackTrace.current.toString());
-
+ void dispose() {
+    ScreenProtector.protectDataLeakageOff();
     _beautyAppliedOnJoin = false;
     agora.removeListener(_onAgoraStateChanged);
 
