@@ -4,8 +4,8 @@ version: 1.4.5+45
 
 # ==== ENVIRONMENT SECTION ====
 environment:
-  sdk: ">=3.8.0 <4.0.0" # Matches Flutter 3.22.x
-  flutter: ">=3.32.1"
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.47.0"
 # =========================
 
 dependencies:

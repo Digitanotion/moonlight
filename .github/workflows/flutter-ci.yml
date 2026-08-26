@@ -98,6 +98,28 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Verify Android Build Toolchain
+        run: |
+          echo "========================================"
+          echo "FLUTTER"
+          echo "========================================"
+          flutter --version
+
+          echo "========================================"
+          echo "JAVA"
+          echo "========================================"
+          java -version
+
+          echo "========================================"
+          echo "FLUTTER DOCTOR"
+          echo "========================================"
+          flutter doctor -v
+
+          echo "========================================"
+          echo "GRADLE"
+          echo "========================================"
+          cd android
+          ./gradlew --version
 
       - run: flutter pub get
 
