@@ -65,6 +65,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   List<Message> _lastKnownMessages = [];
   String? _bannerError;
 
+  // Typing indicator — driven by ChatCubit.typingUserStream, cleared on a
+  // short timer since the "stopped typing" signal isn't always delivered.
+  bool _otherTyping = false;
+  Timer? _typingClearTimer;
+  StreamSubscription<String>? _typingSub;
+
   @override
   void initState() {
     super.initState();
@@ -76,9 +82,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _messageFocusNode = FocusNode(skipTraversal: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatCubit>().loadMessages(widget.conversation.uuid);
-      context.read<ChatCubit>().markAsRead(widget.conversation.uuid);
+      final cubit = context.read<ChatCubit>();
+      cubit.loadMessages(widget.conversation.uuid);
+      cubit.markAsRead(widget.conversation.uuid);
       _setFocusWithoutKeyboard();
+
+      _typingSub = cubit.typingUserStream.listen((_) {
+        if (!mounted) return;
+        if (!_otherTyping) setState(() => _otherTyping = true);
+        _typingClearTimer?.cancel();
+        _typingClearTimer = Timer(const Duration(seconds: 4), () {
+          if (mounted) setState(() => _otherTyping = false);
+        });
+        // A visible "typing…" means they haven't sent yet — but they've seen
+        // the thread, so keep our own read state fresh too.
+      });
     });
 
     _setupPusherListener();
@@ -442,6 +460,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
+    _typingClearTimer?.cancel();
+    _typingSub?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
 
@@ -671,11 +691,36 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ],
       );
     }
+    // Never blank the thread on an unrecognised state — fall back to the
+    // last good list.
+    if (messages.isEmpty && _lastKnownMessages.isNotEmpty) {
+      messages = _lastKnownMessages;
+      currentConversationUuid ??= widget.conversation.uuid;
+    }
+
     return _buildMessagesList(
       messages,
       hasMore,
       currentConversationUuid,
       isLoadingMore,
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const _TypingDots(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2708,6 +2753,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
+                // Typing indicator
+                if (_otherTyping) _buildTypingIndicator(),
+
                 // Edit banner
                 if (_editingMessage != null) _buildEditBanner(),
 
@@ -2901,6 +2949,58 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Three bouncing dots for the "typing…" bubble.
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            final t = (_c.value - i * 0.2) % 1.0;
+            final scale = 0.6 + 0.4 * (1 - (2 * t - 1).abs()).clamp(0.0, 1.0);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: Colors.white70,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

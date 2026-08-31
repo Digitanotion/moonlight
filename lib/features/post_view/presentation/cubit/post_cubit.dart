@@ -188,33 +188,32 @@ class PostCubit extends Cubit<PostState> {
     _liking = true;
     final p = state.post!;
 
+    // 1) Optimistic flip — heart turns red/filled instantly and stays,
+    //    exactly like the feed.
+    final optimistic = p.copyWith(
+      isLiked: !p.isLiked,
+      likes: p.isLiked ? (p.likes - 1).clamp(0, 1 << 31) : p.likes + 1,
+    );
+    emit(state.copyWith(post: optimistic, lastAction: null));
+    GetIt.I<LikeMemory>().setLiked(postId, optimistic.isLiked);
+
     try {
       final updated = await repo.toggleLike(postId);
-
-      emit(
-        state.copyWith(
-          post: Post(
-            id: updated.id,
-            author: updated.author,
-            mediaUrl: updated.mediaUrl,
-            thumbUrl: updated.thumbUrl,
-            mediaType: updated.mediaType,
-            caption: updated.caption,
-            tags: updated.tags,
-            createdAt: updated.createdAt,
-            likes: updated.likes,
-            commentsCount: updated.commentsCount,
-            shares: updated.shares,
-            isLiked: updated.isLiked,
-            views: updated.views,
-          ),
-          lastAction: null,
-        ),
+      // 2) Reconcile counts with the server; keep the optimistic liked state
+      //    if the server's like flag looks stale/unparsed.
+      final serverLikes = (updated.likes <= 0 && optimistic.likes > 0)
+          ? optimistic.likes
+          : updated.likes;
+      final merged = optimistic.copyWith(
+        likes: serverLikes,
+        isLiked: updated.isLiked,
       );
-
-      GetIt.I<LikeMemory>().setLiked(postId, updated.isLiked);
+      emit(state.copyWith(post: merged, lastAction: null));
+      GetIt.I<LikeMemory>().setLiked(postId, merged.isLiked);
     } catch (e) {
-      // Show error
+      // 3) Roll back on genuine failure.
+      emit(state.copyWith(post: p, lastAction: null));
+      GetIt.I<LikeMemory>().setLiked(postId, p.isLiked);
     } finally {
       _liking = false;
     }

@@ -774,20 +774,25 @@ class ChatCubit extends Cubit<ChatState> {
 
     _typingSubscription = _repository.typingStartedStream().listen(
       (userUuid) {
-        emit(ChatTypingStarted(userUuid: userUuid));
-
-        Future.delayed(const Duration(seconds: 3), () {
-          if (state is ChatTypingStarted &&
-              (state as ChatTypingStarted).userUuid == userUuid) {
-            emit(ChatTypingStopped());
-          }
-        });
+        // Typing must NOT go through emit() — the typing states replace the
+        // message-list state, which blanked the whole conversation while
+        // someone typed. Push it on a side channel the screen listens to.
+        final myUuid = _currentUserService?.currentUser?.id;
+        if (userUuid.isEmpty || userUuid == myUuid) return;
+        if (_currentConversationUuid != conversationUuid) return;
+        if (!_typingCtrl.isClosed) _typingCtrl.add(userUuid);
       },
       onError: (e) {
         debugPrint('❌ Error in typing stream: $e');
       },
     );
   }
+
+  /// Emits the uuid of a participant who just sent a typing ping. The chat
+  /// screen shows a transient "typing…" indicator and clears it on a timer.
+  final StreamController<String> _typingCtrl =
+      StreamController<String>.broadcast();
+  Stream<String> get typingUserStream => _typingCtrl.stream;
 
   bool _isMessageFromCurrentUser(Message message) {
     try {
@@ -847,6 +852,7 @@ class ChatCubit extends Cubit<ChatState> {
   Future<void> close() {
     _uploadManager.dispose();
     clearConversation();
+    _typingCtrl.close();
     return super.close();
   }
 }

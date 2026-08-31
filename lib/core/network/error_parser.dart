@@ -2,11 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:moonlight/core/network/interceptors/error_normalizer_interceptor.dart';
 
 /// Returns a clean, user-facing message for any error object.
 /// Feed this into MoonSnack.error(context, apiErrorMessage(state.error));
 String apiErrorMessage(Object? error) {
   if (error == null) return "An unexpected error occurred";
+
+  // 0) Already-normalised API errors (from ErrorNormalizerInterceptor).
+  if (error is ApiException) return error.message;
+  if (error is DioException && error.error is ApiException) {
+    return (error.error as ApiException).message;
+  }
+
+  // A plain String that was already passed through (e.g. a cubit stored
+  // state.error) — just scrub any leftover technical prefixes.
+  if (error is String) return humanizeErrorText(error);
 
   // 1) Dio-specific handling
   if (error is DioException) {
@@ -145,18 +156,51 @@ String _safeStringifyMap(Map data) {
 }
 
 /// Remove noisy class prefixes like "DioException: " from messages.
-String _cleanTechPrefixes(String input) {
-  final cleaned = input
-      .replaceAll(
-        RegExp(r'^DioError(\s*\[.*?\])?:\s*', caseSensitive: false),
-        '',
-      )
-      .replaceAll(
-        RegExp(r'^DioException(\s*\[.*?\])?:\s*', caseSensitive: false),
-        '',
-      )
-      .replaceAll(RegExp(r'Unhandled Exception:\s*', caseSensitive: false), '');
-  return cleaned.trim().isEmpty
-      ? "An unexpected error occurred"
-      : cleaned.trim();
+String _cleanTechPrefixes(String input) => humanizeErrorText(input);
+
+/// Aggressively scrub a raw error/exception string into something safe to
+/// show a user. Strips `DioException [..]:`, `Exception:`, `ApiException(..):`,
+/// `SocketException:`, stack-trace tails, wrapping quotes, etc. If what's
+/// left still looks like a technical dump (stack frames, JSON, absurdly
+/// long, or empty) it returns a generic friendly line instead.
+///
+/// Safe to call on a string that's already clean — it's close to a no-op.
+String humanizeErrorText(String input) {
+  var s = input.trim();
+  if (s.isEmpty) return 'Something went wrong. Please try again.';
+
+  // Keep only the first line, and drop anything from a stack frame / Dio's
+  // own "Error: ..." tail onward.
+  s = s.split('\n').first.trim();
+  s = s.split(RegExp(r'\s+Error:\s')).first.trim();
+
+  // Drop "SomeException [meta] (code): " noise — leading AND embedded, so
+  // "Failed to save: DioException [bad response]: ..." also gets cleaned.
+  final exNoise = RegExp(
+    r'\b[A-Z][A-Za-z0-9_]*(?:Exception|Error)(?:\s*\[[^\]]*\])?(?:\([^)]*\))?\s*:\s*',
+  );
+  // Loop a couple of times for stacked prefixes.
+  for (var i = 0; i < 3 && exNoise.hasMatch(s); i++) {
+    s = s.replaceFirst(exNoise, '');
+  }
+  s = s.replaceFirst(
+    RegExp(r'^(?:Unhandled Exception|Uncaught)\s*:\s*', caseSensitive: false),
+    '',
+  );
+
+  // Trim wrapping quotes.
+  s = s.replaceAll(RegExp('^[\'"]+|[\'"]+\$'), '').trim();
+
+  if (s.isEmpty) return 'Something went wrong. Please try again.';
+
+  // If what's left still looks like a raw dump, don't show it.
+  final looksTechnical = s.contains(RegExp(r'#\d+\s')) ||
+      s.startsWith('{') ||
+      s.startsWith('[') ||
+      s.contains('package:') ||
+      s.contains('DioExceptionType.') ||
+      s.length > 220;
+  if (looksTechnical) return 'Something went wrong. Please try again.';
+
+  return s;
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/network/error_parser.dart';
 
 /// Usage:
 /// MoonSnack.show(
@@ -36,7 +37,7 @@ class MoonSnack {
     Duration? duration,
   }) => show(
     context,
-    message: message,
+    message: humanizeErrorText(message),
     type: MoonSnackType.error,
     duration: duration,
   );

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/network/error_parser.dart';
 
 /// TopSnack: overlay-based, top-positioned snackbar/toast.
 /// Always uses the root overlay so it appears above sheets and dialogs.
@@ -85,7 +86,8 @@ class TopSnack {
     onAction: onAction,
   );
 
-  // Error variant
+  // Error variant. `msg` may be a raw exception string / server blob — it's
+  // scrubbed to a plain, user-friendly line before display.
   static void error(
     BuildContext ctx,
     String msg, {
@@ -93,7 +95,7 @@ class TopSnack {
     VoidCallback? onAction,
   }) => show(
     ctx,
-    msg,
+    humanizeErrorText(msg),
     icon: Icons.error_outline,
     duration: duration,
     bgStart: const Color(0xFF3E0F0F),
