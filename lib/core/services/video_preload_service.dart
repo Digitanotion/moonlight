@@ -15,6 +15,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
+import 'video_cache_manager.dart';
+
 class VideoPreloadService {
   VideoPreloadService._();
   static final VideoPreloadService instance = VideoPreloadService._();
@@ -86,29 +88,47 @@ class VideoPreloadService {
     }
 
     debugPrint('🎬 [Preload] START: ${_short(url)}');
-    final startedAt = DateTime.now();
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-    _controllers[url] = controller;
-    _order.remove(url);
-    _order.add(url);
-
-    final future = controller
-        .initialize()
-        .then((_) {
-          controller.setVolume(0);
-          final ms = DateTime.now().difference(startedAt).inMilliseconds;
-          debugPrint('🎬 [Preload] READY (${ms}ms): ${_short(url)}');
-        })
-        .catchError((e, st) {
-          debugPrint('⚠️ [Preload] FAILED: ${_short(url)} — $e');
-          _controllers.remove(url);
-          _order.remove(url);
-        });
-
+    final future = _preloadAsync(url);
     _initFutures[url] = future;
     future.whenComplete(() => _initFutures.remove(url));
+  }
 
-    _evictIfNeeded();
+  Future<void> _preloadAsync(String url) async {
+    final startedAt = DateTime.now();
+    VideoPlayerController? controller;
+    try {
+      // Prefer an already-on-disk file, then a fresh download into the
+      // disk cache, and only fall back to a plain network controller if
+      // caching failed entirely. This is what makes back-scrolling to an
+      // earlier video instant instead of a fresh download.
+      final file = await VideoCacheManager.cachedFileFor(url) ??
+          await VideoCacheManager.ensureCached(url);
+
+      controller = file != null
+          ? VideoPlayerController.file(file)
+          : VideoPlayerController.networkUrl(Uri.parse(url));
+
+      await controller.initialize();
+      controller.setVolume(0);
+
+      _controllers[url] = controller;
+      _order.remove(url);
+      _order.add(url);
+      _evictIfNeeded();
+
+      final ms = DateTime.now().difference(startedAt).inMilliseconds;
+      debugPrint(
+        '🎬 [Preload] READY (${ms}ms, ${file != null ? "disk" : "net"}): '
+        '${_short(url)}',
+      );
+    } catch (e) {
+      debugPrint('⚠️ [Preload] FAILED: ${_short(url)} — $e');
+      _controllers.remove(url);
+      _order.remove(url);
+      try {
+        await controller?.dispose();
+      } catch (_) {}
+    }
   }
 
   String _short(String url) {

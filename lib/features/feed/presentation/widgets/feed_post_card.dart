@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/services/video_cache_manager.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
@@ -479,13 +480,36 @@ class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
     if (preloaded != null) {
       _vc = preloaded;
     } else {
-      final c = VideoPlayerController.networkUrl(Uri.parse(url));
-      try {
-        await c.initialize();
-        _vc = c;
-      } catch (_) {
-        _loading = false;
-        return;
+      // If a preload is already in flight for this url, wait for it
+      // rather than starting a second, competing fetch.
+      final inFlight = VideoPreloadService.instance.inFlight(url);
+      if (inFlight != null) {
+        try {
+          await inFlight;
+        } catch (_) {}
+        final justReady = VideoPreloadService.instance.takeIfReady(url);
+        if (justReady != null) _vc = justReady;
+      }
+
+      if (_vc == null) {
+        // Play from the on-disk cache when we have it; otherwise stream
+        // from the network and warm the cache in the background so the
+        // next visit is instant.
+        VideoPlayerController c;
+        final cachedFile = await VideoCacheManager.cachedFileFor(url);
+        if (cachedFile != null) {
+          c = VideoPlayerController.file(cachedFile);
+        } else {
+          c = VideoPlayerController.networkUrl(Uri.parse(url));
+          unawaited(VideoCacheManager.ensureCached(url));
+        }
+        try {
+          await c.initialize();
+          _vc = c;
+        } catch (_) {
+          _loading = false;
+          return;
+        }
       }
     }
 

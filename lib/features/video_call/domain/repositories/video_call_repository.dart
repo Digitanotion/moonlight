@@ -13,6 +13,12 @@ abstract class VideoCallRepository {
   Stream<Map<String, dynamic>> callAcceptedStream();
    Stream<Map<String, dynamic>> callResolvedStream();
 
+  /// Fired when the OTHER party paused / resumed the call's countdown
+  /// because the media connection dropped — sourced from
+  /// 'video_call_paused' / 'video_call_resumed'. Payload meta carries
+  /// 'paused' (bool) and the server's fresh 'ends_at' / 'remaining_seconds'.
+  Stream<Map<String, dynamic>> callPauseStateStream();
+
   // Routes a video-call event that arrived through a channel OTHER than
   // the live Pusher socket — specifically, FCM's foreground onMessage
   // listener, which is the only delivery mechanism actually confirmed
@@ -53,6 +59,11 @@ abstract class VideoCallRepository {
     String? reason,
   });
   Future<VideoCallSessionModel> status(String sessionUuid);
+
+  /// Freeze / unfreeze the call countdown for a network drop (#3).
+  Future<VideoCallSessionModel> pause(String sessionUuid);
+  Future<VideoCallSessionModel> resume(String sessionUuid);
+
   Future<void> report({
     required String sessionUuid,
     required String reason,

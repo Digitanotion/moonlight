@@ -23,11 +23,12 @@ import 'package:moonlight/features/post_view/domain/repositories/post_repository
 import 'package:moonlight/features/post_view/presentation/widgets/comment_bottom_sheet.dart';
 
 class VideoFeedScreen extends StatefulWidget {
+  // Seed list captured at navigation time. The screen no longer treats
+  // this as the whole world — it re-derives the live video list from the
+  // shared FeedCubit on every build and paginates that cubit as the user
+  // approaches the end, so the swipe flow reaches every video the feed
+  // can load, not just the handful already on screen when it opened.
   final List<Post> videoPosts;
-  // Parallel to videoPosts — each entry is that video's index within
-  // the FeedCubit's own full, unfiltered items list, needed because
-  // FeedCubit.toggleLikeAt() is index-based against that full list,
-  // not against our filtered videos-only list here.
   final List<int> originalIndices;
   final int initialIndex;
 
@@ -46,17 +47,57 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   late final PageController _pageController;
 
   static const int _preloadWindow = 4; // matches TikTok-style "few ahead" feel
+  // How close to the end of the loaded videos the user must get before we
+  // ask the feed for the next page.
+  static const int _paginateThreshold = 3;
 
   // Shared across every video in this swipe flow — toggling sound on any
   // one video affects all the others too, matching how TikTok itself
   // behaves, rather than each video resetting to muted independently.
   bool _muted = true;
 
+  int _currentIndex = 0;
+
+  // Live videos-only view of the FeedCubit's items, plus each entry's
+  // index within the cubit's full list (needed for index-based
+  // toggleLikeAt / replaceAt). Recomputed from cubit state each build.
+  List<Post> _videoPosts = const [];
+  List<int> _originalIndices = const [];
+
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
+    _videoPosts = List.of(widget.videoPosts);
+    _originalIndices = List.of(widget.originalIndices);
     _pageController = PageController(initialPage: widget.initialIndex);
     _preloadAround(widget.initialIndex);
+  }
+
+  /// Rebuild the videos-only projection from the cubit's current items.
+  void _syncFromFeed(FeedState state) {
+    final posts = <Post>[];
+    final indices = <int>[];
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].isVideo) {
+        posts.add(state.items[i]);
+        indices.add(i);
+      }
+    }
+    _videoPosts = posts;
+    _originalIndices = indices;
+  }
+
+  /// Ask the feed for more if the user is within [_paginateThreshold]
+  /// pages of the last loaded video. Safe to call repeatedly — the cubit
+  /// no-ops while already paging or when there's nothing left.
+  void _maybePaginate() {
+    if (_currentIndex >= _videoPosts.length - 1 - _paginateThreshold) {
+      final cubit = context.read<FeedCubit>();
+      if (cubit.state.hasMore && !cubit.state.paging) {
+        cubit.loadNextPage();
+      }
+    }
   }
 
   void _preloadAround(int index) {
@@ -64,11 +105,11 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     for (var offset = 1; offset <= _preloadWindow; offset++) {
       final nextIdx = index + offset;
       final prevIdx = index - offset;
-      if (nextIdx < widget.videoPosts.length) {
-        urls.add(widget.videoPosts[nextIdx].mediaUrl);
+      if (nextIdx < _videoPosts.length) {
+        urls.add(_videoPosts[nextIdx].mediaUrl);
       }
       if (prevIdx >= 0) {
-        urls.add(widget.videoPosts[prevIdx].mediaUrl);
+        urls.add(_videoPosts[prevIdx].mediaUrl);
       }
     }
     VideoPreloadService.instance.preloadAll(urls);
@@ -176,18 +217,43 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        itemCount: widget.videoPosts.length,
-        onPageChanged: (i) => _preloadAround(i),
-        itemBuilder: (context, i) {
-          final post = widget.videoPosts[i];
-          final originalIndex = widget.originalIndices[i];
-          final isOwner =
-              post.author.id == sl<CurrentUserService>().currentUser?.id;
+      body: BlocConsumer<FeedCubit, FeedState>(
+        listenWhen: (p, n) =>
+            p.items.length != n.items.length || p.paging != n.paging,
+        listener: (context, state) {
+          // A page just landed — if the user is still near the end (e.g.
+          // the new page was mostly images), keep pulling until there's
+          // a comfortable runway of videos ahead or the feed is exhausted.
+          if (!state.paging) {
+            _syncFromFeed(state);
+            _maybePaginate();
+          }
+        },
+        builder: (context, state) {
+          _syncFromFeed(state);
 
-          return Stack(
+          if (_videoPosts.isEmpty) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            );
+          }
+
+          return PageView.builder(
+            controller: _pageController,
+            scrollDirection: Axis.vertical,
+            itemCount: _videoPosts.length,
+            onPageChanged: (i) {
+              _currentIndex = i;
+              _preloadAround(i);
+              _maybePaginate();
+            },
+            itemBuilder: (context, i) {
+              final post = _videoPosts[i];
+              final originalIndex = _originalIndices[i];
+              final isOwner =
+                  post.author.id == sl<CurrentUserService>().currentUser?.id;
+
+              return Stack(
             fit: StackFit.expand,
             children: [
               FeedVideoPlayer(
@@ -291,6 +357,8 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                 ),
               ),
             ],
+          );
+            },
           );
         },
       ),

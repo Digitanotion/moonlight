@@ -1,5 +1,6 @@
 // lib/features/video_call/presentation/bloc/video_call_bloc.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
@@ -31,6 +32,11 @@ class VideoCallState {
   final bool actionLoading;
   final String? error;
   final bool showExtendPrompt; // true once remainingSeconds <= 30
+  // Countdown frozen because the media connection dropped (#3). The
+  // server is the source of truth (session.endsAt is pushed forward on
+  // resume); this flag drives the "Reconnecting…" UI and stops the
+  // client-side auto-end from firing during the freeze.
+  final bool isPaused;
 
   const VideoCallState({
     required this.phase,
@@ -38,6 +44,7 @@ class VideoCallState {
     this.actionLoading = false,
     this.error,
     this.showExtendPrompt = false,
+    this.isPaused = false,
   });
 
   factory VideoCallState.initial() =>
@@ -51,6 +58,7 @@ class VideoCallState {
     String? error,
     bool clearError = false,
     bool? showExtendPrompt,
+    bool? isPaused,
   }) {
     return VideoCallState(
       phase: phase ?? this.phase,
@@ -58,6 +66,7 @@ class VideoCallState {
       actionLoading: actionLoading ?? this.actionLoading,
       error: clearError ? null : (error ?? this.error),
       showExtendPrompt: showExtendPrompt ?? this.showExtendPrompt,
+      isPaused: isPaused ?? this.isPaused,
     );
   }
 }
@@ -131,6 +140,21 @@ class CallReportRequested extends VideoCallEvent {
 /// trigger the 30s-remaining extend prompt (doc 1C).
 class _CallTicked extends VideoCallEvent {}
 
+/// Internal: the remote party's media stream dropped (`visible: false`)
+/// or came back (`visible: true`) — drives the network-drop timer
+/// freeze (#3). Debounced before it ever reaches the bloc.
+class _RemoteMediaChanged extends VideoCallEvent {
+  final bool visible;
+  _RemoteMediaChanged(this.visible);
+}
+
+/// Internal: the OTHER party paused / resumed the countdown — sourced
+/// from the 'video_call_paused' / 'video_call_resumed' notification.
+class _CallPauseStateChanged extends VideoCallEvent {
+  final Map<String, dynamic> payload;
+  _CallPauseStateChanged(this.payload);
+}
+
 /// Internal: socket-driven, someone is calling me.
 class _IncomingCallReceived extends VideoCallEvent {
   final Map<String, dynamic> payload;
@@ -169,7 +193,13 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
   StreamSubscription<Map<String, dynamic>>? _incomingSub;
   StreamSubscription<Map<String, dynamic>>? _acceptedSub;
   StreamSubscription<Map<String, dynamic>>? _resolvedSub;
+  StreamSubscription<Map<String, dynamic>>? _pauseStateSub;
   Timer? _tickTimer;
+  // Network-drop watcher (#3): flips the countdown to frozen when the
+  // remote video/audio stops arriving, and unfreezes it when it returns.
+  Timer? _mediaDropDebounce;
+  bool _remoteMediaWatcherAttached = false;
+  bool _networkPauseInFlight = false;
   // Fallback for a confirmed gap: broadcasts between the two parties on
   // a call can fail to arrive via Pusher at all — first confirmed for
   // reject events reaching the caller, but the same unreliability should
@@ -191,6 +221,8 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     on<CallEndRequested>(_onEnd);
     on<CallReportRequested>(_onReport);
     on<_CallTicked>(_onTick);
+    on<_RemoteMediaChanged>(_onRemoteMediaChanged);
+    on<_CallPauseStateChanged>(_onCallPauseStateChanged);
     on<_IncomingCallReceived>(_onIncomingReceived);
     on<_CallAcceptedReceived>(_onAcceptedReceived);
     on<_CallResolvedByOtherParty>(_onResolvedByOtherParty);
@@ -208,6 +240,9 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     );
     _resolvedSub = repo.callResolvedStream().listen(
       (payload) => add(_CallResolvedByOtherParty(payload)),
+    );
+    _pauseStateSub = repo.callPauseStateStream().listen(
+      (payload) => add(_CallPauseStateChanged(payload)),
     );
   }
 
@@ -263,6 +298,8 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     // device's local bloc state for a genuinely different, still-active
     // call.
     if (currentUuid == null || resolvedUuid != currentUuid) return;
+
+    _detachRemoteMediaWatcher();
 
     if (state.phase == VideoCallPhase.active) {
       // Leave AND dispose — matches _onEnd exactly. Leaving alone (the
@@ -548,6 +585,7 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     final wasActive = state.phase == VideoCallPhase.active;
     final endingSession = state.session;
     _tickTimer?.cancel();
+    _detachRemoteMediaWatcher();
     _stopResolutionPoll();
     await agora.leave();
     await agora.disposeEngine();
@@ -741,6 +779,117 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!_isDisposed) add(_CallTicked());
     });
+    _attachRemoteMediaWatcher();
+  }
+
+  // ── Network-drop timer freeze (#3) ──────────────────────────────────────
+
+  /// Grace period before a media drop is treated as "connection lost".
+  /// Agora briefly reports no-video on ordinary keyframe gaps / camera
+  /// toggles; we only want to pause on a genuine stall.
+  static const _mediaDropGrace = Duration(seconds: 4);
+
+  void _attachRemoteMediaWatcher() {
+    if (_remoteMediaWatcherAttached) return;
+    _remoteMediaWatcherAttached = true;
+    agora.remoteHasVideo.addListener(_onRemoteMediaMaybeChanged);
+    agora.remoteHasAudio.addListener(_onRemoteMediaMaybeChanged);
+  }
+
+  void _detachRemoteMediaWatcher() {
+    if (!_remoteMediaWatcherAttached) return;
+    _remoteMediaWatcherAttached = false;
+    _mediaDropDebounce?.cancel();
+    _mediaDropDebounce = null;
+    try {
+      agora.remoteHasVideo.removeListener(_onRemoteMediaMaybeChanged);
+      agora.remoteHasAudio.removeListener(_onRemoteMediaMaybeChanged);
+    } catch (_) {}
+  }
+
+  void _onRemoteMediaMaybeChanged() {
+    if (_isDisposed || state.phase != VideoCallPhase.active) return;
+
+    final receiving =
+        agora.remoteHasVideo.value || agora.remoteHasAudio.value;
+
+    if (receiving) {
+      // Connection restored — cancel any pending pause, and if we're
+      // already paused, resume immediately.
+      _mediaDropDebounce?.cancel();
+      _mediaDropDebounce = null;
+      if (state.isPaused) add(_RemoteMediaChanged(true));
+      return;
+    }
+
+    // Media stopped — wait out the grace period before pausing.
+    if (_mediaDropDebounce != null || state.isPaused) return;
+    _mediaDropDebounce = Timer(_mediaDropGrace, () {
+      _mediaDropDebounce = null;
+      if (_isDisposed || state.phase != VideoCallPhase.active) return;
+      final stillDown =
+          !agora.remoteHasVideo.value && !agora.remoteHasAudio.value;
+      if (stillDown && !state.isPaused) add(_RemoteMediaChanged(false));
+    });
+  }
+
+  Future<void> _onRemoteMediaChanged(
+    _RemoteMediaChanged e,
+    Emitter<VideoCallState> emit,
+  ) async {
+    final sessionUuid = state.session?.uuid;
+    if (sessionUuid == null || state.phase != VideoCallPhase.active) return;
+    if (_networkPauseInFlight) return;
+
+    // Optimistically reflect the freeze/unfreeze so the UI reacts
+    // instantly; the server round-trip reconciles session.endsAt.
+    if (e.visible && !state.isPaused) return;
+    if (!e.visible && state.isPaused) return;
+
+    _networkPauseInFlight = true;
+    emit(state.copyWith(isPaused: !e.visible));
+    try {
+      final session = e.visible
+          ? await repo.resume(sessionUuid)
+          : await repo.pause(sessionUuid);
+      emit(state.copyWith(session: session, isPaused: session.isPaused));
+    } catch (err) {
+      // A failed pause/resume must never wedge the call — fall back to
+      // the true media state.
+      final receiving =
+          agora.remoteHasVideo.value || agora.remoteHasAudio.value;
+      emit(state.copyWith(isPaused: !receiving));
+      debugPrint('⚠️ [VideoCall] pause/resume failed: ${_msg(err)}');
+    } finally {
+      _networkPauseInFlight = false;
+    }
+
+    // Media may have flipped again while the request was in flight (that
+    // event would have been dropped by the _networkPauseInFlight guard) —
+    // re-evaluate so we don't get stuck out of sync with reality.
+    _onRemoteMediaMaybeChanged();
+  }
+
+  Future<void> _onCallPauseStateChanged(
+    _CallPauseStateChanged e,
+    Emitter<VideoCallState> emit,
+  ) async {
+    final meta = (e.payload['meta'] as Map?)?.cast<String, dynamic>() ?? {};
+    final sessionUuid = (meta['session_uuid'] ?? '').toString();
+    if (sessionUuid.isEmpty || state.session?.uuid != sessionUuid) return;
+    if (state.phase != VideoCallPhase.active) return;
+
+    final paused = meta['paused'] == true ||
+        (e.payload['type'] ?? '') == 'video_call_paused';
+
+    // Pull the authoritative session so our countdown matches the
+    // server's freshly-adjusted ends_at.
+    try {
+      final session = await repo.status(sessionUuid);
+      emit(state.copyWith(session: session, isPaused: session.isPaused));
+    } catch (_) {
+      emit(state.copyWith(isPaused: paused));
+    }
   }
 
   /// Fallback for a confirmed gap: a broadcast between the two parties
@@ -827,6 +976,11 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     if (session == null || state.phase != VideoCallPhase.active) return;
     if (session.endsAt == null) return;
 
+    // Countdown is frozen while the connection is down (#3). The server
+    // pushes ends_at forward on resume, so we simply skip every tick's
+    // countdown/auto-end logic until then.
+    if (state.isPaused) return;
+
     final remaining = session.endsAt!.difference(DateTime.now()).inSeconds;
 
     // 30-second extend prompt (doc 1C). Only fire once per crossing, not
@@ -846,8 +1000,24 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
 
   String _msg(Object err) {
     if (err is DioException) {
-      final d = err.response?.data;
-      if (d is Map && d['message'] is String) return d['message'] as String;
+      var d = err.response?.data;
+      // Some error responses arrive as an unparsed JSON string.
+      if (d is String && d.trim().startsWith('{')) {
+        try {
+          d = jsonDecode(d);
+        } catch (_) {}
+      }
+      if (d is Map) {
+        final message = d['message'];
+        if (message is String && message.trim().isNotEmpty) return message;
+        // Laravel validation shape: { errors: { field: [msg, ...] } }
+        final errors = d['errors'];
+        if (errors is Map && errors.isNotEmpty) {
+          final first = errors.values.first;
+          if (first is List && first.isNotEmpty) return '${first.first}';
+          if (first is String && first.isNotEmpty) return first;
+        }
+      }
     }
     return 'Something went wrong. Please try again.';
   }
@@ -856,10 +1026,12 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
   Future<void> close() async {
     _isDisposed = true;
     _tickTimer?.cancel();
+    _detachRemoteMediaWatcher();
     _stopResolutionPoll();
     await _incomingSub?.cancel();
     await _acceptedSub?.cancel();
     await _resolvedSub?.cancel();
+    await _pauseStateSub?.cancel();
     // Deliberately NOT disposing `repo` here — it's an app-wide singleton,
     // shared across every screen, not owned by this bloc instance.
     try {

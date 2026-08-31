@@ -34,6 +34,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   bool _dialed = false;
+  bool _errorShown = false; // guard: only surface the failure dialog once
 
   @override
   void initState() {
@@ -58,7 +59,8 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     // events, and a second instance would double-react to the same event.
     final bloc = context.read<VideoCallBloc>();
     return BlocConsumer<VideoCallBloc, VideoCallState>(
-      listenWhen: (prev, curr) => prev.phase != curr.phase,
+      listenWhen: (prev, curr) =>
+          prev.phase != curr.phase || prev.error != curr.error,
       listener: (context, state) {
         if (state.phase == VideoCallPhase.active) {
           Navigator.of(context).pushReplacement(
@@ -69,14 +71,57 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
               ),
             ),
           );
-        } else if (state.phase == VideoCallPhase.idle && _dialed && state.error == null) {
+        } else if (state.phase == VideoCallPhase.idle &&
+            _dialed &&
+            state.error != null &&
+            !_errorShown) {
+          // The call could not be placed (e.g. "Only male users can
+          // initiate video calls", "already on another call",
+          // insufficient coins). Surface it as a clear dialog rather
+          // than 12px red text on a screen that otherwise looks like
+          // it's still dialing, then leave the screen.
+          _errorShown = true;
+          showDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              backgroundColor: AppColors.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                'Call not connected',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              content: Text(
+                state.error!,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: AppColors.primary2,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ).then((_) {
+            if (mounted && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          });
+        } else if (state.phase == VideoCallPhase.idle &&
+            _dialed &&
+            state.error == null) {
           // Clean idle transition (rejected, no answer) — safe to
-          // auto-pop. If state.error is set (e.g. "already on another
-          // call", insufficient coins), DON'T auto-pop — the error needs
-          // to actually stay visible long enough to read, and the user
-          // dismisses manually via the decline button below. This
-          // condition was accidentally dropped during an earlier full-file
-          // rewrite (the PopScope addition) — restoring it here.
+          // auto-pop.
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
         }
       },

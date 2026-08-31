@@ -23,6 +23,7 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
   final _incomingCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _acceptedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _resolvedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _pauseStateCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   bool _subscribed = false;
   String? _subscribedChannel;
@@ -40,6 +41,9 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
   /// confirm it's for the call currently on screen. Without this, a
   /// caller/callee's screen never finds out the other side hung up.
   Stream<Map<String, dynamic>> callResolvedStream() => _resolvedCtrl.stream;
+
+  @override
+  Stream<Map<String, dynamic>> callPauseStateStream() => _pauseStateCtrl.stream;
 
   @override
   void injectExternalEvent(Map<String, dynamic> payload) {
@@ -125,6 +129,11 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
       case 'video_call_rejected':
         debugPrint('📞 [VideoCall] Call resolved by other party: $type');
         _resolvedCtrl.add(payload);
+        break;
+      case 'video_call_paused':
+      case 'video_call_resumed':
+        debugPrint('📞 [VideoCall] Call pause state changed: $type');
+        _pauseStateCtrl.add(payload);
         break;
       default:
         break;
@@ -250,6 +259,18 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
   @override
   Future<VideoCallSessionModel> status(String sessionUuid) async {
     final res = await _client.dio.get('/api/v1/video-call/$sessionUuid/status');
+    return _sessionFromResponse(res.data);
+  }
+
+  @override
+  Future<VideoCallSessionModel> pause(String sessionUuid) async {
+    final res = await _client.dio.post('/api/v1/video-call/$sessionUuid/pause');
+    return _sessionFromResponse(res.data);
+  }
+
+  @override
+  Future<VideoCallSessionModel> resume(String sessionUuid) async {
+    final res = await _client.dio.post('/api/v1/video-call/$sessionUuid/resume');
     return _sessionFromResponse(res.data);
   }
 

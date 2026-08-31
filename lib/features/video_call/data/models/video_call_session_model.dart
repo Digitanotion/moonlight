@@ -56,6 +56,8 @@ class VideoCallSessionModel {
   final DateTime? endedAt;
   final String? endedReason;
   final int? remainingSeconds;
+  final bool isPaused; // countdown frozen for a network drop (#3)
+  final int totalPausedSeconds;
   final VideoCallUserSummary? caller;
   final VideoCallUserSummary? callee;
   final VideoCallAgoraCredentials? agora;
@@ -76,6 +78,8 @@ class VideoCallSessionModel {
     this.endedAt,
     this.endedReason,
     this.remainingSeconds,
+    this.isPaused = false,
+    this.totalPausedSeconds = 0,
     this.caller,
     this.callee,
     this.agora,
@@ -109,6 +113,9 @@ class VideoCallSessionModel {
       remainingSeconds: map['remaining_seconds'] == null
           ? null
           : int.tryParse('${map['remaining_seconds']}'),
+      isPaused: map['is_paused'] == true,
+      totalPausedSeconds:
+          int.tryParse('${map['total_paused_seconds'] ?? 0}') ?? 0,
       caller: map['caller'] is Map
           ? VideoCallUserSummary.fromMap(
               (map['caller'] as Map).cast<String, dynamic>(),

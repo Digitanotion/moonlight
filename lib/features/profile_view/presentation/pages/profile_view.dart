@@ -22,6 +22,7 @@ import 'package:moonlight/features/profile_view/presentation/pages/follow_list_s
 import 'package:moonlight/features/profile_view/presentation/widgets/user_clubs_section.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
+import 'package:moonlight/features/video_call/presentation/utils/video_call_guard.dart';
 import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -680,6 +681,13 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
   }
 
   Future<void> _openVideoCall(BuildContext context, UserProfile targetUser) async {
+    // Ladies cannot start calls (server-enforced) — explain up front
+    // rather than letting the call fail mid-ring.
+    if (!currentUserCanStartCall()) {
+      await showLadiesCannotCallDialog(context);
+      return;
+    }
+
     final balance = await _fetchCoinBalance();
     if (!context.mounted) return;
 

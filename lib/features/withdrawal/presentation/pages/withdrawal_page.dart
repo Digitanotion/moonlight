@@ -125,6 +125,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
 
   // ── State flags ────────────────────────────────────────────────────────────
   bool _isSubmitting = false;
+  bool _processingDialogOpen = false;
   bool _loadingBanks = false;
   bool _resolvingAccountName = false;
   String? _accountNameError;
@@ -352,6 +353,67 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
         ],
       ),
     );
+  }
+
+  // ── Processing overlay ─────────────────────────────────────────────────────
+  // Blocking, non-dismissible. Shown for the ENTIRE in-flight window —
+  // from the moment the request leaves the device until the server (and,
+  // for store-backed flows, the payment provider) reports an outcome —
+  // so the user is never left looking at an idle-looking form wondering
+  // whether their tap registered.
+
+  void _showProcessingDialog() {
+    if (_processingDialogOpen || !mounted) return;
+    _processingDialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1C1533),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Processing…',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Please wait while we submit your withdrawal. '
+                'This can take a few moments — don’t close the app.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() => _processingDialogOpen = false);
+  }
+
+  void _dismissProcessingDialog() {
+    if (!_processingDialogOpen) return;
+    _processingDialogOpen = false;
+    // The processing dialog is the top-most route when open.
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   void _showPendingDialog() {
@@ -1281,6 +1343,19 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       ),
       body: BlocConsumer<WithdrawalCubit, WithdrawalState>(
         listener: (ctx, state) {
+          // Blocking "Processing…" overlay for the whole in-flight window.
+          if (state is WithdrawalSubmitting) {
+            _showProcessingDialog();
+            return;
+          }
+
+          // Any terminal outcome clears the processing overlay first.
+          if (state is WithdrawalPending ||
+              state is WithdrawalSuccess ||
+              state is WithdrawalError) {
+            _dismissProcessingDialog();
+          }
+
           // ── WithdrawalPending: show processing dialog, NOT success ──────────
           // The transfer is queued but not yet settled. The user will be
           // notified via push notification when it completes or fails.

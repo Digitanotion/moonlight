@@ -25,7 +25,9 @@ class GoLiveCubit extends Cubit<GoLiveState> {
     try {
       final cats = await repo.fetchCategories();
 
-      final eligible = await repo.isFirstStreamBonusEligible();
+      // First-stream $20 bonus has been retired — never surface the promo
+      // card regardless of what a stale backend might report.
+      const eligible = false;
 
       // Initialize devices according to default toggles
       final micReady = state.micOn ? await _ensureMicStarted() : false;

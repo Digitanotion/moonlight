@@ -57,25 +57,34 @@ class _HomeAppBarState extends State<HomeAppBar> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Moonlight',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppColors.textWhite,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              'Moonlight',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: AppColors.textWhite,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
+          const SizedBox(width: 8),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               _TopIcon(
                 icon: Icons.search,
                 onTap: () => _navigateToSearch(context),
               ),
-              const SizedBox(width: 14),
-              _TopIcon(
-                icon: Icons.videocam_outlined,
+              const SizedBox(width: 10),
+              // Textual entry point — replaces the bare camera icon, which
+              // users did not recognise as "start a private video chat".
+              _TopPill(
+                icon: Icons.videocam_rounded,
+                label: 'Video chat',
                 onTap: () => _navigateToVideoCall(context),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
               // Notification icon with badge
               ValueListenableBuilder<int>(
                 valueListenable: _unreadService.notificationUnreadCount,
@@ -96,7 +105,7 @@ class _HomeAppBarState extends State<HomeAppBar> {
                   );
                 },
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
               // Message icon with badge
                            ValueListenableBuilder<int>(
                 valueListenable: _unreadService.messageUnreadCount,
@@ -155,6 +164,47 @@ class _TopIcon extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: AppColors.textWhite, size: 20),
+      ),
+    );
+  }
+}
+
+/// Compact labelled entry point used in the home app bar. Reads as an
+/// action ("Video chat") rather than a bare glyph the user has to guess at.
+class _TopPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _TopPill({required this.icon, required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withOpacity(0.10)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: AppColors.textWhite, size: 18),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

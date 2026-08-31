@@ -12,6 +12,7 @@ import 'package:moonlight/features/video_call/domain/repositories/video_call_rep
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
 import 'package:moonlight/features/video_call/presentation/pages/video_call_settings_screen.dart';
+import 'package:moonlight/features/video_call/presentation/utils/video_call_guard.dart';
 import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -427,6 +428,13 @@ class _UserCard extends StatelessWidget {
 
   Future<void> _handleCallTap(BuildContext context) async {
     if (!_canCall) return;
+
+    // Ladies cannot start calls (server-enforced) — explain up front
+    // rather than letting the call fail mid-ring.
+    if (!currentUserCanStartCall()) {
+      await showLadiesCannotCallDialog(context);
+      return;
+    }
 
     final balance = await _fetchCoinBalance();
     if (!context.mounted) return;

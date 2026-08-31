@@ -1,4 +1,6 @@
 // lib/features/video_call/presentation/pages/active_call_screen.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
@@ -139,15 +141,27 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                               ],
                             ),
                             if (session?.endsAt != null)
-                              _CountdownPill(endsAt: session!.endsAt!),
+                              _CountdownPill(
+                                endsAt: session!.endsAt!,
+                                paused: state.isPaused,
+                              ),
                           ],
                         ),
                       ),
                     ),
                   ),
 
+                  // ── Network-drop banner (#3): timer paused ─────────────
+                  if (state.isPaused)
+                    Positioned(
+                      top: 110,
+                      left: 20,
+                      right: 20,
+                      child: _ReconnectingBanner(),
+                    ),
+
                   // ── Extend prompt (doc 1C: 30s remaining) ──────────────
-                  if (state.showExtendPrompt)
+                  if (state.showExtendPrompt && !state.isPaused)
                     Positioned(
                       top: 110,
                       left: 20,
@@ -315,25 +329,60 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
 
 class _CountdownPill extends StatefulWidget {
   final DateTime endsAt;
-  const _CountdownPill({required this.endsAt});
+  final bool paused;
+  const _CountdownPill({required this.endsAt, this.paused = false});
 
   @override
   State<_CountdownPill> createState() => _CountdownPillState();
 }
 
 class _CountdownPillState extends State<_CountdownPill> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CountdownPill old) {
+    super.didUpdateWidget(old);
+    if (old.paused != widget.paused) _syncTicker();
+  }
+
+  /// A local 1s repaint so the countdown actually ticks — but not while
+  /// paused, where the number must stay frozen (#3).
+  void _syncTicker() {
+    _ticker?.cancel();
+    if (widget.paused) return;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final remaining = widget.endsAt.difference(DateTime.now()).inSeconds;
     final safe = remaining < 0 ? 0 : remaining;
     final minutes = safe ~/ 60;
     final seconds = safe % 60;
-    final urgent = safe <= 30;
+    final urgent = safe <= 30 && !widget.paused;
+
+    final bg = widget.paused
+        ? Colors.black
+        : (urgent ? AppColors.textRed : Colors.black);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: (urgent ? AppColors.textRed : Colors.black).withOpacity(0.55),
+        color: bg.withOpacity(0.55),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: urgent ? AppColors.textRed : Colors.white24,
@@ -342,13 +391,55 @@ class _CountdownPillState extends State<_CountdownPill> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.timer_outlined, color: Colors.white, size: 14),
+          Icon(
+            widget.paused ? Icons.pause_circle_outline : Icons.timer_outlined,
+            color: Colors.white,
+            size: 14,
+          ),
           const SizedBox(width: 6),
           Text(
-            '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+            widget.paused
+                ? 'Paused'
+                : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
             style: AppTextStyles.caption.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReconnectingBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Connection lost — reconnecting. Your time is paused.',
+              style: AppTextStyles.caption.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
