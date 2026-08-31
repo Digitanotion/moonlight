@@ -13,10 +13,9 @@ class WithdrawalRemoteDataSource {
   Future<int> getWithdrawableBalance() async {
     final res = await http.dio.get('/api/v1/wallet');
     final data = _extract(res);
-    final withdrawable_balance =
-        (data['data']['balance'] as num).toInt() +
-        (data['data']['bonus_balance'] as num).toInt();
-    return withdrawable_balance;
+    // Bonus coins are NOT withdrawable — only the real earned/purchased
+    // `balance` can be paid out. (Was `balance + bonus_balance`.)
+    return (data['data']['balance'] as num?)?.toInt() ?? 0;
   }
 
   // ── PIN verify ─────────────────────────────────────────────────────────────
