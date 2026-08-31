@@ -228,6 +228,24 @@ class MessageEditEvent {
   }
 }
 
+/// Realtime payload for the `conversation.read` Pusher event — a participant
+/// advanced their read cursor.
+class ConversationReadEvent {
+  final String userUuid;
+  final DateTime? lastReadAt;
+
+  const ConversationReadEvent({required this.userUuid, this.lastReadAt});
+
+  factory ConversationReadEvent.fromJson(Map<String, dynamic> json) {
+    return ConversationReadEvent(
+      userUuid: (json['user_uuid'] ?? '').toString(),
+      lastReadAt: json['last_read_at'] != null
+          ? DateTime.tryParse(json['last_read_at'] as String)?.toLocal()
+          : null,
+    );
+  }
+}
+
 class Conversation extends Equatable {
   final String uuid;
   final String type;

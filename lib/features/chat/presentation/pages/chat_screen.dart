@@ -583,7 +583,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     } else if (state is ChatMessageSent ||
         state is ChatMessageReceived ||
         state is ChatMessageUpdated ||
-        state is ChatMessageDeleted) {
+        state is ChatMessageDeleted ||
+        state is ChatReadReceiptUpdated) {
       // These states also contain messages
       if (state is ChatMessageSent) {
         messages = state.messages;
@@ -598,6 +599,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         currentConversationUuid = state.conversationUuid;
         hasMore = false;
       } else if (state is ChatMessageDeleted) {
+        messages = state.messages;
+        currentConversationUuid = state.conversationUuid;
+        hasMore = false;
+      } else if (state is ChatReadReceiptUpdated) {
         messages = state.messages;
         currentConversationUuid = state.conversationUuid;
         hasMore = false;
@@ -874,6 +879,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             final bool showTime = _shouldShowTime(messages, index);
             final bool showTail = _shouldShowTail(messages, index, isMe);
 
+            // "Seen"/"Sent" under the last outgoing message only.
+            final bool isLastOutgoing = isMe &&
+                !widget.isClub &&
+                messages
+                    .skip(index + 1)
+                    .every((m) => m.sender?.uuid != _getCurrentUserUuid(context));
+
             return Column(
               children: [
                 // Time separator if needed
@@ -901,6 +913,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   chatCubit: context.read<ChatCubit>(),
                   isClub: widget.isClub,
                 ),
+
+                if (isLastOutgoing) _buildReadStatus(message),
               ],
             );
           },
@@ -910,6 +924,36 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         if (_showScrollToBottomIndicator) _buildScrollToBottomIndicator(),
         if (_showNewMessageIndicator) _buildNewMessageIndicator(),
       ],
+    );
+  }
+
+  Widget _buildReadStatus(Message message) {
+    final lastReadAt = context.read<ChatCubit>().otherPartyLastReadAt;
+    final seen = lastReadAt != null && !lastReadAt.isBefore(message.createdAt);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6, top: 2, bottom: 4),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              seen ? Icons.done_all_rounded : Icons.done_rounded,
+              size: 13,
+              color: seen ? AppColors.info : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              seen ? 'Seen' : 'Sent',
+              style: TextStyle(
+                fontSize: 10.5,
+                color: seen ? AppColors.info : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

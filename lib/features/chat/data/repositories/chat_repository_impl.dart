@@ -28,7 +28,8 @@ class ChatRepositoryImpl implements ChatRepository {
   final _conversationUpdateStreamCtrl =
       StreamController<Map<String, dynamic>>.broadcast();
   final _typingStartedStreamCtrl = StreamController<String>.broadcast();
-  final _conversationReadStreamCtrl = StreamController<String>.broadcast();
+  final _conversationReadStreamCtrl =
+      StreamController<ConversationReadEvent>.broadcast();
   final _messageEditStreamCtrl = StreamController<MessageEditEvent>.broadcast();
 
   final Set<String> _boundConversations = {};
@@ -470,7 +471,7 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
-  Stream<String> conversationReadStream() {
+  Stream<ConversationReadEvent> conversationReadStream() {
     _bindGlobalEventsIfNeeded();
     return _conversationReadStreamCtrl.stream;
   }
@@ -583,10 +584,12 @@ class ChatRepositoryImpl implements ChatRepository {
       // Bind to conversation.read event
       _pusher.bind(channel, 'conversation.read', (data) {
         debugPrint('👁️ Received conversation.read event: $data');
-        final map = _normalizeData(data);
-        final readerUuid = map['user_uuid'];
-        if (readerUuid is String) {
-          _conversationReadStreamCtrl.add(readerUuid);
+        try {
+          _conversationReadStreamCtrl.add(
+            ConversationReadEvent.fromJson(_normalizeData(data)),
+          );
+        } catch (e) {
+          debugPrint('❌ Error parsing conversation.read: $e');
         }
       });
 

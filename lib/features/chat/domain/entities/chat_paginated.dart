@@ -35,8 +35,27 @@ class ChatPaginated<T> extends Equatable {
   ];
 }
 
+/// A participant's read cursor, from `meta.participants_read`.
+class ParticipantRead {
+  final String? userUuid;
+  final DateTime? lastReadAt;
+
+  const ParticipantRead({this.userUuid, this.lastReadAt});
+
+  factory ParticipantRead.fromJson(Map<String, dynamic> json) {
+    return ParticipantRead(
+      userUuid: json['user_uuid'] as String?,
+      lastReadAt: json['last_read_at'] != null
+          ? DateTime.tryParse(json['last_read_at'] as String)?.toLocal()
+          : null,
+    );
+  }
+}
+
 // Specifically for messages
 class PaginatedMessages extends ChatPaginated<Message> {
+  final List<ParticipantRead> participantsRead;
+
   const PaginatedMessages({
     required super.data,
     required super.currentPage,
@@ -45,6 +64,7 @@ class PaginatedMessages extends ChatPaginated<Message> {
     required super.total,
     super.nextPageUrl,
     super.prevPageUrl,
+    this.participantsRead = const [],
   });
 
   factory PaginatedMessages.fromJson(Map<String, dynamic> json) {
@@ -102,6 +122,13 @@ class PaginatedMessages extends ChatPaginated<Message> {
     nextPageUrl ??= json['next_page_url'] as String?;
     prevPageUrl ??= json['prev_page_url'] as String?;
 
+    final meta = json['meta'];
+    final readList = (meta is Map ? meta['participants_read'] : null) as List?;
+    final participantsRead = (readList ?? [])
+        .whereType<Map>()
+        .map((m) => ParticipantRead.fromJson(m.cast<String, dynamic>()))
+        .toList();
+
     return PaginatedMessages(
       data: messages,
       currentPage: currentPage,
@@ -110,6 +137,7 @@ class PaginatedMessages extends ChatPaginated<Message> {
       total: total,
       nextPageUrl: nextPageUrl,
       prevPageUrl: prevPageUrl,
+      participantsRead: participantsRead,
     );
   }
 

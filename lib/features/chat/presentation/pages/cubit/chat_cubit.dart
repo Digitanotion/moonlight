@@ -22,8 +22,13 @@ class ChatCubit extends Cubit<ChatState> {
   StreamSubscription<Message>? _messageSubscription;
   StreamSubscription<String>? _typingSubscription;
   StreamSubscription<MessageEditEvent>? _messageEditSubscription;
+  StreamSubscription<ConversationReadEvent>? _readReceiptSubscription;
 
   String? _currentConversationUuid;
+
+  // The other participant's read cursor — drives the "Seen" indicator.
+  DateTime? _otherPartyLastReadAt;
+  DateTime? get otherPartyLastReadAt => _otherPartyLastReadAt;
   final Map<String, UploadProgress> _currentUploads = {};
 
   // Pagination
@@ -124,6 +129,16 @@ class ChatCubit extends Cubit<ChatState> {
         page: _currentPage,
         perPage: 30,
       );
+
+      // Capture the other participant's read cursor for "Seen" indicators.
+      if (!loadMore) {
+        final myUuid = _currentUserService?.currentUser?.id;
+        final other = result.participantsRead
+            .where((p) => p.userUuid != null && p.userUuid != myUuid)
+            .toList();
+        _otherPartyLastReadAt =
+            other.isNotEmpty ? other.first.lastReadAt : null;
+      }
 
       // Store last page for future reference
       _lastPage = result.lastPage;
@@ -495,6 +510,8 @@ class ChatCubit extends Cubit<ChatState> {
       return (state as ChatMessageUpdated).messages;
     } else if (state is ChatMessageDeleted) {
       return (state as ChatMessageDeleted).messages;
+    } else if (state is ChatReadReceiptUpdated) {
+      return (state as ChatReadReceiptUpdated).messages;
     } else if (state is ChatUploadingMedia) {
       return (state as ChatUploadingMedia).messages;
     }
@@ -678,6 +695,7 @@ class ChatCubit extends Cubit<ChatState> {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _messageEditSubscription?.cancel();
+    _readReceiptSubscription?.cancel();
 
     try {
       _repository.bindConversationEvents(conversationUuid);
@@ -731,6 +749,29 @@ class ChatCubit extends Cubit<ChatState> {
       },
     );
 
+    _readReceiptSubscription = _repository.conversationReadStream().listen(
+      (event) {
+        if (_currentConversationUuid != conversationUuid) return;
+        final myUuid = _currentUserService?.currentUser?.id;
+        if (event.userUuid.isEmpty || event.userUuid == myUuid) return;
+        final at = event.lastReadAt ?? DateTime.now();
+        if (_otherPartyLastReadAt != null &&
+            !at.isAfter(_otherPartyLastReadAt!)) {
+          return;
+        }
+        _otherPartyLastReadAt = at;
+        emit(
+          ChatReadReceiptUpdated(
+            messages: List.from(_allMessages),
+            conversationUuid: conversationUuid,
+          ),
+        );
+      },
+      onError: (e) {
+        debugPrint('❌ Error in read-receipt stream: $e');
+      },
+    );
+
     _typingSubscription = _repository.typingStartedStream().listen(
       (userUuid) {
         emit(ChatTypingStarted(userUuid: userUuid));
@@ -772,6 +813,8 @@ class ChatCubit extends Cubit<ChatState> {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _messageEditSubscription?.cancel();
+    _readReceiptSubscription?.cancel();
+    _otherPartyLastReadAt = null;
 
     if (uuid != null) {
       _repository.unbindConversationEvents(uuid);

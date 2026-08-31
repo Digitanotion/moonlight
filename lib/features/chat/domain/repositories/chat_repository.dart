@@ -13,7 +13,7 @@ abstract class ChatRepository {
   Future<List<Conversation>> searchConversations(String query);
 
   // ========== MESSAGES ==========
-  Future<ChatPaginated<Message>> getMessages(
+  Future<PaginatedMessages> getMessages(
     String conversationUuid, {
     int page,
     int perPage,
@@ -57,7 +57,7 @@ abstract class ChatRepository {
   Stream<Message> messageStream();
   Stream<Map<String, dynamic>> conversationUpdateStream();
   Stream<String> typingStartedStream();
-  Stream<String> conversationReadStream();
+  Stream<ConversationReadEvent> conversationReadStream();
   Stream<MessageEditEvent> messageEditedStream();
 
   // ========== LIFECYCLE ==========

@@ -94,6 +94,18 @@ class ChatMessageDeleted extends ChatState {
   ChatMessageDeleted({required this.messages, required this.conversationUuid});
 }
 
+/// Emitted when the other participant's read cursor advances, so the UI can
+/// re-render "Seen" indicators. Carries the current message list unchanged.
+class ChatReadReceiptUpdated extends ChatState {
+  final List<Message> messages;
+  final String conversationUuid;
+
+  ChatReadReceiptUpdated({
+    required this.messages,
+    required this.conversationUuid,
+  });
+}
+
 // Real-time states
 class ChatTypingStarted extends ChatState {
   final String userUuid;
