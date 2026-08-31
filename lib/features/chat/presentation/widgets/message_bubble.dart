@@ -22,6 +22,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onReact;
   final VoidCallback? onReply;
+  final VoidCallback? onEdit;
   final VoidCallback? onCancelReply;
   final VoidCallback? onMediaTap;
   final File? mediaFile;
@@ -41,6 +42,7 @@ class MessageBubble extends StatelessWidget {
     this.onDelete,
     this.onReact,
     this.onReply,
+    this.onEdit,
     this.onCancelReply,
     this.onMediaTap,
     this.mediaFile,
@@ -853,6 +855,16 @@ class MessageBubble extends StatelessWidget {
                       },
                       color: AppColors.textSecondary,
                     ),
+                    if (message.type == MessageType.text && onEdit != null)
+                      _buildContextMenuItem(
+                        icon: Icons.edit_outlined,
+                        label: 'Edit',
+                        onTap: () {
+                          Navigator.pop(context);
+                          onEdit?.call();
+                        },
+                        color: AppColors.info,
+                      ),
                     _buildContextMenuItem(
                       icon: Icons.delete,
                       label: 'Delete',

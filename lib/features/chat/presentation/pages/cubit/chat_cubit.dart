@@ -21,6 +21,7 @@ class ChatCubit extends Cubit<ChatState> {
 
   StreamSubscription<Message>? _messageSubscription;
   StreamSubscription<String>? _typingSubscription;
+  StreamSubscription<MessageEditEvent>? _messageEditSubscription;
 
   String? _currentConversationUuid;
   final Map<String, UploadProgress> _currentUploads = {};
@@ -676,6 +677,7 @@ class ChatCubit extends Cubit<ChatState> {
   void _setupRealTimeListeners(String conversationUuid) {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
+    _messageEditSubscription?.cancel();
 
     try {
       _repository.bindConversationEvents(conversationUuid);
@@ -704,6 +706,28 @@ class ChatCubit extends Cubit<ChatState> {
       },
       onError: (e) {
         debugPrint('❌ Error in message stream: $e');
+      },
+    );
+
+    _messageEditSubscription = _repository.messageEditedStream().listen(
+      (edit) {
+        if (_currentConversationUuid != conversationUuid) return;
+        final index = _allMessages.indexWhere((m) => m.uuid == edit.uuid);
+        if (index == -1) return;
+        _allMessages[index] = _allMessages[index].copyWith(
+          body: edit.body,
+          isEdited: true,
+          editedAt: edit.editedAt ?? DateTime.now(),
+        );
+        emit(
+          ChatMessageUpdated(
+            messages: List.from(_allMessages),
+            conversationUuid: conversationUuid,
+          ),
+        );
+      },
+      onError: (e) {
+        debugPrint('❌ Error in message-edit stream: $e');
       },
     );
 
@@ -747,6 +771,7 @@ class ChatCubit extends Cubit<ChatState> {
 
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
+    _messageEditSubscription?.cancel();
 
     if (uuid != null) {
       _repository.unbindConversationEvents(uuid);

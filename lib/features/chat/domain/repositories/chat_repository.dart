@@ -58,6 +58,7 @@ abstract class ChatRepository {
   Stream<Map<String, dynamic>> conversationUpdateStream();
   Stream<String> typingStartedStream();
   Stream<String> conversationReadStream();
+  Stream<MessageEditEvent> messageEditedStream();
 
   // ========== LIFECYCLE ==========
   void bindConversationEvents(String conversationUuid);

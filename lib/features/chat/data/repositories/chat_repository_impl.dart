@@ -29,6 +29,7 @@ class ChatRepositoryImpl implements ChatRepository {
       StreamController<Map<String, dynamic>>.broadcast();
   final _typingStartedStreamCtrl = StreamController<String>.broadcast();
   final _conversationReadStreamCtrl = StreamController<String>.broadcast();
+  final _messageEditStreamCtrl = StreamController<MessageEditEvent>.broadcast();
 
   final Set<String> _boundConversations = {};
   bool _globalEventsBound = false;
@@ -474,6 +475,9 @@ class ChatRepositoryImpl implements ChatRepository {
     return _conversationReadStreamCtrl.stream;
   }
 
+  @override
+  Stream<MessageEditEvent> messageEditedStream() => _messageEditStreamCtrl.stream;
+
   /* -------------------------------------------------------------------------- */
   /*                           PUSHER BINDINGS                                   */
   /* -------------------------------------------------------------------------- */
@@ -561,6 +565,18 @@ class ChatRepositoryImpl implements ChatRepository {
         final uuid = map['user_uuid'];
         if (uuid is String) {
           _typingStartedStreamCtrl.add(uuid);
+        }
+      });
+
+      // Bind to message.updated event (a message was edited)
+      _pusher.bind(channel, 'message.updated', (data) {
+        debugPrint('✏️ Received message.updated event: $data');
+        try {
+          _messageEditStreamCtrl.add(
+            MessageEditEvent.fromJson(_normalizeData(data)),
+          );
+        } catch (e) {
+          debugPrint('❌ Error parsing message.updated: $e');
         }
       });
 
@@ -694,6 +710,7 @@ class ChatRepositoryImpl implements ChatRepository {
     await _typingStartedStreamCtrl.close();
     await _conversationUpdateStreamCtrl.close();
     await _conversationReadStreamCtrl.close();
+    await _messageEditStreamCtrl.close();
 
     _boundConversations.clear();
     _globalEventsBound = false;

@@ -168,6 +168,26 @@ class Message extends Equatable {
     'reply_to': replyTo?.toJson(),
   };
 
+  Message copyWith({
+    String? body,
+    bool? isEdited,
+    DateTime? editedAt,
+  }) {
+    return Message(
+      uuid: uuid,
+      body: body ?? this.body,
+      type: type,
+      sender: sender,
+      media: media,
+      reactions: reactions,
+      isEdited: isEdited ?? this.isEdited,
+      createdAt: createdAt,
+      editedAt: editedAt ?? this.editedAt,
+      replyToUuid: replyToUuid,
+      replyTo: replyTo,
+    );
+  }
+
   @override
   List<Object?> get props => [
     uuid,
@@ -182,6 +202,30 @@ class Message extends Equatable {
     replyToUuid,
     replyTo,
   ];
+}
+
+/// Lightweight realtime payload for the `message.updated` Pusher event —
+/// the server only sends the changed fields, keyed by message uuid.
+class MessageEditEvent {
+  final String uuid;
+  final String body;
+  final DateTime? editedAt;
+
+  const MessageEditEvent({
+    required this.uuid,
+    required this.body,
+    this.editedAt,
+  });
+
+  factory MessageEditEvent.fromJson(Map<String, dynamic> json) {
+    return MessageEditEvent(
+      uuid: json['uuid'] as String,
+      body: json['body']?.toString() ?? '',
+      editedAt: json['edited_at'] != null
+          ? DateTime.tryParse(json['edited_at'] as String)?.toLocal()
+          : null,
+    );
+  }
 }
 
 class Conversation extends Equatable {

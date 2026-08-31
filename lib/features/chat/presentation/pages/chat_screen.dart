@@ -39,6 +39,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Reply functionality
   Message? _replyingToMessage;
   bool _showReplyPreview = false;
+
+  // Edit functionality — non-null while editing an already-sent message
+  Message? _editingMessage;
   bool _isEmojiVisible = false;
   List<File> _selectedMedia = [];
   bool _shouldAutoScroll = true;
@@ -891,6 +894,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   },
                   onReact: () => _reactToMessage(message),
                   onReply: () => _startReply(message),
+                  onEdit: () => _startEditing(message),
                   onCancelReply: _cancelReply,
                   isTyping: false,
                   showTail: showTail,
@@ -906,6 +910,50 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         if (_showScrollToBottomIndicator) _buildScrollToBottomIndicator(),
         if (_showNewMessageIndicator) _buildNewMessageIndicator(),
       ],
+    );
+  }
+
+  Widget _buildEditBanner() {
+    if (_editingMessage == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withOpacity(0.9),
+        border: Border(bottom: BorderSide(color: AppColors.divider, width: 1)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.edit_outlined, size: 18, color: AppColors.info),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Editing message',
+                  style: TextStyle(
+                    color: AppColors.info,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _editingMessage!.body,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close, size: 20, color: AppColors.textSecondary),
+            onPressed: _cancelEditing,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1164,6 +1212,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   void _startReply(Message message) {
     setState(() {
+      _editingMessage = null;
       _replyingToMessage = message;
       _showReplyPreview = true;
     });
@@ -1186,8 +1235,40 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
+  void _startEditing(Message message) {
+    setState(() {
+      _editingMessage = message;
+      // editing and replying are mutually exclusive
+      _replyingToMessage = null;
+      _showReplyPreview = false;
+    });
+    _messageController.text = message.body;
+    _messageController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _messageController.text.length),
+    );
+    _messageFocusNode.requestFocus();
+  }
+
+  void _cancelEditing() {
+    setState(() => _editingMessage = null);
+    _messageController.clear();
+  }
+
   void _sendMessage() {
     final text = _messageController.text.trim();
+
+    // ── Editing an existing message ────────────────────────────────────────
+    if (_editingMessage != null) {
+      final target = _editingMessage!;
+      if (text.isNotEmpty && text != target.body) {
+        context.read<ChatCubit>().editMessage(
+          messageUuid: target.uuid,
+          newBody: text,
+        );
+      }
+      _cancelEditing();
+      return;
+    }
 
     if (text.isEmpty && _selectedMedia.isEmpty) {
       return;
@@ -2582,6 +2663,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
+
+                // Edit banner
+                if (_editingMessage != null) _buildEditBanner(),
 
                 // Reply Preview
                 if (_showReplyPreview && _replyingToMessage != null)
