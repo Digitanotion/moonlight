@@ -95,9 +95,9 @@ class MainActivity : FlutterActivity() {
             "onPipModeChanged",
             mapOf("active" to isInPictureInPictureMode)
         )
-        if (!isInPictureInPictureMode) {
-            isVideoPlaying = false
-            updatePipParams(videoPlaying = false)
-        }
+        // NOTE: we intentionally do NOT reset isVideoPlaying here. The Flutter
+        // side owns that flag — a live viewer / video post still on screen
+        // after the user expands PiP back into the app should keep auto-PiP
+        // armed. The owning screen calls setVideoPlaying(false) in dispose.
     }
 }

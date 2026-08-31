@@ -12,6 +12,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/ad_service.dart';
 import 'package:moonlight/core/services/call_kit_service.dart'; // ← NEW
 import 'package:moonlight/core/services/connection_monitor.dart';
+import 'package:moonlight/core/services/deep_link_service.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/notification_handler_service.dart';
 import 'package:moonlight/core/services/notification_service.dart';
@@ -359,6 +360,13 @@ Future<void> _initEverything() async {
       ConnectionMonitor().startMonitoring().catchError(
         (e) => debugPrint('⚠️ ConnectionMonitor: $e'),
       ),
+    );
+
+    // Inbound deep links (moonlightstream.app/live/… + moonlight:// scheme).
+    unawaited(
+      DeepLinkService.instance
+          .init()
+          .catchError((e) => debugPrint('⚠️ DeepLinkService: $e')),
     );
 
     debugPrint('🎉 Background init complete');

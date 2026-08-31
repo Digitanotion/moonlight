@@ -37,7 +37,7 @@ import 'package:moonlight/features/live_viewer/presentation/widgets/video_layout
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/controls/guest_control_panel.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/dynamic_split_screen.dart';
 import 'package:moonlight/widgets/top_snack.dart';
-import 'package:screen_protector/screen_protector.dart';
+import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:uuid/uuid.dart';
 
 class GuestModeScreen extends StatefulWidget {
@@ -73,7 +73,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
     // Doc item 11: "Nobody will be able to screenshot or video record
     // a streamer." — same protection as ViewerModeScreen, since this
     // is also a livestream-viewing screen (just for guest/co-host role).
-    ScreenProtector.protectDataLeakageOn();
+    ScreenGuard.acquire();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<ViewerBloc>();
       if (bloc.state.giftCatalog.isEmpty) {
@@ -84,7 +84,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
 
   @override
   void dispose() {
-    ScreenProtector.protectDataLeakageOff();
+    ScreenGuard.release();
     _commentCtrl.dispose();
     super.dispose();
   }

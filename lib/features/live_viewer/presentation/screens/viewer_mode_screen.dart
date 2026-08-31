@@ -31,7 +31,7 @@ import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.
 import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
 import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:moonlight/widgets/top_snack.dart';
-import 'package:screen_protector/screen_protector.dart';
+import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:uuid/uuid.dart';
 
 class ViewerModeScreen extends StatefulWidget {
@@ -65,7 +65,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
     // applied for the duration this viewer screen is on-screen only,
     // not app-wide, and reversed in dispose() below so other screens
     // are unaffected.
-    ScreenProtector.protectDataLeakageOn();
+    ScreenGuard.acquire();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<ViewerBloc>();
       if (bloc.state.giftCatalog.isEmpty) {
@@ -76,7 +76,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
 
   @override
   void dispose() {
-    ScreenProtector.protectDataLeakageOff();
+    ScreenGuard.release();
     _commentCtrl.dispose();
     super.dispose();
   }

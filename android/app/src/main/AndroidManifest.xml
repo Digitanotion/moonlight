@@ -104,6 +104,26 @@
                 <action android:name="FLUTTER_NOTIFICATION_CLICK" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+
+            <!-- Verified App Links: https://moonlightstream.app/live/... and /post/...
+                 Requires /.well-known/assetlinks.json on the domain (see deploy/). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="moonlightstream.app" android:pathPrefix="/live/" />
+                <data android:scheme="https" android:host="moonlightstream.app" android:pathPrefix="/post/" />
+                <data android:scheme="https" android:host="www.moonlightstream.app" android:pathPrefix="/live/" />
+                <data android:scheme="https" android:host="www.moonlightstream.app" android:pathPrefix="/post/" />
+            </intent-filter>
+
+            <!-- Custom-scheme fallback (no domain verification needed) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="moonlight" />
+            </intent-filter>
         </activity>
 
         <meta-data

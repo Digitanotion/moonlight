@@ -31,7 +31,8 @@ import 'package:moonlight/features/livestream/presentation/widgets/confirm_end_s
 import 'package:moonlight/features/livestream/presentation/widgets/gift_toast.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/live_settings_menu.dart';
 import 'package:moonlight/widgets/top_snack.dart';
-import 'package:screen_protector/screen_protector.dart';
+import 'package:moonlight/core/services/screen_guard.dart';
+import 'package:moonlight/core/services/share_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
 import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
@@ -191,7 +192,7 @@ class _LiveHostPageState extends State<LiveHostPage>
     // Doc item 11: "Nobody will be able to screenshot or video record
     // a streamer." Applied here too (her own device), alongside the
     // viewer-side screens, for consistent protection either way.
-    ScreenProtector.protectDataLeakageOn();
+    ScreenGuard.acquire();
     _giftToast = GiftToast();
     WidgetsBinding.instance.addObserver(this);
     agora.addListener(_onAgoraStateChanged);
@@ -305,7 +306,7 @@ class _LiveHostPageState extends State<LiveHostPage>
   }
 
  void dispose() {
-    ScreenProtector.protectDataLeakageOff();
+    ScreenGuard.release();
     _beautyAppliedOnJoin = false;
     agora.removeListener(_onAgoraStateChanged);
 
@@ -506,6 +507,19 @@ class _LiveHostPageState extends State<LiveHostPage>
     return '$m:$s';
   }
 
+  void _shareMyStream() {
+    final current = sl<LiveSessionTracker>().current;
+    final ref = (current?.uuid != null && current!.uuid!.isNotEmpty)
+        ? current.uuid!
+        : current?.livestreamId.toString();
+    if (ref == null || ref.isEmpty) return;
+    ShareService.shareLive(
+      livestreamUuid: ref,
+      hostName: widget.hostName,
+      title: widget.topic,
+    );
+  }
+
   Widget _buildLoadingState() {
     return Container(
       color: Colors.black,
@@ -634,6 +648,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                           avatarUrl: widget.avatarUrl,
                           timeText: _mmss(state.elapsedSeconds),
                           viewersText: _formatViewers(state.viewers),
+                          onShare: _shareMyStream,
                           onEnd: () {
                             try {
                               context.read<LiveHostBloc>().add(EndPressed());
@@ -1950,6 +1965,7 @@ class _HeaderBar extends StatelessWidget {
   final String viewersText;
   final String? avatarUrl;
   final VoidCallback onEnd;
+  final VoidCallback? onShare;
 
   const _HeaderBar({
     required this.hostName,
@@ -1957,6 +1973,7 @@ class _HeaderBar extends StatelessWidget {
     required this.timeText,
     required this.viewersText,
     required this.onEnd,
+    this.onShare,
     this.avatarUrl,
   });
 
@@ -2038,6 +2055,17 @@ class _HeaderBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (onShare != null) ...[
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onShare,
+              child: const Padding(
+                padding: EdgeInsets.only(top: 2, right: 10, left: 2),
+                child: Icon(Icons.ios_share_rounded,
+                    color: Colors.white, size: 18),
+              ),
+            ),
+          ],
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _showEndStreamConfirmation(context),

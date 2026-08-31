@@ -816,6 +816,39 @@ class AgoraEnginePool {
     debugPrint('📲 [Pool] Foregrounded');
   }
 
+  /// Background variant for the live viewer that keeps playing in a
+  /// Picture-in-Picture window / while the user is in another app
+  /// (product spec items 9 + 10). The `current` slot stays joined so
+  /// audio + video continue; only `previous`/`next` are released.
+  Future<void> onAppBackgroundedKeepingCurrent() async {
+    if (_backgrounded) return;
+    _backgrounded = true;
+    for (final position in const [SlotPosition.previous, SlotPosition.next]) {
+      await _leaveSlot(_map[position]!);
+    }
+    debugPrint('📴 [Pool] Backgrounded (PiP — current slot kept alive)');
+  }
+
+  /// Foreground counterpart of [onAppBackgroundedKeepingCurrent]. Drops the
+  /// still-joined `current` slot first so the normal foreground path rejoins
+  /// it fresh and re-issues `setupRemoteVideo` against the (possibly
+  /// OS-recreated) video Surface.
+  Future<void> onAppForegroundedFromPip({
+    required int currentIndex,
+    required int itemCount,
+    required Future<StreamJoinRequest?> Function(int) resolve,
+  }) async {
+    if (!_backgrounded) return;
+    try {
+      await _leaveSlot(_map[SlotPosition.current]!);
+    } catch (_) {}
+    await onAppForegrounded(
+      currentIndex: currentIndex,
+      itemCount: itemCount,
+      resolve: resolve,
+    );
+  }
+
   /// Fully releases the shared engine so another engine (e.g. AgoraService
   /// for the host go-live screen) can be created. The pool resets to an
   /// uninitialized state — the next call to initialize() will create a

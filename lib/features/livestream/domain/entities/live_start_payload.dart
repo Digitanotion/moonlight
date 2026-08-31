@@ -1,5 +1,6 @@
 class LiveStartPayload {
   final int livestreamId;
+  final String? uuid;
   final String channel;
   final String uidType;
   final String uid;
@@ -24,6 +25,7 @@ class LiveStartPayload {
 
   const LiveStartPayload({
     required this.livestreamId,
+    this.uuid,
     required this.channel,
     required this.uidType,
     required this.uid,

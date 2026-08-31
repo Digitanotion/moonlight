@@ -41,6 +41,7 @@ class FirstBonusDto {
 class StartLiveResponse {
   // existing transport fields
   final int livestreamId; // numeric (for sockets)
+  final String? uuid;
   final String channel;
   final String uidType;
   final String uid;
@@ -62,6 +63,7 @@ class StartLiveResponse {
 
   StartLiveResponse({
     required this.livestreamId,
+    this.uuid,
     required this.channel,
     required this.uidType,
     required this.uid,
@@ -86,6 +88,7 @@ class StartLiveResponse {
 
     return StartLiveResponse(
       livestreamId: int.tryParse(j['livestream_id'].toString()) ?? 0,
+      uuid: (stream['uuid'] ?? j['uuid'])?.toString(),
       channel: j['channel']?.toString() ?? '',
       uidType: j['uid_type']?.toString() ?? 'userAccount',
       uid: j['uid']?.toString() ?? '',

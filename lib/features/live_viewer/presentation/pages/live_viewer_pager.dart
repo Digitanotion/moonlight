@@ -33,6 +33,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
+import 'package:moonlight/core/services/pip_service.dart';
+import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/pool_video_view.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
@@ -78,6 +80,10 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   @override
   void initState() {
     super.initState();
+    ScreenGuard.acquire(); // no screenshots / recording while watching a stream
+    // Items 9 + 10: keep the stream playing when minimised / when the user
+    // switches apps, in an OS Picture-in-Picture window, until they close it.
+    PipService.instance.setVideoPlaying(true);
     WidgetsBinding.instance.addObserver(this);
 
     _currentPage = widget.initialIndex;
@@ -145,6 +151,8 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
 
   @override
   void dispose() {
+    ScreenGuard.release();
+    PipService.instance.setVideoPlaying(false); // stop auto-PiP for this screen
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onPageScrolled);
     _controller.dispose();
@@ -177,16 +185,19 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.paused) {
-      _pool.onAppBackgrounded();
-      // Stop hitting /status while backgrounded — a viewer that can't see the
-      // stream has no reason to poll it.
+      // Items 9 + 10: DON'T tear the stream down. Keep the current slot
+      // joined so audio + video continue in the PiP window / while the user
+      // is in another app; only release the off-screen slots.
+      _pool.onAppBackgroundedKeepingCurrent();
+      // Health polling can pause though — the payload is only needed for the
+      // in-app UI, which isn't visible.
       if (_currentPage >= 0 && _currentPage < _repos.length) {
         try {
           _repos[_currentPage].pauseHealthCheck();
         } catch (_) {}
       }
     } else if (state == AppLifecycleState.resumed) {
-      _pool.onAppForegrounded(
+      _pool.onAppForegroundedFromPip(
         currentIndex: _currentPage,
         itemCount: widget.items.length,
         resolve: (i) => _resolver.resolve(widget.items, i),

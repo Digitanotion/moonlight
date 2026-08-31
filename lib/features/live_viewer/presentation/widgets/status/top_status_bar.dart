@@ -5,6 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/share_service.dart';
+import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 
 class TopStatusBar extends StatefulWidget {
@@ -32,6 +34,21 @@ class _TopStatusBarState extends State<TopStatusBar> {
       barrierColor: Colors.black54,
       builder: (dialogContext) => _StreamerInfoPopup(host: host),
     );
+  }
+
+  void _shareStream(BuildContext context) {
+    final bloc = context.read<ViewerBloc>();
+    final repo = bloc.repo;
+    final uuid = repo is ViewerRepositoryImpl ? repo.livestreamParam : null;
+    if (uuid == null || uuid.isEmpty) return;
+
+    final host = bloc.state.host;
+    ShareService.shareLive(
+      livestreamUuid: uuid,
+      hostName: host?.name,
+      title: host?.title,
+    );
+    bloc.add(const SharePressed()); // bump the share count server-side
   }
 
   @override
@@ -111,6 +128,17 @@ class _TopStatusBarState extends State<TopStatusBar> {
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _shareStream(context),
+                child: _glass(
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.ios_share_rounded,
+                        color: Colors.white, size: 18),
                   ),
                 ),
               ),

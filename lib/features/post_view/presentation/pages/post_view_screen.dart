@@ -1,13 +1,13 @@
 // lib/features/post_view/presentation/pages/post_view_screen.dart
 
 import 'dart:async';
-import 'package:moonlight/core/widgets/connection_toast.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
+import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart'; // ← NEW
 import 'package:moonlight/core/theme/app_text_styles.dart';
@@ -52,26 +52,22 @@ class _PostViewScreenState extends State<PostViewScreen> {
   String? _editingCommentId;
   bool _isInPipMode = false;
 
-  // Single MethodChannel — only here, NOT in _PostMediaState
-  static const _pipChannel = MethodChannel('com.app.moonlightstream/pip');
+  final PipService _pip = PipService.instance;
 
   @override
   void initState() {
     super.initState();
-    _pipChannel.setMethodCallHandler(_onNativePipCall);
+    _pip.isInPipMode.addListener(_onPipChanged);
+    _isInPipMode = _pip.isInPipMode.value;
   }
 
-  Future<dynamic> _onNativePipCall(MethodCall call) async {
-    if (call.method == 'onPipModeChanged') {
-      final active = call.arguments['active'] as bool? ?? false;
-      // Suppress the global network toast while PiP is showing.
-      SimpleConnectionToast.pipActive.value = active;
-      if (mounted) setState(() => _isInPipMode = active);
-    }
+  void _onPipChanged() {
+    if (mounted) setState(() => _isInPipMode = _pip.isInPipMode.value);
   }
 
   @override
   void dispose() {
+    _pip.isInPipMode.removeListener(_onPipChanged);
     _commentController.dispose();
     _commentFocusNode.dispose();
     super.dispose();
@@ -386,7 +382,6 @@ class _PostViewScreenState extends State<PostViewScreen> {
         body: _PostMedia(
           key: ValueKey('media_${post.id}'),
           post: post,
-          pipChannel: _pipChannel,
           fillScreen: true,
         ),
       );
@@ -405,7 +400,6 @@ class _PostViewScreenState extends State<PostViewScreen> {
                   child: _PostMedia(
                     key: ValueKey('media_${post.id}'),
                     post: post,
-                    pipChannel: _pipChannel,
                   ),
                 ),
 
@@ -524,17 +518,15 @@ class _ActionRow extends StatelessWidget {
 }
 
 // ── Post media ────────────────────────────────────────────────────────────────
-// pipChannel passed in so _PostMediaState can notify native of play state.
-// No _isInPipMode here — PiP is handled at screen level via Visibility.
+// Notifies native of play state via PipService. No _isInPipMode here — PiP is
+// handled at screen level via Visibility.
 
 class _PostMedia extends StatefulWidget {
   final Post post;
-  final MethodChannel pipChannel;
   final bool fillScreen;
   const _PostMedia({
     super.key,
     required this.post,
-    required this.pipChannel,
     this.fillScreen = false,
   });
 
@@ -682,11 +674,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
   }
 
   Future<void> _notifyPlayingState(bool playing) async {
-    try {
-      await widget.pipChannel.invokeMethod('setVideoPlaying', {
-        'playing': playing,
-      });
-    } catch (_) {}
+    await PipService.instance.setVideoPlaying(playing);
   }
 
   @override
@@ -1061,7 +1049,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
                     GestureDetector(
                       onTap: () async {
                         await _notifyPlayingState(true);
-                        await widget.pipChannel.invokeMethod('enterPip');
+                        await PipService.instance.enterPip();
                       },
                       child: Container(
                         padding: const EdgeInsets.all(8),

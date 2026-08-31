@@ -17,6 +17,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
+import 'package:moonlight/core/services/pip_service.dart';
+import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
@@ -102,6 +104,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   @override
   void initState() {
     super.initState();
+    ScreenGuard.acquire(); // block screenshots / screen-recording of the stream
+    PipService.instance.setVideoPlaying(true); // items 9 + 10: keep playing / PiP
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
@@ -274,6 +278,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
 
   @override
   void dispose() {
+    ScreenGuard.release();
+    PipService.instance.setVideoPlaying(false);
     _fadeController?.dispose();
     _videoReadyProgress.dispose();
     _viewerBloc?.close();

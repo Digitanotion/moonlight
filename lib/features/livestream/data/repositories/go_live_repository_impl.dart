@@ -99,6 +99,7 @@ class GoLiveRepositoryImpl implements GoLiveRepository {
     // Map DTO → Domain
     return LiveStartPayload(
       livestreamId: dto.livestreamId,
+      uuid: dto.uuid,
       channel: dto.channel,
       uidType: dto.uidType,
       uid: dto.uid,

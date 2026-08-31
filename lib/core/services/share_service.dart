@@ -90,4 +90,26 @@ class ShareService {
       subject: 'Check this out on Moonlight Stream',
     );
   }
+
+  /// Share a live stream invite link. The URL is a verified App Link /
+  /// Universal Link — it opens the stream straight in the app if installed,
+  /// otherwise the web landing page bounces the friend to the store.
+  static Future<void> shareLive({
+    required String livestreamUuid,
+    String? hostName,
+    String? title,
+  }) async {
+    final link = '$_baseUrl/live/$livestreamUuid';
+    final who = (hostName != null && hostName.trim().isNotEmpty)
+        ? hostName.trim()
+        : 'Someone';
+    final what = (title != null && title.trim().isNotEmpty)
+        ? ' — “${title.trim()}”'
+        : '';
+
+    await Share.share(
+      '$who is live on Moonlight right now$what.\nJoin the stream:\n$link',
+      subject: 'Join me live on Moonlight',
+    );
+  }
 }

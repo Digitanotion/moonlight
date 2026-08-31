@@ -1,0 +1,16 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.app.moonlightstream",
+      "sha256_cert_fingerprints": [
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256",
+        "REPLACE_WITH_UPLOAD_KEY_SHA256",
+        "EA:6B:47:6C:03:12:D8:DF:AC:B7:28:4E:4F:4E:76:9F:BA:55:59:98:97:E7:17:D8:51:D3:FE:3B:99:CA:DB:28"
+      ]
+    }
+  }
+]
