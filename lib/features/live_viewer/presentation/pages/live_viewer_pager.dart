@@ -299,11 +299,42 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     };
   }
 
+  // ── Seamless wrap-around ─────────────────────────────────────────────
+  //
+  // When the viewer swipes past the last stream, silently loop back to the
+  // first one instead of dead-ending — "so the users will not know that the
+  // profiles have finished" (product spec item 15).
+  bool _wrapping = false;
+
+  bool _handleScrollNotification(ScrollNotification n) {
+    if (_wrapping || widget.items.length < 2) return false;
+    final lastIndex = widget.items.length - 1;
+
+    // Overscroll past the bottom edge while sitting on the last page.
+    if (n is OverscrollNotification &&
+        n.overscroll > 0 &&
+        _currentPage >= lastIndex) {
+      _wrapping = true;
+      // Defer so we don't mutate the controller mid-scroll-notification.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_controller.hasClients) {
+          _wrapping = false;
+          return;
+        }
+        _controller.jumpToPage(0);
+        _wrapping = false;
+      });
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: PageView.builder(
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _handleScrollNotification,
+        child: PageView.builder(
         controller: _controller,
         scrollDirection: Axis.vertical,
         physics: const PageScrollPhysics(),
@@ -335,6 +366,7 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
             ),
           );
         },
+        ),
       ),
     );
   }
