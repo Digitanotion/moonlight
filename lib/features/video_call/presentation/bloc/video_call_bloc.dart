@@ -824,16 +824,19 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
 
   // ── Network-drop timer freeze (#3) ──────────────────────────────────────
 
-  /// Grace period before a media drop is treated as "connection lost".
-  /// Agora briefly reports no-video on ordinary keyframe gaps / camera
-  /// toggles; we only want to pause on a genuine stall.
-  static const _mediaDropGrace = Duration(seconds: 4);
+  /// Grace period before a media drop is treated as "connection lost" —
+  /// long enough to ride out a brief keyframe gap, short enough that the
+  /// caller isn't billed for real dead air.
+  static const _mediaDropGrace = Duration(seconds: 3);
 
   void _attachRemoteMediaWatcher() {
     if (_remoteMediaWatcherAttached) return;
     _remoteMediaWatcherAttached = true;
-    agora.remoteHasVideo.addListener(_onRemoteMediaMaybeChanged);
-    agora.remoteHasAudio.addListener(_onRemoteMediaMaybeChanged);
+    // Two signals: our OWN Agora connection (catches the local network
+    // dying — the remote-state callbacks never fire then) and whether we
+    // are actually seeing the peer (catches the peer's network dying).
+    agora.connectionHealthy.addListener(_onRemoteMediaMaybeChanged);
+    agora.remoteStreamHealthy.addListener(_onRemoteMediaMaybeChanged);
   }
 
   void _detachRemoteMediaWatcher() {
@@ -842,34 +845,36 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     _mediaDropDebounce?.cancel();
     _mediaDropDebounce = null;
     try {
-      agora.remoteHasVideo.removeListener(_onRemoteMediaMaybeChanged);
-      agora.remoteHasAudio.removeListener(_onRemoteMediaMaybeChanged);
+      agora.connectionHealthy.removeListener(_onRemoteMediaMaybeChanged);
+      agora.remoteStreamHealthy.removeListener(_onRemoteMediaMaybeChanged);
     } catch (_) {}
   }
+
+  /// True only when the call is genuinely live on this device: our
+  /// connection is up AND we're receiving the peer (or they chose to turn
+  /// their camera off — network fine). Anything else freezes the timer.
+  bool get _callMediaHealthy =>
+      agora.connectionHealthy.value && agora.remoteStreamHealthy.value;
 
   void _onRemoteMediaMaybeChanged() {
     if (_isDisposed || state.phase != VideoCallPhase.active) return;
 
-    final receiving =
-        agora.remoteHasVideo.value || agora.remoteHasAudio.value;
-
-    if (receiving) {
-      // Connection restored — cancel any pending pause, and if we're
-      // already paused, resume immediately.
+    if (_callMediaHealthy) {
+      // Restored — cancel any pending pause, and if already paused, resume.
       _mediaDropDebounce?.cancel();
       _mediaDropDebounce = null;
       if (state.isPaused) add(_RemoteMediaChanged(true));
       return;
     }
 
-    // Media stopped — wait out the grace period before pausing.
+    // Dropped — wait out the grace period before freezing the timer.
     if (_mediaDropDebounce != null || state.isPaused) return;
     _mediaDropDebounce = Timer(_mediaDropGrace, () {
       _mediaDropDebounce = null;
       if (_isDisposed || state.phase != VideoCallPhase.active) return;
-      final stillDown =
-          !agora.remoteHasVideo.value && !agora.remoteHasAudio.value;
-      if (stillDown && !state.isPaused) add(_RemoteMediaChanged(false));
+      if (!_callMediaHealthy && !state.isPaused) {
+        add(_RemoteMediaChanged(false));
+      }
     });
   }
 
@@ -900,9 +905,7 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     } catch (err) {
       // A failed pause/resume must never wedge the call — fall back to
       // the true media state.
-      final receiving =
-          agora.remoteHasVideo.value || agora.remoteHasAudio.value;
-      emit(state.copyWith(isPaused: !receiving));
+      emit(state.copyWith(isPaused: !_callMediaHealthy));
       debugPrint('⚠️ [VideoCall] pause/resume failed: ${_msg(err)}');
     } finally {
       _networkPauseInFlight = false;
@@ -1022,6 +1025,11 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
   void _onTick(_CallTicked e, Emitter<VideoCallState> emit) {
     final session = state.session;
     if (session == null || state.phase != VideoCallPhase.active) return;
+
+    // Safety net: re-evaluate media health every second in case an Agora
+    // state callback was missed (common when the local network drops —
+    // no callbacks arrive at all until it recovers).
+    _onRemoteMediaMaybeChanged();
 
     final endsAt = state.countdownEndsAt;
     if (endsAt == null) return;

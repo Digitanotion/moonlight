@@ -36,6 +36,18 @@ class VideoCallAgoraService with ChangeNotifier {
   final ValueNotifier<bool> remoteHasVideo = ValueNotifier<bool>(false);
   final ValueNotifier<bool> remoteHasAudio = ValueNotifier<bool>(false);
 
+  /// True only while THIS device's Agora connection is fully connected.
+  /// Goes false the moment we drop to reconnecting/failed — this is how a
+  /// call detects the *local* network dying (the remote-state callbacks
+  /// never fire in that case, because our socket is down).
+  final ValueNotifier<bool> connectionHealthy = ValueNotifier<bool>(true);
+
+  /// True while we are genuinely receiving the peer's video, OR the peer
+  /// deliberately turned their camera off (their network is fine — the
+  /// call continues). False when their video froze/stopped for a network
+  /// reason, or they went offline. Drives the network-drop timer freeze.
+  final ValueNotifier<bool> remoteStreamHealthy = ValueNotifier<bool>(false);
+
   bool get joined => _joined;
   String? get channelId => _channelId;
   bool get isMicEnabled => _isMicEnabled;
@@ -95,6 +107,8 @@ class VideoCallAgoraService with ChangeNotifier {
     _channelId = channel;
     _localUid = uid;
     _lastError = null;
+    _setNotifier(connectionHealthy, true);
+    _setNotifier(remoteStreamHealthy, false);
 
     await e.initialize(
       RtcEngineContext(
@@ -150,7 +164,20 @@ class VideoCallAgoraService with ChangeNotifier {
             _setNotifier(remoteUid, null);
             _setNotifier(remoteHasVideo, false);
             _setNotifier(remoteHasAudio, false);
+            _setNotifier(remoteStreamHealthy, false);
           }
+          _notify();
+        },
+        onConnectionStateChanged: (
+          RtcConnection conn,
+          ConnectionStateType state,
+          ConnectionChangedReasonType reason,
+        ) {
+          final ok = state == ConnectionStateType.connectionStateConnected;
+          if (kDebugMode) {
+            debugPrint('[VideoCallAgora] connection=$state ok=$ok');
+          }
+          _setNotifier(connectionHealthy, ok);
           _notify();
         },
         onRemoteVideoStateChanged: (
@@ -160,12 +187,25 @@ class VideoCallAgoraService with ChangeNotifier {
           RemoteVideoStateReason reason,
           int elapsed,
         ) {
-          final hasVideo =
-              state == RemoteVideoState.remoteVideoStateDecoding ||
+          if (uid != remoteUid.value) return;
+          final decoding =
+              state == RemoteVideoState.remoteVideoStateDecoding;
+          final starting =
               state == RemoteVideoState.remoteVideoStateStarting;
-          if (uid == remoteUid.value) {
-            _setNotifier(remoteHasVideo, hasVideo);
-          }
+          _setNotifier(remoteHasVideo, decoding || starting);
+
+          // "Healthy" = we're seeing them, OR they deliberately turned
+          // their camera off (network fine — don't freeze the timer).
+          // A frozen/stopped stream for ANY other reason is a network
+          // problem → freeze.
+          final byPeerChoice = reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted ||
+              reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonRemoteUnmuted;
+          _setNotifier(
+            remoteStreamHealthy,
+            decoding || starting || byPeerChoice,
+          );
           _notify();
         },
         onRemoteAudioStateChanged: (
@@ -186,6 +226,7 @@ class VideoCallAgoraService with ChangeNotifier {
           _setNotifier(remoteUid, null);
           _setNotifier(remoteHasVideo, false);
           _setNotifier(remoteHasAudio, false);
+          _setNotifier(remoteStreamHealthy, false);
           if (kDebugMode) debugPrint('[VideoCallAgora] left');
           _notify();
         },
@@ -301,6 +342,12 @@ class VideoCallAgoraService with ChangeNotifier {
     } catch (_) {}
     try {
       remoteHasAudio.dispose();
+    } catch (_) {}
+    try {
+      connectionHealthy.dispose();
+    } catch (_) {}
+    try {
+      remoteStreamHealthy.dispose();
     } catch (_) {}
     super.dispose();
   }
