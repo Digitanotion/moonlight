@@ -91,13 +91,16 @@ class MainActivity : FlutterActivity() {
         newConfig: Configuration
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (!isInPictureInPictureMode) {
+            // Always disarm on exit so a stale flag can never auto-minimise
+            // the app from an unrelated screen. If a video screen is still on
+            // top, the Flutter side (PipService) re-arms via onPipModeChanged.
+            isVideoPlaying = false
+            updatePipParams(videoPlaying = false)
+        }
         methodChannel?.invokeMethod(
             "onPipModeChanged",
             mapOf("active" to isInPictureInPictureMode)
         )
-        // NOTE: we intentionally do NOT reset isVideoPlaying here. The Flutter
-        // side owns that flag — a live viewer / video post still on screen
-        // after the user expands PiP back into the app should keep auto-PiP
-        // armed. The owning screen calls setVideoPlaying(false) in dispose.
     }
 }

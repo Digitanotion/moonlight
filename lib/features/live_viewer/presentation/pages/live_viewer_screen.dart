@@ -105,7 +105,9 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   void initState() {
     super.initState();
     ScreenGuard.acquire(); // block screenshots / screen-recording of the stream
-    PipService.instance.setVideoPlaying(true); // items 9 + 10: keep playing / PiP
+    // Standalone open (deep link / notification). The pager owns PiP for the
+    // pool path so we don't double-arm.
+    if (widget.pool == null) PipService.instance.acquire();
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
@@ -279,7 +281,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   @override
   void dispose() {
     ScreenGuard.release();
-    PipService.instance.setVideoPlaying(false);
+    if (widget.pool == null) PipService.instance.release();
     _fadeController?.dispose();
     _videoReadyProgress.dispose();
     _viewerBloc?.close();

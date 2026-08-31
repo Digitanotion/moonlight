@@ -561,6 +561,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _isVideo = _detectVideo(widget.post);
+    if (_isVideo) PipService.instance.acquire(); // arm PiP for this video
     _initVideo();
     _startFreezeWatchdog();
   }
@@ -570,7 +571,10 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     super.didUpdateWidget(old);
     if (old.post.mediaUrl != widget.post.mediaUrl) {
       _disposeVc();
+      final wasVideo = _isVideo;
       _isVideo = _detectVideo(widget.post);
+      if (wasVideo && !_isVideo) PipService.instance.release();
+      if (!wasVideo && _isVideo) PipService.instance.acquire();
       _initVideo();
     }
   }
@@ -654,6 +658,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    if (_isVideo) PipService.instance.release();
     WidgetsBinding.instance.removeObserver(this);
     _freezeWatchdog?.cancel();
     _controlsTimer?.cancel();
@@ -673,9 +678,9 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     _vc = null;
   }
 
-  Future<void> _notifyPlayingState(bool playing) async {
-    await PipService.instance.setVideoPlaying(playing);
-  }
+  // PiP arming is now handled once, ref-counted, in initState/dispose via
+  // PipService.acquire()/release() — no per-play toggling.
+  Future<void> _notifyPlayingState(bool playing) async {}
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -1047,10 +1052,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     GestureDetector(
-                      onTap: () async {
-                        await _notifyPlayingState(true);
-                        await PipService.instance.enterPip();
-                      },
+                      onTap: () => PipService.instance.enterPip(),
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(

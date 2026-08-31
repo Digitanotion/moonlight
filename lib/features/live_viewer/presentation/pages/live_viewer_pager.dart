@@ -68,6 +68,11 @@ class LiveViewerPager extends StatefulWidget {
 
 class _LiveViewerPagerState extends State<LiveViewerPager>
     with WidgetsBindingObserver {
+  // Only one live-viewer session may exist at a time. Opening a new stream
+  // (from the grid, a deep link, a notification) closes the previous one so
+  // its audio/video and PiP arming don't linger behind the new stream.
+  static _LiveViewerPagerState? _active;
+
   late final PageController _controller;
   late final List<ViewerRepositoryImpl> _repos;
 
@@ -80,10 +85,21 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   @override
   void initState() {
     super.initState();
+
+    // Tear down any previous live-viewer session first — deactivates its PiP
+    // and background playback so this new stream opens cleanly.
+    final previous = _active;
+    if (previous != null && previous.mounted) {
+      try {
+        previous._closeForNewSession();
+      } catch (_) {}
+    }
+    _active = this;
+
     ScreenGuard.acquire(); // no screenshots / recording while watching a stream
     // Items 9 + 10: keep the stream playing when minimised / when the user
     // switches apps, in an OS Picture-in-Picture window, until they close it.
-    PipService.instance.setVideoPlaying(true);
+    PipService.instance.acquire();
     WidgetsBinding.instance.addObserver(this);
 
     _currentPage = widget.initialIndex;
@@ -149,10 +165,21 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     });
   }
 
+  /// Called by a newer pager taking over: leave Agora + pop this route so the
+  /// old stream doesn't keep playing behind the new one.
+  void _closeForNewSession() {
+    try {
+      _pool.leaveAll();
+    } catch (_) {}
+    final nav = Navigator.of(context, rootNavigator: false);
+    if (nav.canPop()) nav.pop();
+  }
+
   @override
   void dispose() {
+    if (identical(_active, this)) _active = null;
     ScreenGuard.release();
-    PipService.instance.setVideoPlaying(false); // stop auto-PiP for this screen
+    PipService.instance.release();
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onPageScrolled);
     _controller.dispose();

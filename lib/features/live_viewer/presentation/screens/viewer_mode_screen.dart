@@ -6,6 +6,7 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
+import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
@@ -57,9 +58,17 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   bool _isProcessingPayment = false;
   String? _paymentError;
 
+  // In the OS Picture-in-Picture window we render ONLY the video — every
+  // overlay (chat, buttons, banners) is hidden.
+  bool _pip = PipService.instance.isInPipMode.value;
+  void _onPipChanged() {
+    if (mounted) setState(() => _pip = PipService.instance.isInPipMode.value);
+  }
+
   @override
   void initState() {
     super.initState();
+    PipService.instance.isInPipMode.addListener(_onPipChanged);
     // Doc item 11: "Nobody will be able to screenshot or video record
     // a streamer. Enable zero screenshot or record of livestream." —
     // applied for the duration this viewer screen is on-screen only,
@@ -76,6 +85,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
 
   @override
   void dispose() {
+    PipService.instance.isInPipMode.removeListener(_onPipChanged);
     ScreenGuard.release();
     _commentCtrl.dispose();
     super.dispose();
@@ -161,17 +171,22 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
             p.showChatUI != n.showChatUI ||
             p.chat != n.chat,
         builder: (context, state) {
+          // In PiP, force overlays off and drop the safe-area insets so the
+          // video fills the whole (small) window.
+          final showOverlays = !_pip && !_immersive;
           return Scaffold(
             backgroundColor: Colors.black,
             body: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onHorizontalDragEnd: (details) {
-                final v = details.primaryVelocity ?? 0;
-                if (v > 300) setState(() => _immersive = true);
-                if (v < -300) setState(() => _immersive = false);
-              },
+              onHorizontalDragEnd: _pip
+                  ? null
+                  : (details) {
+                      final v = details.primaryVelocity ?? 0;
+                      if (v > 300) setState(() => _immersive = true);
+                      if (v < -300) setState(() => _immersive = false);
+                    },
               child: SafeArea(
-                top: true,
+                top: !_pip,
                 bottom: false,
                 child: Stack(
                   children: [
@@ -195,7 +210,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       HostVideoContainer(repository: widget.repository),
 
                     // ── Normal viewer UI ────────────────────────────────
-                    if (!_immersive && !state.requiresPremiumPayment) ...[
+                    if (showOverlays && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
                       const FollowPromptOverlay(),
                       const GuestJoinedBanner(),
@@ -256,7 +271,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                     ],
 
                     // Premium paywall — always on top
-                    if (state.requiresPremiumPayment)
+                    if (state.requiresPremiumPayment && !_pip)
                       Positioned.fill(
                         child: PremiumOverlay(
                           fee: state.premiumEntryFeeCoins,

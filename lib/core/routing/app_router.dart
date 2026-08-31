@@ -58,6 +58,7 @@ import 'package:moonlight/features/live_viewer/data/repositories/viewer_reposito
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
+import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_from_notification.dart';
 import 'package:moonlight/features/live_viewer/presentation/screens/live_viewer_orchestrator.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/live_stream_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
@@ -372,7 +373,6 @@ class AppRouter {
           final id = a['id'] as int?;
           final uuid = a['uuid'] as String?;
           final channel = a['channel'] as String?;
-          final hostUuid = a['hostUuid'] as String?;
           final isPremium = a['isPremium'] as int? ?? 0;
           final premiumFee = a['premiumFee'] as int? ?? 0;
 
@@ -386,21 +386,6 @@ class AppRouter {
             );
           }
 
-          final host = HostInfo(
-            name: (a['hostName'] as String?) ?? 'Host',
-            title: (a['title'] as String?) ?? 'Live',
-            subtitle: '',
-            badge: (a['role'] as String?) ?? 'Host',
-            avatarUrl:
-                (a['hostAvatar'] as String?) ??
-                'https://via.placeholder.com/120x120.png?text=LIVE',
-          );
-
-          final startedAtIso = a['startedAt'] as String?;
-          final startedAt = startedAtIso == null
-              ? null
-              : DateTime.tryParse(startedAtIso);
-
           final routeArgs = {
             ...a,
             'id': id,
@@ -410,15 +395,11 @@ class AppRouter {
             'premiumFee': premiumFee,
           };
 
+          // LiveViewerFromNotification builds the repo AND provides the
+          // ViewerBloc — LiveViewerScreen.create() alone does not, so opening
+          // it directly here crashed with "Could not find Provider<ViewerBloc>".
           return MaterialPageRoute(
-            builder: (context) => LiveViewerScreen.create(
-              livestreamId: uuid,
-              channelName: channel,
-              hostUuid: hostUuid,
-              hostInfo: host,
-              startedAt: startedAt,
-              routeArgs: routeArgs,
-            ),
+            builder: (context) => LiveViewerFromNotification(args: routeArgs),
             settings: settings,
           );
         }

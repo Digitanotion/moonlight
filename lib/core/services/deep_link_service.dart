@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/home/domain/entities/live_item.dart';
+import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_pager.dart';
 import 'package:moonlight/main.dart' show MyApp;
 
 /// Handles inbound links:
@@ -115,32 +117,55 @@ class DeepLinkService {
       return;
     }
 
-    _push(RouteNames.liveViewer, {
-      'id': id,
-      'uuid': data['uuid'] ?? uuid,
-      'channel': channel,
-      'hostUuid': host['uuid'],
-      'hostName': host['name'] ?? host['fullname'],
-      'hostAvatar': host['avatar_url'] ?? host['avatar'],
-      'title': data['title'],
-      'role': 'Host',
-      'startedAt': data['started_at'],
-      'isPremium': (data['is_premium'] == true) ? 1 : 0,
-      'premiumFee': (data['entry_fee_coins'] as num?)?.toInt() ?? 0,
-    });
+    final slug = (host['user_slug'] ?? host['slug'] ?? '').toString();
+    final item = LiveItem(
+      id: id,
+      uuid: (data['uuid'] ?? uuid).toString(),
+      channel: channel,
+      coverUrl: (host['avatar_url'] ?? host['avatar'])?.toString(),
+      handle: slug.isNotEmpty ? '@$slug' : '@host',
+      role: 'Host',
+      countryIso2: null,
+      countryName: null,
+      viewers: (data['viewers'] as num?)?.toInt() ?? 0,
+      title: data['title']?.toString(),
+      startedAt: data['started_at']?.toString(),
+      hostUuid: host['uuid']?.toString(),
+      isPremium: (data['is_premium'] == true) ? 1 : 0,
+      premiumFee: (data['entry_fee_coins'] as num?)?.toInt() ?? 0,
+    );
+
+    // Open exactly like a tap from the Live grid — LiveViewerPager wires the
+    // engine pool, PiP, and the ViewerBloc providers.
+    _pushWidget(
+      LiveViewerPager(items: [item], initialIndex: 0),
+    );
+  }
+
+  void _pushWidget(Widget page) {
+    void go() {
+      final nav = MyApp.navigatorKey.currentState;
+      if (nav == null) {
+        Future.delayed(const Duration(milliseconds: 500), go);
+        return;
+      }
+      nav.push(MaterialPageRoute(builder: (_) => page, fullscreenDialog: true));
+    }
+
+    go();
   }
 
   void _push(String route, Map<String, dynamic> args) {
-    final nav = MyApp.navigatorKey.currentState;
-    if (nav == null) {
-      // Navigator not ready yet — retry shortly.
-      Future.delayed(
-        const Duration(milliseconds: 600),
-        () => MyApp.navigatorKey.currentState?.pushNamed(route, arguments: args),
-      );
-      return;
+    void go() {
+      final nav = MyApp.navigatorKey.currentState;
+      if (nav == null) {
+        Future.delayed(const Duration(milliseconds: 500), go);
+        return;
+      }
+      nav.pushNamed(route, arguments: args);
     }
-    nav.pushNamed(route, arguments: args);
+
+    go();
   }
 
   void _toast(String msg) {

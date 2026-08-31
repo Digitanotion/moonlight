@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
@@ -128,6 +129,17 @@ class _TopStatusBarState extends State<TopStatusBar> {
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => PipService.instance.enterPip(),
+                child: _glass(
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.picture_in_picture_alt_rounded,
+                        color: Colors.white, size: 18),
                   ),
                 ),
               ),
