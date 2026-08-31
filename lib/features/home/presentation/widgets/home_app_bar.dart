@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -14,6 +16,7 @@ class HomeAppBar extends StatefulWidget {
 
 class _HomeAppBarState extends State<HomeAppBar> {
   late final UnreadBadgeService _unreadService;
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -33,6 +36,14 @@ class _HomeAppBarState extends State<HomeAppBar> {
 
       // Trigger initial update
       _updateUI();
+
+      // Safety-net poll: realtime can silently drop (Pusher reconnect, socket
+      // idle-kill). A light 45s refresh while home is on screen keeps the
+      // badges honest even if a push event is missed.
+      _pollTimer?.cancel();
+      _pollTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+        _unreadService.refresh();
+      });
     } catch (e) {
       debugPrint('HomeAppBar: Error initializing unread service: $e');
     }
@@ -46,6 +57,7 @@ class _HomeAppBarState extends State<HomeAppBar> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _unreadService.messageUnreadCount.removeListener(_updateUI);
     _unreadService.notificationUnreadCount.removeListener(_updateUI);
     super.dispose();
@@ -141,12 +153,16 @@ class _HomeAppBarState extends State<HomeAppBar> {
     Navigator.pushNamed(context, RouteNames.videoCallDirectory);
   }
 
-  void _navigateToNotification(BuildContext context) {
-    Navigator.pushNamed(context, RouteNames.notifications);
+  Future<void> _navigateToNotification(BuildContext context) async {
+    await Navigator.pushNamed(context, RouteNames.notifications);
+    // Whatever the notifications screen did (read one / read all), pull the
+    // authoritative counts back so the badge is correct on return.
+    _unreadService.refresh();
   }
 
-  void _navigateToConversations(BuildContext context) {
-    Navigator.pushNamed(context, RouteNames.conversations);
+  Future<void> _navigateToConversations(BuildContext context) async {
+    await Navigator.pushNamed(context, RouteNames.conversations);
+    _unreadService.refresh();
   }
 }
 

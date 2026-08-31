@@ -102,7 +102,9 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
         .toList();
 
     emit(NotificationsLoaded(items: _items, hasMore: _hasMore));
-    repo.markRead(event.id);
+    try {
+      await repo.markRead(event.id);
+    } catch (_) {}
   }
 
   Future<void> _markAllRead(
@@ -111,6 +113,8 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
   ) async {
     _items = _items.map((n) => n.copyWith(isRead: true)).toList();
     emit(NotificationsLoaded(items: _items, hasMore: _hasMore));
-    repo.markAllRead();
+    try {
+      await repo.markAllRead();
+    } catch (_) {}
   }
 }

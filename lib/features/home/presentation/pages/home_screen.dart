@@ -61,6 +61,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // App came back to foreground, check connection
       _checkServiceConnection();
+      // Re-sync the unread badges — realtime may have missed events while
+      // backgrounded, and this also re-establishes the subscription.
+      try {
+        GetIt.instance<UnreadBadgeService>().refresh();
+      } catch (_) {}
     }
   }
 

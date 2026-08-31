@@ -71,8 +71,16 @@ class RealtimeUnreadService {
         await _waitForPusherInitialization();
       }
 
-      // Listen for connection state changes
+      // Listen for FUTURE connection state changes (reconnects).
       _setupConnectionListener();
+
+      // Pusher is very often ALREADY connected by the time the home screen
+      // mounts and calls us — in that case the listener above never fires a
+      // `connected` event, so subscribe right now or realtime badge updates
+      // never start. This was the core "counts don't update" bug.
+      if (_pusherService!.isConnected) {
+        await _subscribeToUnreadUpdates();
+      }
 
       _isInitialized = true;
 
@@ -290,6 +298,16 @@ class RealtimeUnreadService {
   }
 
   Future<void> refreshCounts() async {
+    // Opportunistically (re)establish the realtime subscription — it may have
+    // dropped on a reconnect, or never started if we init'd before Pusher
+    // connected.
+    if (!_isInitialized) {
+      await initialize();
+      return;
+    }
+    if (!_isSubscribed && (_pusherService?.isConnected ?? false)) {
+      await _subscribeToUnreadUpdates();
+    }
     await _fetchInitialCounts();
   }
 
