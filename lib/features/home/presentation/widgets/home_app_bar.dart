@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
+import 'package:moonlight/core/widgets/about_moonlight_sheet.dart';
 
 class HomeAppBar extends StatefulWidget {
   const HomeAppBar({super.key});
@@ -57,14 +58,17 @@ class _HomeAppBarState extends State<HomeAppBar> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Flexible(
-            child: Text(
-              'Moonlight',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: AppColors.textWhite,
-                fontWeight: FontWeight.w800,
+          // Tap the logo → "About Moonlight" (legal / company links).
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showAboutMoonlightSheet(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 36,
+                height: 36,
+                filterQuality: FilterQuality.medium,
               ),
             ),
           ),
