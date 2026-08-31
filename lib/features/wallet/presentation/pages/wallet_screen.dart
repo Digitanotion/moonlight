@@ -324,7 +324,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
                     _BalanceCard(
                       balance: loaded.balance,
-                      earnedbalance: loaded.earnedBalance,
+                      bonusBalance: loaded.earnedBalance,
                       hideBalance: _hideBalance,
                       onToggleHide: () {
                         HapticFeedback.selectionClick();
@@ -377,7 +377,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
 class _BalanceCard extends StatelessWidget {
   final int balance;
-  final int earnedbalance;
+  final int bonusBalance;
   final bool hideBalance;
   final VoidCallback onToggleHide;
   final VoidCallback onBuyCoins;
@@ -385,7 +385,7 @@ class _BalanceCard extends StatelessWidget {
   const _BalanceCard({
     Key? key,
     required this.balance,
-    required this.earnedbalance,
+    required this.bonusBalance,
     required this.hideBalance,
     required this.onToggleHide,
     required this.onBuyCoins,
@@ -482,60 +482,119 @@ class _BalanceCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
+          // Breakdown: what can actually be cashed out vs. bonus coins
+          // that are spend-only. Replaces the old "Total Earned / Bonuses"
+          // block that implied the bonus was withdrawable.
+          Row(
+            children: [
+              Expanded(
+                child: _WalletStat(
+                  label: 'Withdrawable',
+                  value: hideBalance
+                      ? '••••'
+                      : '\$${(balance * 0.005).toStringAsFixed(2)}',
+                  hint: 'Cash out anytime',
+                  accent: const Color(0xFF4ADE80),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _WalletStat(
+                  label: 'Bonus coins',
+                  value: hideBalance ? '••••' : formatCoin(bonusBalance),
+                  hint: 'Spend only',
+                  accent: const Color(0xFFFFB020),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onBuyCoins,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text(
+                'Buy coins',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A00),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Total Earned',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        hideBalance ? '••••••' : formatCoin(earnedbalance),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Bonuses',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── wallet stat pill ─────────────────────────────────────────────────────────
+
+class _WalletStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final String hint;
+  final Color accent;
+
+  const _WalletStat({
+    Key? key,
+    required this.label,
+    required this.value,
+    required this.hint,
+    required this.accent,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                 ),
-                ElevatedButton(
-                  onPressed: onBuyCoins,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF7A00),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 10,
-                    ),
-                  ),
-                  child: const Text(
-                    'Buy',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            hint,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 10,
             ),
           ),
         ],
