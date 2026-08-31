@@ -46,7 +46,11 @@ class VideoFeedScreen extends StatefulWidget {
 class _VideoFeedScreenState extends State<VideoFeedScreen> {
   late final PageController _pageController;
 
-  static const int _preloadWindow = 4; // matches TikTok-style "few ahead" feel
+  // Only warms the on-disk byte cache now (no decoders), but each warm is a
+  // full video download — keep the window small so they don't saturate the
+  // connection and so back-scroll stays cheap. Biased forward.
+  static const int _preloadAhead = 2;
+  static const int _preloadBehind = 1;
   // How close to the end of the loaded videos the user must get before we
   // ask the feed for the next page.
   static const int _paginateThreshold = 3;
@@ -102,15 +106,13 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
 
   void _preloadAround(int index) {
     final urls = <String>[];
-    for (var offset = 1; offset <= _preloadWindow; offset++) {
+    for (var offset = 1; offset <= _preloadAhead; offset++) {
       final nextIdx = index + offset;
+      if (nextIdx < _videoPosts.length) urls.add(_videoPosts[nextIdx].mediaUrl);
+    }
+    for (var offset = 1; offset <= _preloadBehind; offset++) {
       final prevIdx = index - offset;
-      if (nextIdx < _videoPosts.length) {
-        urls.add(_videoPosts[nextIdx].mediaUrl);
-      }
-      if (prevIdx >= 0) {
-        urls.add(_videoPosts[prevIdx].mediaUrl);
-      }
+      if (prevIdx >= 0) urls.add(_videoPosts[prevIdx].mediaUrl);
     }
     VideoPreloadService.instance.preloadAll(urls);
   }

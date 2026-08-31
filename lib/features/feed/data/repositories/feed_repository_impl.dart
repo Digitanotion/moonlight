@@ -61,7 +61,12 @@ class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Future<Post> toggleLike(String postUuid) async {
-    final res = await remote.toggleLike(postUuid);
+    final raw = await remote.toggleLike(postUuid);
+    // The endpoint returns a PostResource, which Laravel wraps as
+    // {"data": {...}} — unwrap it, but tolerate an un-wrapped body too.
+    final res = (raw['data'] is Map)
+        ? (raw['data'] as Map).cast<String, dynamic>()
+        : raw;
     return Post(
       id: postUuid,
       author: const AppUser(

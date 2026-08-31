@@ -22,14 +22,21 @@ class VideoPreloadService {
   static final VideoPreloadService instance = VideoPreloadService._();
 
   /// Max number of initialized controllers kept alive at once. Each one
-  /// holds a decoder + buffered frames, so keep this modest. Was 6,
-  /// sized only for the regular feed's single-direction preload (4
-  /// items ahead). VideoFeedScreen preloads BOTH directions (up to 4
-  /// next + 4 previous = 8 simultaneously) — at 6, the cache was
-  /// silently evicting/disposing controllers before the user ever
-  /// scrolled to them, showing as cache misses despite preloading
-  /// having genuinely run and completed for them moments earlier.
-  static const int maxCached = 12;
+  /// holds a HARDWARE video decoder (OMX/c2 codec instance), and phones
+  /// allow only a handful of those app-wide — going over it makes the
+  /// decoder fail to init (`0xfffffff4` / ENOMEM on Qualcomm), which
+  /// shows as videos that never load, freeze, or reload endlessly.
+  ///
+  /// Preloading now only warms the on-disk byte cache (no decoder); the
+  /// only entries here are LIVE controllers handed over via [donate]
+  /// during a feed <-> post-view transition. Keep this tiny.
+  static const int maxCached = 3;
+
+  /// Cap on simultaneous background downloads so N preloads don't split
+  /// the connection N ways and make every one of them slow.
+  static const int _maxConcurrentWarms = 2;
+  int _activeWarms = 0;
+  final List<String> _warmQueue = [];
 
   final Map<String, VideoPlayerController> _controllers = {};
   final Map<String, Future<void>> _initFutures = {};
@@ -76,58 +83,49 @@ class VideoPreloadService {
     _evictIfNeeded();
   }
 
-  /// Kick off initialization for [url] if it's not already cached or in
-  /// flight. Fire-and-forget — call this from feed scroll handling for
-  /// the next few upcoming items. Safe to call repeatedly; it no-ops if
-  /// already cached/loading.
+  /// Warm the on-disk byte cache for [url] so that when a feed card for it
+  /// scrolls into view it can start from a local file instead of a cold
+  /// network fetch. Fire-and-forget, safe to call repeatedly.
+  ///
+  /// This deliberately does NOT create or initialize a VideoPlayerController
+  /// — that would grab a scarce hardware decoder for a video the user may
+  /// never reach. Only the visible card creates its own controller.
   void preload(String url) {
     if (url.isEmpty || !_isVideoUrl(url)) return;
-    if (_controllers.containsKey(url) || _initFutures.containsKey(url)) {
-      debugPrint('🎬 [Preload] SKIP (already cached/loading): ${_short(url)}');
+    if (_controllers.containsKey(url) ||
+        _initFutures.containsKey(url) ||
+        _warmQueue.contains(url)) {
       return;
     }
-
-    debugPrint('🎬 [Preload] START: ${_short(url)}');
-    final future = _preloadAsync(url);
-    _initFutures[url] = future;
-    future.whenComplete(() => _initFutures.remove(url));
+    _warmQueue.add(url);
+    _pumpWarmQueue();
   }
 
-  Future<void> _preloadAsync(String url) async {
+  void _pumpWarmQueue() {
+    while (_activeWarms < _maxConcurrentWarms && _warmQueue.isNotEmpty) {
+      final url = _warmQueue.removeAt(0);
+      if (_initFutures.containsKey(url)) continue;
+      _activeWarms++;
+      final future = _warmAsync(url);
+      _initFutures[url] = future;
+      future.whenComplete(() {
+        _initFutures.remove(url);
+        _activeWarms--;
+        _pumpWarmQueue();
+      });
+    }
+  }
+
+  Future<void> _warmAsync(String url) async {
     final startedAt = DateTime.now();
-    VideoPlayerController? controller;
     try {
-      // Prefer an already-on-disk file, then a fresh download into the
-      // disk cache, and only fall back to a plain network controller if
-      // caching failed entirely. This is what makes back-scrolling to an
-      // earlier video instant instead of a fresh download.
-      final file = await VideoCacheManager.cachedFileFor(url) ??
-          await VideoCacheManager.ensureCached(url);
-
-      controller = file != null
-          ? VideoPlayerController.file(file)
-          : VideoPlayerController.networkUrl(Uri.parse(url));
-
-      await controller.initialize();
-      controller.setVolume(0);
-
-      _controllers[url] = controller;
-      _order.remove(url);
-      _order.add(url);
-      _evictIfNeeded();
-
+      final already = await VideoCacheManager.cachedFileFor(url);
+      if (already != null) return;
+      await VideoCacheManager.ensureCached(url);
       final ms = DateTime.now().difference(startedAt).inMilliseconds;
-      debugPrint(
-        '🎬 [Preload] READY (${ms}ms, ${file != null ? "disk" : "net"}): '
-        '${_short(url)}',
-      );
+      debugPrint('🎬 [Warm] cached (${ms}ms): ${_short(url)}');
     } catch (e) {
-      debugPrint('⚠️ [Preload] FAILED: ${_short(url)} — $e');
-      _controllers.remove(url);
-      _order.remove(url);
-      try {
-        await controller?.dispose();
-      } catch (_) {}
+      debugPrint('⚠️ [Warm] FAILED: ${_short(url)} — $e');
     }
   }
 
