@@ -8,6 +8,7 @@ import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/services/service_registration_manager.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/core/widgets/update_prompt.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/section_header.dart';
@@ -46,6 +47,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       } catch (e) {
         debugPrint('Error initializing unread service: $e');
       }
+
+      // Check for an app update (soft prompt, or a blocking gate if the
+      // running build is below the server's minimum).
+      if (mounted) maybePromptForUpdate(context);
     });
   }
 
@@ -66,6 +71,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       try {
         GetIt.instance<UnreadBadgeService>().refresh();
       } catch (_) {}
+      // Re-check for updates — catches a forced-update flag flipped while the
+      // user was away. Soft prompts stay to launch-time only (not naggy).
+      if (mounted) {
+        maybePromptForUpdate(context, force: true, onlyForced: true);
+      }
     }
   }
 
