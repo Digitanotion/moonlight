@@ -90,7 +90,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                             return _HeroBackdrop(
                               name: name,
                               avatarUrl: avatarUrl,
-                              status: state.isPaused
+                              status: (state.isPaused || state.localMediaDown)
                                   ? 'Reconnecting…'
                                   : 'Connecting…',
                             );
@@ -183,15 +183,20 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   ),
 
                   // ── Network-drop banner (#3) / extend prompt ──────────
-                  if (state.isPaused)
+                  if (state.isPaused || state.localMediaDown)
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 128,
                       left: 20,
                       right: 20,
-                      child: _ReconnectingBanner(),
+                      child: _ReconnectingBanner(
+                        // The caller's freeze is authoritative & billed-safe;
+                        // the callee's is just "we can't see them right now".
+                        billed: state.isCaller,
+                      ),
                     ),
                   if (state.showExtendPrompt &&
                       !state.isPaused &&
+                      !state.localMediaDown &&
                       state.isCaller)
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 128,
@@ -642,36 +647,47 @@ class _EndCallButton extends StatelessWidget {
 }
 
 class _ReconnectingBanner extends StatelessWidget {
+  final bool billed;
+  const _ReconnectingBanner({this.billed = false});
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation(Colors.white),
-            ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.55),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white24),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Connection lost — reconnecting. Your time is paused.',
-              style: AppTextStyles.caption.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  billed
+                      ? 'Connection lost — reconnecting. Your time is paused.'
+                      : 'Connection lost — reconnecting…',
+                  style: AppTextStyles.caption.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

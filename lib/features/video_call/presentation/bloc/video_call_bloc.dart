@@ -38,6 +38,12 @@ class VideoCallState {
   // client-side auto-end from firing during the freeze.
   final bool isPaused;
 
+  /// Cosmetic, per-device: this side isn't currently seeing the other
+  /// person (own or peer network hiccup). Drives the "Reconnecting…"
+  /// overlay. Does NOT freeze the countdown — that's [isPaused], which is
+  /// server-authoritative and caller-driven.
+  final bool localMediaDown;
+
   /// True on the CALLER's device, false on the callee's. The paid
   /// countdown (and the client-side auto-end at zero) belongs to the
   /// caller only — the callee just talks, like a normal call.
@@ -55,6 +61,7 @@ class VideoCallState {
     this.error,
     this.showExtendPrompt = false,
     this.isPaused = false,
+    this.localMediaDown = false,
     this.isCaller = false,
     this.localEndsAt,
   });
@@ -71,6 +78,7 @@ class VideoCallState {
     bool clearError = false,
     bool? showExtendPrompt,
     bool? isPaused,
+    bool? localMediaDown,
     bool? isCaller,
     DateTime? localEndsAt,
   }) {
@@ -81,6 +89,7 @@ class VideoCallState {
       error: clearError ? null : (error ?? this.error),
       showExtendPrompt: showExtendPrompt ?? this.showExtendPrompt,
       isPaused: isPaused ?? this.isPaused,
+      localMediaDown: localMediaDown ?? this.localMediaDown,
       isCaller: isCaller ?? this.isCaller,
       localEndsAt: localEndsAt ?? this.localEndsAt,
     );
@@ -168,6 +177,20 @@ class _RemoteMediaChanged extends VideoCallEvent {
   _RemoteMediaChanged(this.visible);
 }
 
+/// Internal: this device's view of whether the call media is currently
+/// flowing. Purely cosmetic ("Reconnecting…" overlay) — does NOT touch
+/// the countdown. Set on both sides; the countdown freeze is separate
+/// and caller-only.
+class _LocalMediaHealthChanged extends VideoCallEvent {
+  final bool healthy;
+  _LocalMediaHealthChanged(this.healthy);
+}
+
+/// Internal: the OTHER party left the Agora channel by choice — they
+/// hung up. Triggers a status check so the call resolves to "ended"
+/// even if the `video_call_ended` push was dropped.
+class _RemotePeerLeft extends VideoCallEvent {}
+
 /// Internal: the OTHER party paused / resumed the countdown — sourced
 /// from the 'video_call_paused' / 'video_call_resumed' notification.
 class _CallPauseStateChanged extends VideoCallEvent {
@@ -242,6 +265,8 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     on<CallReportRequested>(_onReport);
     on<_CallTicked>(_onTick);
     on<_RemoteMediaChanged>(_onRemoteMediaChanged);
+    on<_LocalMediaHealthChanged>(_onLocalMediaHealthChanged);
+    on<_RemotePeerLeft>(_onRemotePeerLeft);
     on<_CallPauseStateChanged>(_onCallPauseStateChanged);
     on<_IncomingCallReceived>(_onIncomingReceived);
     on<_CallAcceptedReceived>(_onAcceptedReceived);
@@ -823,20 +848,32 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
   }
 
   // ── Network-drop timer freeze (#3) ──────────────────────────────────────
+  //
+  // Roles:
+  //   • CALLER  — owns the paid countdown. When it stops seeing the
+  //     callee (their video froze, or our own connection dropped) it
+  //     calls repo.pause() so the server freezes ends_at for BOTH sides,
+  //     and unfreezes on repo.resume(). If our own network is down the
+  //     pause is local-only and reconciles on reconnect.
+  //   • CALLEE  — has no countdown. It NEVER calls pause/resume; it just
+  //     shows the cosmetic "Reconnecting…" overlay from its own view, and
+  //     obeys the server's video_call_paused / _resumed events. It also
+  //     polls status() while media is down so a dropped video_call_ended
+  //     still resolves the call.
 
-  /// Grace period before a media drop is treated as "connection lost" —
-  /// long enough to ride out a brief keyframe gap, short enough that the
-  /// caller isn't billed for real dead air.
+  /// Grace before a media drop is acted on — rides out a brief keyframe
+  /// gap without billing the caller for real dead air.
   static const _mediaDropGrace = Duration(seconds: 3);
+
+  bool _lastReportedMediaHealthy = true;
 
   void _attachRemoteMediaWatcher() {
     if (_remoteMediaWatcherAttached) return;
     _remoteMediaWatcherAttached = true;
-    // Two signals: our OWN Agora connection (catches the local network
-    // dying — the remote-state callbacks never fire then) and whether we
-    // are actually seeing the peer (catches the peer's network dying).
     agora.connectionHealthy.addListener(_onRemoteMediaMaybeChanged);
     agora.remoteStreamHealthy.addListener(_onRemoteMediaMaybeChanged);
+    agora.remotePeerLeft.addListener(_onRemotePeerLeftNotified);
+    _lastReportedMediaHealthy = true;
   }
 
   void _detachRemoteMediaWatcher() {
@@ -844,55 +881,103 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     _remoteMediaWatcherAttached = false;
     _mediaDropDebounce?.cancel();
     _mediaDropDebounce = null;
+    _stopActiveResolutionPoll();
     try {
       agora.connectionHealthy.removeListener(_onRemoteMediaMaybeChanged);
       agora.remoteStreamHealthy.removeListener(_onRemoteMediaMaybeChanged);
+      agora.remotePeerLeft.removeListener(_onRemotePeerLeftNotified);
     } catch (_) {}
   }
 
   /// True only when the call is genuinely live on this device: our
   /// connection is up AND we're receiving the peer (or they chose to turn
-  /// their camera off — network fine). Anything else freezes the timer.
+  /// their camera off — network fine).
   bool get _callMediaHealthy =>
       agora.connectionHealthy.value && agora.remoteStreamHealthy.value;
+
+  void _onRemotePeerLeftNotified() {
+    if (_isDisposed || state.phase != VideoCallPhase.active) return;
+    add(_RemotePeerLeft());
+  }
 
   void _onRemoteMediaMaybeChanged() {
     if (_isDisposed || state.phase != VideoCallPhase.active) return;
 
-    if (_callMediaHealthy) {
-      // Restored — cancel any pending pause, and if already paused, resume.
+    final healthy = _callMediaHealthy;
+
+    if (healthy) {
       _mediaDropDebounce?.cancel();
       _mediaDropDebounce = null;
-      if (state.isPaused) add(_RemoteMediaChanged(true));
+      if (_lastReportedMediaHealthy != true) {
+        _lastReportedMediaHealthy = true;
+        add(_LocalMediaHealthChanged(true));
+      }
+      // Caller only: lift the server-side freeze.
+      if (state.isCaller && state.isPaused) add(_RemoteMediaChanged(true));
       return;
     }
 
-    // Dropped — wait out the grace period before freezing the timer.
-    if (_mediaDropDebounce != null || state.isPaused) return;
+    // Unhealthy — debounce, then act.
+    if (_mediaDropDebounce != null) return;
     _mediaDropDebounce = Timer(_mediaDropGrace, () {
       _mediaDropDebounce = null;
       if (_isDisposed || state.phase != VideoCallPhase.active) return;
-      if (!_callMediaHealthy && !state.isPaused) {
-        add(_RemoteMediaChanged(false));
+      if (_callMediaHealthy) return;
+
+      if (_lastReportedMediaHealthy != false) {
+        _lastReportedMediaHealthy = false;
+        add(_LocalMediaHealthChanged(false));
       }
+      // Caller only: freeze the countdown server-side.
+      if (state.isCaller && !state.isPaused) add(_RemoteMediaChanged(false));
     });
+  }
+
+  Future<void> _onLocalMediaHealthChanged(
+    _LocalMediaHealthChanged e,
+    Emitter<VideoCallState> emit,
+  ) async {
+    if (state.phase != VideoCallPhase.active) return;
+    emit(state.copyWith(localMediaDown: !e.healthy));
+
+    // While either side can't see the other, keep checking whether the
+    // call actually ended (covers a dropped video_call_ended push, and
+    // the server's abandoned-call sweep force-ending a stuck pause).
+    if (!e.healthy) {
+      _startActiveResolutionPoll();
+    } else {
+      _stopActiveResolutionPoll();
+    }
+  }
+
+  Future<void> _onRemotePeerLeft(
+    _RemotePeerLeft e,
+    Emitter<VideoCallState> emit,
+  ) async {
+    if (state.phase != VideoCallPhase.active) return;
+    emit(state.copyWith(localMediaDown: true));
+    // They hung up — confirm with the server and resolve to the summary
+    // screen even if the video_call_ended push never lands.
+    _startActiveResolutionPoll(aggressive: true);
   }
 
   Future<void> _onRemoteMediaChanged(
     _RemoteMediaChanged e,
     Emitter<VideoCallState> emit,
   ) async {
+    // Caller-only path — the callee never gets here.
     final sessionUuid = state.session?.uuid;
-    if (sessionUuid == null || state.phase != VideoCallPhase.active) return;
+    if (sessionUuid == null ||
+        state.phase != VideoCallPhase.active ||
+        !state.isCaller) {
+      return;
+    }
     if (_networkPauseInFlight) return;
-
-    // Optimistically reflect the freeze/unfreeze so the UI reacts
-    // instantly; the server round-trip reconciles session.endsAt.
     if (e.visible && !state.isPaused) return;
     if (!e.visible && state.isPaused) return;
 
     _networkPauseInFlight = true;
-    emit(state.copyWith(isPaused: !e.visible));
+    emit(state.copyWith(isPaused: !e.visible)); // optimistic
     try {
       final session = e.visible
           ? await repo.resume(sessionUuid)
@@ -903,18 +988,64 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
         localEndsAt: _anchorEndsAt(session),
       ));
     } catch (err) {
-      // A failed pause/resume must never wedge the call — fall back to
-      // the true media state.
+      // Our own network is likely down — keep the local freeze, it
+      // reconciles to the true server value on reconnect.
       emit(state.copyWith(isPaused: !_callMediaHealthy));
       debugPrint('⚠️ [VideoCall] pause/resume failed: ${_msg(err)}');
     } finally {
       _networkPauseInFlight = false;
     }
 
-    // Media may have flipped again while the request was in flight (that
-    // event would have been dropped by the _networkPauseInFlight guard) —
-    // re-evaluate so we don't get stuck out of sync with reality.
     _onRemoteMediaMaybeChanged();
+  }
+
+  // ── Active-call resolution poll (dropped video_call_ended safety net) ──
+
+  Timer? _activeResolutionPoll;
+  int _activeResolutionPollTicks = 0;
+
+  void _startActiveResolutionPoll({bool aggressive = false}) {
+    if (_activeResolutionPoll != null) return;
+    _activeResolutionPollTicks = 0;
+    final interval = Duration(seconds: aggressive ? 2 : 4);
+    _activeResolutionPoll = Timer.periodic(interval, (_) async {
+      _activeResolutionPollTicks++;
+      if (_isDisposed || state.phase != VideoCallPhase.active) {
+        _stopActiveResolutionPoll();
+        return;
+      }
+      // Give up after ~30s of polling — the server's per-minute sweep is
+      // the ultimate backstop.
+      if (_activeResolutionPollTicks > (aggressive ? 15 : 8)) {
+        _stopActiveResolutionPoll();
+        return;
+      }
+      final uuid = state.session?.uuid;
+      if (uuid == null) return;
+      try {
+        final session = await repo.status(uuid);
+        const terminal = {
+          'completed',
+          'ended',
+          'rejected',
+          'cancelled',
+          'no_answer',
+        };
+        if (terminal.contains(session.status)) {
+          _stopActiveResolutionPoll();
+          add(_CallResolvedByOtherParty({
+            'meta': {'session_uuid': uuid},
+          }));
+        }
+      } catch (_) {
+        // Transient — keep polling.
+      }
+    });
+  }
+
+  void _stopActiveResolutionPoll() {
+    _activeResolutionPoll?.cancel();
+    _activeResolutionPoll = null;
   }
 
   Future<void> _onCallPauseStateChanged(

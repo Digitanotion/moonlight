@@ -48,6 +48,17 @@ class VideoCallAgoraService with ChangeNotifier {
   /// reason, or they went offline. Drives the network-drop timer freeze.
   final ValueNotifier<bool> remoteStreamHealthy = ValueNotifier<bool>(false);
 
+  /// Bumped to a fresh int whenever the remote peer LEAVES the channel by
+  /// choice (`userOfflineQuit`) — i.e. the other side hung up. This is a
+  /// call-ended signal, NOT a network-drop signal, and must not trigger
+  /// the reconnecting/paused UI.
+  final ValueNotifier<int> remotePeerLeft = ValueNotifier<int>(0);
+
+  // True while the peer has deliberately turned their camera off — in
+  // that state there are no remote frames by design, so onRemoteVideoStats
+  // reporting 0 fps must NOT be read as a network stall.
+  bool _remoteCameraMutedByPeer = false;
+
   bool get joined => _joined;
   String? get channelId => _channelId;
   bool get isMicEnabled => _isMicEnabled;
@@ -107,6 +118,7 @@ class VideoCallAgoraService with ChangeNotifier {
     _channelId = channel;
     _localUid = uid;
     _lastError = null;
+    _remoteCameraMutedByPeer = false;
     _setNotifier(connectionHealthy, true);
     _setNotifier(remoteStreamHealthy, false);
 
@@ -159,13 +171,33 @@ class VideoCallAgoraService with ChangeNotifier {
           int uid,
           UserOfflineReasonType reason,
         ) {
-          if (kDebugMode) debugPrint('[VideoCallAgora] Remote offline: $uid');
+          if (kDebugMode) {
+            debugPrint('[VideoCallAgora] Remote offline: $uid ($reason)');
+          }
           if (remoteUid.value == uid) {
             _setNotifier(remoteUid, null);
             _setNotifier(remoteHasVideo, false);
             _setNotifier(remoteHasAudio, false);
             _setNotifier(remoteStreamHealthy, false);
+            // The peer chose to leave → the call has ended, not a network
+            // blip. Anything else (dropped) is a genuine disconnect.
+            if (reason == UserOfflineReasonType.userOfflineQuit) {
+              _setNotifier(remotePeerLeft, remotePeerLeft.value + 1);
+            }
           }
+          _notify();
+        },
+        onRemoteVideoStats: (RtcConnection conn, RemoteVideoStats stats) {
+          if (stats.uid != remoteUid.value) return;
+          // If the peer deliberately turned their camera off, there are
+          // no frames by design — don't treat that as a stall.
+          if (_remoteCameraMutedByPeer) return;
+          final fps = stats.rendererOutputFrameRate ?? 0;
+          final bitrate = stats.receivedBitrate ?? 0;
+          final flowing = fps > 0 && bitrate > 0;
+          // A hard 0-fps report is a definitive "not seeing them" — this
+          // catches a soft stall that never emits a frozen state change.
+          _setNotifier(remoteStreamHealthy, flowing);
           _notify();
         },
         onConnectionStateChanged: (
@@ -194,17 +226,23 @@ class VideoCallAgoraService with ChangeNotifier {
               state == RemoteVideoState.remoteVideoStateStarting;
           _setNotifier(remoteHasVideo, decoding || starting);
 
+          if (reason ==
+              RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted) {
+            _remoteCameraMutedByPeer = true;
+          } else if (reason ==
+                  RemoteVideoStateReason
+                      .remoteVideoStateReasonRemoteUnmuted ||
+              decoding ||
+              starting) {
+            _remoteCameraMutedByPeer = false;
+          }
+
           // "Healthy" = we're seeing them, OR they deliberately turned
           // their camera off (network fine — don't freeze the timer).
-          // A frozen/stopped stream for ANY other reason is a network
-          // problem → freeze.
-          final byPeerChoice = reason ==
-                  RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted ||
-              reason ==
-                  RemoteVideoStateReason.remoteVideoStateReasonRemoteUnmuted;
+          // Frozen/stopped for any other reason is a network problem.
           _setNotifier(
             remoteStreamHealthy,
-            decoding || starting || byPeerChoice,
+            decoding || starting || _remoteCameraMutedByPeer,
           );
           _notify();
         },
@@ -348,6 +386,9 @@ class VideoCallAgoraService with ChangeNotifier {
     } catch (_) {}
     try {
       remoteStreamHealthy.dispose();
+    } catch (_) {}
+    try {
+      remotePeerLeft.dispose();
     } catch (_) {}
     super.dispose();
   }

@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/web_view_screen.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// All external destinations, kept in one place.
@@ -36,9 +37,6 @@ class MoonlightLinks {
       'https://www.linkedin.com/company/franokwy-ventures-ltd/';
 }
 
-// Keep in sync with pubspec.yaml `version:`.
-const _appVersion = '1.4.5';
-
 Future<void> showAboutMoonlightSheet(BuildContext context) {
   return showModalBottomSheet(
     context: context,
@@ -48,8 +46,23 @@ Future<void> showAboutMoonlightSheet(BuildContext context) {
   );
 }
 
-class _AboutMoonlightSheet extends StatelessWidget {
+class _AboutMoonlightSheet extends StatefulWidget {
   const _AboutMoonlightSheet();
+
+  @override
+  State<_AboutMoonlightSheet> createState() => _AboutMoonlightSheetState();
+}
+
+class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = info.version);
+    }).catchError((_) {});
+  }
 
   void _openPage(BuildContext context, String title, String url) {
     Navigator.of(context).pop();
@@ -109,14 +122,16 @@ class _AboutMoonlightSheet extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Version $_appVersion',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.45),
-                      fontSize: 12.5,
+                  if (_version.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Version $_version',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 12.5,
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 14),
                   Text(
                     'Go live, catch fun, and earn gifts. Join clubs, climb '
