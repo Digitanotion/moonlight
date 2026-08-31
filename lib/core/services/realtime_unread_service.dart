@@ -74,13 +74,13 @@ class RealtimeUnreadService {
       // Listen for FUTURE connection state changes (reconnects).
       _setupConnectionListener();
 
-      // Pusher is very often ALREADY connected by the time the home screen
-      // mounts and calls us — in that case the listener above never fires a
-      // `connected` event, so subscribe right now or realtime badge updates
-      // never start. This was the core "counts don't update" bug.
-      if (_pusherService!.isConnected) {
-        await _subscribeToUnreadUpdates();
-      }
+      // Subscribe/bind NOW — unconditionally. `connectionStateStream` does not
+      // replay the current state, so if Pusher already connected before we got
+      // here the listener never fires and realtime badge updates never start
+      // (the core "counts don't update" bug). PusherService.bind() just
+      // registers handlers, and subscribe() queues the channel and applies it
+      // on connect, so calling this before "connected" is safe.
+      await _subscribeToUnreadUpdates();
 
       _isInitialized = true;
 
