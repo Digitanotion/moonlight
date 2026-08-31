@@ -33,6 +33,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
+import 'package:moonlight/core/services/mini_player_controller.dart';
 import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/pool_video_view.dart';
@@ -55,11 +56,17 @@ class LiveViewerPager extends StatefulWidget {
   final int initialIndex;
   final List<Map<String, dynamic>>? allArgs;
 
+  /// True when re-opened from the in-app mini player — the shared resources
+  /// (Agora pool, PiP arming, screenshot guard) were never released, so we
+  /// must not re-acquire them.
+  final bool resumingFromMini;
+
   const LiveViewerPager({
     super.key,
     required this.items,
     required this.initialIndex,
     this.allArgs,
+    this.resumingFromMini = false,
   });
 
   @override
@@ -82,9 +89,19 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
 
   int _currentPage = 0;
 
+  // True while we're popping ourselves to hand the stream to the in-app mini
+  // player — dispose() then skips the resource teardown.
+  bool _minimizing = false;
+
   @override
   void initState() {
     super.initState();
+
+    // A different stream is being opened while one is minimised — close the
+    // mini player (and its pool) so this one starts clean.
+    if (!widget.resumingFromMini && MiniPlayerController.instance.isActive) {
+      MiniPlayerController.instance.close();
+    }
 
     // Tear down any previous live-viewer session first — deactivates its PiP
     // and background playback so this new stream opens cleanly.
@@ -96,10 +113,14 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     }
     _active = this;
 
-    ScreenGuard.acquire(); // no screenshots / recording while watching a stream
-    // Items 9 + 10: keep the stream playing when minimised / when the user
-    // switches apps, in an OS Picture-in-Picture window, until they close it.
-    PipService.instance.acquire();
+    MiniPlayerController.instance.bindActivePager(_minimizeToMini);
+
+    if (!widget.resumingFromMini) {
+      ScreenGuard.acquire(); // no screenshots / recording while watching
+      // Items 9 + 10: keep the stream playing when minimised / when the user
+      // switches apps, in an OS Picture-in-Picture window, until closed.
+      PipService.instance.acquire();
+    }
     WidgetsBinding.instance.addObserver(this);
 
     _currentPage = widget.initialIndex;
@@ -165,6 +186,19 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     });
   }
 
+  /// Hand the stream to the in-app mini player and pop this route. The shared
+  /// resources (pool, PiP, ScreenGuard) stay held — dispose() sees
+  /// `_minimizing` and skips their teardown.
+  void _minimizeToMini() {
+    if (_minimizing || !mounted) return;
+    _minimizing = true;
+    MiniPlayerController.instance.enterMini(
+      MiniStreamRef(items: widget.items, index: _currentPage),
+    );
+    final nav = Navigator.of(context);
+    if (nav.canPop()) nav.pop();
+  }
+
   /// Called by a newer pager taking over: leave Agora + pop this route so the
   /// old stream doesn't keep playing behind the new one.
   void _closeForNewSession() {
@@ -178,8 +212,11 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   @override
   void dispose() {
     if (identical(_active, this)) _active = null;
-    ScreenGuard.release();
-    PipService.instance.release();
+    MiniPlayerController.instance.unbindActivePager(_minimizeToMini);
+    if (!_minimizing) {
+      ScreenGuard.release();
+      PipService.instance.release();
+    }
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onPageScrolled);
     _controller.dispose();
@@ -197,12 +234,12 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       try { repo.dispose(); } catch (_) {}
     }
 
-    // Dispose the pool — leaves all channels, releases all 3 engines.
-    // The pool is a GetIt singleton — do NOT call disposeAll() here, as
-    // that would tear down the shared engine for the whole app lifetime.
-    // BUT we must leave all active connections so Agora stops sending
-    // audio/video — otherwise streams keep playing after the page closes.
-    _pool.leaveAll();
+    // Leave all Agora connections so audio/video stops — UNLESS we're
+    // minimising, in which case the mini player keeps the pool alive and
+    // owns the eventual leaveAll() (on close) itself.
+    if (!_minimizing) {
+      _pool.leaveAll();
+    }
     super.dispose();
   }
 
