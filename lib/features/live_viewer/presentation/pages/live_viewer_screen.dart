@@ -44,12 +44,18 @@ class LiveViewerScreen extends StatefulWidget {
   final AgoraEnginePool? pool;
   final String? channelId;
 
+  /// Called after a successful premium payment so the pager can force the
+  /// pool's current slot to (re)join — the audience token was withheld by
+  /// the backend until payment, and the video view is only mounted now.
+  final Future<void> Function()? onPremiumUnlocked;
+
   const LiveViewerScreen({
     super.key,
     required this.repository,
     this.routeArgs,
     this.pool,       // ← NEW (optional)
     this.channelId,  // ← NEW (optional)
+    this.onPremiumUnlocked,
   });
 
   factory LiveViewerScreen.create({
@@ -208,6 +214,14 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
         if (_viewerBloc != null && !_viewerBloc!.isClosed) {
           _viewerBloc!.add(const PremiumAccessGranted());
         }
+        // Pool mode: the backend withheld the audience RTC token until
+        // now, so the current slot never joined. Kick a fresh join — the
+        // video view is mounted from this frame on, so it attaches cleanly.
+        if (widget.pool != null && widget.onPremiumUnlocked != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            widget.onPremiumUnlocked!.call();
+          });
+        }
         if (context.mounted) {
           TopSnack.success(context, 'Access unlocked! Enjoy the stream.');
         }
@@ -325,6 +339,9 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
           _isProcessingPayment = false;
           _paymentStatusMessage = null;
         });
+        // Stream flipped to premium mid-session — stop the pool feeding
+        // the host's audio/video behind the paywall.
+        widget.pool?.setCurrentSlotMuted(true);
         TopSnack.warning(
           ctx,
           'Host has made this stream premium. Unlock to continue watching.',

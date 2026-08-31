@@ -18,6 +18,7 @@
 // method as the `resolve` parameter to pool.setInitialWindow() and
 // pool.rotate().
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
@@ -52,8 +53,17 @@ class PoolRtcResolver {
   /// Returns null when:
   ///   - [index] is out of bounds for [items]
   ///   - the backend RTC fetch fails (pool treats null → unavailable)
-  Future<StreamJoinRequest?> resolve(List<LiveItem> items, int index) async {
+  Future<StreamJoinRequest?> resolve(
+    List<LiveItem> items,
+    int index, {
+    bool forceRefresh = false,
+  }) async {
     if (index < 0 || index >= items.length) return null;
+
+    if (forceRefresh) {
+      _cache.remove(index);
+      _channelCache.remove(index);
+    }
 
     // Return cached entry immediately — no network call needed.
     if (_cache.containsKey(index)) return _cache[index];
@@ -85,6 +95,18 @@ class PoolRtcResolver {
       );
 
       return req;
+    } on DioException catch (e) {
+      // 402 = premium stream the viewer hasn't paid for. Returning null
+      // leaves the slot `unavailable` so nothing joins and no audio/video
+      // leaks behind the paywall. After payment the screen calls
+      // pool.refreshCurrentSlot() with forceRefresh, which re-hits this
+      // endpoint (now 200).
+      if (e.response?.statusCode == 402) {
+        debugPrint('🔒 [Resolver] index $index is premium-locked (unpaid)');
+        return null;
+      }
+      debugPrint('⚠️ [Resolver] RTC fetch failed for index $index: $e');
+      return null;
     } catch (e) {
       debugPrint('⚠️ [Resolver] RTC fetch failed for index $index: $e');
       return null;

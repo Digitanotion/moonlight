@@ -313,6 +313,13 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
               routeArgs: routeArgs,
               pool: _pool,
               channelId: widget.items[i].channel,
+              onPremiumUnlocked: () => _pool.refreshCurrentSlot(
+                () => _resolver.resolve(
+                  widget.items,
+                  i,
+                  forceRefresh: true,
+                ),
+              ),
             ),
           );
         },

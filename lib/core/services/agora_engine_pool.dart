@@ -720,6 +720,32 @@ class AgoraEnginePool {
     }
   }
 
+  /// Force the CURRENT slot to leave and rejoin from a fresh [resolve].
+  ///
+  /// Used after a premium unlock: pre-payment the backend withholds the
+  /// audience RTC token (402), so the current slot is `unavailable` and
+  /// nothing is playing. Once the viewer pays, this fetches a real token
+  /// and joins — with the PoolVideoView already mounted (paywall gone),
+  /// so the remote video attaches to a live Surface instead of a dead one.
+  Future<void> refreshCurrentSlot(
+    Future<StreamJoinRequest?> Function() resolve,
+  ) async {
+    if (!_initialized || _disposed) return;
+    final slot = _map[SlotPosition.current];
+    if (slot == null) return;
+
+    await _leaveSlot(slot);
+    if (_disposed) return;
+
+    final req = await resolve();
+    if (req == null || _disposed) {
+      slot.markUnavailable();
+      return;
+    }
+    await _joinSlot(slot, req);
+    debugPrint('🔄 [Pool] Current slot refreshed → ch=${req.channel}');
+  }
+
   Future<void> _backgroundRejoin({
     required EngineSlot slot,
     required int index,
@@ -762,10 +788,17 @@ class AgoraEnginePool {
   Future<void> onAppBackgrounded() async {
     if (_backgrounded) return;
     _backgrounded = true;
-    for (final position in [SlotPosition.previous, SlotPosition.next]) {
+    // Leave ALL slots, including current. Keeping `current` joined while
+    // backgrounded meant that on resume the OS had already destroyed the
+    // video Surface, `setInitialWindow` saw the slot as "still joined" and
+    // never re-ran the join, so `setupRemoteVideo` was never re-issued —
+    // the stream stuck on an endless loading spinner until the viewer
+    // closed and reopened it. A clean leave here + fresh rejoin on
+    // foreground costs ~1s of reconnect but always recovers.
+    for (final position in SlotPosition.values) {
       await _leaveSlot(_map[position]!);
     }
-    debugPrint('📴 [Pool] Backgrounded');
+    debugPrint('📴 [Pool] Backgrounded (all slots left)');
   }
 
   Future<void> onAppForegrounded({
@@ -822,6 +855,38 @@ class AgoraEnginePool {
       await _leaveSlot(slot);
     }
     debugPrint('🏊 [Pool] All connections left (engine retained)');
+  }
+
+  /// Mute/unmute BOTH audio and video on the current slot. Used when a
+  /// stream flips to premium mid-session (host toggled it on while the
+  /// viewer was already watching for free) — the paywall UI covers the
+  /// screen but without this the pool keeps feeding the host's audio.
+  /// Unlocking is handled by refreshCurrentSlot() (a full rejoin).
+  Future<void> setCurrentSlotMuted(bool muted) async {
+    if (!_initialized || _disposed) return;
+    final slot = _map[SlotPosition.current];
+    final conn = slot?.connection;
+    if (conn == null) return;
+    try {
+      await _engine.updateChannelMediaOptionsEx(
+        connection: conn,
+        options: ChannelMediaOptions(
+          autoSubscribeAudio: !muted,
+          autoSubscribeVideo: !muted,
+        ),
+      );
+      final hostUid = slot!.hostUid.value;
+      if (hostUid != null) {
+        await _engine.muteRemoteAudioStreamEx(
+          uid: hostUid, mute: muted, connection: conn,
+        );
+        await _engine.muteRemoteVideoStreamEx(
+          uid: hostUid, mute: muted, connection: conn,
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [Pool] setCurrentSlotMuted($muted) failed: $e');
+    }
   }
 
   // ── Teardown ──────────────────────────────────────────────────────────────
