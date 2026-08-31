@@ -324,7 +324,6 @@ class _WalletScreenState extends State<WalletScreen> {
 
                     _BalanceCard(
                       balance: loaded.balance,
-                      bonusBalance: loaded.earnedBalance,
                       hideBalance: _hideBalance,
                       onToggleHide: () {
                         HapticFeedback.selectionClick();
@@ -377,7 +376,6 @@ class _WalletScreenState extends State<WalletScreen> {
 
 class _BalanceCard extends StatelessWidget {
   final int balance;
-  final int bonusBalance;
   final bool hideBalance;
   final VoidCallback onToggleHide;
   final VoidCallback onBuyCoins;
@@ -385,7 +383,6 @@ class _BalanceCard extends StatelessWidget {
   const _BalanceCard({
     Key? key,
     required this.balance,
-    required this.bonusBalance,
     required this.hideBalance,
     required this.onToggleHide,
     required this.onBuyCoins,
@@ -482,119 +479,82 @@ class _BalanceCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Breakdown: what can actually be cashed out vs. bonus coins
-          // that are spend-only. Replaces the old "Total Earned / Bonuses"
-          // block that implied the bonus was withdrawable.
-          Row(
-            children: [
-              Expanded(
-                child: _WalletStat(
-                  label: 'Withdrawable',
-                  value: hideBalance
-                      ? '••••'
-                      : '\$${(balance * 0.005).toStringAsFixed(2)}',
-                  hint: 'Cash out anytime',
-                  accent: const Color(0xFF4ADE80),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _WalletStat(
-                  label: 'Bonus coins',
-                  value: hideBalance ? '••••' : formatCoin(bonusBalance),
-                  hint: 'Spend only',
-                  accent: const Color(0xFFFFB020),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: onBuyCoins,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text(
-                'Buy coins',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF7A00),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
+          // A single "withdrawable" figure + Buy action. (Replaced the old
+          // "Total Earned / Bonuses" block — bonus coins are spend-only and
+          // no longer surfaced as a balance.)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── wallet stat pill ─────────────────────────────────────────────────────────
-
-class _WalletStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final String hint;
-  final Color accent;
-
-  const _WalletStat({
-    Key? key,
-    required this.label,
-    required this.value,
-    required this.hint,
-    required this.accent,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(
+                            Icons.savings_outlined,
+                            size: 14,
+                            color: Color(0xFF4ADE80),
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Withdrawable',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        hideBalance
+                            ? '••••'
+                            : '\$${(balance * 0.005).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Available to cash out',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            hint,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
-              fontSize: 10,
+                ElevatedButton.icon(
+                  onPressed: onBuyCoins,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text(
+                    'Buy coins',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7A00),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

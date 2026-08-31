@@ -1,11 +1,20 @@
 // lib/features/video_call/presentation/pages/active_call_screen.dart
 import 'dart:async';
+import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
+import 'package:moonlight/features/video_call/data/models/video_call_session_model.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+
+String _firstName(String? full) {
+  final t = (full ?? '').trim();
+  if (t.isEmpty) return 'Unknown';
+  return t.split(RegExp(r'\s+')).first;
+}
 
 class ActiveCallScreen extends StatefulWidget {
   const ActiveCallScreen({super.key});
@@ -40,7 +49,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       },
       builder: (context, state) {
         final session = state.session;
-        final otherParty = session?.caller ?? session?.callee;
+        // Each side shows the OTHER person — caller sees the callee,
+        // callee sees the caller.
+        final VideoCallUserSummary? otherParty =
+            state.isCaller ? session?.callee : session?.caller;
+        final name = _firstName(otherParty?.displayName);
+        final avatarUrl = otherParty?.avatarUrl;
+        final showTimer = state.isCaller && state.countdownEndsAt != null;
 
         return PopScope(
           canPop: false, // intercept every exit path ourselves
@@ -64,7 +79,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // ── Remote video, full screen ─────────────────────────
+                  // ── Remote video, full screen (or hero backdrop) ──────
                   ListenableBuilder(
                     listenable: agora,
                     builder: (context, _) {
@@ -72,7 +87,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                         valueListenable: agora.remoteHasVideo,
                         builder: (context, hasVideo, _) {
                           if (!hasVideo) {
-                            return _connectingPlaceholder(otherParty?.displayName);
+                            return _HeroBackdrop(
+                              name: name,
+                              avatarUrl: avatarUrl,
+                              status: state.isPaused
+                                  ? 'Reconnecting…'
+                                  : 'Connecting…',
+                            );
                           }
                           return agora.remoteView();
                         },
@@ -80,90 +101,100 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                     },
                   ),
 
-                  // ── Local preview bubble ───────────────────────────────
+                  // Soft top/bottom scrims so chrome stays legible over video.
+                  const _EdgeScrims(),
+
+                  // ── Local preview ─────────────────────────────────────
                   Positioned(
-                    top: 60,
-                    right: 16,
-                    child: AnimatedOpacity(
-                      opacity: _controlsVisible ? 1 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        width: 100,
-                        height: 148,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.4),
-                              blurRadius: 12,
+                    top: MediaQuery.of(context).padding.top + 64,
+                    right: 14,
+                    child: AnimatedSlide(
+                      offset: _controlsVisible ? Offset.zero : const Offset(0, -0.15),
+                      duration: const Duration(milliseconds: 220),
+                      child: AnimatedOpacity(
+                        opacity: _controlsVisible ? 1 : 0.35,
+                        duration: const Duration(milliseconds: 220),
+                        child: Container(
+                          width: 96,
+                          height: 132,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.25),
+                              width: 1.5,
                             ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
-                          child: agora.localPreview(),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.35),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: agora.localPreview(),
+                          ),
                         ),
                       ),
                     ),
                   ),
 
-                  // ── Top bar: name + countdown ──────────────────────────
+                  // ── Top chrome: identity + timer + report ─────────────
                   AnimatedOpacity(
                     opacity: _controlsVisible ? 1 : 0,
                     duration: const Duration(milliseconds: 200),
                     child: SafeArea(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                        child: Column(
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
                               children: [
-                                Text(
-                                  otherParty?.displayName ?? '',
-                                  style: AppTextStyles.titleMedium.copyWith(
-                                    color: Colors.white,
-                                    shadows: [
-                                      const Shadow(
-                                        color: Colors.black54,
-                                        blurRadius: 8,
-                                      ),
-                                    ],
+                                const SizedBox(width: 40),
+                                Expanded(
+                                  child: Center(
+                                    child: showTimer
+                                        ? _CountdownPill(
+                                            endsAt: state.countdownEndsAt!,
+                                            paused: state.isPaused,
+                                          )
+                                        : const SizedBox.shrink(),
                                   ),
+                                ),
+                                _GlassIconButton(
+                                  icon: Icons.flag_outlined,
+                                  onTap: () => _showReportSheet(context),
                                 ),
                               ],
                             ),
-                            if (session?.endsAt != null)
-                              _CountdownPill(
-                                endsAt: session!.endsAt!,
-                                paused: state.isPaused,
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: _CallerIdentity(
+                                name: name,
+                                avatarUrl: avatarUrl,
                               ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ),
 
-                  // ── Network-drop banner (#3): timer paused ─────────────
+                  // ── Network-drop banner (#3) / extend prompt ──────────
                   if (state.isPaused)
                     Positioned(
-                      top: 110,
+                      top: MediaQuery.of(context).padding.top + 128,
                       left: 20,
                       right: 20,
                       child: _ReconnectingBanner(),
                     ),
-
-                  // ── Extend prompt (doc 1C: 30s remaining) ──────────────
-                  if (state.showExtendPrompt && !state.isPaused)
+                  if (state.showExtendPrompt &&
+                      !state.isPaused &&
+                      state.isCaller)
                     Positioned(
-                      top: 110,
+                      top: MediaQuery.of(context).padding.top + 128,
                       left: 20,
                       right: 20,
                       child: _ExtendBanner(
@@ -174,7 +205,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                       ),
                     ),
 
-                  // ── Bottom controls ─────────────────────────────────────
+                  // ── Bottom control bar ───────────────────────────────
                   AnimatedOpacity(
                     opacity: _controlsVisible ? 1 : 0,
                     duration: const Duration(milliseconds: 200),
@@ -182,69 +213,66 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                       alignment: Alignment.bottomCenter,
                       child: SafeArea(
                         child: Padding(
-                          padding: const EdgeInsets.only(bottom: 28, top: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              ListenableBuilder(
-                                listenable: agora,
-                                builder: (context, _) => _ControlButton(
-                                  icon: agora.isMicEnabled
-                                      ? Icons.mic_rounded
-                                      : Icons.mic_off_rounded,
-                                  active: agora.isMicEnabled,
-                                  onTap: () =>
-                                      agora.setMicEnabled(!agora.isMicEnabled),
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(32),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
                                 ),
-                              ),
-                              ListenableBuilder(
-                                listenable: agora,
-                                builder: (context, _) => _ControlButton(
-                                  icon: agora.isCameraEnabled
-                                      ? Icons.videocam_rounded
-                                      : Icons.videocam_off_rounded,
-                                  active: agora.isCameraEnabled,
-                                  onTap: () => agora
-                                      .setCameraEnabled(!agora.isCameraEnabled),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.10),
+                                  borderRadius: BorderRadius.circular(32),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
                                 ),
-                              ),
-                              _ControlButton(
-                                icon: Icons.cameraswitch_rounded,
-                                active: true,
-                                onTap: agora.switchCamera,
-                              ),
-                              _ControlButton(
-                                icon: Icons.flag_rounded,
-                                active: true,
-                                onTap: () => _showReportSheet(context),
-                              ),
-                              GestureDetector(
-                                onTap: () => context
-                                    .read<VideoCallBloc>()
-                                    .add(CallEndRequested(reason: null)),
-                                child: Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: AppColors.textRed,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color:
-                                            AppColors.textRed.withOpacity(0.5),
-                                        blurRadius: 16,
-                                        spreadRadius: 1,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ListenableBuilder(
+                                      listenable: agora,
+                                      builder: (context, _) => _ControlButton(
+                                        icon: agora.isMicEnabled
+                                            ? Icons.mic_rounded
+                                            : Icons.mic_off_rounded,
+                                        active: agora.isMicEnabled,
+                                        onTap: () => agora
+                                            .setMicEnabled(!agora.isMicEnabled),
                                       ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                    Icons.call_end_rounded,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    ListenableBuilder(
+                                      listenable: agora,
+                                      builder: (context, _) => _ControlButton(
+                                        icon: agora.isCameraEnabled
+                                            ? Icons.videocam_rounded
+                                            : Icons.videocam_off_rounded,
+                                        active: agora.isCameraEnabled,
+                                        onTap: () => agora.setCameraEnabled(
+                                          !agora.isCameraEnabled,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    _ControlButton(
+                                      icon: Icons.flip_camera_ios_rounded,
+                                      active: true,
+                                      onTap: agora.switchCamera,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    _EndCallButton(
+                                      onTap: () => context
+                                          .read<VideoCallBloc>()
+                                          .add(CallEndRequested(reason: null)),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -256,24 +284,6 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
           ),
         );
       },
-    );
-  }
-
-  Widget _connectingPlaceholder(String? name) {
-    return Container(
-      color: AppColors.dark,
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(color: AppColors.primary2),
-          const SizedBox(height: 16),
-          Text(
-            name != null ? 'Connecting to $name...' : 'Connecting...',
-            style: AppTextStyles.body.copyWith(color: Colors.white70),
-          ),
-        ],
-      ),
     );
   }
 
@@ -327,6 +337,185 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   }
 }
 
+// ── Hero backdrop shown before the remote video arrives ─────────────────
+class _HeroBackdrop extends StatelessWidget {
+  final String name;
+  final String? avatarUrl;
+  final String status;
+  const _HeroBackdrop({
+    required this.name,
+    required this.avatarUrl,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAvatar = avatarUrl != null && avatarUrl!.isNotEmpty;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (hasAvatar)
+          CachedNetworkImage(imageUrl: avatarUrl!, fit: BoxFit.cover)
+        else
+          Container(color: AppColors.navy),
+        BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          child: Container(color: Colors.black.withOpacity(0.55)),
+        ),
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.35),
+                    width: 2,
+                  ),
+                ),
+                child: _Avatar(url: avatarUrl, radius: 52, name: name),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                name,
+                style: AppTextStyles.headlineLarge.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                status,
+                style: AppTextStyles.body.copyWith(
+                  color: Colors.white.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EdgeScrims extends StatelessWidget {
+  const _EdgeScrims();
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Column(
+        children: [
+          Container(
+            height: 180,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black.withOpacity(0.45), Colors.transparent],
+              ),
+            ),
+          ),
+          const Spacer(),
+          Container(
+            height: 160,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Avatar extends StatelessWidget {
+  final String? url;
+  final double radius;
+  final String name;
+  const _Avatar({required this.url, required this.radius, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final has = url != null && url!.isNotEmpty;
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.card,
+      backgroundImage: has ? CachedNetworkImageProvider(url!) : null,
+      child: has
+          ? null
+          : Text(
+              initial,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: radius * 0.8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+    );
+  }
+}
+
+class _CallerIdentity extends StatelessWidget {
+  final String name;
+  final String? avatarUrl;
+  const _CallerIdentity({required this.name, required this.avatarUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Avatar(url: avatarUrl, radius: 16, name: name),
+        const SizedBox(width: 10),
+        Text(
+          name,
+          style: AppTextStyles.titleMedium.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            shadows: const [Shadow(color: Colors.black54, blurRadius: 8)],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GlassIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.15)),
+            ),
+            child: Icon(icon, color: Colors.white, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CountdownPill extends StatefulWidget {
   final DateTime endsAt;
   final bool paused;
@@ -351,8 +540,6 @@ class _CountdownPillState extends State<_CountdownPill> {
     if (old.paused != widget.paused) _syncTicker();
   }
 
-  /// A local 1s repaint so the countdown actually ticks — but not while
-  /// paused, where the number must stay frozen (#3).
   void _syncTicker() {
     _ticker?.cancel();
     if (widget.paused) return;
@@ -375,38 +562,80 @@ class _CountdownPillState extends State<_CountdownPill> {
     final seconds = safe % 60;
     final urgent = safe <= 30 && !widget.paused;
 
-    final bg = widget.paused
-        ? Colors.black
-        : (urgent ? AppColors.textRed : Colors.black);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: bg.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: urgent ? AppColors.textRed : Colors.white24,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            widget.paused ? Icons.pause_circle_outline : Icons.timer_outlined,
-            color: Colors.white,
-            size: 14,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            widget.paused
-                ? 'Paused'
-                : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-            style: AppTextStyles.caption.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: (urgent ? AppColors.textRed : Colors.white).withOpacity(
+              urgent ? 0.85 : 0.14,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: urgent
+                  ? AppColors.textRed
+                  : Colors.white.withOpacity(0.18),
             ),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.paused
+                    ? Icons.pause_rounded
+                    : Icons.schedule_rounded,
+                color: Colors.white,
+                size: 13,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                widget.paused
+                    ? 'Paused'
+                    : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EndCallButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _EndCallButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.textRed,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.textRed.withOpacity(0.45),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.call_end_rounded,
+          color: Colors.white,
+          size: 26,
+        ),
       ),
     );
   }
@@ -546,13 +775,19 @@ class _ControlButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 52,
-        height: 52,
+        width: 50,
+        height: 50,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: active ? Colors.white.withOpacity(0.15) : AppColors.textRed,
+          color: active
+              ? Colors.white.withOpacity(0.16)
+              : Colors.white.withOpacity(0.92),
         ),
-        child: Icon(icon, color: Colors.white, size: 24),
+        child: Icon(
+          icon,
+          color: active ? Colors.white : AppColors.dark,
+          size: 22,
+        ),
       ),
     );
   }

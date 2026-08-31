@@ -38,6 +38,16 @@ class VideoCallState {
   // client-side auto-end from firing during the freeze.
   final bool isPaused;
 
+  /// True on the CALLER's device, false on the callee's. The paid
+  /// countdown (and the client-side auto-end at zero) belongs to the
+  /// caller only — the callee just talks, like a normal call.
+  final bool isCaller;
+
+  /// The call's end time re-anchored to THIS device's clock from the
+  /// server's `remaining_seconds` (now + remaining), so the countdown
+  /// never drifts with device-clock skew and both parties agree.
+  final DateTime? localEndsAt;
+
   const VideoCallState({
     required this.phase,
     this.session,
@@ -45,6 +55,8 @@ class VideoCallState {
     this.error,
     this.showExtendPrompt = false,
     this.isPaused = false,
+    this.isCaller = false,
+    this.localEndsAt,
   });
 
   factory VideoCallState.initial() =>
@@ -59,6 +71,8 @@ class VideoCallState {
     bool clearError = false,
     bool? showExtendPrompt,
     bool? isPaused,
+    bool? isCaller,
+    DateTime? localEndsAt,
   }) {
     return VideoCallState(
       phase: phase ?? this.phase,
@@ -67,8 +81,14 @@ class VideoCallState {
       error: clearError ? null : (error ?? this.error),
       showExtendPrompt: showExtendPrompt ?? this.showExtendPrompt,
       isPaused: isPaused ?? this.isPaused,
+      isCaller: isCaller ?? this.isCaller,
+      localEndsAt: localEndsAt ?? this.localEndsAt,
     );
   }
+
+  /// Convenience: the countdown target (local, drift-free), falling back
+  /// to the raw server `ends_at` if we never got a `remaining_seconds`.
+  DateTime? get countdownEndsAt => localEndsAt ?? session?.endsAt;
 }
 
 // ===== Events =====
@@ -349,6 +369,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
           actionLoading: false,
           session: session,
           phase: VideoCallPhase.ringingOutgoing,
+          isCaller: true,
         ),
       );
       // Belt-and-suspenders for the exact gap just confirmed by testing:
@@ -389,6 +410,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
           actionLoading: false,
           session: session,
           phase: VideoCallPhase.active,
+          localEndsAt: _anchorEndsAt(session),
         ),
       );
       _startTicking();
@@ -427,6 +449,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
           actionLoading: false,
           session: session,
           phase: VideoCallPhase.active,
+          localEndsAt: _anchorEndsAt(session),
         ),
       );
       _startTicking();
@@ -476,6 +499,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
           actionLoading: false,
           session: session,
           phase: VideoCallPhase.active,
+          localEndsAt: _anchorEndsAt(session),
         ),
       );
       _startTicking();
@@ -548,6 +572,7 @@ Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
           actionLoading: false,
           session: session,
           showExtendPrompt: false,
+          localEndsAt: _anchorEndsAt(session),
         ),
       );
     } catch (err) {
@@ -701,6 +726,7 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     emit(
       state.copyWith(
         phase: VideoCallPhase.ringingIncoming,
+        isCaller: false,
         session: VideoCallSessionModel(
           uuid: sessionUuid,
           status: 'ringing',
@@ -766,6 +792,7 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
           actionLoading: false,
           session: session,
           phase: VideoCallPhase.ringingIncoming,
+          isCaller: false,
         ),
       );
       _startResolutionPoll(e.sessionUuid);
@@ -780,6 +807,19 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
       if (!_isDisposed) add(_CallTicked());
     });
     _attachRemoteMediaWatcher();
+  }
+
+  /// Re-anchor the call's end time to THIS device's clock using the
+  /// server's `remaining_seconds` (authoritative, already excludes any
+  /// paused time). Falls back to the raw server `ends_at` only if the
+  /// response lacked `remaining_seconds`. Using local elapsed time from
+  /// here on means the countdown can't drift with device-clock skew, and
+  /// both parties — anchoring off the same server value within a second
+  /// of each other — stay in sync.
+  DateTime? _anchorEndsAt(VideoCallSessionModel s) {
+    final r = s.remainingSeconds;
+    if (r != null) return DateTime.now().add(Duration(seconds: r));
+    return s.endsAt;
   }
 
   // ── Network-drop timer freeze (#3) ──────────────────────────────────────
@@ -852,7 +892,11 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
       final session = e.visible
           ? await repo.resume(sessionUuid)
           : await repo.pause(sessionUuid);
-      emit(state.copyWith(session: session, isPaused: session.isPaused));
+      emit(state.copyWith(
+        session: session,
+        isPaused: session.isPaused,
+        localEndsAt: _anchorEndsAt(session),
+      ));
     } catch (err) {
       // A failed pause/resume must never wedge the call — fall back to
       // the true media state.
@@ -886,7 +930,11 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     // server's freshly-adjusted ends_at.
     try {
       final session = await repo.status(sessionUuid);
-      emit(state.copyWith(session: session, isPaused: session.isPaused));
+      emit(state.copyWith(
+        session: session,
+        isPaused: session.isPaused,
+        localEndsAt: _anchorEndsAt(session),
+      ));
     } catch (_) {
       emit(state.copyWith(isPaused: paused));
     }
@@ -974,14 +1022,21 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
   void _onTick(_CallTicked e, Emitter<VideoCallState> emit) {
     final session = state.session;
     if (session == null || state.phase != VideoCallPhase.active) return;
-    if (session.endsAt == null) return;
+
+    final endsAt = state.countdownEndsAt;
+    if (endsAt == null) return;
 
     // Countdown is frozen while the connection is down (#3). The server
     // pushes ends_at forward on resume, so we simply skip every tick's
     // countdown/auto-end logic until then.
     if (state.isPaused) return;
 
-    final remaining = session.endsAt!.difference(DateTime.now()).inSeconds;
+    // The paid countdown — and the auto-end at zero — belong to the
+    // CALLER only. The callee just talks; the server's per-minute sweep
+    // is the authoritative backstop that ends the call for both.
+    if (!state.isCaller) return;
+
+    final remaining = endsAt.difference(DateTime.now()).inSeconds;
 
     // 30-second extend prompt (doc 1C). Only fire once per crossing, not
     // every tick, to avoid re-showing a dismissed prompt every second.

@@ -17,20 +17,17 @@ class WalletCubit extends Cubit<WalletState> {
     try {
       final results = await Future.wait([
         repo.fetchBalance(),
-        repo.fetchEarned(), // returns int (cents) — ensure repo provides this
         repo.fetchPackages(),
         repo.fetchRecentActivity(),
       ]);
 
       final balance = results[0] as int;
-      final earnedCents = results[1] as int;
-      final packages = results[2] as List<CoinPackage>;
-      final recent = results[3] as List<TransactionModel>;
+      final packages = results[1] as List<CoinPackage>;
+      final recent = results[2] as List<TransactionModel>;
 
       emit(
         WalletLoaded(
           balance: balance,
-          earnedBalance: earnedCents,
           packages: packages,
           recent: recent,
         ),
