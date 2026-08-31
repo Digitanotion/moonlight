@@ -1,5 +1,6 @@
 // lib/features/live_viewer/presentation/services/stream_health_service.dart
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 
@@ -41,13 +42,16 @@ class StreamHealthService {
   StreamHealthService({
     required this.http,
     required this.livestreamUuid,
-    this.pollInterval = const Duration(seconds: 12),
+    this.pollInterval = const Duration(seconds: 20),
   });
+
+  final _rng = Random();
 
   final _controller = StreamController<StreamHealthResult>.broadcast();
   Stream<StreamHealthResult> get stream => _controller.stream;
 
   Timer? _timer;
+  bool _polling = false;
   StreamHealthStatus _lastEmittedStatus = StreamHealthStatus.unknown;
   bool _disposed = false;
 
@@ -73,11 +77,25 @@ class StreamHealthService {
 
   void start() {
     if (_disposed) return;
+    if (_polling) return; // already running — don't stack timers
+    _polling = true;
     _check();
-    _timer = Timer.periodic(pollInterval, (_) => _check());
+    _scheduleNext();
     debugPrint(
-      '🏥 StreamHealthService: started (interval: ${pollInterval.inSeconds}s)',
+      '🏥 StreamHealthService: started (interval: ~${pollInterval.inSeconds}s + jitter)',
     );
+  }
+
+  // Self-rescheduling timer with per-tick jitter (0–5s) so that many viewers
+  // watching the same stream don't all hit /status in the same instant.
+  void _scheduleNext() {
+    if (_disposed || !_polling) return;
+    final jitterMs = _rng.nextInt(5000);
+    _timer = Timer(pollInterval + Duration(milliseconds: jitterMs), () async {
+      if (_disposed || !_polling) return;
+      await _check();
+      _scheduleNext();
+    });
   }
 
   /// Call this when the viewer successfully pays for premium access.
@@ -88,6 +106,7 @@ class StreamHealthService {
   }
 
   void stop() {
+    _polling = false;
     _timer?.cancel();
     _timer = null;
     debugPrint('🏥 StreamHealthService: stopped');

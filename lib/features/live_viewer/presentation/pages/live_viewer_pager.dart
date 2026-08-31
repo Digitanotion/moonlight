@@ -178,12 +178,24 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.paused) {
       _pool.onAppBackgrounded();
+      // Stop hitting /status while backgrounded — a viewer that can't see the
+      // stream has no reason to poll it.
+      if (_currentPage >= 0 && _currentPage < _repos.length) {
+        try {
+          _repos[_currentPage].pauseHealthCheck();
+        } catch (_) {}
+      }
     } else if (state == AppLifecycleState.resumed) {
       _pool.onAppForegrounded(
         currentIndex: _currentPage,
         itemCount: widget.items.length,
         resolve: (i) => _resolver.resolve(widget.items, i),
       );
+      if (_currentPage >= 0 && _currentPage < _repos.length) {
+        try {
+          _repos[_currentPage].resumeHealthCheck();
+        } catch (_) {}
+      }
     }
   }
 

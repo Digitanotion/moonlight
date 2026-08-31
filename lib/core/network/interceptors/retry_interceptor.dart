@@ -11,7 +11,11 @@ class RetryInterceptor extends Interceptor {
   /// client/validation/permission error — retrying it just delays the
   /// error the user needs to see, and for financial writes (withdrawals,
   /// purchases) re-attempts the operation against the payment provider.
-  static const _retryableStatus = {408, 425, 429, 500, 502, 503, 504};
+  //
+  // 429 is deliberately NOT here: retrying a rate-limited request just spends
+  // more of the client's budget and piles load onto an already-stressed
+  // server. Let the caller surface it (or back off) instead.
+  static const _retryableStatus = {408, 425, 500, 502, 503, 504};
 
   static const _retryableTypes = {
     DioExceptionType.connectionTimeout,

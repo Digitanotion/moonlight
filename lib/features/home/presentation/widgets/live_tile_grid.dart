@@ -35,19 +35,31 @@ class _LiveTileGridState extends State<LiveTileGrid> {
     final navigator = Navigator.of(context);
 
     try {
-      final repo = sl<LiveFeedRepository>();
-      final result = await repo.checkStreamStatus(liveId: widget.item.id ?? 0);
-      final status = result['status'] as String? ?? 'offline';
-      final message = result['message'] as String? ?? 'Stream is not available';
+      // Best-effort pre-check. If it returns a definitive non-live status we
+      // tell the user and stop; but a rate-limit / timeout / transient error
+      // must NOT block entry — the viewer screen runs its own health poll and
+      // will surface the real state within a tick or two.
+      try {
+        final repo = sl<LiveFeedRepository>();
+        final result = await repo
+            .checkStreamStatus(liveId: widget.item.id ?? 0)
+            .timeout(const Duration(seconds: 4));
+        final status = result['status'] as String? ?? 'online';
+        final message =
+            result['message'] as String? ?? 'Stream is not available';
+
+        if (!mounted) return;
+        if (status != 'online' && status != 'pending') {
+          TopSnack.info(context, message);
+          return;
+        }
+      } catch (_) {
+        // fall through and navigate anyway
+      }
 
       if (!mounted) return;
 
-      if (status != 'online') {
-        TopSnack.info(context, message);
-        return;
-      }
-
-      // ✅ Stream is online — navigate
+      // ✅ Enter the stream
       final args = {
         'id': widget.item.id,
         'uuid': widget.item.uuid,
