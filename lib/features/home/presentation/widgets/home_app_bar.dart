@@ -37,11 +37,12 @@ class _HomeAppBarState extends State<HomeAppBar> {
       // Trigger initial update
       _updateUI();
 
-      // Safety-net poll: realtime can silently drop (Pusher reconnect, socket
-      // idle-kill). A light 45s refresh while home is on screen keeps the
-      // badges honest even if a push event is missed.
+      // Safety-net poll only — realtime `chat.unread.updated` /
+      // `notifications.unread.updated` are the primary path. Kept long (2min)
+      // and server-cached so it's negligible even at very high user counts;
+      // resume + returning from the chat/notification screens also refresh.
       _pollTimer?.cancel();
-      _pollTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      _pollTimer = Timer.periodic(const Duration(minutes: 2), (_) {
         _unreadService.refresh();
       });
     } catch (e) {
