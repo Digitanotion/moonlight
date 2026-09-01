@@ -33,7 +33,12 @@ abstract class ChatRepository {
   });
   Future<Message> editMessage(String messageUuid, String newBody);
   Future<void> deleteMessage(String messageUuid);
-  Future<void> reactToMessage(String messageUuid, String emoji);
+  /// Set / replace / clear (emoji == null) the current user's reaction on a
+  /// message. Returns the authoritative grouped reaction set.
+  Future<List<MessageReactionGroup>> reactToMessage(
+    String messageUuid,
+    String? emoji,
+  );
   Future<void> markConversationAsRead(String conversationUuid);
   // Future<ChatPaginated<Message>> searchMessages(
   //   String conversationUuid,
@@ -59,6 +64,7 @@ abstract class ChatRepository {
   Stream<String> typingStartedStream();
   Stream<ConversationReadEvent> conversationReadStream();
   Stream<MessageEditEvent> messageEditedStream();
+  Stream<MessageReactionEvent> messageReactionStream();
 
   // ========== LIFECYCLE ==========
   void bindConversationEvents(String conversationUuid);

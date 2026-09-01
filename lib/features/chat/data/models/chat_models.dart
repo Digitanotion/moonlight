@@ -77,13 +77,73 @@ class MediaAttachment extends Equatable {
   List<Object?> get props => [uuid, url]; // uuid can be null
 }
 
+/// One emoji's worth of reactions on a message (WhatsApp-style pill).
+class MessageReactionGroup extends Equatable {
+  final String emoji;
+  final int count;
+
+  /// True if the current user is one of the reactors for this emoji.
+  final bool mine;
+
+  /// Who reacted with this emoji (may be empty on lightweight payloads).
+  final List<ChatUser> users;
+
+  const MessageReactionGroup({
+    required this.emoji,
+    required this.count,
+    this.mine = false,
+    this.users = const [],
+  });
+
+  MessageReactionGroup copyWith({int? count, bool? mine}) =>
+      MessageReactionGroup(
+        emoji: emoji,
+        count: count ?? this.count,
+        mine: mine ?? this.mine,
+        users: users,
+      );
+
+  factory MessageReactionGroup.fromJson(
+    Map<String, dynamic> json, {
+    String? myUuid,
+  }) {
+    final users = (json['users'] as List? ?? [])
+        .whereType<Map>()
+        .map((u) => ChatUser.fromJson(Map<String, dynamic>.from(u)))
+        .toList();
+    // When myUuid is supplied (realtime broadcasts) the payload's `me`
+    // flag is the *sender's* context — don't trust it, derive from users.
+    final mine = myUuid != null
+        ? users.any((u) => u.uuid == myUuid)
+        : json['me'] == true;
+    return MessageReactionGroup(
+      emoji: json['emoji'].toString(),
+      count: json['count'] is num
+          ? (json['count'] as num).toInt()
+          : users.length,
+      mine: mine,
+      users: users,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'emoji': emoji,
+    'count': count,
+    'me': mine,
+    'users': users.map((u) => u.toJson()).toList(),
+  };
+
+  @override
+  List<Object?> get props => [emoji, count, mine];
+}
+
 class Message extends Equatable {
   final String uuid;
   final String body;
   final MessageType type;
   final ChatUser sender;
   final List<MediaAttachment> media;
-  final List<String> reactions;
+  final List<MessageReactionGroup> reactions;
   final bool isEdited;
   final DateTime createdAt;
   final DateTime? editedAt;
@@ -118,7 +178,7 @@ class Message extends Equatable {
                 MediaAttachment.fromJson(Map<String, dynamic>.from(m as Map)),
           )
           .toList(),
-      reactions: List<String>.from(json['reactions'] as List? ?? []),
+      reactions: _parseReactions(json['reactions']),
       isEdited: json['is_edited'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
       editedAt: json['edited_at'] != null
@@ -131,6 +191,54 @@ class Message extends Equatable {
             )
           : null,
     );
+  }
+
+  /// The current user's own reaction emoji, if any.
+  String? get myReaction {
+    for (final g in reactions) {
+      if (g.mine) return g.emoji;
+    }
+    return null;
+  }
+
+  /// Public entry point for parsing a reactions payload (HTTP `data` or a
+  /// realtime event). Pass [myUuid] when the payload's `me` flag can't be
+  /// trusted (broadcasts).
+  static List<MessageReactionGroup> reactionsFromPayload(
+    Object? raw, {
+    String? myUuid,
+  }) =>
+      _parseReactions(raw, myUuid: myUuid);
+
+  static List<MessageReactionGroup> _parseReactions(
+    Object? raw, {
+    String? myUuid,
+  }) {
+    if (raw is List) {
+      // New shape: list of {emoji,count,me,users}. Legacy: list of strings.
+      if (raw.isNotEmpty && raw.first is String) {
+        return raw
+            .map((e) => MessageReactionGroup(emoji: e.toString(), count: 1))
+            .toList();
+      }
+      return raw
+          .whereType<Map>()
+          .map((m) => MessageReactionGroup.fromJson(
+                Map<String, dynamic>.from(m),
+                myUuid: myUuid,
+              ))
+          .toList();
+    }
+    if (raw is Map && raw['summary'] is List) {
+      return (raw['summary'] as List)
+          .whereType<Map>()
+          .map((m) => MessageReactionGroup.fromJson(
+                Map<String, dynamic>.from(m),
+                myUuid: myUuid,
+              ))
+          .toList();
+    }
+    return const [];
   }
 
   // Special constructor for reply_to objects (they have less fields)
@@ -160,7 +268,7 @@ class Message extends Equatable {
     'type': type.value,
     'sender': sender.toJson(),
     'media': media.map((m) => m.toJson()).toList(),
-    'reactions': reactions,
+    'reactions': reactions.map((r) => r.toJson()).toList(),
     'is_edited': isEdited,
     'created_at': createdAt.toUtc().toIso8601String(),
     'edited_at': editedAt?.toUtc().toIso8601String(),
@@ -172,6 +280,7 @@ class Message extends Equatable {
     String? body,
     bool? isEdited,
     DateTime? editedAt,
+    List<MessageReactionGroup>? reactions,
   }) {
     return Message(
       uuid: uuid,
@@ -179,7 +288,7 @@ class Message extends Equatable {
       type: type,
       sender: sender,
       media: media,
-      reactions: reactions,
+      reactions: reactions ?? this.reactions,
       isEdited: isEdited ?? this.isEdited,
       createdAt: createdAt,
       editedAt: editedAt ?? this.editedAt,
@@ -202,6 +311,30 @@ class Message extends Equatable {
     replyToUuid,
     replyTo,
   ];
+}
+
+/// Realtime payload for the `message.reaction` Pusher event. Carries the
+/// full grouped reaction set for one message; `mine` is resolved against
+/// [myUuid] because a broadcast can't know each viewer.
+class MessageReactionEvent {
+  final String messageUuid;
+  final List<MessageReactionGroup> reactions;
+
+  const MessageReactionEvent({
+    required this.messageUuid,
+    required this.reactions,
+  });
+
+  factory MessageReactionEvent.fromJson(
+    Map<String, dynamic> json, {
+    String? myUuid,
+  }) {
+    return MessageReactionEvent(
+      messageUuid: (json['message_uuid'] ?? json['uuid'] ?? '').toString(),
+      reactions:
+          Message.reactionsFromPayload(json['reactions'], myUuid: myUuid),
+    );
+  }
 }
 
 /// Lightweight realtime payload for the `message.updated` Pusher event —

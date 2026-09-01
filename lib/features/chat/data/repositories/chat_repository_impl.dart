@@ -31,6 +31,8 @@ class ChatRepositoryImpl implements ChatRepository {
   final _conversationReadStreamCtrl =
       StreamController<ConversationReadEvent>.broadcast();
   final _messageEditStreamCtrl = StreamController<MessageEditEvent>.broadcast();
+  final _messageReactionStreamCtrl =
+      StreamController<MessageReactionEvent>.broadcast();
 
   final Set<String> _boundConversations = {};
   bool _globalEventsBound = false;
@@ -361,12 +363,20 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
-  Future<void> reactToMessage(String messageUuid, String emoji) async {
+  Future<List<MessageReactionGroup>> reactToMessage(
+    String messageUuid,
+    String? emoji,
+  ) async {
     try {
-      await _client.dio.post(
+      final res = await _client.dio.post(
         '/api/v1/chat/messages/$messageUuid/reactions',
         data: {'emoji': emoji},
       );
+      final data = res.data is Map ? res.data['data'] : null;
+      if (data is Map) {
+        return Message.reactionsFromPayload(data['reactions']);
+      }
+      return const [];
     } catch (e) {
       debugPrint('❌ Error reacting to message: $e');
       rethrow;
@@ -479,6 +489,10 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Stream<MessageEditEvent> messageEditedStream() => _messageEditStreamCtrl.stream;
 
+  @override
+  Stream<MessageReactionEvent> messageReactionStream() =>
+      _messageReactionStreamCtrl.stream;
+
   /* -------------------------------------------------------------------------- */
   /*                           PUSHER BINDINGS                                   */
   /* -------------------------------------------------------------------------- */
@@ -578,6 +592,21 @@ class ChatRepositoryImpl implements ChatRepository {
           );
         } catch (e) {
           debugPrint('❌ Error parsing message.updated: $e');
+        }
+      });
+
+      // Bind to message.reaction event (someone reacted / un-reacted)
+      _pusher.bind(channel, 'message.reaction', (data) {
+        debugPrint('😀 Received message.reaction event: $data');
+        try {
+          _messageReactionStreamCtrl.add(
+            MessageReactionEvent.fromJson(
+              _normalizeData(data),
+              myUuid: getCurrentUserUuidSync(),
+            ),
+          );
+        } catch (e) {
+          debugPrint('❌ Error parsing message.reaction: $e');
         }
       });
 

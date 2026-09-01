@@ -776,30 +776,64 @@ class MessageBubble extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Reactions
-                if (message.reactions != null && message.reactions!.isNotEmpty)
+                // Reactions — WhatsApp-style pills. Tap a pill to toggle
+                // your own reaction to that emoji; tap it again to remove.
+                // Long-press any pill to see who reacted.
+                if (message.reactions.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 5),
                     child: Wrap(
-                      spacing: 4,
-                      children: message.reactions!
-                          .map(
-                            (reaction) => GestureDetector(
-                              onTap: onReact,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
+                      spacing: 5,
+                      runSpacing: 4,
+                      children: [
+                        for (final g in message.reactions)
+                          GestureDetector(
+                            onTap: () => onReactWith?.call(g.emoji),
+                            onLongPress: () =>
+                                _showReactorsSheet(context, message.reactions),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: g.mine
+                                    ? AppColors.secondary.withOpacity(0.22)
+                                    : (isMe
+                                        ? Colors.black.withOpacity(0.06)
+                                        : Colors.white.withOpacity(0.08)),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: g.mine
+                                      ? AppColors.secondary.withOpacity(0.7)
+                                      : Colors.white.withOpacity(0.10),
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surface.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(reaction),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(g.emoji,
+                                      style: const TextStyle(fontSize: 13)),
+                                  if (g.count > 1) ...[
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      '${g.count}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: g.mine
+                                            ? AppColors.secondary
+                                            : (isMe
+                                                ? AppColors.chatOutgoingMeta
+                                                : Colors.white70),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
-                          )
-                          .toList(),
+                          ),
+                      ],
                     ),
                   ),
               ],
@@ -859,7 +893,8 @@ class MessageBubble extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Quick reactions — tap sends that emoji immediately.
+                // Quick reactions — tap sends immediately. The one you've
+                // already picked is highlighted; tapping it again removes it.
                 if (canReact)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -878,6 +913,13 @@ class MessageBubble extends StatelessWidget {
                               },
                               child: Container(
                                 padding: const EdgeInsets.all(8),
+                                decoration: message.myReaction == e
+                                    ? BoxDecoration(
+                                        color: AppColors.secondary
+                                            .withOpacity(0.22),
+                                        shape: BoxShape.circle,
+                                      )
+                                    : null,
                                 child: Text(
                                   e,
                                   style: const TextStyle(fontSize: 24),
@@ -945,6 +987,78 @@ class MessageBubble extends StatelessWidget {
                     },
                   ),
                 const SizedBox(height: 6),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showReactorsSheet(
+    BuildContext context,
+    List<MessageReactionGroup> groups,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reactions',
+                  style: TextStyle(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (final g in groups)
+                  for (final u in (g.users.isEmpty
+                      ? [null]
+                      : g.users))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: Colors.white10,
+                            backgroundImage: (u?.avatarUrl ?? '').isNotEmpty
+                                ? NetworkImage(u!.avatarUrl!)
+                                : null,
+                            child: (u?.avatarUrl ?? '').isEmpty
+                                ? const Icon(Icons.person,
+                                    size: 15, color: Colors.white38)
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              u == null
+                                  ? '${g.count} ${g.count == 1 ? "person" : "people"}'
+                                  : (u.fullName.isNotEmpty
+                                      ? u.fullName
+                                      : u.userSlug),
+                              style: TextStyle(
+                                color: AppColors.onSurface,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                          ),
+                          Text(g.emoji, style: const TextStyle(fontSize: 18)),
+                        ],
+                      ),
+                    ),
               ],
             ),
           ),

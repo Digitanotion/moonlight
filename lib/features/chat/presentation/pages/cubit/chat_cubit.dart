@@ -22,6 +22,7 @@ class ChatCubit extends Cubit<ChatState> {
   StreamSubscription<Message>? _messageSubscription;
   StreamSubscription<String>? _typingSubscription;
   StreamSubscription<MessageEditEvent>? _messageEditSubscription;
+  StreamSubscription<MessageReactionEvent>? _messageReactionSubscription;
   StreamSubscription<ConversationReadEvent>? _readReceiptSubscription;
 
   String? _currentConversationUuid;
@@ -631,15 +632,109 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
+  /// WhatsApp-style: one reaction per user. Tapping your current emoji
+  /// clears it; tapping another replaces it. Optimistic, reconciled with
+  /// the server's authoritative grouped set, rolled back on failure.
   Future<void> reactToMessage({
     required String messageUuid,
     required String emoji,
   }) async {
+    final index = _allMessages.indexWhere((m) => m.uuid == messageUuid);
+    if (index == -1) return;
+
+    final myUuid = _currentUserService?.currentUser?.id;
+    final me = _currentUserService?.currentUser;
+    final before = _allMessages[index];
+    final current = before.myReaction;
+    final clearing = current == emoji; // tapped my own -> remove
+    final target = clearing ? null : emoji;
+
+    // ── optimistic ──────────────────────────────────────────────────────
+    final optimistic = _applyReactionLocally(
+      before.reactions,
+      previousEmoji: current,
+      newEmoji: target,
+      myUuid: myUuid,
+      mySlug: me?.userSlug,
+      myName: me?.fullname,
+      myAvatar: me?.avatarUrl,
+    );
+    _allMessages[index] = before.copyWith(reactions: optimistic);
+    _emitMessagesUpdated();
+
     try {
-      await _repository.reactToMessage(messageUuid, emoji);
+      final authoritative =
+          await _repository.reactToMessage(messageUuid, target);
+      final i = _allMessages.indexWhere((m) => m.uuid == messageUuid);
+      if (i != -1) {
+        _allMessages[i] = _allMessages[i].copyWith(reactions: authoritative);
+        _emitMessagesUpdated();
+      }
     } catch (e) {
-      emit(ChatError(e.toString(), _currentConversationUuid));
+      final i = _allMessages.indexWhere((m) => m.uuid == messageUuid);
+      if (i != -1) {
+        _allMessages[i] = _allMessages[i].copyWith(reactions: before.reactions);
+        _emitMessagesUpdated();
+      }
+      emit(ChatError('Could not update reaction', _currentConversationUuid));
     }
+  }
+
+  List<MessageReactionGroup> _applyReactionLocally(
+    List<MessageReactionGroup> groups, {
+    required String? previousEmoji,
+    required String? newEmoji,
+    String? myUuid,
+    String? mySlug,
+    String? myName,
+    String? myAvatar,
+  }) {
+    final out = <MessageReactionGroup>[];
+    for (final g in groups) {
+      if (g.emoji == previousEmoji) {
+        final c = g.count - 1;
+        if (c > 0) {
+          out.add(g.copyWith(
+            count: c,
+            mine: false,
+          ));
+        }
+      } else {
+        out.add(g);
+      }
+    }
+    if (newEmoji != null) {
+      final existingIdx = out.indexWhere((g) => g.emoji == newEmoji);
+      if (existingIdx != -1) {
+        out[existingIdx] = out[existingIdx]
+            .copyWith(count: out[existingIdx].count + 1, mine: true);
+      } else {
+        out.add(MessageReactionGroup(
+          emoji: newEmoji,
+          count: 1,
+          mine: true,
+          users: [
+            if (myUuid != null)
+              ChatUser(
+                uuid: myUuid,
+                userSlug: mySlug ?? '',
+                fullName: myName ?? '',
+                avatarUrl: myAvatar,
+              ),
+          ],
+        ));
+      }
+    }
+    return out;
+  }
+
+  void _emitMessagesUpdated() {
+    final uuid = _currentConversationUuid;
+    if (uuid == null) return;
+    emit(ChatMessageUpdated(
+      messages: List.from(_allMessages),
+      conversationUuid: uuid,
+    ));
   }
 
   /* -------------------------------------------------------------------------- */
@@ -695,6 +790,7 @@ class ChatCubit extends Cubit<ChatState> {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _messageEditSubscription?.cancel();
+    _messageReactionSubscription?.cancel();
     _readReceiptSubscription?.cancel();
 
     try {
@@ -746,6 +842,22 @@ class ChatCubit extends Cubit<ChatState> {
       },
       onError: (e) {
         debugPrint('❌ Error in message-edit stream: $e');
+      },
+    );
+
+    _messageReactionSubscription =
+        _repository.messageReactionStream().listen(
+      (event) {
+        if (_currentConversationUuid != conversationUuid) return;
+        final i =
+            _allMessages.indexWhere((m) => m.uuid == event.messageUuid);
+        if (i == -1) return;
+        _allMessages[i] =
+            _allMessages[i].copyWith(reactions: event.reactions);
+        _emitMessagesUpdated();
+      },
+      onError: (e) {
+        debugPrint('❌ Error in message-reaction stream: $e');
       },
     );
 
@@ -818,6 +930,7 @@ class ChatCubit extends Cubit<ChatState> {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _messageEditSubscription?.cancel();
+    _messageReactionSubscription?.cancel();
     _readReceiptSubscription?.cancel();
     _otherPartyLastReadAt = null;
 
