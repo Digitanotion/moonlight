@@ -931,6 +931,11 @@ void _startHealthService() {
     _ChatArrived event,
     Emitter<ViewerState> emit,
   ) async {
+    // Drop duplicates by id — a reconnect / swipe-back re-hydrates recent
+    // chat, which would otherwise re-append messages (and gift lines) that
+    // are already on screen.
+    final id = event.message.id;
+    if (id.isNotEmpty && state.chat.any((c) => c.id == id)) return;
     final updated = [...state.chat, event.message];
     if (updated.length > 200) updated.removeAt(0);
     _safeEmit(emit, state.copyWith(chat: updated));
@@ -1064,8 +1069,9 @@ void _startHealthService() {
   ) async {
     final b = event.broadcast;
 
-    // Resolve the gift's pretty title + image from the catalog (falls back
-    // to the raw code if it's not in the catalog).
+    // The in-chat gift line is a real, server-persisted chat message now
+    // (delivered via chat.message to everyone incl. the host). This handler
+    // only drives the transient gift toast / animation overlay.
     GiftItem? item;
     for (final g in state.giftCatalog) {
       if (g.code == b.giftCode || g.id == b.giftId) {
@@ -1073,42 +1079,15 @@ void _startHealthService() {
         break;
       }
     }
-    final giftLabel = item?.title ?? _prettifyCode(b.giftCode);
-    final sender = b.senderDisplayName.trim().isEmpty
-        ? 'Someone'
-        : b.senderDisplayName.trim();
-
-    // Inline chat line, TikTok/Tango style. Dedupe on server txn id in case
-    // Pusher redelivers the event.
-    final giftMsgId = 'gift_${b.serverTxnId}';
-    final already = state.chat.any((c) => c.id == giftMsgId);
-
-    final chat = already
-        ? state.chat
-        : () {
-            final list = [
-              ...state.chat,
-              ChatMessage.gift(
-                id: giftMsgId,
-                sender: sender,
-                giftLabel: giftLabel,
-                avatarUrl: b.senderAvatarUrl.isEmpty ? null : b.senderAvatarUrl,
-                giftImageUrl: item?.imageUrl,
-                coins: b.coinsSpent,
-                quantity: b.quantity,
-                fromHost: state.host?.name == b.senderDisplayName,
-              ),
-            ];
-            if (list.length > 200) list.removeAt(0);
-            return list;
-          }();
+    final giftLabel = item?.title ?? b.giftCode;
 
     _safeEmit(
       emit,
       state.copyWith(
-        chat: chat,
         gift: GiftNotice(
-          from: sender,
+          from: b.senderDisplayName.trim().isEmpty
+              ? 'Someone'
+              : b.senderDisplayName.trim(),
           giftName: giftLabel,
           coins: b.coinsSpent,
         ),
@@ -1116,16 +1095,6 @@ void _startHealthService() {
       ),
     );
     _logEvent('GIFT_BROADCAST', 'Received: ${b.giftCode}');
-  }
-
-  static String _prettifyCode(String code) {
-    if (code.isEmpty) return 'a gift';
-    return code
-        .replaceAll(RegExp(r'[_\-]+'), ' ')
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .map((w) => w[0].toUpperCase() + w.substring(1))
-        .join(' ');
   }
 
   Future<void> _onGiftOverlayDequeued(

@@ -887,10 +887,52 @@ class ViewerRepositoryImpl implements ViewerRepository {
       final messageId =
           (chatData['id'] ?? DateTime.now().microsecondsSinceEpoch.toString())
               .toString();
-      _chatCtrl.add(ChatMessage(id: messageId, username: username, text: text));
+
+      final avatar = chatData['avatar']?.toString();
+      final isHost = (chatData['role']?.toString() == 'host') ||
+          (hostSlug != null && hostSlug == username);
+
+      if (chatData['type']?.toString() == 'gift') {
+        _chatCtrl.add(_giftChatFrom(messageId, username, avatar, isHost,
+            chatData['meta'], text));
+        return;
+      }
+
+      _chatCtrl.add(ChatMessage(
+        id: messageId,
+        username: username,
+        text: text,
+        isHost: isHost,
+        avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
+      ));
     } catch (e) {
       debugPrint('❌ Failed to process chat: $e');
     }
+  }
+
+  ChatMessage _giftChatFrom(
+    String id,
+    String username,
+    String? avatar,
+    bool isHost,
+    Object? metaRaw,
+    String fallbackText,
+  ) {
+    final meta = (metaRaw is Map)
+        ? metaRaw.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    return ChatMessage.gift(
+      id: id,
+      sender: username,
+      giftLabel: (meta['gift_title'] ?? meta['gift_code'] ?? fallbackText)
+          .toString(),
+      avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
+      giftImageUrl: meta['gift_image']?.toString(),
+      coins: meta['coins'] is num ? (meta['coins'] as num).toInt() : null,
+      quantity:
+          meta['quantity'] is num ? (meta['quantity'] as num).toInt() : 1,
+      fromHost: isHost,
+    );
   }
 
   Future<void> _hydrateRecentChat() async {
@@ -903,14 +945,23 @@ class ViewerRepositoryImpl implements ViewerRepository {
       final List list = (data is List) ? data : (jsonDecode('$data') as List);
       for (final e in list) {
         final m = (e as Map).cast<String, dynamic>();
+        final username = m['user'] is Map
+            ? '${(m['user'] as Map)['user_slug'] ?? (m['user'] as Map)['name'] ?? 'user'}'
+            : '${m['user']}';
+        final avatar = m['avatar']?.toString();
+        final isHost = hostSlug == username;
+        if (m['type']?.toString() == 'gift') {
+          _chatCtrl.add(_giftChatFrom(
+              '${m['id']}', username, avatar, isHost, m['meta'], '${m['text']}'));
+          continue;
+        }
         _chatCtrl.add(
           ChatMessage(
             id: '${m['id']}',
-            username: m['user'] is Map
-                ? '${(m['user'] as Map)['user_slug'] ?? (m['user'] as Map)['name'] ?? 'user'}'
-                : '${m['user']}',
+            username: username,
             text: '${m['text']}',
-            isHost: hostSlug == m['user'],
+            isHost: isHost,
+            avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
           ),
         );
       }
