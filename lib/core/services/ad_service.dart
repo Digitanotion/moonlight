@@ -1,5 +1,6 @@
 // lib/core/services/ad_service.dart
 
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -48,6 +49,12 @@ class AdService {
       _pick(_useTestAds ? _testBanner : _prodBanner);
 
   bool _initialized = false;
+  bool get isInitialized => _initialized;
+
+  /// Completes once [init] has finished, so ad widgets built during app
+  /// startup can await readiness instead of failing permanently.
+  final Completer<void> _ready = Completer<void>();
+  Future<void> get ready => _ready.future;
 
   /// Runs in the background at launch. Ad calls before this completes just
   /// no-op; they start working once it's done.
@@ -63,6 +70,7 @@ class AdService {
 
     await MobileAds.instance.initialize();
     _initialized = true;
+    if (!_ready.isCompleted) _ready.complete();
     _preloadInterstitial();
   }
 
@@ -150,8 +158,15 @@ class AdService {
     required VoidCallback onFailed,
   }) async {
     if (!_initialized) {
-      onFailed();
-      return null;
+      // Widget was built during app startup, before init() finished.
+      // Wait for it rather than failing permanently.
+      try {
+        await ready.timeout(const Duration(seconds: 8));
+      } catch (_) {}
+      if (!_initialized) {
+        onFailed();
+        return null;
+      }
     }
     final size = await AdSize.getAnchoredAdaptiveBannerAdSize(
       Orientation.portrait,

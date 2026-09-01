@@ -9,6 +9,7 @@ import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/video_feed_screen.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_post_card.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_skeletons.dart';
+import 'package:moonlight/core/widgets/styled_banner_ad.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -37,6 +38,10 @@ class _FeedScreenState extends State<FeedScreen> {
   // VideoPreloadService.maxCached).
   static const int _preloadAhead = 4;
   int _lastPreloadedIndex = -1;
+
+  // Show one in-feed sponsored banner after every N posts. 6 keeps it
+  // present but well spaced — never two ads within a screen height.
+  static const int _adEvery = 6;
 
   @override
   void initState() {
@@ -140,25 +145,37 @@ class _FeedScreenState extends State<FeedScreen> {
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 120),
                 sliver: SliverList.separated(
                   itemBuilder: (_, i) {
-                    if (i >= s.items.length) {
+                    // Every (_adEvery + 1)th slot is a sponsored banner.
+                    if ((i + 1) % (_adEvery + 1) == 0) {
+                      return const StyledBannerAd();
+                    }
+                    // Map list index → post index, skipping ad slots.
+                    final postIndex = i - (i + 1) ~/ (_adEvery + 1);
+
+                    if (postIndex >= s.items.length) {
                       return const Padding(
                         padding: EdgeInsets.only(top: 4),
                         child: FeedSkeletonList(count: 2),
                       );
                     }
-                                        final post = s.items[i];
+                    final post = s.items[postIndex];
                     return FeedPostCard(
                       post: post,
-                      onLike: () => context.read<FeedCubit>().toggleLikeAt(i),
-                      onOpenPost: () => _openPostAndBump(i, post),
+                      onLike: () =>
+                          context.read<FeedCubit>().toggleLikeAt(postIndex),
+                      onOpenPost: () => _openPostAndBump(postIndex, post),
                       onOpenProfile: () => _openProfile(post),
-                      onOpenVideoFeed: () => _openVideoFeed(i),
-                      onCommentsChanged: (n) =>
-                          context.read<FeedCubit>().setCommentsCountAt(i, n),
+                      onOpenVideoFeed: () => _openVideoFeed(postIndex),
+                      onCommentsChanged: (n) => context
+                          .read<FeedCubit>()
+                          .setCommentsCountAt(postIndex, n),
                     );
                   },
                   separatorBuilder: (_, __) => const SizedBox(height: 14),
-                  itemCount: s.items.length + (s.paging ? 1 : 0),
+                  itemCount: () {
+                    final posts = s.items.length + (s.paging ? 1 : 0);
+                    return posts + posts ~/ _adEvery;
+                  }(),
                 ),
               );
             },
