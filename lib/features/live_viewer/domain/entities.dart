@@ -132,6 +132,10 @@ class HostInfo extends Equatable {
   final String? uuid;
   final int? fans;
   final String? country;
+  // Whether THIS viewer may place a private video call to this host. Computed
+  // server-side (host is female, viewer is male, not self) — mirrors the hard
+  // rules in VideoCallService. Drives whether the call button is shown.
+  final bool callable;
 
   const HostInfo({
     required this.name,
@@ -143,6 +147,7 @@ class HostInfo extends Equatable {
     this.uuid,
     this.fans,
     this.country,
+    this.callable = false,
   });
 
   HostInfo copyWith({bool? isFollowed}) => HostInfo(
@@ -155,6 +160,7 @@ class HostInfo extends Equatable {
     uuid: uuid,
     fans: fans,
     country: country,
+    callable: callable,
   );
 
   @override
@@ -168,6 +174,7 @@ class HostInfo extends Equatable {
     uuid,
     fans,
     country,
+    callable,
   ];
 }
 

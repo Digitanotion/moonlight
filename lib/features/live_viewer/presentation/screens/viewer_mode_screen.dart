@@ -263,14 +263,12 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                           onGiftTap: () =>
                               showGiftBottomSheet(context, widget.repository),
                           onToggleControls: null,
-                          // Private video call (doc item 8). Gated only on
-                          // a host being present — the actual gender/
-                          // online/enabled rules are enforced server-side
-                          // by VideoCallService.initiate() (already tested),
-                          // so a non-callable host just gets a clear error
-                          // message back rather than needing every one of
-                          // those fields threaded through HostInfo here.
-                          showVideoCall: state.host != null,
+                          // Private video call (doc item 8). Only shown when
+                          // the server says this viewer may actually call this
+                          // host (host female, viewer male, not self) — the
+                          // same hard rules VideoCallService enforces. Avoids
+                          // a visibly-dead call button on e.g. a male host.
+                          showVideoCall: state.host?.callable == true,
                           onVideoCallTap: () =>
                               _openVideoCall(context, widget.repository),
                         ),

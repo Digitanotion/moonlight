@@ -213,6 +213,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
         // the periodic "Follow" prompt.
         isFollowed: hostData['isFollowed'] == true ||
             hostData['is_followed'] == true,
+        callable: hostData['callable'] == true,
         uuid: hostData['uuid']?.toString(),
         fans: hostData['fans'] == null
             ? null
