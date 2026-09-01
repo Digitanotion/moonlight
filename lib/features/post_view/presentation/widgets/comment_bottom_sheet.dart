@@ -18,42 +18,44 @@ import 'package:moonlight/features/post_view/domain/repositories/post_repository
 import 'package:moonlight/features/post_view/presentation/cubit/post_cubit.dart';
 
 class CommentBottomSheet {
+  /// [onCountChanged] fires with the current comment total whenever it moves
+  /// (add / delete), so the caller — a feed card, the video feed — can keep
+  /// its own count in sync without a full refresh.
   static Future<void> show(
     BuildContext context, {
     required String postId,
     Post? initialPost,
+    void Function(int newCount)? onCountChanged,
   }) {
+    PostCubit build() {
+      try {
+        final cubit = sl<PostCubit>(param1: postId, param2: initialPost);
+        if (initialPost == null) cubit.load();
+        return cubit;
+      } catch (e) {
+        debugPrint('❌ GetIt factory param failed: $e');
+        final cubit =
+            PostCubit(sl<PostRepository>(), postId, initialPost: initialPost);
+        if (initialPost == null) cubit.load();
+        return cubit;
+      }
+    }
+
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => BlocProvider<PostCubit>(
-        create: (_) {
-          // Same DI pattern as app_router.dart's postView route —
-          // factory-param first, direct construction as a fallback.
-          try {
-            final cubit = sl<PostCubit>(param1: postId, param2: initialPost);
-            if (initialPost == null) cubit.load();
-            return cubit;
-          } catch (e) {
-            debugPrint('❌ GetIt factory param failed: $e');
-            final cubit = PostCubit(
-              sl<PostRepository>(),
-              postId,
-              initialPost: initialPost,
-            );
-            if (initialPost == null) cubit.load();
-            return cubit;
-          }
-        },
-        child: const _CommentSheetBody(),
+        create: (_) => build(),
+        child: _CommentSheetBody(onCountChanged: onCountChanged),
       ),
     );
   }
 }
 
 class _CommentSheetBody extends StatefulWidget {
-  const _CommentSheetBody();
+  const _CommentSheetBody({this.onCountChanged});
+  final void Function(int newCount)? onCountChanged;
 
   @override
   State<_CommentSheetBody> createState() => _CommentSheetBodyState();
@@ -63,11 +65,18 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   Comment? _replyingTo;
+  int? _lastReportedCount;
 
   @override
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+  }
+
+  void _maybeReportCount(int? count) {
+    if (count == null || count == _lastReportedCount) return;
+    _lastReportedCount = count;
+    widget.onCountChanged?.call(count);
   }
 
   @override
@@ -98,6 +107,14 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
 
   @override
   Widget build(BuildContext context) {
+    return BlocListener<PostCubit, PostState>(
+      listenWhen: (p, n) => p.post?.commentsCount != n.post?.commentsCount,
+      listener: (_, state) => _maybeReportCount(state.post?.commentsCount),
+      child: _buildSheet(context),
+    );
+  }
+
+  Widget _buildSheet(BuildContext context) {
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.5,

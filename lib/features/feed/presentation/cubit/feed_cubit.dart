@@ -147,6 +147,17 @@ class FeedCubit extends Cubit<FeedState> {
     }
   }
 
+  /// Keep a card's comment count in sync after the user comments from the
+  /// in-place comment sheet (no full feed refresh).
+  void setCommentsCountAt(int index, int count) {
+    if (index < 0 || index >= state.items.length) return;
+    if (state.items[index].commentsCount == count) return;
+    emit(state.copyWith(
+      items: [...state.items]
+        ..[index] = state.items[index].copyWith(commentsCount: count),
+    ));
+  }
+
   Future<void> shareAt(int index) async {
     if (index < 0 || index >= state.items.length) return;
     final current = state.items[index];

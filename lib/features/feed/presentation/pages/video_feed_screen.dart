@@ -342,6 +342,9 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                             context,
                             postId: current.id,
                             initialPost: current,
+                            onCountChanged: (n) => context
+                                .read<FeedCubit>()
+                                .setCommentsCountAt(originalIndex, n),
                           ),
                         ),
                         if (isOwner) ...[

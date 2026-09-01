@@ -31,12 +31,16 @@ class FeedPostCard extends StatelessWidget {
     required this.onOpenPost,
     required this.onOpenProfile,
     this.onOpenVideoFeed,
+    this.onCommentsChanged,
   });
 
   final Post post;
   final VoidCallback onLike;
   final VoidCallback onOpenPost;
   final VoidCallback onOpenProfile;
+  /// Fired with the new comment total after the user comments from the sheet,
+  /// so the feed can keep this card's count in sync without a refresh.
+  final void Function(int newCount)? onCommentsChanged;
   // Doc item 5 — tapping a video opens the TikTok-style video feed
   // instead of doing nothing. Optional/nullable so this card still
   // works anywhere it's used without this wired up.
@@ -198,7 +202,7 @@ class FeedPostCard extends StatelessWidget {
                 _LikeMetric(
                   isLiked: post.isLiked,
                   count: post.likes,
-                  onTap: onOpenPost, // ← tapping heart opens post, not likes it
+                  onTap: onLike, // like in place — heart fills red and stays
                 ),
                 const SizedBox(width: 18),
                 _Metric(
@@ -208,6 +212,7 @@ class FeedPostCard extends StatelessWidget {
                     context,
                     postId: post.id,
                     initialPost: post,
+                    onCountChanged: onCommentsChanged,
                   ),
                 ),
                 const SizedBox(width: 18),

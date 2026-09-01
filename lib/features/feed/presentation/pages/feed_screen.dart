@@ -153,6 +153,8 @@ class _FeedScreenState extends State<FeedScreen> {
                       onOpenPost: () => _openPostAndBump(i, post),
                       onOpenProfile: () => _openProfile(post),
                       onOpenVideoFeed: () => _openVideoFeed(i),
+                      onCommentsChanged: (n) =>
+                          context.read<FeedCubit>().setCommentsCountAt(i, n),
                     );
                   },
                   separatorBuilder: (_, __) => const SizedBox(height: 14),
