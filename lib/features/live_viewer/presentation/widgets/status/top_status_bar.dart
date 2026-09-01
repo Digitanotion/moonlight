@@ -20,6 +20,8 @@ class TopStatusBar extends StatefulWidget {
 }
 
 class _TopStatusBarState extends State<TopStatusBar> {
+  // Kept for when the client wants the stream timer back (see build()).
+  // ignore: unused_element
   String _fmt(Duration d) {
     final mm = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final ss = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -164,22 +166,25 @@ class _TopStatusBarState extends State<TopStatusBar> {
                 ),
               ),
               const Spacer(),
-              _glass(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  child: Text(
-                    _fmt(state.elapsed),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
+              // Elapsed-time display hidden per client request. Restore this
+              // block (and remove `_fmt`'s `// ignore: unused_element` if
+              // added) if they ask for the stream timer back.
+              // _glass(
+              //   child: Padding(
+              //     padding: const EdgeInsets.symmetric(
+              //       horizontal: 12,
+              //       vertical: 6,
+              //     ),
+              //     child: Text(
+              //       _fmt(state.elapsed),
+              //       style: const TextStyle(
+              //         color: Colors.white,
+              //         fontWeight: FontWeight.w600,
+              //       ),
+              //     ),
+              //   ),
+              // ),
+              // const SizedBox(width: 8),
               GestureDetector(
                 onTap: () {
                   // In-app minimise (draggable mini player) when we're in the

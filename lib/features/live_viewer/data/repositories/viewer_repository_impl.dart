@@ -208,7 +208,11 @@ class ViewerRepositoryImpl implements ViewerRepository {
             hostData['avatar']?.toString() ??
             hostData['avatar_url']?.toString() ??
             'https://via.placeholder.com/120x120.png?text=LIVE',
-        isFollowed: hostData['is_followed'] == true,
+        // Backend returns this as 'isFollowed' (camelCase) — 'is_followed'
+        // never matched, so a viewer who already follows the host still saw
+        // the periodic "Follow" prompt.
+        isFollowed: hostData['isFollowed'] == true ||
+            hostData['is_followed'] == true,
         uuid: hostData['uuid']?.toString(),
         fans: hostData['fans'] == null
             ? null
