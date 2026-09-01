@@ -10,6 +10,15 @@ class GiftVisuals {
 
   static Future<void> _ensureManifestLoaded() async {
     if (_assets != null) return;
+    // Flutter 3.16+ dropped AssetManifest.json for AssetManifest.bin.
+    try {
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      _assets = manifest
+          .listAssets()
+          .where((k) => k.startsWith(_base) && k.endsWith('.svg'))
+          .toSet();
+      return;
+    } catch (_) {/* fall through to legacy + probe */}
     try {
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifest = jsonDecode(manifestJson);
@@ -18,6 +27,18 @@ class GiftVisuals {
           .toSet();
     } catch (_) {
       _assets = <String>{};
+    }
+  }
+
+  /// Direct probe — used when the manifest lookup came up empty but the
+  /// caller has a concrete code (avoids showing a blank fallback when the
+  /// asset actually ships).
+  static Future<bool> _assetExists(String path) async {
+    try {
+      await rootBundle.load(path);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -68,18 +89,22 @@ class GiftVisuals {
   }) async {
     await _ensureManifestLoaded();
     final svgPath = '$_base$code.svg';
-    final hasSvg = _assets!.contains(svgPath);
+    final hasSvg = _assets!.contains(svgPath) ||
+        (code.isNotEmpty && await _assetExists(svgPath));
 
-    // Emoji first: if this code maps to a defined emoji, show the emoji widget (always preferred).
-    if (_emoji.containsKey(code)) {
-      return Text(
-        _emoji[code]!,
-        style: emojiStyle ?? TextStyle(fontSize: size * 0.9),
-        semanticsLabel: title ?? code,
-      );
+    // A real, non-placeholder remote image from the DB wins (that's what
+    // "gift icon from db" means). Skip obvious seed placeholders.
+    final bool realRemote = imageUrl != null &&
+        imageUrl.isNotEmpty &&
+        (imageUrl.startsWith('http')) &&
+        !imageUrl.contains('example.com') &&
+        !imageUrl.contains('placeholder');
+    if (realRemote) {
+      final w = _remoteImage(imageUrl, size, code, title, color);
+      if (w != null) return w;
     }
 
-    // If we have a bundled SVG asset for this code, use SvgPicture.asset (only when no emoji defined).
+    // Bundled per-gift SVG artwork.
     if (hasSvg) {
       return SvgPicture.asset(
         svgPath,
@@ -98,56 +123,67 @@ class GiftVisuals {
       );
     }
 
+    // Emoji mapping (light + always available).
+    if (_emoji.containsKey(code)) {
+      return Text(
+        _emoji[code]!,
+        style: emojiStyle ?? TextStyle(fontSize: size * 0.9),
+        semanticsLabel: title ?? code,
+      );
+    }
+
     // Material icons fallback (if code matches a material mapping)
     if (_material.containsKey(code)) {
       return Icon(_material[code], size: size, color: color ?? Colors.white);
     }
 
-    // If we were given a remote image URL (raster or svg), show Image.network or SvgPicture.network
-    if (imageUrl != null && imageUrl.isNotEmpty) {
-      // detect svg by extension (best-effort)
-      final isSvg = imageUrl.toLowerCase().endsWith('.svg');
-      if (isSvg) {
-        try {
-          return SvgPicture.network(
-            imageUrl,
-            width: size,
-            height: size,
-            fit: BoxFit.contain,
-            placeholderBuilder: (_) => SizedBox(
-              width: size,
-              height: size,
-              child: Center(
-                child: SizedBox(
-                  width: size * 0.35,
-                  height: size * 0.35,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            ),
-            semanticsLabel: title ?? code,
-          );
-        } catch (_) {
-          // fallthrough to raster attempt
-        }
-      }
-
-      return Image.network(
-        imageUrl,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) {
-          return Icon(
-            Icons.card_giftcard,
-            size: size,
-            color: color ?? Colors.white,
-          );
-        },
-      );
+    // Any remaining remote URL (even a placeholder — better than nothing).
+    if (imageUrl != null && imageUrl.isNotEmpty && imageUrl.startsWith('http')) {
+      final w = _remoteImage(imageUrl, size, code, title, color);
+      if (w != null) return w;
     }
 
     // final fallback icon
     return Icon(Icons.card_giftcard, size: size, color: color ?? Colors.white);
+  }
+
+  static Widget? _remoteImage(
+    String imageUrl,
+    double size,
+    String code,
+    String? title,
+    Color? color,
+  ) {
+    final isSvg = imageUrl.toLowerCase().endsWith('.svg');
+    if (isSvg) {
+      try {
+        return SvgPicture.network(
+          imageUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          placeholderBuilder: (_) => SizedBox(
+            width: size,
+            height: size,
+            child: Center(
+              child: SizedBox(
+                width: size * 0.35,
+                height: size * 0.35,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          semanticsLabel: title ?? code,
+        );
+      } catch (_) {}
+    }
+    return Image.network(
+      imageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) =>
+          Icon(Icons.card_giftcard, size: size, color: color ?? Colors.white),
+    );
   }
 }

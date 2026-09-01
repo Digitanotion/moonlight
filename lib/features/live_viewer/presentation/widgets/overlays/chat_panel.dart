@@ -212,18 +212,29 @@ class _GiftChatLine extends StatelessWidget {
           if (message.giftCoins != null && message.giftCoins! > 0) ...[
             const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.fromLTRB(4, 2, 7, 2),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.30),
+                color: const Color(0xFF16A34A).withOpacity(0.22),
                 borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '${message.giftCoins}',
-                style: const TextStyle(
-                  color: Color(0xFFFFD27A),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                border: Border.all(
+                  color: const Color(0xFF22C55E).withOpacity(0.55),
                 ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.south_rounded,
+                      size: 12, color: Color(0xFF4ADE80)),
+                  const SizedBox(width: 1),
+                  Text(
+                    '${message.giftCoins}',
+                    style: const TextStyle(
+                      color: Color(0xFF4ADE80),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
