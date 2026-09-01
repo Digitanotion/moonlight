@@ -950,6 +950,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     context.read<ChatCubit>().deleteMessage(messageUuid);
                   },
                   onReact: () => _reactToMessage(message),
+                  onReactWith: (emoji) => context
+                      .read<ChatCubit>()
+                      .reactToMessage(messageUuid: message.uuid, emoji: emoji),
                   onReply: () => _startReply(message),
                   onEdit: () => _startEditing(message),
                   onCancelReply: _cancelReply,

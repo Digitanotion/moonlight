@@ -21,6 +21,9 @@ class MessageBubble extends StatelessWidget {
   final Message? repliedMessage;
   final VoidCallback? onDelete;
   final VoidCallback? onReact;
+  // Sends a specific emoji reaction directly (from the quick-reaction strip
+  // in the long-press menu).
+  final void Function(String emoji)? onReactWith;
   final VoidCallback? onReply;
   final VoidCallback? onEdit;
   final VoidCallback? onCancelReply;
@@ -41,6 +44,7 @@ class MessageBubble extends StatelessWidget {
     this.repliedMessage,
     this.onDelete,
     this.onReact,
+    this.onReactWith,
     this.onReply,
     this.onEdit,
     this.onCancelReply,
@@ -698,9 +702,7 @@ class MessageBubble extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: isMe
-                              ? AppColors.chatOutgoingBottom.withOpacity(0.28)
-                              : Colors.black.withOpacity(0.22),
+                          color: Colors.black.withOpacity(isMe ? 0.14 : 0.22),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -731,7 +733,7 @@ class MessageBubble extends StatelessWidget {
                               message.body,
                               style: TextStyle(
                                 color: isMe
-                                    ? Colors.white
+                                    ? AppColors.chatOutgoingText
                                     : AppColors.onSurface,
                                 fontSize: 15,
                                 height: 1.35,
@@ -748,7 +750,7 @@ class MessageBubble extends StatelessWidget {
                               _formatTime(message.createdAt),
                               style: TextStyle(
                                 color: isMe
-                                    ? Colors.white.withOpacity(0.75)
+                                    ? AppColors.chatOutgoingMeta
                                     : AppColors.secondaryText,
                                 fontSize: 10,
                                 letterSpacing: 0.2,
@@ -761,7 +763,7 @@ class MessageBubble extends StatelessWidget {
                                   'edited',
                                   style: TextStyle(
                                     color: isMe
-                                        ? Colors.white.withOpacity(0.7)
+                                        ? AppColors.chatOutgoingMeta
                                         : AppColors.textSecondary,
                                     fontSize: 10,
                                     fontStyle: FontStyle.italic,
@@ -822,6 +824,7 @@ class MessageBubble extends StatelessWidget {
   void _showMessageContextMenu(BuildContext context) {
     final bool canEdit = message.type == MessageType.text && onEdit != null;
     final bool canCopy = message.body.trim().isNotEmpty;
+    final bool canReact = onReactWith != null || onReact != null;
 
     showModalBottomSheet(
       context: context,
@@ -856,8 +859,8 @@ class MessageBubble extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Quick reactions
-                if (onReact != null)
+                // Quick reactions — tap sends that emoji immediately.
+                if (canReact)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
@@ -867,7 +870,11 @@ class MessageBubble extends StatelessWidget {
                             (e) => GestureDetector(
                               onTap: () {
                                 Navigator.pop(sheetCtx);
-                                onReact?.call();
+                                if (onReactWith != null) {
+                                  onReactWith!(e);
+                                } else {
+                                  onReact?.call();
+                                }
                               },
                               child: Container(
                                 padding: const EdgeInsets.all(8),
@@ -881,7 +888,7 @@ class MessageBubble extends StatelessWidget {
                           .toList(),
                     ),
                   ),
-                if (onReact != null)
+                if (canReact)
                   Divider(
                     color: Colors.white.withOpacity(0.06),
                     height: 18,
@@ -1052,13 +1059,12 @@ class MessageBubble extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppColors.card.withOpacity(0.5),
+          color: isMe
+              ? Colors.black.withOpacity(0.05)
+              : AppColors.card.withOpacity(0.5),
           borderRadius: BorderRadius.circular(8),
           border: Border(
-            left: BorderSide(
-              color: isMe ? AppColors.primary_ : AppColors.primary,
-              width: 3,
-            ),
+            left: BorderSide(color: AppColors.secondary, width: 3),
           ),
         ),
         child: Column(
@@ -1066,18 +1072,18 @@ class MessageBubble extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.reply,
                   size: 12,
-                  color: isMe ? AppColors.primary_ : AppColors.primary,
+                  color: AppColors.secondary,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   isRepliedMessageMe
                       ? 'You'
                       : repliedMsg.sender?.fullName ?? 'User',
-                  style: TextStyle(
-                    color: isMe ? AppColors.primary_ : AppColors.primary,
+                  style: const TextStyle(
+                    color: AppColors.secondary,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1088,7 +1094,9 @@ class MessageBubble extends StatelessWidget {
             Text(
               repliedMsg.body,
               style: TextStyle(
-                color: AppColors.textSecondary,
+                color: isMe
+                    ? AppColors.chatOutgoingMeta
+                    : AppColors.textSecondary,
                 fontSize: 13,
                 overflow: TextOverflow.ellipsis,
               ),

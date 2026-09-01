@@ -457,70 +457,94 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
 
   @override
   Widget build(BuildContext context) {
-    final content = _buildViewerContent();
-    if (!MiniPlayerController.instance.minimized) return content;
-
-    // ── Minimised: a small draggable window over a transparent route, so the
-    //    screen underneath stays visible and interactive. The full viewer
-    //    tree stays mounted at this size — restoring is instant, no re-join.
+    final minimized = MiniPlayerController.instance.minimized;
     final media = MediaQuery.of(context);
     final sz = media.size;
     final safe = media.padding;
-    final maxX = (sz.width - _miniW - 12).clamp(12.0, double.infinity);
-    final minY = safe.top + 12;
-    final maxY =
-        (sz.height - _miniH - 12 - safe.bottom - 64).clamp(minY, double.infinity);
 
-    final pos = _miniOffset ?? Offset(maxX, maxY);
-    final clamped = Offset(pos.dx.clamp(12.0, maxX), pos.dy.clamp(minY, maxY));
+    // Target geometry: full screen, or the small draggable corner window.
+    late final Rect target;
+    if (minimized) {
+      final maxX = (sz.width - _miniW - 12).clamp(12.0, double.infinity);
+      final minY = safe.top + 12;
+      final maxY = (sz.height - _miniH - 12 - safe.bottom - 64)
+          .clamp(minY, double.infinity);
+      final pos = _miniOffset ?? Offset(maxX, maxY);
+      final clamped =
+          Offset(pos.dx.clamp(12.0, maxX), pos.dy.clamp(minY, maxY));
+      target = Rect.fromLTWH(clamped.dx, clamped.dy, _miniW, _miniH);
+    } else {
+      target = Rect.fromLTWH(0, 0, sz.width, sz.height);
+    }
 
+    // IMPORTANT: the viewer tree (Scaffold → PageView → BlocProvider) must
+    // stay at the SAME position in the widget tree across minimise/restore,
+    // otherwise Flutter tears it down and rebuilds it — which re-creates the
+    // ViewerBloc and forces a fresh Agora join (the "overlay stuck / no
+    // video on restore" bug). So we ALWAYS render it as children[0] of the
+    // same Stack, only animating its rect and toggling a few flags.
     return Stack(
       children: [
-        Positioned(
-          left: clamped.dx,
-          top: clamped.dy,
-          width: _miniW,
-          height: _miniH,
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          left: target.left,
+          top: target.top,
+          width: target.width,
+          height: target.height,
           child: GestureDetector(
-            onTap: MiniPlayerController.instance.expand,
-            onPanUpdate: (d) => setState(() {
-              _miniOffset = (_miniOffset ?? clamped) + d.delta;
-            }),
+            onTap: minimized ? MiniPlayerController.instance.expand : null,
+            onPanUpdate: minimized
+                ? (d) => setState(() {
+                      _miniOffset = (_miniOffset ?? target.topLeft) + d.delta;
+                    })
+                : null,
             child: Material(
-              elevation: 14,
+              elevation: minimized ? 14 : 0,
               color: Colors.black,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(minimized ? 14 : 0),
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  IgnorePointer(child: content),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.center,
-                        colors: [Colors.black54, Colors.transparent],
+                  // Same instance/position always — never wrapped/unwrapped.
+                  IgnorePointer(
+                    ignoring: minimized,
+                    child: _buildViewerContent(),
+                  ),
+
+                  // Mini-only chrome — added/removed as later siblings, which
+                  // does not disturb children[0]'s element.
+                  if (minimized) ...[
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.center,
+                          colors: [Colors.black54, Colors.transparent],
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      iconSize: 16,
-                      icon: const Icon(Icons.close_rounded, color: Colors.white),
-                      onPressed: () {
-                        MiniPlayerController.instance.expand();
-                        final nav = Navigator.of(context);
-                        if (nav.canPop()) nav.pop();
-                      },
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                            minWidth: 30, minHeight: 30),
+                        iconSize: 16,
+                        icon: const Icon(Icons.close_rounded,
+                            color: Colors.white),
+                        onPressed: () {
+                          MiniPlayerController.instance.expand();
+                          final nav = Navigator.of(context);
+                          if (nav.canPop()) nav.pop();
+                        },
+                      ),
                     ),
-                  ),
-                  const Positioned(left: 6, bottom: 6, child: _MiniLiveDot()),
+                    const Positioned(
+                        left: 6, bottom: 6, child: _MiniLiveDot()),
+                  ],
                 ],
               ),
             ),

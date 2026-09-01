@@ -46,11 +46,14 @@ class AppColors {
   static const Color vip = Color(0xFF9B5CFF);
 
   // ── Chat ────────────────────────────────────────────────────────────────
-  // Outgoing bubble: a deep, warm brand gradient — keeps Moonlight's orange
-  // identity but dark enough that white body text stays crisp (the bright
-  // #FF6A00 fill washed the text out).
-  static const Color chatOutgoingTop = Color(0xFFE85D2C);
-  static const Color chatOutgoingBottom = Color(0xFFBE3A12);
+  // Outgoing bubble: a light, warm porcelain surface (WhatsApp model —
+  // outgoing is the light bubble). Dark text on it is crisp, and orange
+  // accents/icons read clearly against it instead of vanishing into a
+  // saturated orange fill.
+  static const Color chatOutgoingTop = Color(0xFFFFF3EA);
+  static const Color chatOutgoingBottom = Color(0xFFFCE6D4);
+  static const Color chatOutgoingText = Color(0xFF201A16);
+  static const Color chatOutgoingMeta = Color(0xFF9A6A4E);
   // Incoming bubble: soft slate that reads clearly on the navy chat canvas.
   static const Color chatIncomingTop = Color(0xFF20263F);
   static const Color chatIncomingBottom = Color(0xFF191E33);
