@@ -135,21 +135,14 @@ class DeepLinkService {
       premiumFee: (data['entry_fee_coins'] as num?)?.toInt() ?? 0,
     );
 
-    // Open exactly like a tap from the Live grid — LiveViewerPager wires the
-    // engine pool, PiP, and the ViewerBloc providers.
-    _pushWidget(
-      LiveViewerPager(items: [item], initialIndex: 0),
-    );
-  }
-
-  void _pushWidget(Widget page) {
+    // Open exactly like a tap from the Live grid.
     void go() {
       final nav = MyApp.navigatorKey.currentState;
       if (nav == null) {
         Future.delayed(const Duration(milliseconds: 500), go);
         return;
       }
-      nav.push(MaterialPageRoute(builder: (_) => page, fullscreenDialog: true));
+      nav.push(LiveViewerPager.route(items: [item], initialIndex: 0));
     }
 
     go();

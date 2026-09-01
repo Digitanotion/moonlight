@@ -1,89 +1,50 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
-import 'package:moonlight/core/injection_container.dart';
-import 'package:moonlight/core/services/agora_engine_pool.dart';
-import 'package:moonlight/core/services/pip_service.dart';
-import 'package:moonlight/core/services/screen_guard.dart';
-import 'package:moonlight/features/home/domain/entities/live_item.dart';
-
-/// State for the in-app minimized livestream ("mini player").
+/// Drives the viewer's in-app "minimise" state.
 ///
-/// Distinct from OS Picture-in-Picture (`PipService`): this keeps the stream
-/// in a small draggable window *inside the app* so the user can browse the
-/// feed, open chats, etc. while it keeps playing. OS PiP still takes over on
-/// top of this if the user then backgrounds the whole app.
+/// The live viewer route is pushed as a *transparent* route, so when
+/// [minimized] is true the pager shrinks itself into a small draggable
+/// window and the screen underneath (feed, home, chat) shows through and is
+/// interactive. The route — and therefore all of its state, its Agora
+/// connection and its Pusher subscriptions — stays fully mounted, so
+/// restoring is instant with no re-join.
 ///
-/// Lifecycle of the shared resources (Agora pool, PipService, ScreenGuard):
-///   full viewer open   -> pager acquires PipService + ScreenGuard
-///   minimize           -> pager pops but does NOT release them; the mini
-///                         player is now on screen and they carry over
-///   expand             -> pager is re-pushed with `resumingFromMini: true`
-///                         and skips re-acquiring (the refs never dropped)
-///   mini closed (X)    -> release both + pool.leaveAll()
-///   full viewer closed -> pager releases both + pool.leaveAll()
-class MiniStreamRef {
-  final List<LiveItem> items;
-  final int index;
-  const MiniStreamRef({required this.items, required this.index});
-}
-
+/// Distinct from OS Picture-in-Picture (`PipService`), which shrinks the
+/// whole app into a system window when it's backgrounded.
 class MiniPlayerController extends ChangeNotifier {
   MiniPlayerController._();
   static final MiniPlayerController instance = MiniPlayerController._();
 
-  MiniStreamRef? _ref;
-  MiniStreamRef? get ref => _ref;
-  bool get isActive => _ref != null;
+  bool _minimized = false;
+  bool get minimized => _minimized;
 
-  /// Fires when the user taps the mini player to go back to full screen — the
-  /// app-root host listens and re-pushes the viewer.
-  final _expandCtrl = StreamController<MiniStreamRef>.broadcast();
-  Stream<MiniStreamRef> get onExpand => _expandCtrl.stream;
+  /// The active pager registers a "minimise me" hook so the deeply nested
+  /// top-bar button can trigger it, and so we know a minimisable viewer is on
+  /// screen at all (vs the standalone deep-link route, which uses OS PiP).
+  VoidCallback? _minimizeHook;
 
-  /// The active pager registers a "minimize me" callback here so the deeply
-  /// nested top-bar button can trigger it without plumbing.
-  VoidCallback? _minimizeRequest;
+  void bindActivePager(VoidCallback onMinimize) => _minimizeHook = onMinimize;
 
-  void bindActivePager(VoidCallback onMinimizeRequested) =>
-      _minimizeRequest = onMinimizeRequested;
-
-  void unbindActivePager(VoidCallback onMinimizeRequested) {
-    if (identical(_minimizeRequest, onMinimizeRequested)) {
-      _minimizeRequest = null;
-    }
+  void unbindActivePager(VoidCallback onMinimize) {
+    if (identical(_minimizeHook, onMinimize)) _minimizeHook = null;
+    _minimized = false;
   }
 
-  /// True when a pager is on screen that can be minimized in-app.
-  bool get canMinimize => _minimizeRequest != null;
+  /// True when an in-app minimisable viewer is on screen.
+  bool get canMinimize => _minimizeHook != null;
 
-  /// Called from the viewer's "minimize" button.
-  void requestMinimize() => _minimizeRequest?.call();
+  /// Called from the viewer's minimise button.
+  void requestMinimize() => _minimizeHook?.call();
 
-  /// The pager calls this right after it pops itself.
-  void enterMini(MiniStreamRef ref) {
-    _ref = ref;
+  void minimize() {
+    if (_minimized) return;
+    _minimized = true;
     notifyListeners();
   }
 
-  /// User tapped the mini player — the root listener re-opens the full viewer.
-  void requestExpand() {
-    final ref = _ref;
-    if (ref == null) return;
-    _ref = null;
-    notifyListeners();
-    _expandCtrl.add(ref);
-  }
-
-  /// User dismissed the mini player. This owns the teardown now.
-  void close() {
-    _ref = null;
-    try {
-      sl<AgoraEnginePool>().leaveAll();
-    } catch (_) {}
-    PipService.instance.release();
-    ScreenGuard.release();
+  void expand() {
+    if (!_minimized) return;
+    _minimized = false;
     notifyListeners();
   }
 }

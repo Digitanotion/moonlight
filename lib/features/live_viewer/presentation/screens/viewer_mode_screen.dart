@@ -6,6 +6,7 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
+import 'package:moonlight/core/services/mini_player_controller.dart';
 import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
@@ -58,17 +59,22 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   bool _isProcessingPayment = false;
   String? _paymentError;
 
-  // In the OS Picture-in-Picture window we render ONLY the video — every
-  // overlay (chat, buttons, banners) is hidden.
-  bool _pip = PipService.instance.isInPipMode.value;
+  // In the OS PiP window OR the in-app mini window we render ONLY the video —
+  // every overlay (chat, buttons, banners) is hidden.
+  bool _pip = PipService.instance.isInPipMode.value ||
+      MiniPlayerController.instance.minimized;
   void _onPipChanged() {
-    if (mounted) setState(() => _pip = PipService.instance.isInPipMode.value);
+    if (mounted) {
+      setState(() => _pip = PipService.instance.isInPipMode.value ||
+          MiniPlayerController.instance.minimized);
+    }
   }
 
   @override
   void initState() {
     super.initState();
     PipService.instance.isInPipMode.addListener(_onPipChanged);
+    MiniPlayerController.instance.addListener(_onPipChanged);
     // Doc item 11: "Nobody will be able to screenshot or video record
     // a streamer. Enable zero screenshot or record of livestream." —
     // applied for the duration this viewer screen is on-screen only,
@@ -86,6 +92,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   @override
   void dispose() {
     PipService.instance.isInPipMode.removeListener(_onPipChanged);
+    MiniPlayerController.instance.removeListener(_onPipChanged);
     ScreenGuard.release();
     _commentCtrl.dispose();
     super.dispose();

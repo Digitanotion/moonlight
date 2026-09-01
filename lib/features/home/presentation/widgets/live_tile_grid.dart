@@ -101,13 +101,10 @@ class _LiveTileGridState extends State<LiveTileGrid> {
 
         if (!mounted) return;
         navigator.push(
-          MaterialPageRoute(
-            builder: (_) => pager_show.LiveViewerPager(
-              items: widget.items!,
-              initialIndex: widget.index!,
-              allArgs: allArgs,
-            ),
-            fullscreenDialog: true,
+          pager_show.LiveViewerPager.route(
+            items: widget.items!,
+            initialIndex: widget.index!,
+            allArgs: allArgs,
           ),
         );
         return;

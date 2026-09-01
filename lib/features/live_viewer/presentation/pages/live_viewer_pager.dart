@@ -56,18 +56,42 @@ class LiveViewerPager extends StatefulWidget {
   final int initialIndex;
   final List<Map<String, dynamic>>? allArgs;
 
-  /// True when re-opened from the in-app mini player — the shared resources
-  /// (Agora pool, PiP arming, screenshot guard) were never released, so we
-  /// must not re-acquire them.
-  final bool resumingFromMini;
-
   const LiveViewerPager({
     super.key,
     required this.items,
     required this.initialIndex,
     this.allArgs,
-    this.resumingFromMini = false,
   });
+
+  /// Pushed as a **transparent** route: while minimised the pager shrinks to a
+  /// small window and the screen underneath shows through and stays usable,
+  /// with the viewer's Agora + Pusher state fully alive the whole time.
+  static Route<void> route({
+    required List<LiveItem> items,
+    required int initialIndex,
+    List<Map<String, dynamic>>? allArgs,
+  }) {
+    return PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: null,
+      barrierDismissible: false,
+      fullscreenDialog: true,
+      transitionDuration: const Duration(milliseconds: 240),
+      reverseTransitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (_, __, ___) => LiveViewerPager(
+        items: items,
+        initialIndex: initialIndex,
+        allArgs: allArgs,
+      ),
+      transitionsBuilder: (_, anim, __, child) => SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+        child: child,
+      ),
+    );
+  }
 
   @override
   State<LiveViewerPager> createState() => _LiveViewerPagerState();
@@ -89,19 +113,14 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
 
   int _currentPage = 0;
 
-  // True while we're popping ourselves to hand the stream to the in-app mini
-  // player — dispose() then skips the resource teardown.
-  bool _minimizing = false;
+  // ── In-app minimise (draggable window) ──────────────────────────────────
+  Offset? _miniOffset; // null = default corner
+  static const double _miniW = 116;
+  static const double _miniH = 196;
 
   @override
   void initState() {
     super.initState();
-
-    // A different stream is being opened while one is minimised — close the
-    // mini player (and its pool) so this one starts clean.
-    if (!widget.resumingFromMini && MiniPlayerController.instance.isActive) {
-      MiniPlayerController.instance.close();
-    }
 
     // Tear down any previous live-viewer session first — deactivates its PiP
     // and background playback so this new stream opens cleanly.
@@ -114,13 +133,12 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     _active = this;
 
     MiniPlayerController.instance.bindActivePager(_minimizeToMini);
+    MiniPlayerController.instance.addListener(_onMiniChanged);
 
-    if (!widget.resumingFromMini) {
-      ScreenGuard.acquire(); // no screenshots / recording while watching
-      // Items 9 + 10: keep the stream playing when minimised / when the user
-      // switches apps, in an OS Picture-in-Picture window, until closed.
-      PipService.instance.acquire();
-    }
+    ScreenGuard.acquire(); // no screenshots / recording while watching
+    // Items 9 + 10: keep the stream playing when the app is backgrounded, in
+    // an OS Picture-in-Picture window, until the viewer is closed.
+    PipService.instance.acquire();
     WidgetsBinding.instance.addObserver(this);
 
     _currentPage = widget.initialIndex;
@@ -186,17 +204,18 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     });
   }
 
-  /// Hand the stream to the in-app mini player and pop this route. The shared
-  /// resources (pool, PiP, ScreenGuard) stay held — dispose() sees
-  /// `_minimizing` and skips their teardown.
+  /// Shrink into the draggable in-app window. The route is NOT popped — its
+  /// state, Agora connection and Pusher subscriptions all stay live, so
+  /// restoring is instant. The route was pushed transparent, so the screen
+  /// underneath shows through and stays interactive.
   void _minimizeToMini() {
-    if (_minimizing || !mounted) return;
-    _minimizing = true;
-    MiniPlayerController.instance.enterMini(
-      MiniStreamRef(items: widget.items, index: _currentPage),
-    );
-    final nav = Navigator.of(context);
-    if (nav.canPop()) nav.pop();
+    if (!mounted) return;
+    _miniOffset = null;
+    MiniPlayerController.instance.minimize();
+  }
+
+  void _onMiniChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Called by a newer pager taking over: leave Agora + pop this route so the
@@ -212,11 +231,10 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   @override
   void dispose() {
     if (identical(_active, this)) _active = null;
+    MiniPlayerController.instance.removeListener(_onMiniChanged);
     MiniPlayerController.instance.unbindActivePager(_minimizeToMini);
-    if (!_minimizing) {
-      ScreenGuard.release();
-      PipService.instance.release();
-    }
+    ScreenGuard.release();
+    PipService.instance.release();
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onPageScrolled);
     _controller.dispose();
@@ -234,12 +252,8 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       try { repo.dispose(); } catch (_) {}
     }
 
-    // Leave all Agora connections so audio/video stops — UNLESS we're
-    // minimising, in which case the mini player keeps the pool alive and
-    // owns the eventual leaveAll() (on close) itself.
-    if (!_minimizing) {
-      _pool.leaveAll();
-    }
+    // Leave all Agora connections so audio/video stops.
+    _pool.leaveAll();
     super.dispose();
   }
 
@@ -403,45 +417,142 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     return false;
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildViewerContent() {
     return Scaffold(
       backgroundColor: Colors.black,
       body: NotificationListener<ScrollNotification>(
         onNotification: _handleScrollNotification,
         child: PageView.builder(
-        controller: _controller,
-        scrollDirection: Axis.vertical,
-        physics: const PageScrollPhysics(),
-        itemCount: widget.items.length,
-        itemBuilder: (context, i) {
-          final repo = _repos[i];
-          final routeArgs = _routeArgsForIndex(i);
-          return BlocProvider<ViewerBloc>(
-            create: (_) => ViewerBloc(
-              repo,
-              agoraViewerService: sl<AgoraViewerService>(),
-              liveStreamService: sl<LiveStreamService>(),
-              networkMonitorService: null,
-              reconnectionService: null,
-              roleChangeService: sl<RoleChangeService>(),
-            ),
-            child: LiveViewerScreen(
-              repository: repo,
-              routeArgs: routeArgs,
-              pool: _pool,
-              channelId: widget.items[i].channel,
-              onPremiumUnlocked: () => _pool.refreshCurrentSlot(
-                () => _resolver.resolve(
-                  widget.items,
-                  i,
-                  forceRefresh: true,
+          controller: _controller,
+          scrollDirection: Axis.vertical,
+          physics: const PageScrollPhysics(),
+          itemCount: widget.items.length,
+          itemBuilder: (context, i) {
+            final repo = _repos[i];
+            final routeArgs = _routeArgsForIndex(i);
+            return BlocProvider<ViewerBloc>(
+              create: (_) => ViewerBloc(
+                repo,
+                agoraViewerService: sl<AgoraViewerService>(),
+                liveStreamService: sl<LiveStreamService>(),
+                networkMonitorService: null,
+                reconnectionService: null,
+                roleChangeService: sl<RoleChangeService>(),
+              ),
+              child: LiveViewerScreen(
+                repository: repo,
+                routeArgs: routeArgs,
+                pool: _pool,
+                channelId: widget.items[i].channel,
+                onPremiumUnlocked: () => _pool.refreshCurrentSlot(
+                  () => _resolver.resolve(widget.items, i, forceRefresh: true),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = _buildViewerContent();
+    if (!MiniPlayerController.instance.minimized) return content;
+
+    // ── Minimised: a small draggable window over a transparent route, so the
+    //    screen underneath stays visible and interactive. The full viewer
+    //    tree stays mounted at this size — restoring is instant, no re-join.
+    final media = MediaQuery.of(context);
+    final sz = media.size;
+    final safe = media.padding;
+    final maxX = (sz.width - _miniW - 12).clamp(12.0, double.infinity);
+    final minY = safe.top + 12;
+    final maxY =
+        (sz.height - _miniH - 12 - safe.bottom - 64).clamp(minY, double.infinity);
+
+    final pos = _miniOffset ?? Offset(maxX, maxY);
+    final clamped = Offset(pos.dx.clamp(12.0, maxX), pos.dy.clamp(minY, maxY));
+
+    return Stack(
+      children: [
+        Positioned(
+          left: clamped.dx,
+          top: clamped.dy,
+          width: _miniW,
+          height: _miniH,
+          child: GestureDetector(
+            onTap: MiniPlayerController.instance.expand,
+            onPanUpdate: (d) => setState(() {
+              _miniOffset = (_miniOffset ?? clamped) + d.delta;
+            }),
+            child: Material(
+              elevation: 14,
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  IgnorePointer(child: content),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.center,
+                        colors: [Colors.black54, Colors.transparent],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                      iconSize: 16,
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      onPressed: () {
+                        MiniPlayerController.instance.expand();
+                        final nav = Navigator.of(context);
+                        if (nav.canPop()) nav.pop();
+                      },
+                    ),
+                  ),
+                  const Positioned(left: 6, bottom: 6, child: _MiniLiveDot()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniLiveDot extends StatelessWidget {
+  const _MiniLiveDot();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, color: Colors.redAccent, size: 7),
+          SizedBox(width: 4),
+          Text('LIVE',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5)),
+        ],
       ),
     );
   }

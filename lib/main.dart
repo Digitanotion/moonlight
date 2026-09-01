@@ -23,7 +23,6 @@ import 'package:moonlight/core/services/tenjin_service.dart';
 import 'package:moonlight/core/services/token_registration_service.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 import 'package:moonlight/core/widgets/connection_toast.dart';
-import 'package:moonlight/features/live_viewer/presentation/widgets/mini_live_player.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
@@ -270,9 +269,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         initialRoute: RouteNames.splash,
         navigatorKey: MyApp.navigatorKey,
         builder: (context, child) => IncomingCallBanner(
-          child: SimpleConnectionToast(
-            child: MiniPlayerHost(child: child!),
-          ),
+          child: SimpleConnectionToast(child: child!),
         ),
       ),
     );
