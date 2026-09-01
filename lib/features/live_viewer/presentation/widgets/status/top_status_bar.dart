@@ -10,6 +10,7 @@ import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_participants_sheet.dart';
 
 class TopStatusBar extends StatefulWidget {
   const TopStatusBar({super.key});
@@ -25,6 +26,12 @@ class _TopStatusBarState extends State<TopStatusBar> {
     return '$mm:$ss';
   }
 
+  String _compact(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
+  }
+
    void _handleAvatarTap(BuildContext context) {
     final host = context.read<ViewerBloc>().state.host;
     if (host == null) return;
@@ -35,6 +42,18 @@ class _TopStatusBarState extends State<TopStatusBar> {
       context: context,
       barrierColor: Colors.black54,
       builder: (dialogContext) => _StreamerInfoPopup(host: host),
+    );
+  }
+
+  void _openParticipants(BuildContext context) {
+    final bloc = context.read<ViewerBloc>();
+    final repo = bloc.repo;
+    final param = repo is ViewerRepositoryImpl ? repo.livestreamParam : null;
+    if (param == null || param.isEmpty) return;
+    LiveParticipantsSheet.show(
+      context,
+      livestreamParam: param,
+      viewerCount: bloc.state.viewers,
     );
   }
 
@@ -114,6 +133,33 @@ class _TopStatusBarState extends State<TopStatusBar> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _openParticipants(context),
+                child: _glass(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.remove_red_eye_rounded,
+                            color: Colors.white, size: 15),
+                        const SizedBox(width: 5),
+                        Text(
+                          _compact(state.viewers),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

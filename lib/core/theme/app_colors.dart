@@ -44,4 +44,19 @@ class AppColors {
   static const Color hashtag = Color(0xFF39C17F); // tag chip outline/fill
   static const Color info = Color(0xFF4C8DFF); // Nominal member pill
   static const Color vip = Color(0xFF9B5CFF);
+
+  // ── Chat ────────────────────────────────────────────────────────────────
+  // Outgoing bubble: a deep, warm brand gradient — keeps Moonlight's orange
+  // identity but dark enough that white body text stays crisp (the bright
+  // #FF6A00 fill washed the text out).
+  static const Color chatOutgoingTop = Color(0xFFE85D2C);
+  static const Color chatOutgoingBottom = Color(0xFFBE3A12);
+  // Incoming bubble: soft slate that reads clearly on the navy chat canvas.
+  static const Color chatIncomingTop = Color(0xFF20263F);
+  static const Color chatIncomingBottom = Color(0xFF191E33);
+  static const Color chatIncomingBorder = Color(0xFF2E3556);
+  // Chat canvas (behind the messages) + the faint doodle texture on it.
+  static const Color chatCanvasTop = Color(0xFF0C1330);
+  static const Color chatCanvasBottom = Color(0xFF070B1E);
+  static const Color chatTexture = Color(0x0DFFFFFF);
 }

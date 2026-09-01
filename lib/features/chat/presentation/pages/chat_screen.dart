@@ -2704,9 +2704,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.bluePrimaryDark, AppColors.navyDark],
+                colors: [AppColors.chatCanvasTop, AppColors.chatCanvasBottom],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -2718,18 +2718,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
                 // Messages Area
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          AppColors.surface.withOpacity(0.3),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                  child: Stack(
+                    children: [
+                      // Faint doodle texture (WhatsApp-style) behind messages
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _ChatTexturePainter(),
+                        ),
                       ),
-                    ),
-                    child: Stack(
+                      Stack(
                       children: [
                         // Messages List
                         _buildContent(context, state),
@@ -2749,7 +2746,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                             child: _buildNewMessageIndicator(),
                           ),
                       ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -3003,4 +3001,48 @@ class _TypingDotsState extends State<_TypingDots>
       },
     );
   }
+}
+
+/// A very faint, repeating doodle motif drawn behind the message list —
+/// gives the chat canvas a light "paper" texture (à la WhatsApp) without
+/// shipping an image asset. Extremely low opacity so it never competes
+/// with message content.
+class _ChatTexturePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.chatTexture
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    const double cell = 46;
+    for (double y = 0; y < size.height + cell; y += cell) {
+      for (double x = 0; x < size.width + cell; x += cell) {
+        final row = (y ~/ cell);
+        final col = (x ~/ cell);
+        final kind = (row + col) % 3;
+        final cx = x + (col.isEven ? 6 : 20);
+        final cy = y + (row.isEven ? 10 : 24);
+        switch (kind) {
+          case 0: // small circle
+            canvas.drawCircle(Offset(cx, cy), 5, paint);
+            break;
+          case 1: // plus mark
+            canvas.drawLine(Offset(cx - 5, cy), Offset(cx + 5, cy), paint);
+            canvas.drawLine(Offset(cx, cy - 5), Offset(cx, cy + 5), paint);
+            break;
+          default: // short diagonal
+            canvas.drawLine(
+              Offset(cx - 4, cy + 4),
+              Offset(cx + 4, cy - 4),
+              paint,
+            );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChatTexturePainter oldDelegate) => false;
 }

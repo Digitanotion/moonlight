@@ -665,39 +665,44 @@ class MessageBubble extends StatelessWidget {
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.7,
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: isMe
-                            ? [
-                                AppColors.secondary.withOpacity(0.8),
-                                AppColors.secondary.withOpacity(0.9),
+                            ? const [
+                                AppColors.chatOutgoingTop,
+                                AppColors.chatOutgoingBottom,
                               ]
-                            : [
-                                AppColors.surface.withOpacity(0.9),
-                                AppColors.card.withOpacity(0.9),
+                            : const [
+                                AppColors.chatIncomingTop,
+                                AppColors.chatIncomingBottom,
                               ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
+                      border: isMe
+                          ? null
+                          : Border.all(
+                              color: AppColors.chatIncomingBorder,
+                              width: 0.6,
+                            ),
                       borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(20),
-                        topRight: const Radius.circular(20),
-                        bottomLeft: isMe
-                            ? Radius.circular(showTail ? 20 : 4)
-                            : const Radius.circular(4),
-                        bottomRight: isMe
-                            ? const Radius.circular(4)
-                            : Radius.circular(showTail ? 20 : 4),
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(
+                          isMe ? 18 : (showTail ? 4 : 18),
+                        ),
+                        bottomRight: Radius.circular(
+                          isMe ? (showTail ? 4 : 18) : 18,
+                        ),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          color: isMe
+                              ? AppColors.chatOutgoingBottom.withOpacity(0.28)
+                              : Colors.black.withOpacity(0.22),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
@@ -727,14 +732,15 @@ class MessageBubble extends StatelessWidget {
                               style: TextStyle(
                                 color: isMe
                                     ? Colors.white
-                                    : AppColors.textPrimary,
-                                fontSize: 16,
-                                height: 1.3,
+                                    : AppColors.onSurface,
+                                fontSize: 15,
+                                height: 1.35,
+                                letterSpacing: 0.1,
                               ),
                             ),
                           ),
 
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -742,9 +748,10 @@ class MessageBubble extends StatelessWidget {
                               _formatTime(message.createdAt),
                               style: TextStyle(
                                 color: isMe
-                                    ? Colors.white.withOpacity(0.7)
-                                    : AppColors.textSecondary,
+                                    ? Colors.white.withOpacity(0.75)
+                                    : AppColors.secondaryText,
                                 fontSize: 10,
+                                letterSpacing: 0.2,
                               ),
                             ),
                             if (message.isEdited)
@@ -809,147 +816,164 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  // Update the _showMessageContextMenu method to show different options for sender vs receiver
+  // WhatsApp-style message menu: a quick-reaction strip on top, then a
+  // clean vertical list of actions. Same options as before (sender gets
+  // Edit/Delete, receiver gets Report), just a calmer, more legible layout.
   void _showMessageContextMenu(BuildContext context) {
-    // For sender messages (isMe = true)
-    if (isMe) {
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        builder: (context) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
+    final bool canEdit = message.type == MessageType.text && onEdit != null;
+    final bool canCopy = message.body.trim().isNotEmpty;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.45),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.06)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Row 1: Quick actions
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildContextMenuItem(
-                      icon: Icons.reply,
-                      label: 'Reply',
-                      onTap: () {
-                        Navigator.pop(context);
-                        onReply?.call();
-                      },
-                      color: AppColors.info,
-                    ),
-                    _buildContextMenuItem(
-                      icon: Icons.content_copy,
-                      label: 'Copy',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Clipboard.setData(ClipboardData(text: message.body));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Message copied'),
-                            backgroundColor: AppColors.primary_,
-                          ),
-                        );
-                      },
-                      color: AppColors.textSecondary,
-                    ),
-                    if (message.type == MessageType.text && onEdit != null)
-                      _buildContextMenuItem(
-                        icon: Icons.edit_outlined,
-                        label: 'Edit',
-                        onTap: () {
-                          Navigator.pop(context);
-                          onEdit?.call();
-                        },
-                        color: AppColors.info,
-                      ),
-                    _buildContextMenuItem(
-                      icon: Icons.delete,
-                      label: 'Delete',
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showDeleteConfirmationDialog(context);
-                      },
-                      color: AppColors.textRed,
-                    ),
-                  ],
+                const SizedBox(height: 10),
+                Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                // const SizedBox(height: 12),
-                // // Row 2: Delete action (separated for emphasis)
-                // Container(
-                //   width: double.infinity,
-                //   child: _buildContextMenuItem(
-                //     icon: Icons.delete,
-                //     label: 'Delete',
-                //     onTap: () {
-                //       Navigator.pop(context);
-                //       _showDeleteConfirmationDialog(context);
-                //     },
-                //     color: AppColors.textRed,
-                //   ),
-                // ),
-              ],
-            ),
-          );
-        },
-      );
-    } else {
-      // For receiver messages (isMe = false) - keep existing receiver menu
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        builder: (context) {
-          return Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildContextMenuItem(
-                  icon: Icons.reply,
+                const SizedBox(height: 12),
+                // Quick reactions
+                if (onReact != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: ['❤️', '😂', '😮', '😢', '👍', '🔥']
+                          .map(
+                            (e) => GestureDetector(
+                              onTap: () {
+                                Navigator.pop(sheetCtx);
+                                onReact?.call();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                child: Text(
+                                  e,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                if (onReact != null)
+                  Divider(
+                    color: Colors.white.withOpacity(0.06),
+                    height: 18,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
+                _buildActionRow(
+                  icon: Icons.reply_rounded,
                   label: 'Reply',
                   onTap: () {
-                    Navigator.pop(context);
+                    Navigator.pop(sheetCtx);
                     onReply?.call();
                   },
-                  color: AppColors.info,
                 ),
-                _buildContextMenuItem(
-                  icon: Icons.content_copy,
-                  label: 'Copy',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Clipboard.setData(ClipboardData(text: message.body));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Message copied'),
-                        backgroundColor: AppColors.primary_,
-                      ),
-                    );
-                  },
-                  color: AppColors.textSecondary,
-                ),
-                _buildContextMenuItem(
-                  icon: Icons.flag,
-                  label: 'Report',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showReportDialog(context);
-                  },
-                  color: AppColors.textRed,
-                ),
+                if (canCopy)
+                  _buildActionRow(
+                    icon: Icons.content_copy_rounded,
+                    label: 'Copy',
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      Clipboard.setData(ClipboardData(text: message.body));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Message copied')),
+                      );
+                    },
+                  ),
+                if (isMe && canEdit)
+                  _buildActionRow(
+                    icon: Icons.edit_rounded,
+                    label: 'Edit',
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      onEdit?.call();
+                    },
+                  ),
+                if (isMe)
+                  _buildActionRow(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    destructive: true,
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _showDeleteConfirmationDialog(context);
+                    },
+                  )
+                else
+                  _buildActionRow(
+                    icon: Icons.flag_outlined,
+                    label: 'Report',
+                    destructive: true,
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _showReportDialog(context);
+                    },
+                  ),
+                const SizedBox(height: 6),
               ],
             ),
-          );
-        },
-      );
-    }
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionRow({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool destructive = false,
+  }) {
+    final color = destructive ? AppColors.textRed : AppColors.onSurface;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 21),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // Add a delete confirmation dialog for sender messages
@@ -1183,33 +1207,6 @@ class MessageBubble extends StatelessWidget {
 //     );
 //   }
 // }
-
-Widget _buildContextMenuItem({
-  required IconData icon,
-  required String label,
-  required VoidCallback onTap,
-  required Color color,
-}) {
-  return GestureDetector(
-    onTap: onTap,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 24),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(color: color, fontSize: 12)),
-      ],
-    ),
-  );
-}
 
 // void _handleMenuSelection(String value, BuildContext context) {
 //   switch (value) {
