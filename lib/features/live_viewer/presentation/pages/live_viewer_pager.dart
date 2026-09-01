@@ -71,24 +71,11 @@ class LiveViewerPager extends StatefulWidget {
     required int initialIndex,
     List<Map<String, dynamic>>? allArgs,
   }) {
-    return PageRouteBuilder<void>(
-      opaque: false,
-      barrierColor: null,
-      barrierDismissible: false,
-      fullscreenDialog: true,
-      transitionDuration: const Duration(milliseconds: 240),
-      reverseTransitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (_, __, ___) => LiveViewerPager(
+    return _ViewerPagerRoute(
+      builder: (_) => LiveViewerPager(
         items: items,
         initialIndex: initialIndex,
         allArgs: allArgs,
-      ),
-      transitionsBuilder: (_, anim, __, child) => SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 1),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-        child: child,
       ),
     );
   }
@@ -551,6 +538,87 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Transparent page route for the live-viewer pager.
+///
+/// A normal [PageRoute] (even a transparent [PageRouteBuilder]) inserts a
+/// full-screen [ModalBarrier] whose gesture layer is `HitTestBehavior.opaque`
+/// — so it swallows every touch to whatever is below it, dismissible or not.
+/// That's why, while the viewer was minimised into its little window, the
+/// rest of the app was frozen.
+///
+/// This route drops the barrier the moment the viewer is minimised (and
+/// restores a normal blocking barrier at full screen, so nothing leaks
+/// through the transparent route underneath the full-screen viewer). It
+/// rebuilds the barrier whenever [MiniPlayerController] toggles.
+class _ViewerPagerRoute<T> extends PageRoute<T> {
+  _ViewerPagerRoute({required this.builder}) {
+    MiniPlayerController.instance.addListener(_onMiniChanged);
+  }
+
+  final WidgetBuilder builder;
+
+  void _onMiniChanged() {
+    // Rebuilds _modalBarrier via ModalRoute.changedInternalState().
+    changedInternalState();
+  }
+
+  @override
+  void dispose() {
+    MiniPlayerController.instance.removeListener(_onMiniChanged);
+    super.dispose();
+  }
+
+  @override
+  bool get opaque => false;
+  @override
+  Color? get barrierColor => null;
+  @override
+  bool get barrierDismissible => false;
+  @override
+  String? get barrierLabel => null;
+  @override
+  bool get maintainState => true;
+  @override
+  bool get fullscreenDialog => true;
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 240);
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
+
+  @override
+  Widget buildModalBarrier() {
+    if (MiniPlayerController.instance.minimized) {
+      return const SizedBox.shrink(); // let the app behind stay interactive
+    }
+    return const ModalBarrier(dismissible: false);
+  }
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return builder(context);
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 1),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+      child: child,
     );
   }
 }
