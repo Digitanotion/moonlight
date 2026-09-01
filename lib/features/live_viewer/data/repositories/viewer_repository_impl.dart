@@ -927,6 +927,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
       giftLabel: (meta['gift_title'] ?? meta['gift_code'] ?? fallbackText)
           .toString(),
       avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
+      giftCode: meta['gift_code']?.toString(),
       giftImageUrl: meta['gift_image']?.toString(),
       coins: meta['coins'] is num ? (meta['coins'] as num).toInt() : null,
       quantity:

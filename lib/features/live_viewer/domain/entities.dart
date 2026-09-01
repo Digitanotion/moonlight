@@ -190,6 +190,7 @@ class ChatMessage extends Equatable {
   // image, rendered inline in the live chat.
   final ChatMessageKind kind;
   final String? avatarUrl;
+  final String? giftCode;
   final String? giftImageUrl;
   final int? giftCoins;
   final int giftQuantity;
@@ -201,6 +202,7 @@ class ChatMessage extends Equatable {
     this.isHost = false,
     this.kind = ChatMessageKind.user,
     this.avatarUrl,
+    this.giftCode,
     this.giftImageUrl,
     this.giftCoins,
     this.giftQuantity = 1,
@@ -211,6 +213,7 @@ class ChatMessage extends Equatable {
     required String sender,
     required String giftLabel,
     String? avatarUrl,
+    String? giftCode,
     String? giftImageUrl,
     int? coins,
     int quantity = 1,
@@ -223,6 +226,7 @@ class ChatMessage extends Equatable {
       isHost: fromHost,
       kind: ChatMessageKind.gift,
       avatarUrl: avatarUrl,
+      giftCode: giftCode,
       giftImageUrl: giftImageUrl,
       giftCoins: coins,
       giftQuantity: quantity,
@@ -237,6 +241,7 @@ class ChatMessage extends Equatable {
     isHost,
     kind,
     avatarUrl,
+    giftCode,
     giftImageUrl,
     giftCoins,
     giftQuantity,
