@@ -479,7 +479,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
   // ============ WIRING ============
 
   Future<void> ensureWiredOnce() async {
-    if (_wired) return;
+    if (_disposed || _wired) return;
     if (_wiringFuture != null) return await _wiringFuture;
     _wiringFuture = _wire();
     try {
@@ -539,13 +539,39 @@ class ViewerRepositoryImpl implements ViewerRepository {
       rtcData = results[2];
     }
 
-    // ── Step 2: Check if stream already ended ─────────────────────────────
-    final isEnded =
-        statusData['has_ended'] == true ||
+    // ── Step 2: Stream must actually be live to open a viewer ─────────────
+    // `/status` returning "offline"/"not available" or `/enter` rejecting
+    // with 422 ("Livestream is not active") both mean there's no publisher.
+    // Previously the 422 was swallowed by _safePost and the client wired up
+    // Pusher + Agora anyway → a dead black screen with no feedback.
+    final statusStr = (statusData['status'] ?? '').toString().toLowerCase();
+    final isEnded = statusData['has_ended'] == true ||
         statusData['ended_at'] != null ||
-        statusData['status'] == 'ended';
+        statusStr == 'ended';
+    final isOffline = statusStr == 'offline' ||
+        statusStr == 'unavailable' ||
+        statusStr == 'not_available' ||
+        statusStr == 'not available';
+    // _safePost returns {} on any failure (incl. the 422). Treat an empty
+    // enter response as "not joinable" ONLY when /status didn't confirm
+    // the stream is live — a lone network hiccup on /enter shouldn't block.
+    final enterRejected = enterData.isEmpty &&
+        statusData.isNotEmpty && // status call succeeded…
+        statusStr != 'online' && // …and did NOT say the stream is live
+        statusStr != 'live' &&
+        statusStr != 'paused';
 
-    if (isEnded) {
+    if (isEnded || isOffline || enterRejected) {
+      debugPrint(
+        '🚫 Stream not joinable (status="$statusStr", '
+        'enterEmpty=${enterData.isEmpty}) — aborting wire',
+      );
+      if (!isEnded && !_errorCtrl.isClosed) {
+        final msg = (statusData['message'] ?? '').toString();
+        _errorCtrl.add(
+          msg.isNotEmpty ? msg : "This stream isn't live right now.",
+        );
+      }
       if (!_endedCtrl.isClosed) _endedCtrl.add(null);
       return;
     }
@@ -973,8 +999,16 @@ class ViewerRepositoryImpl implements ViewerRepository {
 
   void _startClock() {
     _clockTimer?.cancel();
+    if (_disposed || _clockCtrl.isClosed) return;
     final base = startedAt ?? DateTime.now();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      // A hard-dispose can race a scheduled tick, and rapid pager swipes
+      // can re-enter _startClock after teardown — never add to a closed
+      // controller.
+      if (_disposed || _clockCtrl.isClosed) {
+        t.cancel();
+        return;
+      }
       _clockCtrl.add(DateTime.now().difference(base));
     });
   }
