@@ -8,6 +8,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+configurations.all {
+    // Moonlight has no screen-sharing / screen-cast feature. The Agora
+    // `full-screen-sharing` artifact (pulled transitively by
+    // agora_rtc_engine) ships a manifest declaring
+    // FOREGROUND_SERVICE_MEDIA_PROJECTION plus a `mediaProjection`
+    // service, which Google Play then flags as an undeclared foreground
+    // service. Excluding it drops that permission (and the unused native
+    // screen-capture libs). Re-add screen sharing here in the future by
+    // removing this exclude and declaring the permission in Play Console.
+    exclude(group = "io.agora.rtc", module = "full-screen-sharing")
+}
+
 
 // Load keystore properties
 val keystoreProperties = Properties()
