@@ -92,16 +92,17 @@ class GiftVisuals {
     final hasSvg = _assets!.contains(svgPath) ||
         (code.isNotEmpty && await _assetExists(svgPath));
 
-    // A real, non-placeholder remote image from the DB wins (that's what
-    // "gift icon from db" means). Skip obvious seed placeholders.
-    final bool realRemote = imageUrl != null &&
-        imageUrl.isNotEmpty &&
-        (imageUrl.startsWith('http')) &&
-        !imageUrl.contains('example.com') &&
-        !imageUrl.contains('placeholder');
-    if (realRemote) {
-      final w = _remoteImage(imageUrl, size, code, title, color);
-      if (w != null) return w;
+    // ── Original priority (restored): emoji → bundled SVG → material →
+    //    remote URL → fallback. Only the asset-manifest LOOKUP changed
+    //    (AssetManifest.bin) so the bundled SVGs are actually found.
+
+    // Emoji first: if this code maps to a defined emoji, show the emoji.
+    if (_emoji.containsKey(code)) {
+      return Text(
+        _emoji[code]!,
+        style: emojiStyle ?? TextStyle(fontSize: size * 0.9),
+        semanticsLabel: title ?? code,
+      );
     }
 
     // Bundled per-gift SVG artwork.
@@ -123,21 +124,12 @@ class GiftVisuals {
       );
     }
 
-    // Emoji mapping (light + always available).
-    if (_emoji.containsKey(code)) {
-      return Text(
-        _emoji[code]!,
-        style: emojiStyle ?? TextStyle(fontSize: size * 0.9),
-        semanticsLabel: title ?? code,
-      );
-    }
-
     // Material icons fallback (if code matches a material mapping)
     if (_material.containsKey(code)) {
       return Icon(_material[code], size: size, color: color ?? Colors.white);
     }
 
-    // Any remaining remote URL (even a placeholder — better than nothing).
+    // Remote image URL from the DB.
     if (imageUrl != null && imageUrl.isNotEmpty && imageUrl.startsWith('http')) {
       final w = _remoteImage(imageUrl, size, code, title, color);
       if (w != null) return w;
