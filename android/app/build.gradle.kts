@@ -91,7 +91,7 @@ android {
     defaultConfig {
         applicationId = "com.app.moonlightstream"
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName
         multiDexEnabled = true

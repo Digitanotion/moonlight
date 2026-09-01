@@ -1,6 +1,6 @@
 name: moonlight
 description: Moonlight Livestream App MVP
-version: 1.5.2+48
+version: 1.5.3+49
 
 # ==== ENVIRONMENT SECTION ====
 environment:
@@ -50,7 +50,7 @@ dependencies:
   shimmer: ^3.0.0
   provider: ^6.1.5+1
   mutex: ^3.1.0
-  in_app_purchase: ^3.2.3
+  in_app_purchase: ^3.3.0
   uuid: ^4.5.2
   fluttertoast: ^9.0.0
   file_picker: ^11.0.2
@@ -60,7 +60,7 @@ dependencies:
   firebase_messaging: ^16.1.1
   url_launcher: ^6.3.2
   flutter_local_notifications: ^18.0.0
-  in_app_purchase_android: ^0.4.0+1
+  in_app_purchase_android: ^0.5.0  # Play Billing Library 8.0.0 (Play requirement)
   webview_flutter: ^4.10.0
   app_links: ^6.3.0
   in_app_update: ^4.2.3
