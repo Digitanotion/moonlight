@@ -178,21 +178,69 @@ class HostInfo extends Equatable {
   ];
 }
 
+enum ChatMessageKind { user, gift }
+
 class ChatMessage extends Equatable {
   final String id;
   final String username;
   final String text;
   final bool isHost;
 
+  // Gift line (TikTok/Tango style): "{username} sent {text}" with the gift
+  // image, rendered inline in the live chat.
+  final ChatMessageKind kind;
+  final String? avatarUrl;
+  final String? giftImageUrl;
+  final int? giftCoins;
+  final int giftQuantity;
+
   const ChatMessage({
     required this.id,
     required this.username,
     required this.text,
     this.isHost = false,
+    this.kind = ChatMessageKind.user,
+    this.avatarUrl,
+    this.giftImageUrl,
+    this.giftCoins,
+    this.giftQuantity = 1,
   });
 
+  factory ChatMessage.gift({
+    required String id,
+    required String sender,
+    required String giftLabel,
+    String? avatarUrl,
+    String? giftImageUrl,
+    int? coins,
+    int quantity = 1,
+    bool fromHost = false,
+  }) {
+    return ChatMessage(
+      id: id,
+      username: sender,
+      text: giftLabel,
+      isHost: fromHost,
+      kind: ChatMessageKind.gift,
+      avatarUrl: avatarUrl,
+      giftImageUrl: giftImageUrl,
+      giftCoins: coins,
+      giftQuantity: quantity,
+    );
+  }
+
   @override
-  List<Object?> get props => [id, username, text, isHost];
+  List<Object?> get props => [
+    id,
+    username,
+    text,
+    isHost,
+    kind,
+    avatarUrl,
+    giftImageUrl,
+    giftCoins,
+    giftQuantity,
+  ];
 }
 
 class GuestJoinNotice extends Equatable {
@@ -272,6 +320,7 @@ class GiftBroadcast {
   final int coinsSpent;
   final String senderUuid;
   final String senderDisplayName;
+  final String senderAvatarUrl;
   final DateTime timestamp;
   final int? comboIndex;
   final int? comboWindowMs;
@@ -287,6 +336,7 @@ class GiftBroadcast {
     required this.coinsSpent,
     required this.senderUuid,
     required this.senderDisplayName,
+    this.senderAvatarUrl = '',
     required this.timestamp,
     this.comboIndex,
     this.comboWindowMs,
@@ -325,6 +375,8 @@ class GiftBroadcast {
       senderUuid: '${sender['user_uuid'] ?? ''}',
       senderDisplayName:
           '${sender['display_name'] ?? sender['displayName'] ?? ''}',
+      senderAvatarUrl:
+          '${sender['avatar_url'] ?? sender['avatarUrl'] ?? ''}',
       timestamp: DateTime.tryParse('${m['timestamp'] ?? ''}') ?? DateTime.now(),
       comboIndex: comboMap == null
           ? null

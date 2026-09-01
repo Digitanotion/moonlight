@@ -139,6 +139,9 @@ class ViewerRepositoryImpl implements ViewerRepository {
   final _participantRoleCtrl = StreamController<String>.broadcast();
   final _participantRemovedCtrl = StreamController<String>.broadcast();
   final _giftBroadcastCtrl = StreamController<GiftBroadcast>.broadcast();
+  // Server txn ids of gifts already dispatched — guards against the same
+  // gift.sent arriving on more than one channel or being redelivered.
+  final Set<String> _seenGiftTxns = <String>{};
 
   // ── Gift catalog ──────────────────────────────────────────────────────────
   List<GiftItem> _giftCatalogCache = const [];
@@ -637,11 +640,22 @@ class ViewerRepositoryImpl implements ViewerRepository {
       }
     });
 
-    bindEvent(chRoot, 'gift.sent', (m) {
+    // GiftSent broadcasts on `live.{id}.gifts` (see App\Events\GiftSent),
+    // NOT the root channel — binding on chRoot meant gift events never
+    // reached the viewer. Bind on both so a legacy root broadcast still
+    // works; the bloc dedupes on server_txn_id.
+    void bindGift(String channel) => bindEvent(channel, 'gift.sent', (m) {
       if (m.isEmpty) return;
       try {
         final b = GiftBroadcast.fromJson(_asMap(m));
         if (b.giftCode.isEmpty || b.coinsSpent <= 0) return;
+        // Dedupe: the event may arrive on two channels (or be redelivered).
+        if (b.serverTxnId.isNotEmpty && !_seenGiftTxns.add(b.serverTxnId)) {
+          return;
+        }
+        if (_seenGiftTxns.length > 300) {
+          _seenGiftTxns.remove(_seenGiftTxns.first);
+        }
         _giftBroadcastCtrl.add(b);
         _giftCtrl.add(
           GiftNotice(
@@ -654,6 +668,8 @@ class ViewerRepositoryImpl implements ViewerRepository {
         debugPrint('❌ gift.sent parse failed: $e');
       }
     });
+    bindGift(chGifts);
+    bindGift(chRoot);
 
     bindEvent(chMeta, 'participant.removed', (m) async {
       final data = _asMap(m);

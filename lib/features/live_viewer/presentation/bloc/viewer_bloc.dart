@@ -1062,18 +1062,70 @@ void _startHealthService() {
     GiftBroadcastReceived event,
     Emitter<ViewerState> emit,
   ) async {
+    final b = event.broadcast;
+
+    // Resolve the gift's pretty title + image from the catalog (falls back
+    // to the raw code if it's not in the catalog).
+    GiftItem? item;
+    for (final g in state.giftCatalog) {
+      if (g.code == b.giftCode || g.id == b.giftId) {
+        item = g;
+        break;
+      }
+    }
+    final giftLabel = item?.title ?? _prettifyCode(b.giftCode);
+    final sender = b.senderDisplayName.trim().isEmpty
+        ? 'Someone'
+        : b.senderDisplayName.trim();
+
+    // Inline chat line, TikTok/Tango style. Dedupe on server txn id in case
+    // Pusher redelivers the event.
+    final giftMsgId = 'gift_${b.serverTxnId}';
+    final already = state.chat.any((c) => c.id == giftMsgId);
+
+    final chat = already
+        ? state.chat
+        : () {
+            final list = [
+              ...state.chat,
+              ChatMessage.gift(
+                id: giftMsgId,
+                sender: sender,
+                giftLabel: giftLabel,
+                avatarUrl: b.senderAvatarUrl.isEmpty ? null : b.senderAvatarUrl,
+                giftImageUrl: item?.imageUrl,
+                coins: b.coinsSpent,
+                quantity: b.quantity,
+                fromHost: state.host?.name == b.senderDisplayName,
+              ),
+            ];
+            if (list.length > 200) list.removeAt(0);
+            return list;
+          }();
+
     _safeEmit(
       emit,
       state.copyWith(
+        chat: chat,
         gift: GiftNotice(
-          from: event.broadcast.senderDisplayName,
-          giftName: event.broadcast.giftCode,
-          coins: event.broadcast.coinsSpent,
+          from: sender,
+          giftName: giftLabel,
+          coins: b.coinsSpent,
         ),
         showGiftToast: true,
       ),
     );
-    _logEvent('GIFT_BROADCAST', 'Received: ${event.broadcast.giftCode}');
+    _logEvent('GIFT_BROADCAST', 'Received: ${b.giftCode}');
+  }
+
+  static String _prettifyCode(String code) {
+    if (code.isEmpty) return 'a gift';
+    return code
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join(' ');
   }
 
   Future<void> _onGiftOverlayDequeued(

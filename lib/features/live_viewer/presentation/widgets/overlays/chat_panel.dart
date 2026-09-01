@@ -1,6 +1,8 @@
 // lib/features/live_viewer/presentation/widgets/overlays/chat_panel.dart
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 
 class ChatPanel extends StatefulWidget {
@@ -59,6 +61,9 @@ class _ChatPanelState extends State<ChatPanel> {
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, i) {
                       final m = chat[i];
+                      if (m.kind == ChatMessageKind.gift) {
+                        return _GiftChatLine(message: m, isNew: i == 0);
+                      }
                       return _ModernChatBubble(
                         username: m.username,
                         text: m.text,
@@ -93,6 +98,122 @@ class _ChatPanelState extends State<ChatPanel> {
           ),
         );
       },
+    );
+  }
+}
+
+/// TikTok / Tango style inline gift notice: "{sender} sent {gift} ×N" with
+/// the gift image and a coin badge, on a warm gradient pill.
+class _GiftChatLine extends StatelessWidget {
+  final ChatMessage message;
+  final bool isNew;
+
+  const _GiftChatLine({required this.message, this.isNew = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final qty = message.giftQuantity;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFF7A00).withOpacity(0.32),
+            const Color(0xFFFF3D81).withOpacity(0.28),
+          ],
+        ),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Sender avatar (falls back to a gift glyph).
+          Container(
+            width: 26,
+            height: 26,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white24,
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: (message.avatarUrl != null && message.avatarUrl!.isNotEmpty)
+                ? CachedNetworkImage(
+                    imageUrl: message.avatarUrl!,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => const Icon(
+                        Icons.person, size: 15, color: Colors.white70),
+                  )
+                : const Icon(Icons.card_giftcard_rounded,
+                    size: 15, color: Colors.white),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.25,
+                  color: Colors.white,
+                ),
+                children: [
+                  TextSpan(
+                    text: message.username,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFFFD27A),
+                    ),
+                  ),
+                  const TextSpan(text: '  sent  '),
+                  TextSpan(
+                    text: message.text,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (qty > 1)
+                    TextSpan(
+                      text: '  ×$qty',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (message.giftImageUrl != null && message.giftImageUrl!.isNotEmpty)
+            CachedNetworkImage(
+              imageUrl: message.giftImageUrl!,
+              width: 26,
+              height: 26,
+              fit: BoxFit.contain,
+              errorWidget: (_, __, ___) => const Icon(
+                  Icons.redeem_rounded, size: 20, color: Colors.white),
+            )
+          else
+            const Icon(Icons.redeem_rounded, size: 20, color: Colors.white),
+          if (message.giftCoins != null && message.giftCoins! > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.28),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${message.giftCoins}',
+                style: const TextStyle(
+                  color: Color(0xFFFFD27A),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
