@@ -14,39 +14,49 @@ class HomeAppBar extends StatefulWidget {
   State<HomeAppBar> createState() => _HomeAppBarState();
 }
 
-class _HomeAppBarState extends State<HomeAppBar> {
+class _HomeAppBarState extends State<HomeAppBar> with WidgetsBindingObserver {
   late final UnreadBadgeService _unreadService;
   Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _unreadService = GetIt.instance<UnreadBadgeService>();
     _initializeService();
   }
 
   Future<void> _initializeService() async {
     try {
-      // Initialize the unread service
       await _unreadService.initialize();
 
-      // Listen for count changes
       _unreadService.messageUnreadCount.addListener(_updateUI);
       _unreadService.notificationUnreadCount.addListener(_updateUI);
-
-      // Trigger initial update
       _updateUI();
 
-      // Safety-net poll only — realtime `chat.unread.updated` /
-      // `notifications.unread.updated` are the primary path. Kept long (2min)
-      // and server-cached so it's negligible even at very high user counts;
-      // resume + returning from the chat/notification screens also refresh.
-      _pollTimer?.cancel();
-      _pollTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-        _unreadService.refresh();
-      });
+      _startPoll();
     } catch (e) {
       debugPrint('HomeAppBar: Error initializing unread service: $e');
+    }
+  }
+
+  // Realtime (`chat.unread.updated` / `notifications.unread.updated`) is the
+  // primary path; this is only a safety net for a dropped socket. 5 min,
+  // foreground-only — nothing fires while the app is backgrounded.
+  void _startPoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _unreadService.refresh();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_pollTimer == null) _startPoll();
+    } else if (state == AppLifecycleState.paused) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
     }
   }
 
@@ -58,6 +68,7 @@ class _HomeAppBarState extends State<HomeAppBar> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _unreadService.messageUnreadCount.removeListener(_updateUI);
     _unreadService.notificationUnreadCount.removeListener(_updateUI);
