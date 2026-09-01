@@ -346,6 +346,13 @@ class FeedVideoPlayer extends StatefulWidget {
   // independent muted-by-default behavior exactly as before.
   final bool? initialMuted;
   final ValueChanged<bool>? onMuteChanged;
+  // When true, a slim TikTok-style progress track is drawn along the very
+  // bottom edge of the video and can be dragged to scrub. Used by
+  // VideoFeedScreen; the regular feed card leaves it off.
+  final bool showProgressBar;
+  // Extra bottom inset (px) for the progress track, so VideoFeedScreen can
+  // lift it clear of the system nav bar / its own bottom chrome.
+  final double progressBarBottomInset;
   const FeedVideoPlayer({
     super.key,
     required this.post,
@@ -356,6 +363,8 @@ class FeedVideoPlayer extends StatefulWidget {
     this.muteIconTopOffset = 10,
     this.initialMuted,
     this.onMuteChanged,
+    this.showProgressBar = false,
+    this.progressBarBottomInset = 0,
   });
   @override
   State<FeedVideoPlayer> createState() => _FeedVideoPlayerState();
@@ -679,6 +688,15 @@ class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
           // working on it right now" signal.
           if (_currentlyVisible && !_initialized) const _ModernVideoLoader(),
 
+          // Slim TikTok-style scrub track along the bottom edge.
+          if (_initialized && _vc != null && widget.showProgressBar)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: widget.progressBarBottomInset,
+              child: _VideoScrubTrack(controller: _vc!),
+            ),
+
           // Persistent mute toggle — always visible while the video is
           // active, independent of play/pause state.
           if (_initialized)
@@ -703,6 +721,102 @@ class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ── Slim scrub track (TikTok-style) ───────────────────────────────────────
+// A 3px progress line pinned to the bottom of a video. Grows to a larger
+// hit area and a fatter bar while being dragged, so it's easy to grab but
+// stays out of the way otherwise.
+class _VideoScrubTrack extends StatefulWidget {
+  final VideoPlayerController controller;
+  const _VideoScrubTrack({required this.controller});
+
+  @override
+  State<_VideoScrubTrack> createState() => _VideoScrubTrackState();
+}
+
+class _VideoScrubTrackState extends State<_VideoScrubTrack> {
+  bool _dragging = false;
+  double _dragFraction = 0;
+
+  void _seekToFraction(double f, Duration total) {
+    final clamped = f.clamp(0.0, 1.0);
+    widget.controller.seekTo(total * clamped);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, _) {
+        final total = value.duration;
+        final double progress;
+        if (_dragging) {
+          progress = _dragFraction;
+        } else if (total.inMilliseconds > 0) {
+          progress =
+              (value.position.inMilliseconds / total.inMilliseconds)
+                  .clamp(0.0, 1.0);
+        } else {
+          progress = 0;
+        }
+
+        final double barHeight = _dragging ? 6 : 3;
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (d) {
+            setState(() {
+              _dragging = true;
+              _dragFraction = progress;
+            });
+          },
+          onHorizontalDragUpdate: (d) {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box == null) return;
+            setState(() {
+              _dragFraction =
+                  (box.globalToLocal(d.globalPosition).dx / box.size.width)
+                      .clamp(0.0, 1.0);
+            });
+          },
+          onHorizontalDragEnd: (_) {
+            _seekToFraction(_dragFraction, total);
+            setState(() => _dragging = false);
+          },
+          onTapDown: (d) {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box == null) return;
+            _seekToFraction(
+              box.globalToLocal(d.globalPosition).dx / box.size.width,
+              total,
+            );
+          },
+          child: Padding(
+            // Generous transparent vertical padding = comfortable hit area
+            // without a visually thick bar.
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              height: barHeight,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(barHeight),
+                child: Stack(
+                  children: [
+                    Container(color: Colors.white.withOpacity(0.22)),
+                    FractionallySizedBox(
+                      widthFactor: progress <= 0 ? 0.0001 : progress,
+                      child: Container(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

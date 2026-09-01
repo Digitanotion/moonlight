@@ -255,6 +255,11 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               final isOwner =
                   post.author.id == sl<CurrentUserService>().currentUser?.id;
 
+              final double safeBottom = MediaQuery.of(context).padding.bottom;
+              // Height of the fixed comment bar, measured from the bottom
+              // edge — everything else stacks above it.
+              final double commentBarHeight = safeBottom + 56;
+
               return Stack(
             fit: StackFit.expand,
             children: [
@@ -266,6 +271,8 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                 initialMuted: _muted,
                 onMuteChanged: (muted) => setState(() => _muted = muted),
                 onAspectKnown: (_) {},
+                showProgressBar: true,
+                progressBarBottomInset: commentBarHeight,
               ),
 
               Positioned(
@@ -283,7 +290,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               Positioned(
                 left: 16,
                 right: 88,
-                bottom: 24,
+                bottom: commentBarHeight + 16,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -313,7 +320,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
 
               Positioned(
                 right: 12,
-                bottom: 24,
+                bottom: commentBarHeight + 16,
                 child: BlocBuilder<FeedCubit, FeedState>(
                   buildWhen: (p, n) => p.items != n.items,
                   builder: (context, state) {
@@ -361,6 +368,33 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                   },
                 ),
               ),
+
+              // Fixed, slightly-transparent "Add a comment" bar.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: BlocBuilder<FeedCubit, FeedState>(
+                  buildWhen: (p, n) => p.items != n.items,
+                  builder: (context, state) {
+                    final current =
+                        originalIndex >= 0 && originalIndex < state.items.length
+                        ? state.items[originalIndex]
+                        : post;
+                    return _VideoCommentBar(
+                      bottomInset: safeBottom,
+                      onTap: () => CommentBottomSheet.show(
+                        context,
+                        postId: current.id,
+                        initialPost: current,
+                        onCountChanged: (n) => context
+                            .read<FeedCubit>()
+                            .setCommentsCountAt(originalIndex, n),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
           );
             },
@@ -401,6 +435,67 @@ class _VideoActionButton extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Fixed, faintly-transparent composer strip pinned to the bottom of the
+/// fullscreen video. Tapping anywhere on it opens the comment sheet (which
+/// carries the real composer + thread). Deliberately a lightweight
+/// affordance rather than a live inline field, so it can't get out of sync
+/// with the sheet's own state.
+class _VideoCommentBar extends StatelessWidget {
+  final double bottomInset;
+  final VoidCallback onTap;
+
+  const _VideoCommentBar({required this.bottomInset, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(14, 8, 14, bottomInset + 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withOpacity(0),
+              Colors.black.withOpacity(0.55),
+            ],
+          ),
+        ),
+        child: Container(
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.14),
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: Colors.white.withOpacity(0.18)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Add a comment…',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.72),
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.send_rounded,
+                color: Colors.white.withOpacity(0.9),
+                size: 19,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

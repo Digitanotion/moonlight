@@ -10,6 +10,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/features/post_view/domain/entities/comment.dart';
@@ -154,9 +155,7 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
               child: BlocBuilder<PostCubit, PostState>(
                 builder: (context, state) {
                   if (state.loading && state.comments.isEmpty) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white54),
-                    );
+                    return const _CommentsShimmer();
                   }
                   if (state.comments.isEmpty) {
                     return const Center(
@@ -245,6 +244,65 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Placeholder shown while the first page of comments is loading — a few
+/// greyed rows pulsing, so the user sees work is happening rather than a
+/// bare spinner or an empty sheet.
+class _CommentsShimmer extends StatelessWidget {
+  const _CommentsShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.white.withOpacity(0.08),
+      highlightColor: Colors.white.withOpacity(0.18),
+      child: ListView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        itemCount: 7,
+        itemBuilder: (context, i) {
+          final double lineWidth = (i.isEven ? 0.82 : 0.55);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const CircleAvatar(radius: 15, backgroundColor: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 10,
+                        width: 90,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FractionallySizedBox(
+                        widthFactor: lineWidth,
+                        child: Container(
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
