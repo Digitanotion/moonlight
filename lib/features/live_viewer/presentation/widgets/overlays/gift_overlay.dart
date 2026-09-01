@@ -157,23 +157,55 @@ class _GiftSplashState extends State<_GiftSplash>
                         ),
                         const SizedBox(height: 4),
                         Container(
-                          padding:
-                              const EdgeInsets.fromLTRB(4, 1, 7, 1),
+                          padding: const EdgeInsets.fromLTRB(4, 3, 10, 3),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF16A34A).withOpacity(0.24),
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(20),
+                            gradient: const LinearGradient(
+                              colors: [Color(0x33FFC24B), Color(0x1AFF8A00)],
+                            ),
+                            border:
+                                Border.all(color: const Color(0x66FFD27A)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.south_rounded,
-                                  size: 12, color: Color(0xFF4ADE80)),
-                              const SizedBox(width: 2),
+                              Container(
+                                width: 17,
+                                height: 17,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFFFE083),
+                                      Color(0xFFF5A623),
+                                      Color(0xFFCE7A16),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: Color(0x66FFC24B),
+                                        blurRadius: 5),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  'C',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF7A4A0C),
+                                    height: 1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
                               Text(
-                                '${widget.coins} coins',
+                                '${widget.coins}',
                                 style: const TextStyle(
-                                    color: Color(0xFF4ADE80),
-                                    fontSize: 11,
+                                    color: Colors.white,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w800),
                               ),
                             ],

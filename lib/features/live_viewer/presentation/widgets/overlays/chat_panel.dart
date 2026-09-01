@@ -211,33 +211,69 @@ class _GiftChatLine extends StatelessWidget {
           ),
           if (message.giftCoins != null && message.giftCoins! > 0) ...[
             const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.fromLTRB(4, 2, 7, 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF16A34A).withOpacity(0.22),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFF22C55E).withOpacity(0.55),
-                ),
+            _CoinBadge(coins: message.giftCoins!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Gold coin chip: a shiny coin disc + the amount in bold white.
+class _CoinBadge extends StatelessWidget {
+  final int coins;
+  const _CoinBadge({required this.coins});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 3, 9, 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x33FFC24B), Color(0x1AFF8A00)],
+        ),
+        border: Border.all(color: const Color(0x66FFD27A)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFFE083), Color(0xFFF5A623), Color(0xFFCE7A16)],
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.south_rounded,
-                      size: 12, color: Color(0xFF4ADE80)),
-                  const SizedBox(width: 1),
-                  Text(
-                    '${message.giftCoins}',
-                    style: const TextStyle(
-                      color: Color(0xFF4ADE80),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+              boxShadow: [
+                BoxShadow(color: Color(0x66FFC24B), blurRadius: 4),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: const Text(
+              'C',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF7A4A0C),
+                height: 1,
               ),
             ),
-          ],
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '$coins',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
