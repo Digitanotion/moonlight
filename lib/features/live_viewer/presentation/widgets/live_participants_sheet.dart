@@ -225,7 +225,7 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
   }
 
   Widget _row(_Participant p) {
-    final isMe = _myUuid != null && p.uuid == _myUuid;
+    final isMe = p.isSelf || (_myUuid != null && p.uuid == _myUuid);
     return InkWell(
       onTap: () => _openProfile(p),
       child: Padding(
@@ -316,35 +316,56 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
 
   Widget _followControl(_Participant p) {
     if (p.following) {
+      // Following: a clear outlined "Following ✓" pill (not a bare circle
+      // that reads as an unrelated icon).
       return GestureDetector(
         onTap: () => _toggleFollow(p),
         child: Container(
-          width: 34,
-          height: 34,
+          padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withOpacity(0.28)),
+            color: Colors.white.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.30)),
           ),
-          child: const Icon(Icons.check_rounded, color: Colors.white, size: 18),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.check_rounded, color: Colors.white, size: 15),
+              SizedBox(width: 4),
+              Text(
+                'Following',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
     return GestureDetector(
       onTap: () => _toggleFollow(p),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppColors.chatOutgoingTop, AppColors.chatOutgoingBottom],
-          ),
+          color: AppColors.secondary, // solid brand orange, white text pops
           borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.secondary.withOpacity(0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: const Text(
           'Follow',
           style: TextStyle(
             color: Colors.white,
             fontSize: 12.5,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
@@ -357,6 +378,7 @@ class _Participant {
   final String slug;
   final String avatar;
   final String role;
+  final bool isSelf;
   bool following;
 
   _Participant({
@@ -365,14 +387,14 @@ class _Participant {
     required this.avatar,
     required this.role,
     required this.following,
+    this.isSelf = false,
   });
 
   factory _Participant.fromJson(Map<String, dynamic> j) {
     bool follows = false;
     for (final key in ['followed_by_me', 'is_following', 'following']) {
       final v = j[key];
-      if (v is bool) follows = v;
-      if (v is String) follows = v.toLowerCase() == 'true';
+      if (v == true || v?.toString().toLowerCase() == 'true') follows = true;
     }
     return _Participant(
       uuid: (j['user_uuid'] ?? j['uuid'] ?? '').toString(),
@@ -380,6 +402,7 @@ class _Participant {
       avatar: (j['avatar'] ?? j['avatar_url'] ?? '').toString(),
       role: (j['role'] ?? 'viewer').toString(),
       following: follows,
+      isSelf: j['is_self'] == true,
     );
   }
 }

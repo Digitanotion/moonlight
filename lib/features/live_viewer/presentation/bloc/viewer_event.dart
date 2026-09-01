@@ -59,6 +59,14 @@ class FollowToggled extends ViewerEvent {
   const FollowToggled();
 }
 
+/// Re-fetch host info (authoritative `isFollowed`) — used before deciding
+/// whether to nag the viewer with the "follow the host" prompt, so a
+/// follow made elsewhere (profile, participants sheet, prior session) is
+/// respected.
+class HostFollowStateRefreshRequested extends ViewerEvent {
+  const HostFollowStateRefreshRequested();
+}
+
 class CommentSent extends ViewerEvent {
   final String text;
   const CommentSent(this.text);

@@ -77,6 +77,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       (e, emit) => _safeEmit(emit, state.copyWith(showGiftToast: false)),
     );
     on<FollowToggled>(_onFollowToggled);
+    on<HostFollowStateRefreshRequested>(_onHostFollowStateRefreshRequested);
     on<CommentSent>(_onCommentSent);
     on<LikePressed>(_onLikePressed);
     on<SharePressed>(_onSharePressed);
@@ -875,6 +876,21 @@ void _startHealthService() {
         state.copyWith(followErrorMessage: 'Could not follow — try again'),
       );
     }
+  }
+
+  Future<void> _onHostFollowStateRefreshRequested(
+    HostFollowStateRefreshRequested e,
+    Emitter<ViewerState> emit,
+  ) async {
+    try {
+      final fresh = await repo.fetchHostInfo();
+      final cur = state.host;
+      if (cur == null) {
+        _safeEmit(emit, state.copyWith(host: fresh));
+      } else if (cur.isFollowed != fresh.isFollowed) {
+        _safeEmit(emit, state.copyWith(host: cur.copyWith(isFollowed: fresh.isFollowed)));
+      }
+    } catch (_) {/* best-effort */}
   }
 
   Future<void> _onCommentSent(CommentSent e, Emitter<ViewerState> emit) async {

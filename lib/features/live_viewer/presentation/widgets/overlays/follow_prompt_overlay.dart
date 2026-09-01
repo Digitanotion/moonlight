@@ -44,7 +44,15 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
   void _scheduleNextShow() {
     _showTimer?.cancel();
     if (_acted) return;
-    _showTimer = Timer(_interval, () {
+    _showTimer = Timer(_interval, () async {
+      if (!mounted || _acted) return;
+      // Re-verify against the server first — the viewer may have followed
+      // the host from their profile / the participants sheet / a previous
+      // session, none of which flow through ViewerBloc.
+      context
+          .read<ViewerBloc>()
+          .add(const HostFollowStateRefreshRequested());
+      await Future<void>.delayed(const Duration(milliseconds: 600));
       if (!mounted || _acted) return;
       final isFollowed =
           context.read<ViewerBloc>().state.host?.isFollowed ?? true;
