@@ -1,0 +1,13 @@
+# app-ads.txt — Moonlight (com.app.moonlightstream)
+#
+# Declares AdMob as an authorized seller of this app's ad inventory so that
+# programmatic/mediated demand sources will actually bid on it — Google's
+# own direct demand doesn't need this, but most third-party buyers check it
+# before bidding, so its absence quietly caps how much demand competes for
+# each impression.
+#
+# Publisher ID below is derived from the AdMob App ID
+# (ca-app-pub-9544684683357809~6052135544 -> pub-9544684683357809).
+# "f08c47fec0942fa0" is Google's fixed, universal AdMob certification ID —
+# same for every publisher, not specific to this account.
+google.com, pub-9544684683357809, DIRECT, f08c47fec0942fa0

@@ -67,7 +67,32 @@ Put custom nginx snippets in
 
 ---
 
-## 2. Landing page for `/live/<uuid>` and `/post/<id>`
+## 2. `/app-ads.txt` (AdMob authorized-sellers declaration)
+
+Copy `app-ads.txt` to the **domain root** — not `.well-known`, exactly:
+
+```
+public_html/app-ads.txt
+```
+
+So it's reachable at `https://moonlightstream.app/app-ads.txt` with a **200**
+and plain-text content (no redirect — crawlers give up on redirected
+app-ads.txt files). Verify:
+
+```
+curl -sI https://moonlightstream.app/app-ads.txt   # 200, no Location header
+curl -s  https://moonlightstream.app/app-ads.txt    # the one google.com line
+```
+
+This must be on whatever domain is set as this app's **Developer website** in
+Play Console (Store presence → Store listing → Contact details) — it's
+already `moonlightstream.app` there, so no extra Play Console change needed.
+Crawlers re-check every few days to a couple of weeks; there's no manual
+"re-verify" button like App Links has, so give it time after upload.
+
+---
+
+## 3. Landing page for `/live/<uuid>` and `/post/<id>`
 
 `live-landing.html` opens `moonlight://live/<uuid>` immediately and falls back
 to the Play Store after ~1.2s. Wire it up so both paths serve this one file:
@@ -86,7 +111,7 @@ Update `APP_STORE_URL` in the file once the iOS app has a real App Store id
 
 ---
 
-## 3. iOS Universal Links — not needed yet
+## 4. iOS Universal Links — not needed yet
 
 This repo has no `ios/` project. When iOS ships, add
 `.well-known/apple-app-site-association` (JSON, no extension, `application/json`)
