@@ -6,6 +6,11 @@ class AppUser {
   final String roleLabel; // Superstar / VIP / Active member / Nominal member
   final String roleColor; // hex
 
+  /// Whether the current viewer already follows this user. Only populated
+  /// where the server has that context cheaply (e.g. the post feed); other
+  /// call sites default this to false.
+  final bool isFollowing;
+
   const AppUser({
     required this.id,
     required this.name,
@@ -13,5 +18,6 @@ class AppUser {
     required this.countryFlagEmoji,
     required this.roleLabel,
     required this.roleColor,
+    this.isFollowing = false,
   });
 }

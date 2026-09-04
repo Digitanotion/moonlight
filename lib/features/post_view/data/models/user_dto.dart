@@ -8,6 +8,7 @@ class AppUserDto {
   final String countryFlagEmoji;
   final String roleLabel;
   final String roleColor;
+  final bool isFollowing;
 
   AppUserDto({
     required this.uuid,
@@ -17,6 +18,7 @@ class AppUserDto {
     required this.countryFlagEmoji,
     required this.roleLabel,
     required this.roleColor,
+    this.isFollowing = false,
   });
 
   factory AppUserDto.fromMap(Map<String, dynamic> m) => AppUserDto(
@@ -27,6 +29,7 @@ class AppUserDto {
     countryFlagEmoji: '${m['countryFlagEmoji'] ?? m['flag'] ?? ''}',
     roleLabel: '${m['roleLabel'] ?? m['role'] ?? ''}',
     roleColor: '${m['roleColor'] ?? '#ADB5BD'}',
+    isFollowing: m['isFollowing'] == true || m['is_following'] == true,
   );
 
   AppUser toEntity() => AppUser(
@@ -36,5 +39,6 @@ class AppUserDto {
     countryFlagEmoji: countryFlagEmoji,
     roleLabel: roleLabel,
     roleColor: roleColor,
+    isFollowing: isFollowing,
   );
 }

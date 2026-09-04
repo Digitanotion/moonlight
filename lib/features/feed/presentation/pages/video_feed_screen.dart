@@ -11,18 +11,24 @@
 // is already using (via BlocProvider.value at the navigation site) so
 // likes stay in sync with the regular feed rather than diverging.
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
+import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_post_card.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
+import 'package:moonlight/features/post_view/domain/entities/user.dart';
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/comment_bottom_sheet.dart';
+import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart';
+import 'package:moonlight/widgets/top_snack.dart';
 
 class VideoFeedScreen extends StatefulWidget {
   // Seed list captured at navigation time. The screen no longer treats
@@ -342,19 +348,28 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                             : post;
                         return Column(
                           children: [
+                            _FollowAvatarButton(
+                              key: ValueKey('follow_${current.author.id}'),
+                              author: current.author,
+                              isOwner: isOwner,
+                            ),
+                            const SizedBox(height: 22),
                             _VideoActionButton(
                               icon: current.isLiked
                                   ? Icons.favorite_rounded
                                   : Icons.favorite_border_rounded,
                               color: current.isLiked
-                                  ? Colors.red
+                                  ? const Color(0xFFFF3B5C)
                                   : Colors.white,
+                              tint: current.isLiked
+                                  ? const Color(0xFFFF3B5C).withOpacity(0.16)
+                                  : null,
                               label: '${current.likes}',
                               onTap: () => context
                                   .read<FeedCubit>()
                                   .toggleLikeAt(originalIndex),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 18),
                             _VideoActionButton(
                               icon: Icons.mode_comment_rounded,
                               color: Colors.white,
@@ -368,7 +383,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                                     .setCommentsCountAt(originalIndex, n),
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 18),
                             _VideoActionButton(
                               icon: Icons.ios_share_rounded,
                               color: Colors.white,
@@ -376,7 +391,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                               onTap: () => ShareService.sharePost(current),
                             ),
                             if (isOwner) ...[
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 18),
                               _VideoActionButton(
                                 icon: Icons.edit_rounded,
                                 color: Colors.white,
@@ -427,36 +442,310 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   }
 }
 
+/// Reusable "press to shrink, release to spring back" wrapper — gives every
+/// tappable icon in the rail the same elegant, TikTok-style tactile feel
+/// without duplicating an AnimationController in each widget.
+class _TapBounce extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double scaleDown;
+
+  const _TapBounce({
+    required this.child,
+    required this.onTap,
+    this.scaleDown = 0.86,
+    super.key,
+  });
+
+  @override
+  State<_TapBounce> createState() => _TapBounceState();
+}
+
+class _TapBounceState extends State<_TapBounce>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 120),
+    reverseDuration: const Duration(milliseconds: 220),
+  );
+  late final Animation<double> _scale = CurvedAnimation(
+    parent: _c,
+    curve: Curves.easeOut,
+    reverseCurve: Curves.elasticOut,
+  );
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: widget.onTap == null ? null : (_) => _c.forward(),
+      onTapUp: widget.onTap == null
+          ? null
+          : (_) {
+              _c.reverse();
+              HapticFeedback.selectionClick();
+              widget.onTap!();
+            },
+      onTapCancel: widget.onTap == null ? null : () => _c.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (context, child) => Transform.scale(
+          scale: 1 - (_scale.value * (1 - widget.scaleDown)),
+          child: child,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Modern, elegant translucent "glass" chip used for like / comment / share /
+/// edit. Every icon animates on touch via [_TapBounce]; an optional [tint]
+/// lets liked/active states glow softly instead of just swapping color.
 class _VideoActionButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String label;
   final VoidCallback onTap;
+  final Color? tint;
 
   const _VideoActionButton({
     required this.icon,
     required this.color,
     required this.label,
     required this.onTap,
+    this.tint,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return _TapBounce(
       onTap: onTap,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 30),
-          const SizedBox(height: 4),
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: tint ?? Colors.white.withOpacity(0.10),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.16),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.22),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 5),
           Text(
             label,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 12,
               fontWeight: FontWeight.w700,
+              shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// TikTok-style circular "author avatar as a follow button" — the post
+/// author's photo fills a translucent circle; a small "+" badge sits on its
+/// bottom-right. Tapping the badge optimistically follows the author with a
+/// "+" → check-mark morph animation, then permanently fades the badge away.
+/// Tapping the avatar itself opens the author's profile. Hidden entirely for
+/// the post owner or once the viewer already follows them.
+class _FollowAvatarButton extends StatefulWidget {
+  final AppUser author;
+  final bool isOwner;
+
+  const _FollowAvatarButton({
+    required this.author,
+    required this.isOwner,
+    super.key,
+  });
+
+  @override
+  State<_FollowAvatarButton> createState() => _FollowAvatarButtonState();
+}
+
+class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
+  late bool _following = widget.author.isFollowing;
+  bool _busy = false;
+  bool _justFollowed = false;
+
+  void _openProfile() {
+    final id = widget.author.id;
+    if (id.isEmpty) return;
+    Navigator.of(
+      context,
+    ).pushNamed(RouteNames.profileView, arguments: {'userUuid': id});
+  }
+
+  Future<void> _follow() async {
+    if (_busy || _following) return;
+    setState(() {
+      _busy = true;
+      _justFollowed = true; // optimistic: flips the badge to a check now
+    });
+    try {
+      await sl<ProfileRepository>().followUser(widget.author.id);
+      if (!mounted) return;
+      // Hold the check mark briefly so the animation reads clearly, then
+      // fade the whole badge away for good.
+      await Future.delayed(const Duration(milliseconds: 650));
+      if (!mounted) return;
+      setState(() => _following = true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _justFollowed = false;
+        _busy = false;
+      });
+      TopSnack.error(context, 'Could not follow. Try again.');
+      return;
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isOwner) return const SizedBox.shrink();
+
+    final showBadge = !_following;
+    final avatarUrl = widget.author.avatarUrl;
+
+    return _TapBounce(
+      onTap: _openProfile,
+      scaleDown: 0.9,
+      child: SizedBox(
+        width: 50,
+        height: 50,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              margin: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.55),
+                  width: 1.6,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: Container(
+                  color: Colors.white.withOpacity(0.14),
+                  child: avatarUrl.isEmpty
+                      ? _AuthorInitials(name: widget.author.name)
+                      : CachedNetworkImage(
+                          imageUrl: avatarUrl,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, _, _) =>
+                              _AuthorInitials(name: widget.author.name),
+                          placeholder: (_, _) =>
+                              _AuthorInitials(name: widget.author.name),
+                        ),
+                ),
+              ),
+            ),
+            AnimatedOpacity(
+              opacity: showBadge ? 1 : 0,
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeOut,
+              child: Positioned(
+                right: -2,
+                bottom: -2,
+                child: _TapBounce(
+                  onTap: showBadge ? _follow : null,
+                  scaleDown: 0.8,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.primary,
+                      border: Border.all(color: Colors.black, width: 1.4),
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: Icon(
+                        _justFollowed ? Icons.check_rounded : Icons.add_rounded,
+                        key: ValueKey(_justFollowed),
+                        color: Colors.white,
+                        size: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthorInitials extends StatelessWidget {
+  final String name;
+
+  const _AuthorInitials({required this.name});
+
+  static const _palette = [
+    Color(0xFFFF6B6B),
+    Color(0xFFFFA94D),
+    Color(0xFFFFD43B),
+    Color(0xFF69DB7C),
+    Color(0xFF4DABF7),
+    Color(0xFF9775FA),
+    Color(0xFFF783AC),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = name.trim();
+    final initial = trimmed.isEmpty ? '?' : trimmed[0].toUpperCase();
+    final hash = trimmed.codeUnits.fold<int>(0, (a, b) => a + b);
+    final color = _palette[hash % _palette.length];
+    return Container(
+      alignment: Alignment.center,
+      color: color.withOpacity(0.9),
+      child: Text(
+        initial,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
