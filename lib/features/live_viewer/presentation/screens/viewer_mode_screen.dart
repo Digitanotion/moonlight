@@ -176,6 +176,12 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
             p.requiresPremiumPayment != n.requiresPremiumPayment ||
             p.isStreamUnstable != n.isStreamUnstable ||
             p.showChatUI != n.showChatUI ||
+            // Host info arrives independently of chat (fetchHostInfo). Without
+            // this, `showVideoCall: state.host?.callable` below stayed frozen
+            // at its first value (host null → button hidden) until a chat
+            // message forced a rebuild — so a chat-less stream never showed
+            // the call button.
+            p.host != n.host ||
             p.chat != n.chat,
         builder: (context, state) {
           // In PiP, force overlays off and drop the safe-area insets so the

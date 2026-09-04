@@ -147,6 +147,23 @@ class ViewerRepositoryImpl implements ViewerRepository {
   List<GiftItem> _giftCatalogCache = const [];
   String? _giftCatalogVersion;
 
+  /// Last viewer count we emitted. `_viewerCtrl` is a broadcast stream with no
+  /// replay, and the pager builds a fresh ViewerBloc per page — a bloc that
+  /// subscribes after this value was set would otherwise sit at 0 until the
+  /// next `viewer.count` push. The bloc seeds from this on start.
+  int _lastViewers = 0;
+  @override
+  int get lastKnownViewers => _lastViewers;
+
+  /// Single funnel for every viewer-count update (enter response + the
+  /// `viewer.count` Pusher event) so the replay cache and the stream never
+  /// drift apart.
+  void _emitViewers(int v) {
+    if (v < 0) return;
+    _lastViewers = v;
+    if (!_viewerCtrl.isClosed) _viewerCtrl.add(v);
+  }
+
   // ── Internal state ────────────────────────────────────────────────────────
   String? _activeGuestUuid;
   Timer? _clockTimer;
@@ -577,8 +594,10 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
 
     // ── Step 3: Process enter response ────────────────────────────────────
-    final viewers = (enterData['viewers'] ?? 0) as int;
-    if (!_viewerCtrl.isClosed) _viewerCtrl.add(viewers);
+    // Soft parse — a missing / non-int `viewers` must not blow up wiring or
+    // silently reset the count to 0.
+    final viewers = (enterData['viewers'] as num?)?.toInt();
+    if (viewers != null) _emitViewers(viewers);
     // Single approval emit here — no duplicate in Step 4
     if (!_myApprovalCtrl.isClosed) _myApprovalCtrl.add(true);
     debugPrint('🔌 Enter OK — viewers: $viewers');
@@ -794,7 +813,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
       final data = _asMap(m);
       final raw = data['count'] ?? data['viewers'] ?? 0;
       final v = raw is num ? raw.toInt() : int.tryParse('$raw') ?? 0;
-      _viewerCtrl.add(v);
+      _emitViewers(v);
     });
 
     bindEvent(chChat, 'chat.message', (m) => _handleChatMessage(m));

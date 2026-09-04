@@ -5,6 +5,10 @@ abstract class ViewerRepository {
  Stream<bool> get healthPauseStream;
   Stream<Duration> watchLiveClock();
   Stream<int> watchViewerCount();
+
+  /// Last viewer count known to the repo (0 if none seen yet). Lets a freshly
+  /// created bloc seed its state instead of showing 0 until the next push.
+  int get lastKnownViewers;
   Stream<ChatMessage> watchChat();
   Stream<GuestJoinNotice> watchGuestJoins();
   Stream<GiftNotice> watchGifts();

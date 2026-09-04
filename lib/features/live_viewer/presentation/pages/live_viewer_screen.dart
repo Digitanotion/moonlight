@@ -93,6 +93,14 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   final ValueNotifier<double> _videoReadyProgress = ValueNotifier(0.0);
   AnimationController? _fadeController;
 
+  /// Sticky per-stream latch: true once the host's first video frame has been
+  /// seen for the CURRENT stream. Cleared only when the stream/repository
+  /// actually changes (see [didUpdateWidget]). Guards against a transient
+  /// `ViewerStatus.loading` re-emit (e.g. a rebuild triggered by the keyboard
+  /// opening under the chat field) snapping the full "Joining stream…"
+  /// placeholder back over a video that is already playing.
+  bool _firstFrameSeen = false;
+
   late PremiumVerificationState _premiumState;
   late bool _isPremiumStream;
   late int? _premiumFee;
@@ -111,9 +119,18 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
-    )..addListener(() {
-      _videoReadyProgress.value = _fadeController!.value;
-    });
+    )
+      ..addListener(() {
+        _videoReadyProgress.value = _fadeController!.value;
+      })
+      ..addStatusListener((s) {
+        // Once the placeholder has fully faded out for this stream, latch it
+        // shut. Anything that later resets `_videoReadyProgress` (a rebuild
+        // coinciding with a transient bloc state, the keyboard opening under
+        // the chat field, …) can no longer bring "Joining stream…" back —
+        // only a real stream switch does, via didUpdateWidget.
+        if (s == AnimationStatus.completed) _firstFrameSeen = true;
+      });
     _initPremium();
   }
 
@@ -125,6 +142,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     if (widget.repository != oldWidget.repository || wasReset) {
       _startedBloc = null;
       _viewerBloc = null;
+      _firstFrameSeen = false;
       _fadeController?.reset();
       _videoReadyProgress.value = 0;
       _initPremium();
@@ -152,8 +170,11 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
 
   void notifyVideoReady() {
     if (_fadeController == null || _fadeController!.isAnimating) return;
-    if (_fadeController!.value >= 1.0) return;
-    _fadeController!.forward();
+    if (_fadeController!.value >= 1.0) {
+      _firstFrameSeen = true; // already faded (e.g. value restored) — latch anyway
+      return;
+    }
+    _fadeController!.forward(); // status listener latches `_firstFrameSeen` on completion
   }
 
   Future<void> _checkPremiumStatus() async {
@@ -374,15 +395,14 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
             );
           }
 
-          if (state.status == ViewerStatus.loading &&
-              (_fadeController?.value ?? 0) > 0) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _fadeController?.reset();
-                _videoReadyProgress.value = 0;
-              }
-            });
-          }
+          // NOTE: the "Joining stream…" placeholder used to be re-armed here
+          // whenever the bloc re-emitted `ViewerStatus.loading`. That fired on
+          // any transient rebuild (notably the keyboard opening under the chat
+          // field) and slammed the full-screen placeholder back over an
+          // already-playing video. The placeholder is now a one-shot per
+          // stream: shown until the first frame (`_firstFrameSeen`), re-armed
+          // only on a real stream switch (didUpdateWidget). Mid-session drops
+          // are surfaced by ReconnectionOverlay / PoolVideoView's own spinner.
 
           return Stack(
             fit: StackFit.expand,
@@ -397,7 +417,13 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
               ValueListenableBuilder<double>(
                 valueListenable: _videoReadyProgress,
                 builder: (_, progress, __) {
-                  if (progress >= 1.0) return const SizedBox.shrink();
+                  // `_firstFrameSeen` is the sticky override: once the first
+                  // frame has shown for this stream the placeholder never
+                  // returns until a real stream switch, regardless of what
+                  // resets `_videoReadyProgress`.
+                  if (_firstFrameSeen || progress >= 1.0) {
+                    return const SizedBox.shrink();
+                  }
                   return LiveLoadingPlaceholder(
                     avatarUrl: hostAvatarUrl,
                     hostName: hostName,

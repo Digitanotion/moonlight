@@ -762,6 +762,12 @@ void _startHealthService() {
       onError: (e) => _logEvent('VIEWER_ERROR', '$e'),
       cancelOnError: true,
     );
+    // Seed from the repo's last known count. watchViewerCount() is a
+    // no-replay broadcast stream, and the pager creates a fresh bloc per
+    // page — without this a bloc that starts after the count was set would
+    // show 0 until the next push (the "count drops to zero on scroll" bug).
+    final seededViewers = repo.lastKnownViewers;
+    if (seededViewers > 0) add(_ViewerCountUpdated(seededViewers));
 
     _chatSub = repo.watchChat().listen(
       (m) => add(_ChatArrived(m)),

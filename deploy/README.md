@@ -16,11 +16,16 @@ Copy `well-known/assetlinks.json` to:
 public_html/.well-known/assetlinks.json
 ```
 
-Then fill in the two placeholder fingerprints:
+**Easiest:** Play Console → your app → *Test and release → Setup → App signing*
+has a ready-made **"Digital Asset Links JSON"** snippet with the correct
+fingerprint(s) already filled in — copy that whole block into
+`assetlinks.json` (keep our extra debug fingerprint entry if you still want
+verified links to work with local debug builds).
 
-- **`REPLACE_WITH_PLAY_APP_SIGNING_SHA256`** — Play Console → your app →
-  *Test and release → Setup → App signing* → **App signing key certificate**
-  → copy the `SHA-256 certificate fingerprint`.
+Otherwise, fill in the two placeholder fingerprints by hand:
+
+- **`REPLACE_WITH_PLAY_APP_SIGNING_SHA256`** — same page → **App signing key
+  certificate** → copy the `SHA-256 certificate fingerprint`.
 - **`REPLACE_WITH_UPLOAD_KEY_SHA256`** — same page, **Upload key certificate**
   → `SHA-256 certificate fingerprint`.
   (Or locally: `keytool -list -v -keystore android/app/upload-keystore.jks -alias <alias>`)

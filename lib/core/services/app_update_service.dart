@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -18,7 +17,15 @@ class AppUpdateInfo {
 
   final String latestVersion; // e.g. "1.5.0"
   final int latestBuild;
+
+  /// An https Play/App Store URL the user can always open in a browser.
   final String storeUrl;
+
+  /// A `market://details?id=<pkg>` deep link for the primary button — opens
+  /// the Play Store app directly. Empty on iOS / when the package id is
+  /// unavailable. Callers should try this first, then fall back to [storeUrl].
+  final String marketUrl;
+
   final String notes;
 
   const AppUpdateInfo({
@@ -27,6 +34,7 @@ class AppUpdateInfo {
     required this.latestVersion,
     required this.latestBuild,
     required this.storeUrl,
+    required this.marketUrl,
     required this.notes,
   });
 }
@@ -38,9 +46,15 @@ class AppUpdateService {
   AppUpdateService._();
   static final AppUpdateService instance = AppUpdateService._();
 
-  static const _snoozedBuildKey = 'app_update_snoozed_build';
-
   bool _checkedThisSession = false;
+
+  /// The user tapped "Later" on the soft prompt during THIS app session.
+  /// Deliberately not persisted: the client's requirement is that the soft
+  /// prompt reappears on every fresh launch until the user actually updates.
+  /// Forced updates are never affected by this.
+  bool _softDismissedThisSession = false;
+  bool get softDismissedThisSession => _softDismissedThisSession;
+  void dismissSoftPromptForSession() => _softDismissedThisSession = true;
 
   /// [force] re-checks even if already checked this session (used on resume).
   Future<AppUpdateInfo?> check({bool force = false}) async {
@@ -61,11 +75,18 @@ class AppUpdateService {
 
       final latestBuild = _asInt(p['latest_build']);
       final minBuild = _asInt(p['min_build']);
-      final storeUrl = (p['store_url'] ?? '').toString();
-      if (latestBuild == 0 || storeUrl.isEmpty) return null;
+      if (latestBuild == 0) return null;
 
       final info = await PackageInfo.fromPlatform();
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
+      final pkg = info.packageName;
+
+      // Never trust the server URL blindly — synthesize a correct one from the
+      // real package id when it's missing or not a recognisable store URL.
+      // (A blank/wrong store_url used to make the whole prompt vanish.)
+      final storeUrl = _resolveStoreUrl((p['store_url'] ?? '').toString(), pkg);
+      final marketUrl =
+          (Platform.isAndroid && pkg.isNotEmpty) ? 'market://details?id=$pkg' : '';
 
       final forced = globalForce || (minBuild > 0 && currentBuild < minBuild);
       final available = forced || currentBuild < latestBuild;
@@ -78,6 +99,7 @@ class AppUpdateService {
         latestVersion: (p['latest_version'] ?? '').toString(),
         latestBuild: latestBuild,
         storeUrl: storeUrl,
+        marketUrl: marketUrl,
         notes: (p['notes'] ?? '').toString(),
       );
     } catch (e) {
@@ -86,22 +108,17 @@ class AppUpdateService {
     }
   }
 
-  /// True if the user has already dismissed the *soft* prompt for this exact
-  /// build — don't nag again until there's a newer one.
-  Future<bool> isSnoozed(int latestBuild) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return (prefs.getInt(_snoozedBuildKey) ?? 0) >= latestBuild;
-    } catch (_) {
-      return false;
+  String _resolveStoreUrl(String serverUrl, String pkg) {
+    final s = serverUrl.trim();
+    if (s.startsWith('https://play.google.com/') ||
+        s.startsWith('market://') ||
+        s.startsWith('https://apps.apple.com/')) {
+      return s;
     }
-  }
-
-  Future<void> snooze(int latestBuild) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_snoozedBuildKey, latestBuild);
-    } catch (_) {}
+    if (Platform.isAndroid && pkg.isNotEmpty) {
+      return 'https://play.google.com/store/apps/details?id=$pkg';
+    }
+    return s; // iOS with no server URL — nothing sensible to synthesize
   }
 
   static int _asInt(Object? v) {

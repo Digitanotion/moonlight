@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Join the live stream on Moonlight</title>
 <meta name="robots" content="noindex">
+<meta property="og:title" content="Join me live on Moonlight">
+<meta property="og:description" content="Tap to watch this live stream in the Moonlight app.">
+<meta property="og:type" content="website">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -14,8 +17,17 @@
     display: flex; align-items: center; justify-content: center; padding: 24px;
   }
   .card { max-width: 380px; width: 100%; text-align: center; }
-  .logo { width: 96px; height: 96px; border-radius: 24px; margin: 0 auto 20px; display:block; }
-  h1 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+  .avatar {
+    width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 18px; display: block;
+    object-fit: cover; border: 2px solid rgba(255,255,255,.16); background: #241539;
+  }
+  .live {
+    display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px;
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: #FF6B6B;
+  }
+  .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #FF3B3B; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 8px; line-height: 1.3; }
   p  { font-size: 14px; color: #B9AED0; margin-bottom: 24px; line-height: 1.5; }
   .btn {
     display: block; width: 100%; padding: 14px 20px; border-radius: 14px;
@@ -28,28 +40,28 @@
 </head>
 <body>
   <div class="card">
-    <img class="logo" src="/logo.png" alt="Moonlight" onerror="this.style.display='none'">
+    <img class="avatar" id="avatar" src="/logo.png" alt="" onerror="this.src='/logo.png'">
+    <span class="live" id="liveBadge" hidden>Live now</span>
     <h1 id="headline">Someone is live on Moonlight</h1>
-    <p id="sub">Opening the stream in the app…</p>
+    <p id="sub">Opening the stream in the app&hellip;</p>
 
     <a class="btn" id="openApp" href="#">Open in the Moonlight app</a>
     <a class="btn secondary" id="store" href="#">Get Moonlight</a>
 
-    <p class="muted">If the app didn’t open automatically, tap “Open in the Moonlight app”.</p>
+    <p class="muted">If the app didn&rsquo;t open automatically, tap &ldquo;Open in the Moonlight app&rdquo;.</p>
   </div>
 
 <script>
 (function () {
   var PLAY_URL = "https://play.google.com/store/apps/details?id=com.app.moonlightstream";
   var APP_STORE_URL = "https://apps.apple.com/app/moonlight"; // update with real App Store id when live
+  var API_BASE = "https://svc.moonlightstream.app";
 
-  // URL shape: https://moonlightstream.app/live/<uuid>
   var parts = location.pathname.split("/").filter(Boolean);
   var kind = parts[0] || "live";           // "live" | "post"
   var id = parts[1] || "";
 
   var ua = navigator.userAgent || "";
-  var isAndroid = /android/i.test(ua);
   var isIOS = /iphone|ipad|ipod/i.test(ua);
   var store = isIOS ? APP_STORE_URL : PLAY_URL;
 
@@ -60,16 +72,40 @@
 
   if (kind === "post") {
     document.getElementById("headline").textContent = "View this post on Moonlight";
+    document.getElementById("sub").textContent = "Opening the post in the app…";
   }
 
-  // Try to open the app immediately. On Android the verified App Link
-  // usually means we never even land here; this covers the fallback path.
+  // Best-effort: personalise the page with the host's name + avatar. Public
+  // endpoint, no auth. Never blocks the redirect below.
+  if (kind === "live" && id) {
+    try {
+      fetch(API_BASE + "/api/v1/live/" + encodeURIComponent(id) + "/status", { mode: "cors" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) return;
+          var host = d.host || {};
+          var name = host.fullname || host.user_slug || host.slug || "";
+          var avatar = host.avatar_url || host.avatar || "";
+          if (name) {
+            document.getElementById("headline").textContent = name + " is live on Moonlight";
+            document.title = name + " is live on Moonlight";
+          }
+          if (avatar) document.getElementById("avatar").src = avatar;
+          var badge = document.getElementById("liveBadge");
+          if ((d.status || "").toLowerCase() === "online") badge.hidden = false;
+        })
+        .catch(function () {});
+    } catch (e) {}
+  }
+
+  // Try to open the app immediately. On Android the verified App Link usually
+  // means we never even land here; this covers the fallback path.
   if (id) {
     var now = Date.now();
     var timer = setTimeout(function () {
-      // Still here ~1.2s later → app not installed (or didn't open). Send to store.
-      if (Date.now() - now < 2000) window.location = store;
-    }, 1200);
+      // Still here ~1.4s later → app not installed (or didn't open). Go to store.
+      if (Date.now() - now < 2200) window.location = store;
+    }, 1400);
 
     window.addEventListener("pagehide", function () { clearTimeout(timer); });
     window.addEventListener("blur", function () { clearTimeout(timer); });
