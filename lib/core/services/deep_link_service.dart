@@ -13,14 +13,17 @@ import 'package:moonlight/main.dart' show MyApp;
 
 /// Handles inbound links:
 ///
-///   https://moonlightstream.app/live/<uuid>   (verified App/Universal Link)
+///   https://moonlightstream.app/live/<uuid>   (verified App Link)
 ///   moonlight://live/<uuid>                    (custom scheme fallback)
 ///   https://moonlightstream.app/post/<id>
 ///   moonlight://post/<id>
 ///
-/// A `/live` link is resolved against the stream-status endpoint (uuid is
-/// accepted by the route binding) so we can hand the viewer route the id +
-/// channel it needs, and so an ended/invalid stream degrades gracefully.
+/// Flutter's own deep-link routing is disabled (see
+/// `flutter_deeplinking_enabled=false` in AndroidManifest + the
+/// `onGenerateInitialRoutes` guard in main.dart) so this service is the
+/// single entry point. It waits for the app to finish booting (splash →
+/// first real route) before acting, then resolves a `/live` link against
+/// the status endpoint and opens the viewer exactly like a Live-grid tap.
 class DeepLinkService {
   DeepLinkService._();
   static final DeepLinkService instance = DeepLinkService._();
@@ -29,22 +32,30 @@ class DeepLinkService {
   StreamSubscription<Uri>? _sub;
   bool _started = false;
 
+  /// Completed by the splash screen once it has navigated to the first real
+  /// route. Deep links queue behind this so we never push a viewer on top of
+  /// a still-initialising app (which left the RTC pool half-wired → the
+  /// "spinner spins forever" symptom).
+  final Completer<void> _appReady = Completer<void>();
+  void markAppReady() {
+    if (!_appReady.isCompleted) _appReady.complete();
+  }
+
+  // Cold start can deliver the same URI twice (getInitialLink + the stream).
+  Uri? _lastHandled;
+  DateTime _lastHandledAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   Future<void> init() async {
     if (_started) return;
     _started = true;
 
-    // Cold start.
     try {
       final initial = await _appLinks.getInitialLink();
-      if (initial != null) {
-        // Let the splash finish navigating to its first real route first.
-        Future.delayed(const Duration(milliseconds: 1200), () => _handle(initial));
-      }
+      if (initial != null) _handle(initial);
     } catch (e) {
       debugPrint('DeepLinkService.getInitialLink: $e');
     }
 
-    // Warm / running.
     _sub = _appLinks.uriLinkStream.listen(
       _handle,
       onError: (e) => debugPrint('DeepLinkService stream: $e'),
@@ -58,20 +69,33 @@ class DeepLinkService {
   }
 
   Future<void> _handle(Uri uri) async {
+    // De-dupe a cold-start URI arriving on both channels within a few seconds.
+    final now = DateTime.now();
+    if (uri == _lastHandled &&
+        now.difference(_lastHandledAt) < const Duration(seconds: 4)) {
+      return;
+    }
+    _lastHandled = uri;
+    _lastHandledAt = now;
+
     debugPrint('🔗 Deep link: $uri');
 
-    // https://moonlightstream.app/live/<uuid>  → pathSegments = [live, <uuid>]
-    // moonlight://live/<uuid>                  → host = live, path = [<uuid>]
     final isWeb = uri.scheme == 'https' || uri.scheme == 'http';
     final parts = <String>[
       if (!isWeb) uri.host,
       ...uri.pathSegments,
     ].where((s) => s.isNotEmpty).toList();
-
     if (parts.length < 2) return;
+
     final kind = parts[0];
     final value = parts[1];
     if (kind != 'live' && kind != 'post') return;
+
+    // Wait for the app to finish booting (bounded, so a stuck splash can't
+    // strand the link forever).
+    try {
+      await _appReady.future.timeout(const Duration(seconds: 12));
+    } catch (_) {}
 
     switch (kind) {
       case 'live':
@@ -83,12 +107,12 @@ class DeepLinkService {
     }
   }
 
-  Future<void> _openLive(String uuid) async {
-    if (uuid.isEmpty) return;
+  Future<void> _openLive(String ref) async {
+    if (ref.isEmpty) return;
 
     Map<String, dynamic> data;
     try {
-      final res = await sl<DioClient>().dio.get('/api/v1/live/$uuid/status');
+      final res = await sl<DioClient>().dio.get('/api/v1/live/$ref/status');
       data = (res.data is Map)
           ? (res.data as Map).cast<String, dynamic>()
           : <String, dynamic>{};
@@ -120,7 +144,7 @@ class DeepLinkService {
     final slug = (host['user_slug'] ?? host['slug'] ?? '').toString();
     final item = LiveItem(
       id: id,
-      uuid: (data['uuid'] ?? uuid).toString(),
+      uuid: (data['uuid'] ?? ref).toString(),
       channel: channel,
       coverUrl: (host['avatar_url'] ?? host['avatar'])?.toString(),
       handle: slug.isNotEmpty ? '@$slug' : '@host',
@@ -135,36 +159,30 @@ class DeepLinkService {
       premiumFee: (data['entry_fee_coins'] as num?)?.toInt() ?? 0,
     );
 
-    // Open exactly like a tap from the Live grid.
-    void go() {
-      final nav = MyApp.navigatorKey.currentState;
-      if (nav == null) {
-        Future.delayed(const Duration(milliseconds: 500), go);
-        return;
-      }
-      nav.push(LiveViewerPager.route(items: [item], initialIndex: 0));
+    final nav = MyApp.navigatorKey.currentState;
+    if (nav == null) {
+      // App-ready fired but the navigator isn't attached yet — retry briefly.
+      Future.delayed(const Duration(milliseconds: 400), () => _openLive(ref));
+      return;
     }
-
-    go();
+    nav.push(LiveViewerPager.route(items: [item], initialIndex: 0));
   }
 
   void _push(String route, Map<String, dynamic> args) {
-    void go() {
-      final nav = MyApp.navigatorKey.currentState;
-      if (nav == null) {
-        Future.delayed(const Duration(milliseconds: 500), go);
-        return;
-      }
-      nav.pushNamed(route, arguments: args);
+    final nav = MyApp.navigatorKey.currentState;
+    if (nav == null) {
+      Future.delayed(
+        const Duration(milliseconds: 400),
+        () => _push(route, args),
+      );
+      return;
     }
-
-    go();
+    nav.pushNamed(route, arguments: args);
   }
 
   void _toast(String msg) {
     final ctx = MyApp.navigatorKey.currentContext;
     if (ctx == null) return;
-    final messenger = ScaffoldMessenger.maybeOf(ctx);
-    messenger?.showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(SnackBar(content: Text(msg)));
   }
 }

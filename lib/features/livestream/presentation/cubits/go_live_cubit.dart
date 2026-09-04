@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_category.dart';
-import 'package:moonlight/features/livestream/domain/entities/live_start_payload.dart';
 import 'package:moonlight/features/livestream/domain/repositories/go_live_repository.dart';
 import 'package:moonlight/features/livestream/domain/services/audio_test_service.dart';
 import 'package:moonlight/features/livestream/domain/services/camera_service.dart';
@@ -188,21 +187,11 @@ class GoLiveCubit extends Cubit<GoLiveState> {
         camOn: state.camOn,
       );
 
-      // Map DTO → domain payload for the live session tracker
-      final payload = LiveStartPayload(
-        livestreamId: dto.livestreamId,
-        channel: dto.channel,
-        uidType: dto.uidType,
-        uid: dto.uid,
-        rtcRole: dto.rtcRole,
-        startedAt: dto.startedAt,
-        bonusAwarded: dto.bonusAwarded,
-        appId: dto.appId,
-        rtcToken: dto.rtcToken,
-        expiresAt: dto.expiresAt,
-      );
-      final tracker = GetIt.I<LiveSessionTracker>();
-      tracker.start(payload);
+      // `dto` is already a fully-populated LiveStartPayload (uuid, host
+      // fields, …) — hand it to the tracker as-is. Rebuilding a trimmed
+      // copy here used to drop `uuid`, which is why a shared "go live" link
+      // fell back to the numeric stream id instead of the uuid.
+      GetIt.I<LiveSessionTracker>().start(dto);
 
       emit(state.copyWith(starting: false));
       return dto; // IMPORTANT: return full DTO so UI can read host/stream fields

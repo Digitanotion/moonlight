@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/deep_link_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/utils/asset_paths.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
@@ -147,6 +148,10 @@ class _SplashScreenState extends State<SplashScreen>
       } catch (e) {
         debugPrint('❌ [Splash] Navigation error: $e — falling back to login');
         Navigator.of(context).pushReplacementNamed(RouteNames.login);
+      } finally {
+        // The app is now on its first real route — release any deep link
+        // that arrived during boot.
+        DeepLinkService.instance.markAppReady();
       }
     });
   }

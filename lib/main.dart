@@ -108,7 +108,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         debugPrint('⚠️ CallKit background dismiss failed: $e');
       }
       try {
-        await NotificationService().dismissIncomingCallNotification(sessionUuid);
+        await NotificationService().dismissIncomingCallNotification(
+          sessionUuid,
+        );
       } catch (e) {
         debugPrint('⚠️ Notification background dismiss failed: $e');
       }
@@ -267,10 +269,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         theme: buildAppTheme(),
         onGenerateRoute: AppRouter.generateRoute,
         initialRoute: RouteNames.splash,
+        // Always boot at the splash screen. If the OS still hands us a
+        // launch URI as the initial route (some OEMs ignore the manifest
+        // flag), ignore it here — DeepLinkService (app_links) picks the
+        // same URI up via getInitialLink() and opens it after the app is
+        // fully initialised.
+        onGenerateInitialRoutes: (_) => [
+          AppRouter.generateRoute(const RouteSettings(name: RouteNames.splash)),
+        ],
         navigatorKey: MyApp.navigatorKey,
-        builder: (context, child) => IncomingCallBanner(
-          child: SimpleConnectionToast(child: child!),
-        ),
+        builder: (context, child) =>
+            IncomingCallBanner(child: SimpleConnectionToast(child: child!)),
       ),
     );
   }
@@ -364,9 +373,9 @@ Future<void> _initEverything() async {
 
     // Inbound deep links (moonlightstream.app/live/… + moonlight:// scheme).
     unawaited(
-      DeepLinkService.instance
-          .init()
-          .catchError((e) => debugPrint('⚠️ DeepLinkService: $e')),
+      DeepLinkService.instance.init().catchError(
+        (e) => debugPrint('⚠️ DeepLinkService: $e'),
+      ),
     );
 
     debugPrint('🎉 Background init complete');
@@ -417,14 +426,19 @@ Future<void> _reconcileVideoCallState() async {
   final sessionUuid = await CallKitService().checkForActiveAcceptedCall();
 
   if (sessionUuid != null) {
-    if (sessionUuid == _lastActiveNavigatedSessionUuid) return; // already handled
+    if (sessionUuid == _lastActiveNavigatedSessionUuid)
+      return; // already handled
     // Same debounce as the ringing-call branch below — CallKit's native
     // state can lag behind a call we JUST ended/resolved locally.
-    final recentlyResolved = sessionUuid == _lastLocallyResolvedSessionUuid &&
+    final recentlyResolved =
+        sessionUuid == _lastLocallyResolvedSessionUuid &&
         _lastLocallyResolvedAt != null &&
-        DateTime.now().difference(_lastLocallyResolvedAt!) < const Duration(seconds: 15);
+        DateTime.now().difference(_lastLocallyResolvedAt!) <
+            const Duration(seconds: 15);
     if (recentlyResolved) {
-      debugPrint('📞 [main] Skipping reconcile (accepted) — $sessionUuid was just resolved locally');
+      debugPrint(
+        '📞 [main] Skipping reconcile (accepted) — $sessionUuid was just resolved locally',
+      );
       return;
     }
     try {
@@ -441,7 +455,9 @@ Future<void> _reconcileVideoCallState() async {
     await prefs.remove('pending_join_session_uuid');
     if (pendingUuid != _lastActiveNavigatedSessionUuid) {
       try {
-        debugPrint('📞 [main] Joining pending call from notification accept: $pendingUuid');
+        debugPrint(
+          '📞 [main] Joining pending call from notification accept: $pendingUuid',
+        );
         sl<VideoCallBloc>().add(CallResumeAfterNotificationAccept(pendingUuid));
       } catch (e) {
         debugPrint('⚠️ Failed to join pending call: $e');
@@ -479,13 +495,19 @@ Future<void> _reconcileVideoCallState() async {
         // CallKit's native state can lag behind a resolve we JUST did
         // locally; without this, this exact tick can restart the whole
         // ringing flow (ringtone included) for a call already handled.
-        final recentlyResolved = ringingUuid == _lastLocallyResolvedSessionUuid &&
+        final recentlyResolved =
+            ringingUuid == _lastLocallyResolvedSessionUuid &&
             _lastLocallyResolvedAt != null &&
-            DateTime.now().difference(_lastLocallyResolvedAt!) < const Duration(seconds: 15);
+            DateTime.now().difference(_lastLocallyResolvedAt!) <
+                const Duration(seconds: 15);
         if (recentlyResolved) {
-          debugPrint('📞 [main] Skipping reconcile — $ringingUuid was just resolved locally');
+          debugPrint(
+            '📞 [main] Skipping reconcile — $ringingUuid was just resolved locally',
+          );
         } else {
-          debugPrint('📞 [main] Reconciling still-ringing call CallKit knows about: $ringingUuid');
+          debugPrint(
+            '📞 [main] Reconciling still-ringing call CallKit knows about: $ringingUuid',
+          );
           bloc.add(CallResumeFromNotification(ringingUuid));
         }
       }
@@ -679,7 +701,9 @@ Future<void> _setupFirebaseMessaging() async {
         try {
           sl<VideoCallRepository>().injectExternalEvent(msg.data);
         } catch (e) {
-          debugPrint('⚠️ Failed to route foreground video-call FCM message: $e');
+          debugPrint(
+            '⚠️ Failed to route foreground video-call FCM message: $e',
+          );
         }
         return;
       }

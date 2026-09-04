@@ -139,7 +139,7 @@ class AppRouter {
           ),
         );
 
-     case RouteNames.home:
+      case RouteNames.home:
         return MaterialPageRoute(
           builder: (context) => BlocProvider<VideoCallBloc>(
             // Single app-wide VideoCallBloc — safe to be eager (lazy: false)
@@ -429,65 +429,64 @@ class AppRouter {
           ),
         );
 
+      case RouteNames.postView:
+        {
+          final a = (settings.arguments as Map?) ?? const {};
+          final postId = (a['postId'] as String?) ?? 'demo-post-1';
+          final isOwner = (a['isOwner'] as bool?) ?? false;
+          final initialPost = a['initialPost'] as Post?; // ← NEW
 
-case RouteNames.postView:
-  {
-    final a = (settings.arguments as Map?) ?? const {};
-    final postId = (a['postId'] as String?) ?? 'demo-post-1';
-    final isOwner = (a['isOwner'] as bool?) ?? false;
-    final initialPost = a['initialPost'] as Post?; // ← NEW
-
-    if (postId.isEmpty) {
-      return MaterialPageRoute(
-        builder: (context) => const Scaffold(
-          body: Center(child: Text('Missing postId for PostView')),
-        ),
-      );
-    }
-
-    try {
-      return MaterialPageRoute(
-        builder: (context) => BlocProvider(
-          // NOTE: no more ..load() chained here — that used to force
-          // loading:true immediately after creation, which would have
-          // wiped out the seeded initialPost before it ever reached the
-          // screen. The cubit's constructor now handles both cases:
-          //  - initialPost != null → seeds state immediately, reconciles
-          //    silently in the background (see PostCubit._reconcileSilently)
-          //  - initialPost == null → falls through to calling load()
-          //    itself below, exactly like before (e.g. opened from a
-          //    push notification / deep link with no feed context)
-          create: (context) {
-            final cubit = sl<PostCubit>(
-              param1: postId,
-              param2: initialPost,
+          if (postId.isEmpty) {
+            return MaterialPageRoute(
+              builder: (context) => const Scaffold(
+                body: Center(child: Text('Missing postId for PostView')),
+              ),
             );
-            if (initialPost == null) cubit.load();
-            return cubit;
-          },
-          child: PostViewScreen(isOwner: isOwner, postId: postId),
-        ),
-        settings: settings,
-      );
-    } catch (e) {
-      debugPrint('❌ GetIt factory param failed: $e');
-      return MaterialPageRoute(
-        builder: (context) => BlocProvider(
-          create: (context) {
-            final cubit = PostCubit(
-              sl<PostRepository>(),
-              postId,
-              initialPost: initialPost,
+          }
+
+          try {
+            return MaterialPageRoute(
+              builder: (context) => BlocProvider(
+                // NOTE: no more ..load() chained here — that used to force
+                // loading:true immediately after creation, which would have
+                // wiped out the seeded initialPost before it ever reached the
+                // screen. The cubit's constructor now handles both cases:
+                //  - initialPost != null → seeds state immediately, reconciles
+                //    silently in the background (see PostCubit._reconcileSilently)
+                //  - initialPost == null → falls through to calling load()
+                //    itself below, exactly like before (e.g. opened from a
+                //    push notification / deep link with no feed context)
+                create: (context) {
+                  final cubit = sl<PostCubit>(
+                    param1: postId,
+                    param2: initialPost,
+                  );
+                  if (initialPost == null) cubit.load();
+                  return cubit;
+                },
+                child: PostViewScreen(isOwner: isOwner, postId: postId),
+              ),
+              settings: settings,
             );
-            if (initialPost == null) cubit.load();
-            return cubit;
-          },
-          child: PostViewScreen(isOwner: isOwner, postId: postId),
-        ),
-        settings: settings,
-      );
-    }
-  }
+          } catch (e) {
+            debugPrint('❌ GetIt factory param failed: $e');
+            return MaterialPageRoute(
+              builder: (context) => BlocProvider(
+                create: (context) {
+                  final cubit = PostCubit(
+                    sl<PostRepository>(),
+                    postId,
+                    initialPost: initialPost,
+                  );
+                  if (initialPost == null) cubit.load();
+                  return cubit;
+                },
+                child: PostViewScreen(isOwner: isOwner, postId: postId),
+              ),
+              settings: settings,
+            );
+          }
+        }
 
       case RouteNames.giftCoins:
         return MaterialPageRoute(
@@ -868,21 +867,28 @@ case RouteNames.postView:
 
       case RouteNames.videoCallDirectory:
         return MaterialPageRoute(
-          builder: (context) => AuthGuard(
-            child: const VideoCallDirectoryScreen(),
-          ),
+          builder: (context) =>
+              AuthGuard(child: const VideoCallDirectoryScreen()),
           settings: settings,
         );
 
       case RouteNames.videoCallSettings:
         return MaterialPageRoute(
-          builder: (context) => AuthGuard(
-            child: const VideoCallSettingsScreen(),
-          ),
+          builder: (context) =>
+              AuthGuard(child: const VideoCallSettingsScreen()),
           settings: settings,
         );
 
       default:
+        // A URL / deep-link path must never surface as an unknown route.
+        // app_links owns those; here we just boot normally.
+        final name = settings.name ?? '';
+        if (name.startsWith('http') ||
+            name.startsWith('moonlight:') ||
+            name.startsWith('/live/') ||
+            name.startsWith('/post/')) {
+          return generateRoute(const RouteSettings(name: RouteNames.splash));
+        }
         return MaterialPageRoute(
           builder: (context) => Scaffold(
             body: Center(child: Text('No route defined for ${settings.name}')),

@@ -95,6 +95,16 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
 
+            <!-- Deep links are handled entirely by the app_links plugin
+                 (DeepLinkService). Leave this OFF so the Flutter engine does
+                 NOT hijack `initialRoute` with the launch URI — that skipped
+                 the splash screen (so dependencies never finished loading)
+                 and dropped the raw URL into the Navigator as an unknown
+                 route ("No route defined for https://…/live/…"). -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
