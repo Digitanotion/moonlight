@@ -14,7 +14,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
+import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_post_card.dart';
@@ -261,90 +263,148 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               final double commentBarHeight = safeBottom + 56;
 
               return Stack(
-            fit: StackFit.expand,
-            children: [
-              FeedVideoPlayer(
-                post: post,
-                onOpenPost: () {},
-                enableTapToPlayPause: true,
-                muteIconTopOffset: MediaQuery.of(context).padding.top + 10,
-                initialMuted: _muted,
-                onMuteChanged: (muted) => setState(() => _muted = muted),
-                onAspectKnown: (_) {},
-                showProgressBar: true,
-                progressBarBottomInset: commentBarHeight,
-              ),
-
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 8,
-                left: 8,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.white,
+                fit: StackFit.expand,
+                children: [
+                  FeedVideoPlayer(
+                    post: post,
+                    onOpenPost: () {},
+                    enableTapToPlayPause: true,
+                    muteIconTopOffset: MediaQuery.of(context).padding.top + 10,
+                    initialMuted: _muted,
+                    onMuteChanged: (muted) => setState(() => _muted = muted),
+                    onAspectKnown: (_) {},
+                    showProgressBar: true,
+                    progressBarBottomInset: commentBarHeight,
                   ),
-                ),
-              ),
 
-              Positioned(
-                left: 16,
-                right: 88,
-                bottom: commentBarHeight + 16,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      post.author.name,
-                      style: const TextStyle(
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 8,
+                    left: 8,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
                         color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
                       ),
                     ),
-                    if (post.caption.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        post.caption,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13.5,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                  ),
 
-              Positioned(
-                right: 12,
-                bottom: commentBarHeight + 16,
-                child: BlocBuilder<FeedCubit, FeedState>(
-                  buildWhen: (p, n) => p.items != n.items,
-                  builder: (context, state) {
-                    final current =
-                        originalIndex >= 0 && originalIndex < state.items.length
-                        ? state.items[originalIndex]
-                        : post;
-                    return Column(
+                  Positioned(
+                    left: 16,
+                    right: 88,
+                    bottom: commentBarHeight + 16,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _VideoActionButton(
-                          icon: current.isLiked
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          color: current.isLiked ? Colors.red : Colors.white,
-                          label: '${current.likes}',
-                          onTap: () => context.read<FeedCubit>().toggleLikeAt(
-                            originalIndex,
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: post.author.id.isEmpty
+                              ? null
+                              : () => Navigator.of(context).pushNamed(
+                                  RouteNames.profileView,
+                                  arguments: {'userUuid': post.author.id},
+                                ),
+                          child: Text(
+                            post.author.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        _VideoActionButton(
-                          icon: Icons.mode_comment_rounded,
-                          color: Colors.white,
-                          label: '${current.commentsCount}',
+                        if (post.caption.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            post.caption,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  Positioned(
+                    right: 12,
+                    bottom: commentBarHeight + 16,
+                    child: BlocBuilder<FeedCubit, FeedState>(
+                      buildWhen: (p, n) => p.items != n.items,
+                      builder: (context, state) {
+                        final current =
+                            originalIndex >= 0 &&
+                                originalIndex < state.items.length
+                            ? state.items[originalIndex]
+                            : post;
+                        return Column(
+                          children: [
+                            _VideoActionButton(
+                              icon: current.isLiked
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              color: current.isLiked
+                                  ? Colors.red
+                                  : Colors.white,
+                              label: '${current.likes}',
+                              onTap: () => context
+                                  .read<FeedCubit>()
+                                  .toggleLikeAt(originalIndex),
+                            ),
+                            const SizedBox(height: 20),
+                            _VideoActionButton(
+                              icon: Icons.mode_comment_rounded,
+                              color: Colors.white,
+                              label: '${current.commentsCount}',
+                              onTap: () => CommentBottomSheet.show(
+                                context,
+                                postId: current.id,
+                                initialPost: current,
+                                onCountChanged: (n) => context
+                                    .read<FeedCubit>()
+                                    .setCommentsCountAt(originalIndex, n),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            _VideoActionButton(
+                              icon: Icons.ios_share_rounded,
+                              color: Colors.white,
+                              label: 'Share',
+                              onTap: () => ShareService.sharePost(current),
+                            ),
+                            if (isOwner) ...[
+                              const SizedBox(height: 20),
+                              _VideoActionButton(
+                                icon: Icons.edit_rounded,
+                                color: Colors.white,
+                                label: 'Edit',
+                                onTap: () => _editCaption(context, current),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                  // Fixed, slightly-transparent "Add a comment" bar.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: BlocBuilder<FeedCubit, FeedState>(
+                      buildWhen: (p, n) => p.items != n.items,
+                      builder: (context, state) {
+                        final current =
+                            originalIndex >= 0 &&
+                                originalIndex < state.items.length
+                            ? state.items[originalIndex]
+                            : post;
+                        return _VideoCommentBar(
+                          bottomInset: safeBottom,
                           onTap: () => CommentBottomSheet.show(
                             context,
                             postId: current.id,
@@ -353,50 +413,12 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                                 .read<FeedCubit>()
                                 .setCommentsCountAt(originalIndex, n),
                           ),
-                        ),
-                        if (isOwner) ...[
-                          const SizedBox(height: 20),
-                          _VideoActionButton(
-                            icon: Icons.edit_rounded,
-                            color: Colors.white,
-                            label: 'Edit',
-                            onTap: () => _editCaption(context, current),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ),
-
-              // Fixed, slightly-transparent "Add a comment" bar.
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: BlocBuilder<FeedCubit, FeedState>(
-                  buildWhen: (p, n) => p.items != n.items,
-                  builder: (context, state) {
-                    final current =
-                        originalIndex >= 0 && originalIndex < state.items.length
-                        ? state.items[originalIndex]
-                        : post;
-                    return _VideoCommentBar(
-                      bottomInset: safeBottom,
-                      onTap: () => CommentBottomSheet.show(
-                        context,
-                        postId: current.id,
-                        initialPost: current,
-                        onCountChanged: (n) => context
-                            .read<FeedCubit>()
-                            .setCommentsCountAt(originalIndex, n),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
             },
           );
         },
