@@ -20,4 +20,22 @@ class AppUser {
     required this.roleColor,
     this.isFollowing = false,
   });
+
+  AppUser copyWith({
+    String? id,
+    String? name,
+    String? avatarUrl,
+    String? countryFlagEmoji,
+    String? roleLabel,
+    String? roleColor,
+    bool? isFollowing,
+  }) => AppUser(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    countryFlagEmoji: countryFlagEmoji ?? this.countryFlagEmoji,
+    roleLabel: roleLabel ?? this.roleLabel,
+    roleColor: roleColor ?? this.roleColor,
+    isFollowing: isFollowing ?? this.isFollowing,
+  );
 }

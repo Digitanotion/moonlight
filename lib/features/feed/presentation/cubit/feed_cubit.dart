@@ -78,13 +78,15 @@ class FeedCubit extends Cubit<FeedState> {
     try {
       final page1 = await repo.fetchFeed(page: 1, perPage: _perPage);
       final hydrated = page1.data.map(_applyLocalLike).toList();
-      emit(state.copyWith(
-        items: hydrated,
-        initialLoading: false,
-        page: 1,
-        hasMore: page1.hasMore,
-        clearError: true,
-      ));
+      emit(
+        state.copyWith(
+          items: hydrated,
+          initialLoading: false,
+          page: 1,
+          hasMore: page1.hasMore,
+          clearError: true,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(initialLoading: false, error: apiErrorMessage(e)));
     }
@@ -97,12 +99,14 @@ class FeedCubit extends Cubit<FeedState> {
       final next = state.page + 1;
       final r = await repo.fetchFeed(page: next, perPage: _perPage);
       final hydrated = r.data.map(_applyLocalLike).toList();
-      emit(state.copyWith(
-        items: [...state.items, ...hydrated],
-        paging: false,
-        page: next,
-        hasMore: r.hasMore,
-      ));
+      emit(
+        state.copyWith(
+          items: [...state.items, ...hydrated],
+          paging: false,
+          page: next,
+          hasMore: r.hasMore,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(paging: false, error: apiErrorMessage(e)));
     }
@@ -140,10 +144,12 @@ class FeedCubit extends Cubit<FeedState> {
       emit(state.copyWith(items: [...state.items]..[index] = merged));
     } catch (e) {
       // Roll back on error
-      emit(state.copyWith(
-        items: [...state.items]..[index] = current,
-        error: apiErrorMessage(e),
-      ));
+      emit(
+        state.copyWith(
+          items: [...state.items]..[index] = current,
+          error: apiErrorMessage(e),
+        ),
+      );
     }
   }
 
@@ -152,10 +158,12 @@ class FeedCubit extends Cubit<FeedState> {
   void setCommentsCountAt(int index, int count) {
     if (index < 0 || index >= state.items.length) return;
     if (state.items[index].commentsCount == count) return;
-    emit(state.copyWith(
-      items: [...state.items]
-        ..[index] = state.items[index].copyWith(commentsCount: count),
-    ));
+    emit(
+      state.copyWith(
+        items: [...state.items]
+          ..[index] = state.items[index].copyWith(commentsCount: count),
+      ),
+    );
   }
 
   Future<void> shareAt(int index) async {
@@ -165,15 +173,19 @@ class FeedCubit extends Cubit<FeedState> {
     emit(state.copyWith(items: [...state.items]..[index] = optimistic));
     try {
       final shares = await repo.share(current.id);
-      emit(state.copyWith(
-        items: [...state.items]
-          ..[index] = optimistic.copyWith(shares: shares),
-      ));
+      emit(
+        state.copyWith(
+          items: [...state.items]
+            ..[index] = optimistic.copyWith(shares: shares),
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        items: [...state.items]..[index] = current,
-        error: apiErrorMessage(e),
-      ));
+      emit(
+        state.copyWith(
+          items: [...state.items]..[index] = current,
+          error: apiErrorMessage(e),
+        ),
+      );
     }
   }
 
@@ -185,18 +197,22 @@ class FeedCubit extends Cubit<FeedState> {
     final p = state.items[index];
 
     // Optimistic +1 immediately
-    emit(state.copyWith(
-      items: [...state.items]..[index] = p.copyWith(views: p.views + 1),
-    ));
+    emit(
+      state.copyWith(
+        items: [...state.items]..[index] = p.copyWith(views: p.views + 1),
+      ),
+    );
 
     try {
       final serverViews = await repo.recordView(p.id);
       // Update with actual server count if item still exists in list
       if (index < state.items.length) {
-        emit(state.copyWith(
-          items: [...state.items]
-            ..[index] = state.items[index].copyWith(views: serverViews),
-        ));
+        emit(
+          state.copyWith(
+            items: [...state.items]
+              ..[index] = state.items[index].copyWith(views: serverViews),
+          ),
+        );
       }
     } catch (_) {
       // Keep optimistic update on failure — don't roll back views
@@ -209,6 +225,24 @@ class FeedCubit extends Cubit<FeedState> {
     GetIt.I<LikeMemory>().setLiked(updated.id, updated.isLiked);
     final merged = _applyLocalLike(updated);
     emit(state.copyWith(items: [...state.items]..[index] = merged));
+  }
+
+  /// Marks every loaded post authored by [authorId] as followed, so the
+  /// avatar/follow badge stays hidden for that author everywhere in the
+  /// feed — including on a video page that gets disposed and recreated
+  /// (e.g. swiped past and back) — rather than only in one widget's own
+  /// local state, which would forget the follow the moment it remounts.
+  void markAuthorFollowed(String authorId) {
+    if (authorId.isEmpty) return;
+    var changed = false;
+    final updated = state.items.map((p) {
+      if (p.author.id == authorId && !p.author.isFollowing) {
+        changed = true;
+        return p.copyWith(author: p.author.copyWith(isFollowing: true));
+      }
+      return p;
+    }).toList();
+    if (changed) emit(state.copyWith(items: updated));
   }
 
   Future<void> refresh() => loadFirstPage();

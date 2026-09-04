@@ -587,7 +587,11 @@ class _FollowAvatarButton extends StatefulWidget {
 }
 
 class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
-  late bool _following = widget.author.isFollowing;
+  // Source of truth is the FeedCubit's own item (widget.author.isFollowing),
+  // NOT local state — a video page can be disposed and recreated as the
+  // user swipes past and back, which would otherwise forget the follow.
+  // _justFollowed only drives the brief "+"→check animation while the
+  // request is in flight and the cubit hasn't confirmed it yet.
   bool _busy = false;
   bool _justFollowed = false;
 
@@ -600,7 +604,7 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
   }
 
   Future<void> _follow() async {
-    if (_busy || _following) return;
+    if (_busy || widget.author.isFollowing) return;
     setState(() {
       _busy = true;
       _justFollowed = true; // optimistic: flips the badge to a check now
@@ -608,11 +612,12 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
     try {
       await sl<ProfileRepository>().followUser(widget.author.id);
       if (!mounted) return;
-      // Hold the check mark briefly so the animation reads clearly, then
-      // fade the whole badge away for good.
+      // Flip the shared feed state now so every card by this author (and
+      // this widget if it gets rebuilt/remounted) reflects it permanently.
+      context.read<FeedCubit>().markAuthorFollowed(widget.author.id);
+      // Hold the check mark briefly so the animation reads clearly before
+      // the badge fades away.
       await Future.delayed(const Duration(milliseconds: 650));
-      if (!mounted) return;
-      setState(() => _following = true);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -629,7 +634,7 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
   Widget build(BuildContext context) {
     if (widget.isOwner) return const SizedBox.shrink();
 
-    final showBadge = !_following;
+    final showBadge = !widget.author.isFollowing;
     final avatarUrl = widget.author.avatarUrl;
 
     return _TapBounce(
