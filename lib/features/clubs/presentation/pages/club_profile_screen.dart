@@ -117,7 +117,7 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
               SafeArea(
                 child: Column(
                   children: [
-                    _TopBar(),
+                    _TopBar(club: club),
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(16, 220, 16, 120),
@@ -496,15 +496,62 @@ class _GuideBubble extends StatelessWidget {
 /* ─────────────────── TOP BAR ─────────────────── */
 
 class _TopBar extends StatelessWidget {
+  const _TopBar({this.club});
+
+  final ClubProfile? club;
+
+  Future<void> _confirmLeave(BuildContext context) async {
+    final cubit = context.read<ClubProfileCubit>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        title: const Text('Leave club?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'You’ll stop receiving this club’s messages and updates. You can '
+          'rejoin any time.',
+          style: TextStyle(color: Colors.white.withOpacity(0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text(
+              'Leave',
+              style: TextStyle(
+                color: Color(0xFFFF6B6B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) cubit.leaveClub();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // "Leave" is only for a plain member — the owner must transfer / delete.
+    final canLeave = club != null && club!.isMember && !club!.isCreator;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: const [
-          Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
-          Text(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const Text(
             'Club Profile',
             style: TextStyle(
               color: Colors.white,
@@ -512,7 +559,34 @@ class _TopBar extends StatelessWidget {
               fontSize: 16,
             ),
           ),
-          SizedBox(width: 20),
+          canLeave
+              ? PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  color: AppColors.cardDark,
+                  onSelected: (v) {
+                    if (v == 'leave') _confirmLeave(context);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem<String>(
+                      value: 'leave',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.logout_rounded,
+                            size: 18,
+                            color: Color(0xFFFF6B6B),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Leave club',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox(width: 48),
         ],
       ),
     );

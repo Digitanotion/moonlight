@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/styled_banner_ad.dart';
+import 'package:moonlight/features/clubs/domain/entities/club.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/suggested_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/suggested_clubs_state.dart';
 import 'package:moonlight/features/clubs/presentation/pages/widgets/club_skeletons.dart';
@@ -234,6 +235,7 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
                 club: state.clubs[i],
                 joining: false,
                 onJoin: () {},
+                onLeave: () => _confirmLeave(state.clubs[i]),
               ),
             ),
           );
@@ -247,6 +249,47 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
     if (!mounted) return;
     context.read<SuggestedClubsCubit>().markJoined(clubUuid);
     context.read<MyClubsCubit>().load();
+  }
+
+  Future<void> _confirmLeave(Club club) async {
+    final myClubs = context.read<MyClubsCubit>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        title: const Text('Leave club?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'You’ll stop receiving "${club.name}"’s messages and updates. '
+          'You can rejoin any time.',
+          style: TextStyle(color: Colors.white.withOpacity(0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text(
+              'Leave',
+              style: TextStyle(
+                color: Color(0xFFFF6B6B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final left = await myClubs.leaveClub(club.uuid);
+    if (!mounted) return;
+    if (left) {
+      TopSnack.success(context, 'You left ${club.name}');
+    } else {
+      TopSnack.error(context, 'Could not leave the club. Please try again.');
+    }
   }
 }
 

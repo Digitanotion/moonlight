@@ -42,40 +42,52 @@ class DiscoverClubsCubit extends Cubit<DiscoverClubsState> {
 
     try {
       await repo.joinClub(clubUuid);
-
-      final updated = state.clubs.map((c) {
-        if (c.uuid == clubUuid) {
-          return c.copyWith(isMember: true);
-        }
-        return c;
-      }).toList();
-
-      emit(
-        state.copyWith(
-          clubs: updated,
-          successMessage: '🎉 You have joined the club',
-        ),
-      );
+      _markJoined(clubUuid, '🎉 You have joined the club');
     } on DioException catch (e) {
-      String message = 'Unable to join club';
+      final code = e.response?.statusCode ?? 0;
 
-      if (e.response?.statusCode == 409) {
-        message = 'You are already a member of this club';
-      } else if (e.response?.statusCode == 403) {
-        message = 'You are not allowed to join this club';
-      } else if (e.response?.statusCode == 404) {
-        message = 'Club not found';
+      if (code == 409) {
+        // Already a member — that's a success from the user's point of view.
+        _markJoined(clubUuid, null);
+      } else if (code == 403) {
+        emit(
+          state.copyWith(errorMessage: 'You are not allowed to join this club'),
+        );
+      } else if (code == 404) {
+        emit(state.copyWith(errorMessage: 'Club not found'));
+      } else {
+        // 5xx / timeout / network: the request may well have gone through
+        // server-side (a failing post-commit notification used to 500 a
+        // successful join). Verify against "my clubs" before crying wolf.
+        await _verifyJoin(clubUuid);
       }
-
-      emit(state.copyWith(errorMessage: message));
     } catch (_) {
-      emit(
-        state.copyWith(errorMessage: 'Something went wrong. Please try again.'),
-      );
+      await _verifyJoin(clubUuid);
     } finally {
-      final next = {...state.joining}..remove(clubUuid);
-      emit(state.copyWith(joining: next));
+      emit(state.copyWith(joining: {...state.joining}..remove(clubUuid)));
     }
+  }
+
+  void _markJoined(String clubUuid, String? successMessage) {
+    final updated = state.clubs
+        .map((c) => c.uuid == clubUuid ? c.copyWith(isMember: true) : c)
+        .toList();
+    emit(state.copyWith(clubs: updated, successMessage: successMessage));
+  }
+
+  Future<void> _verifyJoin(String clubUuid) async {
+    try {
+      final mine = await repo.getMyClubs();
+      if (mine.any((c) => c.uuid == clubUuid)) {
+        _markJoined(clubUuid, '🎉 You have joined the club');
+        return;
+      }
+    } catch (_) {
+      /* fall through to the error below */
+    }
+    emit(
+      state.copyWith(errorMessage: 'Something went wrong. Please try again.'),
+    );
   }
 
   /// Optional helper to clear snack triggers after display

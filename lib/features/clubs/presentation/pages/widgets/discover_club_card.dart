@@ -10,13 +10,18 @@ import 'package:moonlight/features/clubs/presentation/pages/widgets/delete_club_
 ///
 /// Layout: cover thumbnail · name + member count + role chip · trailing
 /// action. The trailing action is context-aware:
-///   * club owner  → "Manage" (opens the manage sheet)
-///   * not a member → "Join"  (calls [onJoin], shows a spinner while [joining])
-///   * member       → a chevron
+///   * club owner   → "Manage" (opens the manage sheet)
+///   * not a member → "Join"   (calls [onJoin], shows a spinner while [joining])
+///   * member       → a "•••" menu with **Leave club** when [onLeave] is
+///                    given, otherwise a plain chevron
 class DiscoverClubCard extends StatelessWidget {
   final Club club;
   final bool joining;
   final VoidCallback onJoin;
+
+  /// Only offered to a non-owner member. Omit (or leave null) to fall back
+  /// to a plain chevron — e.g. in contexts where leaving isn't relevant.
+  final VoidCallback? onLeave;
 
   /// Tighter paddings + no description, for narrow / horizontal contexts.
   final bool compact;
@@ -26,6 +31,7 @@ class DiscoverClubCard extends StatelessWidget {
     required this.club,
     required this.joining,
     required this.onJoin,
+    this.onLeave,
     this.compact = false,
   });
 
@@ -149,10 +155,35 @@ class DiscoverClubCard extends StatelessWidget {
         onTap: joining ? null : onJoin,
       );
     }
-    return Icon(
-      Icons.chevron_right_rounded,
-      color: Colors.white.withOpacity(0.3),
-      size: 22,
+    if (onLeave == null) {
+      return Icon(
+        Icons.chevron_right_rounded,
+        color: Colors.white.withOpacity(0.3),
+        size: 22,
+      );
+    }
+    return PopupMenuButton<String>(
+      icon: Icon(
+        Icons.more_vert_rounded,
+        color: Colors.white.withOpacity(0.5),
+        size: 20,
+      ),
+      color: AppColors.cardDark,
+      onSelected: (v) {
+        if (v == 'leave') onLeave!();
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem<String>(
+          value: 'leave',
+          child: Row(
+            children: [
+              Icon(Icons.logout_rounded, size: 18, color: Color(0xFFFF6B6B)),
+              SizedBox(width: 10),
+              Text('Leave club', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
