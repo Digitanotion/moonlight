@@ -15,6 +15,11 @@ class LiveItem {
   final int? premiumFee;
   final bool? isFollowed;
 
+  /// The host's profile photo. Distinct from [coverUrl] (a custom stream
+  /// thumbnail, when the host set one) — the live card falls back to this,
+  /// then to initials, when there's no cover image.
+  final String? hostAvatarUrl;
+
   const LiveItem({
     required this.id,
     required this.uuid,
@@ -31,5 +36,6 @@ class LiveItem {
     required this.isPremium,
     required this.premiumFee,
     this.isFollowed,
+    this.hostAvatarUrl,
   });
 }

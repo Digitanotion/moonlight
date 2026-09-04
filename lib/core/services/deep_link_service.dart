@@ -146,7 +146,11 @@ class DeepLinkService {
       id: id,
       uuid: (data['uuid'] ?? ref).toString(),
       channel: channel,
-      coverUrl: (host['avatar_url'] ?? host['avatar'])?.toString(),
+      // /status doesn't return a stream cover — only the host's avatar. Put
+      // it in hostAvatarUrl (not coverUrl) so the card's initials fallback
+      // still kicks in correctly for hosts with no avatar either.
+      coverUrl: null,
+      hostAvatarUrl: (host['avatar_url'] ?? host['avatar'])?.toString(),
       handle: slug.isNotEmpty ? '@$slug' : '@host',
       role: 'Host',
       countryIso2: null,

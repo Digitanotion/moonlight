@@ -130,7 +130,8 @@ class _LiveNowSectionState extends State<LiveNowSection> {
           return LayoutBuilder(
             builder: (_, box) {
               final cols = _calcColumns(box.maxWidth);
-              final ratio = 9 / 14;
+              final ratio =
+                  9 / 12; // was 9/14 — a little shorter, flatter tiles
               return RefreshIndicator(
                 onRefresh: _onRefresh,
                 child: GridView.builder(
@@ -186,7 +187,7 @@ class _ShimmerGrid extends StatelessWidget {
             crossAxisCount: cols,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 9 / 14,
+            childAspectRatio: 9 / 12,
           ),
           itemCount: cols * 3,
           itemBuilder: (_, __) => Shimmer(

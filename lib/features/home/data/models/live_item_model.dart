@@ -18,6 +18,7 @@ class LiveItemModel extends LiveItem {
     required super.hostUuid,
     required super.isPremium,
     required super.premiumFee,
+    super.hostAvatarUrl,
   });
 
   factory LiveItemModel.fromJson(Map<String, dynamic> j) {
@@ -45,6 +46,9 @@ class LiveItemModel extends LiveItem {
       hostUuid: (host['host_uuid'] as String?) ?? 'Host',
       isPremium: j['is_premium'] as int,
       premiumFee: j['premium_fee'] as int,
+      hostAvatarUrl: (host['avatar_url'] as String?)?.trim().isNotEmpty == true
+          ? host['avatar_url'] as String
+          : null,
     );
   }
 }

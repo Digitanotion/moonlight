@@ -353,7 +353,7 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
         title: item.title ?? '',
         subtitle: '',
         badge: item.role,
-        avatarUrl: item.coverUrl ?? '',
+        avatarUrl: item.coverUrl ?? item.hostAvatarUrl ?? '',
         isFollowed: item.isFollowed ?? false,
       ),
       startedAt: item.startedAt != null
@@ -373,7 +373,7 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       'channel': item.channel,
       'hostUuid': item.hostUuid,
       'hostName': item.handle.replaceFirst('@', ''),
-      'hostAvatar': item.coverUrl,
+      'hostAvatar': item.coverUrl ?? item.hostAvatarUrl,
       'title': item.title,
       'startedAt': item.startedAt,
       'role': item.role,
