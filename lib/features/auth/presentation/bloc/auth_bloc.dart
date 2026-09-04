@@ -47,6 +47,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.tokenRegistrationService,
   }) : super(AuthInitial()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
+    on<SilentUserRefreshRequested>(_onSilentUserRefresh);
     on<LoginRequested>(_onLoginRequested);
     on<LoginWithEmailRequested>(_onLoginWithEmailRequested);
     on<SignUpRequested>(_onSignUpRequested);
@@ -87,6 +88,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthUnauthenticated());
       }
     });
+  }
+
+  /// Background profile refresh. Never emits [AuthLoading] and never changes
+  /// the authenticated/unauthenticated status — it only swaps in a fresher
+  /// [User] when one comes back. Anything else is silently ignored.
+  Future<void> _onSilentUserRefresh(
+    SilentUserRefreshRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is! AuthAuthenticated) return;
+
+    final result = await getCurrentUser();
+    result.fold(
+      (failure) => debugPrint(
+        'AuthBloc: silent user refresh failed (ignored) — ${failure.message}',
+      ),
+      (user) {
+        currentUserService.setUser(user);
+        // AuthAuthenticated.props == [user]; an unchanged profile makes this
+        // a no-op (Equatable), a changed one pushes it to every listener.
+        if (state is AuthAuthenticated) emit(AuthAuthenticated(user));
+      },
+    );
   }
 
   Future<void> _onLoginRequested(

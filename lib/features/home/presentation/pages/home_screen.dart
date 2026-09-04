@@ -9,6 +9,7 @@ import 'package:moonlight/core/services/service_registration_manager.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/update_prompt.dart';
+import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/section_header.dart';
@@ -75,6 +76,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // user was away. Soft prompts stay to launch-time only (not naggy).
       if (mounted) {
         maybePromptForUpdate(context, force: true, onlyForced: true);
+      }
+      // Silently refresh the signed-in user's profile in the background so
+      // cached fields (avatar, gender, verification, video-call flags, …)
+      // stay current. No loading state, never blocks — this replaces the old
+      // per-navigation AuthGuard re-check.
+      if (mounted) {
+        try {
+          context.read<AuthBloc>().add(const SilentUserRefreshRequested());
+        } catch (_) {}
       }
     }
   }

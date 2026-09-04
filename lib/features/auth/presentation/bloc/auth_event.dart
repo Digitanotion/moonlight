@@ -9,6 +9,14 @@ abstract class AuthEvent extends Equatable {
 
 class CheckAuthStatusEvent extends AuthEvent {}
 
+/// Refresh the signed-in user's profile from the server **without** emitting a
+/// loading state. Used for background refreshes (e.g. on app resume) so the
+/// cached profile stays current without ever gating the UI behind a spinner.
+/// A failure is swallowed — a background refresh never logs anyone out.
+class SilentUserRefreshRequested extends AuthEvent {
+  const SilentUserRefreshRequested();
+}
+
 class LoginRequested extends AuthEvent {
   final String email;
   final String password;
