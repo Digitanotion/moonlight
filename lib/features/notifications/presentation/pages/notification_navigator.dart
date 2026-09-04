@@ -5,6 +5,7 @@
 // push notification tap (so routing logic lives in one place).
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/notifications/data/models/notification_model.dart';
 
@@ -38,10 +39,7 @@ class NotificationNavigator {
         Navigator.pushNamed(
           context,
           RouteNames.profileView,
-          arguments: {
-            'userUuid': actorUuid,
-            'user_slug': n.actor?.slug ?? '',
-          },
+          arguments: {'userUuid': actorUuid, 'user_slug': n.actor?.slug ?? ''},
         );
         return true;
 
@@ -69,10 +67,30 @@ class NotificationNavigator {
         Navigator.pushNamed(context, RouteNames.accountSettings);
         return true;
 
-      // ── Unhandled — don't navigate ─────────────────────────────
+      // ── Admin broadcasts (Send Notification page) ──────────────────
+      // Every admin type is prefixed "admin." (general/system_alert/
+      // promotion/security/update/maintenance) — none of them map to an
+      // in-app screen, so the only thing to do on tap is open the link the
+      // admin attached, if any.
       default:
+        if (n.actionUrl.isNotEmpty) {
+          _openLink(n.actionUrl);
+          return true;
+        }
         return false;
     }
+  }
+
+  /// Opens an admin-authored action_url. A `moonlight://` link round-trips
+  /// through the OS back into this app's own intent filter, so
+  /// DeepLinkService ends up handling it exactly like a shared link; a
+  /// plain https URL just opens in the browser.
+  static Future<void> _openLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   /// Extract the post UUID from meta or action_url.

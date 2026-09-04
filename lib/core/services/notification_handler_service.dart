@@ -1,6 +1,7 @@
 // lib/core/services/notification_handler_service.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_from_notification.dart';
@@ -67,9 +68,25 @@ class NotificationHandlerService {
         _handleVideoCallAcceptedNotification(payload);
         break;
 
+      // Admin broadcasts (Send Notification page) — "admin.general",
+      // "admin.promotion", etc. None map to an in-app screen; open the
+      // link the admin attached, if any.
       default:
-        print('⚠️ Unknown notification type: $type');
+        final actionUrl = payload['action_url']?.toString() ?? '';
+        if (actionUrl.isNotEmpty) {
+          _openLink(actionUrl);
+        } else {
+          print('⚠️ Unknown notification type: $type');
+        }
     }
+  }
+
+  Future<void> _openLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   void _handleLiveStreamNotification(Map<String, dynamic> payload) {
