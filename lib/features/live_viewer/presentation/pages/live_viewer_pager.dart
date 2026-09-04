@@ -43,7 +43,8 @@ import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.d
 import 'package:moonlight/features/home/domain/entities/live_item.dart';
 import 'package:moonlight/features/live_viewer/data/pool_rtc_resolver.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
-import 'package:moonlight/features/live_viewer/domain/entities.dart' show HostInfo;
+import 'package:moonlight/features/live_viewer/domain/entities.dart'
+    show HostInfo;
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/live_stream_service.dart';
@@ -234,9 +235,13 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
       // still polling even after the whole pager (not just one page) is
       // closed — the earlier fix only handled swiping between pages within
       // an active session, never closing the pager entirely.
-      try { repo.pauseHealthCheck(); } catch (_) {}
+      try {
+        repo.pauseHealthCheck();
+      } catch (_) {}
       repo.keepAlive = false;
-      try { repo.dispose(); } catch (_) {}
+      try {
+        repo.dispose();
+      } catch (_) {}
     }
 
     // Leave all Agora connections so audio/video stops.
@@ -306,12 +311,16 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
         nearestPage < _repos.length) {
       // Swipe back: reset Pusher wiring so ensureWiredOnce re-subscribes.
       final repo = _repos[nearestPage];
-      debugPrint('🔄 [Pager] Swipe back to page $nearestPage — resetting wiring');
+      debugPrint(
+        '🔄 [Pager] Swipe back to page $nearestPage — resetting wiring',
+      );
       repo.resetWiring();
     }
-      if (previousPage >= 0 && previousPage < _repos.length && previousPage != nearestPage) {
-    _repos[previousPage].pauseHealthCheck();
-  }
+    if (previousPage >= 0 &&
+        previousPage < _repos.length &&
+        previousPage != nearestPage) {
+      _repos[previousPage].pauseHealthCheck();
+    }
     // Wire the newly-visible page's non-Agora concerns (Pusher/chat/health).
     if (nearestPage >= 0 && nearestPage < _repos.length) {
       _repos[nearestPage].ensureWiredOnce();
@@ -375,69 +384,41 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     };
   }
 
-  // ── Seamless wrap-around ─────────────────────────────────────────────
-  //
-  // When the viewer swipes past the last stream, silently loop back to the
-  // first one instead of dead-ending — "so the users will not know that the
-  // profiles have finished" (product spec item 15).
-  bool _wrapping = false;
-
-  bool _handleScrollNotification(ScrollNotification n) {
-    if (_wrapping || widget.items.length < 2) return false;
-    final lastIndex = widget.items.length - 1;
-
-    // Overscroll past the bottom edge while sitting on the last page.
-    if (n is OverscrollNotification &&
-        n.overscroll > 0 &&
-        _currentPage >= lastIndex) {
-      _wrapping = true;
-      // Defer so we don't mutate the controller mid-scroll-notification.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_controller.hasClients) {
-          _wrapping = false;
-          return;
-        }
-        _controller.jumpToPage(0);
-        _wrapping = false;
-      });
-    }
-    return false;
-  }
-
   Widget _buildViewerContent() {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: NotificationListener<ScrollNotification>(
-        onNotification: _handleScrollNotification,
-        child: PageView.builder(
-          controller: _controller,
-          scrollDirection: Axis.vertical,
-          physics: const PageScrollPhysics(),
-          itemCount: widget.items.length,
-          itemBuilder: (context, i) {
-            final repo = _repos[i];
-            final routeArgs = _routeArgsForIndex(i);
-            return BlocProvider<ViewerBloc>(
-              create: (_) => ViewerBloc(
-                repo,
-                agoraViewerService: sl<AgoraViewerService>(),
-                liveStreamService: sl<LiveStreamService>(),
-                networkMonitorService: null,
-                reconnectionService: null,
-                roleChangeService: sl<RoleChangeService>(),
+      // The pager deliberately dead-ends: reaching the last stream stops, and
+      // the viewer scrolls back up to revisit earlier streams. (An earlier
+      // build silently wrapped past the last stream back to the first — that
+      // "endless" behaviour was reverted at the client's request.)
+      body: PageView.builder(
+        controller: _controller,
+        scrollDirection: Axis.vertical,
+        physics: const PageScrollPhysics(),
+        itemCount: widget.items.length,
+        itemBuilder: (context, i) {
+          final repo = _repos[i];
+          final routeArgs = _routeArgsForIndex(i);
+          return BlocProvider<ViewerBloc>(
+            create: (_) => ViewerBloc(
+              repo,
+              agoraViewerService: sl<AgoraViewerService>(),
+              liveStreamService: sl<LiveStreamService>(),
+              networkMonitorService: null,
+              reconnectionService: null,
+              roleChangeService: sl<RoleChangeService>(),
+            ),
+            child: LiveViewerScreen(
+              repository: repo,
+              routeArgs: routeArgs,
+              pool: _pool,
+              channelId: widget.items[i].channel,
+              onPremiumUnlocked: () => _pool.refreshCurrentSlot(
+                () => _resolver.resolve(widget.items, i, forceRefresh: true),
               ),
-              child: LiveViewerScreen(
-                repository: repo,
-                routeArgs: routeArgs,
-                pool: _pool,
-                channelId: widget.items[i].channel,
-                onPremiumUnlocked: () => _pool.refreshCurrentSlot(
-                  () => _resolver.resolve(widget.items, i, forceRefresh: true),
-                ),
-              ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -454,11 +435,15 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     if (minimized) {
       final maxX = (sz.width - _miniW - 12).clamp(12.0, double.infinity);
       final minY = safe.top + 12;
-      final maxY = (sz.height - _miniH - 12 - safe.bottom - 64)
-          .clamp(minY, double.infinity);
+      final maxY = (sz.height - _miniH - 12 - safe.bottom - 64).clamp(
+        minY,
+        double.infinity,
+      );
       final pos = _miniOffset ?? Offset(maxX, maxY);
-      final clamped =
-          Offset(pos.dx.clamp(12.0, maxX), pos.dy.clamp(minY, maxY));
+      final clamped = Offset(
+        pos.dx.clamp(12.0, maxX),
+        pos.dy.clamp(minY, maxY),
+      );
       target = Rect.fromLTWH(clamped.dx, clamped.dy, _miniW, _miniH);
     } else {
       target = Rect.fromLTWH(0, 0, sz.width, sz.height);
@@ -483,8 +468,8 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
             onTap: minimized ? MiniPlayerController.instance.expand : null,
             onPanUpdate: minimized
                 ? (d) => setState(() {
-                      _miniOffset = (_miniOffset ?? target.topLeft) + d.delta;
-                    })
+                    _miniOffset = (_miniOffset ?? target.topLeft) + d.delta;
+                  })
                 : null,
             child: Material(
               elevation: minimized ? 14 : 0,
@@ -518,10 +503,14 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
-                            minWidth: 30, minHeight: 30),
+                          minWidth: 30,
+                          minHeight: 30,
+                        ),
                         iconSize: 16,
-                        icon: const Icon(Icons.close_rounded,
-                            color: Colors.white),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
                         onPressed: () {
                           MiniPlayerController.instance.expand();
                           final nav = Navigator.of(context);
@@ -529,8 +518,7 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
                         },
                       ),
                     ),
-                    const Positioned(
-                        left: 6, bottom: 6, child: _MiniLiveDot()),
+                    const Positioned(left: 6, bottom: 6, child: _MiniLiveDot()),
                   ],
                 ],
               ),
@@ -638,12 +626,15 @@ class _MiniLiveDot extends StatelessWidget {
         children: [
           Icon(Icons.circle, color: Colors.redAccent, size: 7),
           SizedBox(width: 4),
-          Text('LIVE',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5)),
+          Text(
+            'LIVE',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
         ],
       ),
     );
