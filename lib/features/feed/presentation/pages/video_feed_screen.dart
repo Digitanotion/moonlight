@@ -385,7 +385,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                             ),
                             const SizedBox(height: 18),
                             _VideoActionButton(
-                              icon: Icons.ios_share_rounded,
+                              icon: Icons.redo_rounded,
                               color: Colors.white,
                               label: 'Share',
                               onTap: () => ShareService.sharePost(current),
@@ -636,15 +636,15 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
       onTap: _openProfile,
       scaleDown: 0.9,
       child: SizedBox(
-        width: 50,
-        height: 50,
+        width: 56,
+        height: 56,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Container(
-              width: 46,
-              height: 46,
-              margin: const EdgeInsets.all(2),
+              width: 48,
+              height: 48,
+              margin: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
@@ -675,33 +675,47 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
                 ),
               ),
             ),
-            AnimatedOpacity(
-              opacity: showBadge ? 1 : 0,
-              duration: const Duration(milliseconds: 420),
-              curve: Curves.easeOut,
-              child: Positioned(
-                right: -2,
-                bottom: -2,
-                child: _TapBounce(
-                  onTap: showBadge ? _follow : null,
-                  scaleDown: 0.8,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.primary,
-                      border: Border.all(color: Colors.black, width: 1.4),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      transitionBuilder: (child, anim) =>
-                          ScaleTransition(scale: anim, child: child),
-                      child: Icon(
-                        _justFollowed ? Icons.check_rounded : Icons.add_rounded,
-                        key: ValueKey(_justFollowed),
-                        color: Colors.white,
-                        size: 13,
+            // Positioned must sit directly under Stack — the fade lives on
+            // the badge's own child instead, so Flutter never rejects this
+            // as a misplaced ParentDataWidget.
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: IgnorePointer(
+                ignoring: !showBadge,
+                child: AnimatedOpacity(
+                  opacity: showBadge ? 1 : 0,
+                  duration: const Duration(milliseconds: 420),
+                  curve: Curves.easeOut,
+                  child: _TapBounce(
+                    onTap: showBadge ? _follow : null,
+                    scaleDown: 0.78,
+                    child: Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary,
+                        border: Border.all(color: Colors.black, width: 1.6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withOpacity(0.5),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder: (child, anim) =>
+                            ScaleTransition(scale: anim, child: child),
+                        child: Icon(
+                          _justFollowed
+                              ? Icons.check_rounded
+                              : Icons.add_rounded,
+                          key: ValueKey(_justFollowed),
+                          color: Colors.white,
+                          size: 17,
+                        ),
                       ),
                     ),
                   ),
