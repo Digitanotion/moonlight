@@ -206,44 +206,58 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // Reconnection banner
                 // _buildReconnectBanner(),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
                     children: [
-                      const HomeAppBar(),
-                      const SizedBox(height: 8),
-                      const EarnCashBanner(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const HomeAppBar(),
+                          const SizedBox(height: 8),
 
-                      // Header row: SectionHeader + See Posts
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                        child: Row(
-                          children: [
-                            const Expanded(
-                              child: SectionHeader(
-                                title: 'Live Now',
-                                trailingFilter: true,
-                              ),
+                          // Header row: SectionHeader + See Posts
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20.0,
                             ),
-                            TextButton(
-                              onPressed: () => Navigator.pushNamed(
-                                context,
-                                RouteNames.postsPage,
-                              ),
-                              child: const Text(
-                                'See Posts',
-                                style: TextStyle(
-                                  color: AppColors.primary_,
-                                  fontWeight: FontWeight.w900,
+                            child: Row(
+                              children: [
+                                const Expanded(
+                                  child: SectionHeader(
+                                    title: 'Live Now',
+                                    trailingFilter: true,
+                                  ),
                                 ),
-                              ),
+                                TextButton(
+                                  onPressed: () => Navigator.pushNamed(
+                                    context,
+                                    RouteNames.postsPage,
+                                  ),
+                                  child: const Text(
+                                    'See Posts',
+                                    style: TextStyle(
+                                      color: AppColors.primary_,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+                          ),
+                          const SizedBox(height: 8),
 
-                      // Vertical grid feed (pull-to-refresh inside)
-                      const LiveNowSection(),
+                          // Vertical grid feed (pull-to-refresh inside)
+                          const LiveNowSection(),
+                        ],
+                      ),
+
+                      // Floating — sits fixed above the grid, doesn't scroll
+                      // away with it, always reachable.
+                      const Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 8,
+                        child: EarnCashBanner(),
+                      ),
                     ],
                   ),
                 ),
