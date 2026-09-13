@@ -63,5 +63,7 @@ class RouteNames {
   static const String clubPendingRequests = '/club/pending-requests';
   static const String videoCallDirectory = '/video-call/directory';
   static const String videoCallSettings = '/video-call/settings';
+  static const String dailyTasks = '/offerwall/daily-tasks';
+  static const String offerwallDashboard = '/offerwall/dashboard';
   // static const transactionReceipt = '/transactionReceipt';
 }

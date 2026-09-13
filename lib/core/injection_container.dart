@@ -47,6 +47,8 @@ import 'package:moonlight/features/chat/domain/repositories/chat_repository.dart
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
 import 'package:moonlight/features/clubs/data/datasources/club_income_remote_data_source.dart';
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
+import 'package:moonlight/features/offerwall/data/datasources/offerwall_remote_data_source.dart';
+import 'package:moonlight/features/offerwall/presentation/cubit/offerwall_cubit.dart';
 import 'package:moonlight/features/clubs/data/datasources/clubs_remote_data_source.dart';
 import 'package:moonlight/features/clubs/data/repositories/club_income_repository_impl.dart';
 import 'package:moonlight/features/clubs/data/repositories/clubs_repository_impl.dart';
@@ -568,6 +570,7 @@ Future<void> _initFullGraph() async {
   _initNotificationsModule();
   _initSettingsModule();
   _initClubsModule();
+  _initOfferwallModule();
   _initLiveModule(); // registers AgoraService, ParticipantsRepository
   _initVideoCallModule(); // registers VideoCallAgoraService, VideoCallRepository, VideoCallBloc
   _initWalletModule();
@@ -816,6 +819,15 @@ void _initClubsModule() {
   }
 }
 
+void _initOfferwallModule() {
+  sl.registerLazySingleton<OfferwallRemoteDataSource>(
+    () => OfferwallRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
+  );
+  if (!sl.isRegistered<OfferwallCubit>()) {
+    sl.registerFactory<OfferwallCubit>(() => OfferwallCubit(sl()));
+  }
+}
+
 void _initLiveModule() {
   _reg<AgoraService>(() => AgoraService());
   _reg<CameraService>(() => RealCameraService());
@@ -866,7 +878,6 @@ void _initLiveModule() {
   }
 }
 
-
 void _initVideoCallModule() {
   // VideoCallAgoraService — factory, NOT singleton. A fresh engine per
   // call, since AgoraService (livestream host) may already be active on
@@ -893,16 +904,17 @@ void _initVideoCallModule() {
   // screen is open, provide ONE long-lived VideoCallBloc high in the
   // widget tree (e.g. alongside your root MaterialApp/authenticated shell)
   // rather than only creating one inside the directory/call screens.
-if (!sl.isRegistered<VideoCallBloc>()) {
-  sl.registerLazySingleton<VideoCallBloc>(
-    () => VideoCallBloc(
-      sl<VideoCallRepository>(),
-      sl<VideoCallAgoraService>(),
-      sl<RuntimeConfig>(),
-    ),
-  );
+  if (!sl.isRegistered<VideoCallBloc>()) {
+    sl.registerLazySingleton<VideoCallBloc>(
+      () => VideoCallBloc(
+        sl<VideoCallRepository>(),
+        sl<VideoCallAgoraService>(),
+        sl<RuntimeConfig>(),
+      ),
+    );
+  }
 }
-}
+
 void _initWalletModule() {
   _reg<RemoteWalletDataSource>(
     () => RemoteWalletDataSource(client: sl<Dio>(instanceName: 'mainDio')),

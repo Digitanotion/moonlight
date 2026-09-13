@@ -14,6 +14,7 @@ import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bl
 import '../widgets/home_app_bar.dart';
 import '../widgets/section_header.dart';
 import '../widgets/live_now_section.dart';
+import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 import '../widgets/bottom_nav.dart';
 import '../../../../core/injection_container.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -210,6 +211,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                       const HomeAppBar(),
                       const SizedBox(height: 8),
+                      const EarnCashBanner(),
 
                       // Header row: SectionHeader + See Posts
                       Padding(

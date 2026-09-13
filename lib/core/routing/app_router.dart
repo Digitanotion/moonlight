@@ -43,6 +43,8 @@ import 'package:moonlight/features/clubs/presentation/pages/create_club_screen.d
 import 'package:moonlight/features/clubs/presentation/pages/discover_clubs_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/edit_club_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/support_club_page.dart';
+import 'package:moonlight/features/offerwall/presentation/pages/daily_tasks_screen.dart';
+import 'package:moonlight/features/offerwall/presentation/pages/offerwall_dashboard_screen.dart';
 import 'package:moonlight/features/create_post/presentation/cubit/create_post_cubit.dart';
 import 'package:moonlight/features/create_post/presentation/pages/create_post_screen.dart';
 import 'package:moonlight/features/edit_profile/presentation/cubit/edit_profile_cubit.dart';
@@ -876,6 +878,19 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (context) =>
               AuthGuard(child: const VideoCallSettingsScreen()),
+          settings: settings,
+        );
+
+      case RouteNames.dailyTasks:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(child: const DailyTasksScreen()),
+          settings: settings,
+        );
+
+      case RouteNames.offerwallDashboard:
+        return MaterialPageRoute(
+          builder: (context) =>
+              AuthGuard(child: const OfferwallDashboardScreen()),
           settings: settings,
         );
 
