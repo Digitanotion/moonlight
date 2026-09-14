@@ -14,6 +14,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/utils/countries.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/video_feed_screen.dart';
@@ -21,8 +22,8 @@ import 'package:moonlight/features/home/domain/entities/live_item.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_event.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_state.dart';
+import 'package:moonlight/features/home/presentation/widgets/country_picker_sheet.dart';
 import 'package:moonlight/features/home/presentation/widgets/live_tile_grid.dart';
-import 'package:moonlight/features/home/presentation/widgets/section_header.dart';
 import 'package:moonlight/features/home/presentation/widgets/shimmer.dart';
 import 'package:moonlight/features/home/presentation/widgets/video_tile_grid.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
@@ -128,23 +129,25 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid> {
                   videos.isEmpty &&
                   !videoState.paging;
 
-              // The country filter used to live in the old "Live Now"
-              // header row (removed now that HomeTopTabs replaces it) —
-              // moved here, its actual context, always visible regardless
-              // of loading state so it's never blocked behind a spinner.
-              return Column(
+              // Country filter — a small floating icon now, not a full-width
+              // header row with a "Live streams" label (obsolete since this
+              // tab is lives + videos together, and the row was eating
+              // space better spent on content).
+              return Stack(
                 children: [
-                  const SectionHeader(
-                    title: 'Live streams',
-                    trailingFilter: true,
-                  ),
-                  const SizedBox(height: 4),
-                  Expanded(
+                  Positioned.fill(
                     child: stillLoadingFirstBatch
                         ? const _ShimmerGrid()
                         : nothingToShow
                         ? _EmptyDiscoverState(onRefresh: _onRefresh)
                         : _buildGrid(lives, videos, videoState.paging),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 12,
+                    child: _CountryFilterButton(
+                      selectedIso: liveState.selectedCountryIso,
+                    ),
                   ),
                 ],
               );
@@ -273,6 +276,54 @@ class _EmptyDiscoverState extends StatelessWidget {
             TextButton(onPressed: onRefresh, child: const Text('Refresh')),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Compact floating icon — the flag if a country's picked, a globe if not.
+/// Replaces the old full-width "Live streams" header row + text chip; no
+/// label needed, the flag/globe glyph alone reads clearly at a glance, and
+/// it doesn't take space away from the grid.
+class _CountryFilterButton extends StatelessWidget {
+  final String? selectedIso;
+  const _CountryFilterButton({required this.selectedIso});
+
+  Future<void> _open(BuildContext context) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF161616),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const CountryPickerSheet(),
+    );
+    if (selected == null || !context.mounted) return;
+    final isoOrNull = selected == '__ALL__' ? null : selected;
+    context.read<LiveFeedBloc>().add(LiveFeedCountryChanged(isoOrNull));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = selectedIso != null;
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: () => _open(context),
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black.withValues(alpha: 0.4),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        alignment: Alignment.center,
+        child: hasSelection
+            ? Text(
+                isoToFlagEmoji(selectedIso!),
+                style: const TextStyle(fontSize: 16),
+              )
+            : const Icon(Icons.public, color: Colors.white70, size: 18),
       ),
     );
   }

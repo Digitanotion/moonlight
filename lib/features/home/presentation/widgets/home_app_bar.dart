@@ -85,6 +85,14 @@ class AccountButton extends StatelessWidget {
                       },
                     ),
                     _MenuRow(
+                      icon: Icons.savings_rounded,
+                      label: 'Earn Cash',
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        Navigator.pushNamed(context, RouteNames.dailyTasks);
+                      },
+                    ),
+                    _MenuRow(
                       icon: Icons.person_outline,
                       label: 'My Profile',
                       isLast: true,

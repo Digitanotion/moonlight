@@ -208,7 +208,12 @@ class _FeedBodyState extends State<FeedBody> {
     );
 
     return Container(
-      color: _FeedColors.bg,
+      // Standalone (FeedScreen) keeps its own flat dark background as
+      // before. Embedded as the Discover tab, this paints nothing — Home's
+      // own gradient (behind the transparent Watch tab too) shows through
+      // instead, so swiping between tabs doesn't hit a visible seam where
+      // one tab is flat black and the other is the gradient.
+      color: widget.showAppBar ? _FeedColors.bg : null,
       child: widget.showAppBar
           ? scrollView
           : RefreshIndicator(
