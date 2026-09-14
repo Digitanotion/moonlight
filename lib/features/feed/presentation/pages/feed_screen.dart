@@ -22,13 +22,38 @@ class _FeedColors {
   static const textSecondary = Color(0xFF8B8FB8);
 }
 
-class FeedScreen extends StatefulWidget {
+class FeedScreen extends StatelessWidget {
   const FeedScreen({super.key});
+
   @override
-  State<FeedScreen> createState() => _FeedScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _FeedColors.bg,
+      floatingActionButton: BlocBuilder<FeedCubit, FeedState>(
+        buildWhen: (p, n) => p.items.isEmpty != n.items.isEmpty,
+        builder: (context, s) {
+          if (s.items.isEmpty) return const SizedBox.shrink();
+          return const _NewPostFab();
+        },
+      ),
+      body: const FeedBody(),
+    );
+  }
 }
 
-class _FeedScreenState extends State<FeedScreen> {
+/// Everything that used to be FeedScreen's Scaffold body, extracted so it
+/// can also be embedded directly as the "Discover" tab on Home — no
+/// Scaffold/AppBar of its own to clash with, since the "app bar" here was
+/// always just the first sliver (_FeedAppBar), not a real Scaffold one.
+/// FeedScreen above is now a thin wrapper around this; its own behavior
+/// (FAB included) is unchanged.
+class FeedBody extends StatefulWidget {
+  const FeedBody({super.key});
+  @override
+  State<FeedBody> createState() => _FeedBodyState();
+}
+
+class _FeedBodyState extends State<FeedBody> {
   final _scroll = ScrollController();
 
   // How many items ahead of the current scroll position to keep
@@ -51,8 +76,9 @@ class _FeedScreenState extends State<FeedScreen> {
     // 500ms, which reads as "autoplay lagging behind my scroll" on a
     // fast fling. Tightening this makes the play/pause-on-scroll
     // transition track the actual scroll position much more closely.
-    VisibilityDetectorController.instance.updateInterval =
-        const Duration(milliseconds: 100);
+    VisibilityDetectorController.instance.updateInterval = const Duration(
+      milliseconds: 100,
+    );
 
     context.read<FeedCubit>().loadFirstPage();
     _scroll.addListener(_onScroll);
@@ -102,16 +128,9 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _FeedColors.bg,
-      floatingActionButton: BlocBuilder<FeedCubit, FeedState>(
-        buildWhen: (p, n) => p.items.isEmpty != n.items.isEmpty,
-        builder: (context, s) {
-          if (s.items.isEmpty) return const SizedBox.shrink();
-          return const _NewPostFab();
-        },
-      ),
-      body: CustomScrollView(
+    return Container(
+      color: _FeedColors.bg,
+      child: CustomScrollView(
         controller: _scroll,
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
@@ -214,7 +233,7 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
-    void _openVideoFeed(int tappedIndex) {
+  void _openVideoFeed(int tappedIndex) {
     final state = context.read<FeedCubit>().state;
     final videoIndices = <int>[];
     final videoPosts = <Post>[];

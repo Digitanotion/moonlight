@@ -17,10 +17,12 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/video_feed_screen.dart';
+import 'package:moonlight/features/home/domain/entities/live_item.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_event.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_state.dart';
 import 'package:moonlight/features/home/presentation/widgets/live_tile_grid.dart';
+import 'package:moonlight/features/home/presentation/widgets/section_header.dart';
 import 'package:moonlight/features/home/presentation/widgets/shimmer.dart';
 import 'package:moonlight/features/home/presentation/widgets/video_tile_grid.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
@@ -96,91 +98,99 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid> {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: BlocProvider.value(
-        value: _videoCubit,
-        child: BlocBuilder<FeedCubit, FeedState>(
-          builder: (context, videoState) {
-            return BlocBuilder<LiveFeedBloc, LiveFeedState>(
-              builder: (context, liveState) {
-                final lives = liveState.items;
-                final videos = videoState.items;
+    // No Expanded here — this is now a TabBarView page (HomeTopTabs), which
+    // already gives its child the full bounded size. Wrapping in Expanded
+    // would crash (it's only valid directly under a Flex/Column).
+    return BlocProvider.value(
+      value: _videoCubit,
+      child: BlocBuilder<FeedCubit, FeedState>(
+        builder: (context, videoState) {
+          return BlocBuilder<LiveFeedBloc, LiveFeedState>(
+            builder: (context, liveState) {
+              final lives = liveState.items;
+              final videos = videoState.items;
 
-                final stillLoadingFirstBatch =
-                    lives.isEmpty &&
-                    videos.isEmpty &&
-                    (liveState.status == LiveFeedStatus.loading ||
-                        liveState.status == LiveFeedStatus.initial ||
-                        videoState.initialLoading);
+              final stillLoadingFirstBatch =
+                  lives.isEmpty &&
+                  videos.isEmpty &&
+                  (liveState.status == LiveFeedStatus.loading ||
+                      liveState.status == LiveFeedStatus.initial ||
+                      videoState.initialLoading);
 
-                if (stillLoadingFirstBatch) {
-                  return const _ShimmerGrid();
-                }
+              final nothingToShow =
+                  !stillLoadingFirstBatch &&
+                  lives.isEmpty &&
+                  videos.isEmpty &&
+                  !videoState.paging;
 
-                final nothingToShow =
-                    lives.isEmpty &&
-                    videos.isEmpty &&
-                    !stillLoadingFirstBatch &&
-                    !videoState.paging;
-
-                if (nothingToShow) {
-                  return _EmptyDiscoverState(onRefresh: _onRefresh);
-                }
-
-                final totalCount =
-                    lives.length + videos.length + (videoState.paging ? 1 : 0);
-
-                return LayoutBuilder(
-                  builder: (_, box) {
-                    final cols = _calcColumns(box.maxWidth);
-                    return RefreshIndicator(
-                      onRefresh: _onRefresh,
-                      child: GridView.builder(
-                        controller: _ctrl,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: cols,
-                          crossAxisSpacing: 4,
-                          mainAxisSpacing: 4,
-                          childAspectRatio: 9 / 13,
-                        ),
-                        itemCount: totalCount,
-                        itemBuilder: (context, i) {
-                          // Lives always first, unchanged widget/behavior.
-                          if (i < lives.length) {
-                            return LiveTileGrid(
-                              item: lives[i],
-                              items: lives,
-                              index: i,
-                            );
-                          }
-                          final videoIndex = i - lives.length;
-                          if (videoIndex >= videos.length) {
-                            return const Center(
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            );
-                          }
-                          return VideoTileGrid(
-                            post: videos[videoIndex],
-                            onTap: () => _openVideo(videos, videoIndex),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            );
-          },
-        ),
+              // The country filter used to live in the old "Live Now"
+              // header row (removed now that HomeTopTabs replaces it) —
+              // moved here, its actual context, always visible regardless
+              // of loading state so it's never blocked behind a spinner.
+              return Column(
+                children: [
+                  const SectionHeader(
+                    title: 'Live streams',
+                    trailingFilter: true,
+                  ),
+                  const SizedBox(height: 4),
+                  Expanded(
+                    child: stillLoadingFirstBatch
+                        ? const _ShimmerGrid()
+                        : nothingToShow
+                        ? _EmptyDiscoverState(onRefresh: _onRefresh)
+                        : _buildGrid(lives, videos, videoState.paging),
+                  ),
+                ],
+              );
+            },
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildGrid(List<LiveItem> lives, List<Post> videos, bool paging) {
+    final totalCount = lives.length + videos.length + (paging ? 1 : 0);
+    return LayoutBuilder(
+      builder: (_, box) {
+        final cols = _calcColumns(box.maxWidth);
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: GridView.builder(
+            controller: _ctrl,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4,
+              childAspectRatio: 9 / 13,
+            ),
+            itemCount: totalCount,
+            itemBuilder: (context, i) {
+              // Lives always first, unchanged widget/behavior.
+              if (i < lives.length) {
+                return LiveTileGrid(item: lives[i], items: lives, index: i);
+              }
+              final videoIndex = i - lives.length;
+              if (videoIndex >= videos.length) {
+                return const Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              return VideoTileGrid(
+                post: videos[videoIndex],
+                onTap: () => _openVideo(videos, videoIndex),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

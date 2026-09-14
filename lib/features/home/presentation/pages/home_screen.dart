@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/services/service_registration_manager.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
@@ -12,7 +11,6 @@ import 'package:moonlight/core/widgets/update_prompt.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import '../widgets/home_app_bar.dart';
-import '../widgets/section_header.dart';
 import '../widgets/home_top_tabs.dart';
 import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 import '../widgets/bottom_nav.dart';
@@ -214,38 +212,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           const HomeAppBar(),
                           const SizedBox(height: 8),
 
-                          // Header row: SectionHeader + See Posts
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20.0,
-                            ),
-                            child: Row(
-                              children: [
-                                const Expanded(
-                                  child: SectionHeader(
-                                    title: 'Live Now',
-                                    trailingFilter: true,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pushNamed(
-                                    context,
-                                    RouteNames.postsPage,
-                                  ),
-                                  child: const Text(
-                                    'See Posts',
-                                    style: TextStyle(
-                                      color: AppColors.primary_,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-
-                          // Vertical grid feed (pull-to-refresh inside)
+                          // Watch / Discover / Video Chat — replaces the
+                          // old "Live Now" header row + "See Posts" button
+                          // entirely; Discover *is* the Posts feed now,
+                          // reached by swipe instead of a page push.
                           const HomeTopTabs(),
                         ],
                       ),

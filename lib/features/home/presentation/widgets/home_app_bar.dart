@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/core/widgets/about_moonlight_sheet.dart';
@@ -108,43 +110,23 @@ class _HomeAppBarState extends State<HomeAppBar> with WidgetsBindingObserver {
               // Video chat moved out of the header — it's now the "Video
               // Chat" tab in the swipeable strip below (HomeTopTabs), which
               // gives it a roomier, self-explanatory home instead of
-              // competing for width here. _navigateToVideoCall/_TopPill are
-              // kept below (unused here) in case that ever needs to move
-              // back.
-              // Notification icon with badge
-              ValueListenableBuilder<int>(
-                valueListenable: _unreadService.notificationUnreadCount,
-                builder: (context, count, child) {
-                  return _TopIconWithBadge(
-                    icon: Icons.notifications_none,
-                    badgeCount: count,
-                    onTap: () async {
-                      // Mark notifications as read when tapped
-                      try {
-                        // await _unreadService.markNotificationsAsRead();
-                        _navigateToNotification(context);
-                      } catch (e) {
-                        debugPrint('Error marking notifications as read: $e');
-                        _navigateToNotification(context);
-                      }
-                    },
-                  );
-                },
-              ),
-              const SizedBox(width: 10),
-              // Message icon with badge
-              ValueListenableBuilder<int>(
-                valueListenable: _unreadService.messageUnreadCount,
-                builder: (context, count, child) {
-                  return _TopIconWithBadge(
-                    icon: Icons.chat_bubble_outline,
-                    badgeCount: count,
-                    // Was true — meant the actual count silently became
-                    // a plain dot once it exceeded 9, even though
-                    // _ModernBadge already renders real numbers fine
-                    // (up to "99+"). Always show the number.
-                    showSmallDot: false,
-                    onTap: () => _navigateToConversations(context),
+              // competing for width here.
+              //
+              // Notifications + Messages + Profile consolidated into one
+              // account button — opens a compact popover instead of 3
+              // separate icons competing for header width.
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _unreadService.notificationUnreadCount,
+                  _unreadService.messageUnreadCount,
+                ]),
+                builder: (context, _) {
+                  return _AccountButton(
+                    notificationCount:
+                        _unreadService.notificationUnreadCount.value,
+                    messageCount: _unreadService.messageUnreadCount.value,
+                    onOpenNotifications: () => _navigateToNotification(context),
+                    onOpenMessages: () => _navigateToConversations(context),
                   );
                 },
               ),
@@ -172,6 +154,193 @@ class _HomeAppBarState extends State<HomeAppBar> with WidgetsBindingObserver {
   }
 }
 
+/// Single entry point replacing the old separate Notifications/Messages
+/// icons — avatar with a combined unread dot, opens a compact sheet with
+/// Notifications, Messages, and My Profile. Reduces the header's tappable
+/// element count without hiding anything — each destination is still one
+/// tap away, just behind one button instead of three.
+class _AccountButton extends StatelessWidget {
+  final int notificationCount;
+  final int messageCount;
+  final VoidCallback onOpenNotifications;
+  final VoidCallback onOpenMessages;
+
+  const _AccountButton({
+    required this.notificationCount,
+    required this.messageCount,
+    required this.onOpenNotifications,
+    required this.onOpenMessages,
+  });
+
+  void _openMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0E1024),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              _MenuRow(
+                icon: Icons.notifications_none,
+                label: 'Notifications',
+                count: notificationCount,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  onOpenNotifications();
+                },
+              ),
+              const SizedBox(height: 10),
+              _MenuRow(
+                icon: Icons.chat_bubble_outline,
+                label: 'Messages',
+                count: messageCount,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  onOpenMessages();
+                },
+              ),
+              const SizedBox(height: 10),
+              _MenuRow(
+                icon: Icons.person_outline,
+                label: 'My Profile',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.pushNamed(context, RouteNames.myProfile);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatarUrl = GetIt.instance<CurrentUserService>().getCurrentAvatar();
+    final hasUnread = notificationCount > 0 || messageCount > 0;
+
+    return GestureDetector(
+      onTap: () => _openMenu(context),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.16)),
+            ),
+            child: ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: avatarUrl,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) =>
+                    Container(color: Colors.white.withOpacity(0.08)),
+              ),
+            ),
+          ),
+          if (hasUnread)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                width: 11,
+                height: 11,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFFF3B5C),
+                  border: Border.all(color: AppColors.dark, width: 2),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int? count;
+  final VoidCallback onTap;
+
+  const _MenuRow({
+    required this.icon,
+    required this.label,
+    this.count,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.white10,
+              child: Icon(icon, color: Colors.white70),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (count != null && count! > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF3B5C),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  count! > 99 ? '99+' : '$count',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TopIcon extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
@@ -190,153 +359,6 @@ class _TopIcon extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: AppColors.textWhite, size: 20),
-      ),
-    );
-  }
-}
-
-class _TopIconWithBadge extends StatelessWidget {
-  final IconData icon;
-  final int badgeCount;
-  final VoidCallback? onTap;
-  final bool showSmallDot;
-  final double iconSize;
-  final double badgeMinSize;
-
-  const _TopIconWithBadge({
-    required this.icon,
-    this.badgeCount = 0,
-    this.onTap,
-    this.showSmallDot = false,
-    this.iconSize = 20,
-    this.badgeMinSize = 16,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool showBadge = badgeCount > 0;
-    print(
-      '_TopIconWithBadge: count=$badgeCount, showBadge=$showBadge',
-    ); // Debug
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: AppColors.textWhite, size: iconSize),
-            ),
-
-            if (showBadge) ...[
-              // Show badge position for debugging
-              Positioned(
-                top: -6, // Increased from -4 to -6
-                right: -6, // Increased from -4 to -6
-                child: Container(
-                  // decoration: BoxDecoration(
-                  //   border: Border.all(color: Colors.red, width: 1),
-                  // ),
-                  child: _ModernBadge(
-                    count: badgeCount,
-                    showSmallDot: showSmallDot && badgeCount > 9,
-                  ),
-                ),
-              ),
-            ] else ...[
-              // Show position indicator when no badge (for debugging)
-              // Positioned(
-              //   top: -6,
-              //   right: -6,
-              //   child: Container(
-              //     width: 4,
-              //     height: 4,
-              //     color: Colors.green,
-              //   ),
-              // ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ModernBadge extends StatelessWidget {
-  final int count;
-  final bool showSmallDot;
-
-  const _ModernBadge({required this.count, this.showSmallDot = false});
-
-  @override
-  Widget build(BuildContext context) {
-    print('_ModernBadge: count=$count, showSmallDot=$showSmallDot'); // Debug
-
-    if (showSmallDot) {
-      // Twitter-style small dot for high numbers
-      return Container(
-        width: 12, // Increased from 10
-        height: 12, // Increased from 10
-        decoration: BoxDecoration(
-          color:
-              AppColors.textRed, // Changed to use textRed for better visibility
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: Colors.white,
-            width: 1,
-          ), // Increased from 1.5
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3), // Increased opacity
-              blurRadius: 3, // Increased from 2
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // TikTok/Facebook style badge with count
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 5,
-        vertical: 4,
-      ), // Increased padding
-      constraints: const BoxConstraints(
-        minWidth: 20,
-        minHeight: 20,
-      ), // Increased min size
-      decoration: BoxDecoration(
-        color: AppColors.textRed,
-        borderRadius: BorderRadius.circular(12), // Slightly larger
-        border: Border.all(color: Colors.white, width: 1), // Increased from 1.5
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 4, // Increased from 3
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Text(
-        count > 99 ? '99+' : count.toString(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11, // Slightly larger
-          fontWeight: FontWeight.w900,
-          height: 1,
-          letterSpacing: -0.5, // Better spacing for small text
-        ),
-        textAlign: TextAlign.center,
       ),
     );
   }
