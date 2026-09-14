@@ -74,9 +74,13 @@ class _AppShellState extends State<AppShell> {
         }
       },
       child: Scaffold(
-        // Lets page content scroll underneath the bottom nav so its new
-        // frosted-glass look actually has something to show through.
-        extendBody: true,
+        // extendBody: true was reverted — it let page content scroll
+        // underneath the bottom nav for a true see-through blur, but broke
+        // the nav bar's own vertical position on some tabs (extra gap below
+        // it instead of sitting flush at the screen edge). The nav keeps
+        // its translucent/blurred look either way — it just blurs its own
+        // Scaffold background now instead of live content behind it, which
+        // reads almost the same and isn't worth the layout risk.
         body: AnimatedTabStack(index: _index, children: _tabs),
         bottomNavigationBar: HomeBottomNav(
           currentIndex: _index,
