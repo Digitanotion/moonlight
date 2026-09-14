@@ -101,6 +101,17 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
               const SizedBox(height: 10),
               _sheetTile(
+                icon: Icons.savings_rounded,
+                label: 'Earn Cash',
+                subtitle: 'Complete simple tasks, withdraw weekly',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  HapticFeedback.selectionClick();
+                  Navigator.pushNamed(context, RouteNames.dailyTasks);
+                },
+              ),
+              const SizedBox(height: 10),
+              _sheetTile(
                 icon: Icons.lock_outline,
                 label: 'Set Wallet PIN',
                 subtitle: 'Protect your wallet with a PIN',

@@ -1,16 +1,19 @@
 // lib/features/offerwall/presentation/widgets/earn_cash_banner.dart
 //
 // The homepage/strategic-placement promo for the offerwall "Earn Cash"
-// feature. Copy is verbatim from the client's brief. Dismissible — a
-// dismissal hides it for 24h (not forever), since this is a revenue feature
-// worth resurfacing, not a one-time tip. Once the user actually activates
-// Daily Tasks, this banner should simply stop being shown by whoever embeds
-// it (check OfferwallCubit.state.activated) rather than via this widget's
-// own dismiss state.
+// feature. Copy is verbatim from the client's brief. This is purely a
+// pre-activation discovery nudge, not the feature's only door — once
+// activated, the permanent access point is the "Earn Cash" row in the
+// Wallet screen's actions sheet, so this banner stops showing entirely
+// (not just dismissed-for-24h) the moment activation is confirmed.
+// Before activation, a dismissal hides it for 24h rather than forever,
+// since this is a revenue feature worth resurfacing, not a one-time tip.
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/offerwall/data/datasources/offerwall_remote_data_source.dart';
 
 class EarnCashBanner extends StatefulWidget {
   const EarnCashBanner({super.key});
@@ -22,15 +25,28 @@ class EarnCashBanner extends StatefulWidget {
 }
 
 class _EarnCashBannerState extends State<EarnCashBanner> {
-  bool _hidden = true; // hidden until we've checked prefs, avoids a flash
+  bool _hidden = true; // hidden until we've checked, avoids a flash
 
   @override
   void initState() {
     super.initState();
-    _checkDismissed();
+    _checkVisibility();
   }
 
-  Future<void> _checkDismissed() async {
+  Future<void> _checkVisibility() async {
+    // Authoritative check first — once activated, this banner is done for
+    // good, regardless of any past dismiss timer.
+    try {
+      final status = await sl<OfferwallRemoteDataSource>().getStatus();
+      if (status['activated'] == true) {
+        if (mounted) setState(() => _hidden = true);
+        return;
+      }
+    } catch (_) {
+      // Offline/error — fall through to the local dismiss check rather
+      // than failing closed or open on a guess.
+    }
+
     final sp = await SharedPreferences.getInstance();
     final until = sp.getInt(EarnCashBanner._dismissedUntilKey) ?? 0;
     final stillDismissed = DateTime.now().millisecondsSinceEpoch < until;
