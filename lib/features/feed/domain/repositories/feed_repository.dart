@@ -22,6 +22,7 @@ abstract class FeedRepository {
     int perPage = 20,
     String? type,
     String? sort,
+    String? country,
   });
   Future<Post> toggleLike(String postUuid);
   Future<int> share(String postUuid);

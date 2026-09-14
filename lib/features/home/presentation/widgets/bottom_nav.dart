@@ -16,6 +16,7 @@ class HomeBottomNav extends StatelessWidget {
   final ValueChanged<int> onTabSelected;
   final VoidCallback onGoLive;
   final VoidCallback onCreatePost;
+  final VoidCallback onSearch;
 
   const HomeBottomNav({
     super.key,
@@ -23,6 +24,7 @@ class HomeBottomNav extends StatelessWidget {
     required this.onTabSelected,
     required this.onGoLive,
     required this.onCreatePost,
+    required this.onSearch,
   });
 
   void _handleTabTap(int index) {
@@ -90,12 +92,16 @@ class HomeBottomNav extends StatelessWidget {
                 onTap: _handleTabTap,
               ),
 
-              _NavItem(
-                icon: Icons.person_outline,
-                label: 'Profile',
-                index: 4,
-                activeIndex: currentIndex,
-                onTap: _handleTabTap,
+              // Was "Profile" (index 4) — that's reachable from the home
+              // header's account button now, so this slot became Search
+              // instead (also moved out of the home header, per feedback).
+              _ActionItem(
+                icon: Icons.search,
+                label: 'Search',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onSearch();
+                },
               ),
             ],
           ),

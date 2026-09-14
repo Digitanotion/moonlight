@@ -84,6 +84,9 @@ class _AppShellState extends State<AppShell> {
           onCreatePost: () {
             Navigator.pushNamed(context, RouteNames.createPost);
           },
+          onSearch: () {
+            Navigator.pushNamed(context, RouteNames.search);
+          },
         ),
       ),
     );

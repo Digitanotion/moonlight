@@ -15,12 +15,14 @@ class FeedRepositoryImpl implements FeedRepository {
     int perPage = 20,
     String? type,
     String? sort,
+    String? country,
   }) async {
     final map = await remote.fetchFeed(
       page: page,
       perPage: perPage,
       type: type,
       sort: sort,
+      country: country,
     );
 
     final dataListRaw = (map['data'] as List?) ?? const [];

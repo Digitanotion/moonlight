@@ -105,7 +105,12 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid> {
       value: _videoCubit,
       child: BlocBuilder<FeedCubit, FeedState>(
         builder: (context, videoState) {
-          return BlocBuilder<LiveFeedBloc, LiveFeedState>(
+          return BlocConsumer<LiveFeedBloc, LiveFeedState>(
+            // Country selection filters both lives (already did) and videos
+            // (new) — when it changes, refetch the video side to match.
+            listenWhen: (p, n) => p.selectedCountryIso != n.selectedCountryIso,
+            listener: (context, state) =>
+                _videoCubit.setCountry(state.selectedCountryIso),
             builder: (context, liveState) {
               final lives = liveState.items;
               final videos = videoState.items;

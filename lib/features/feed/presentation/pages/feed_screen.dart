@@ -46,9 +46,15 @@ class FeedScreen extends StatelessWidget {
 /// Scaffold/AppBar of its own to clash with, since the "app bar" here was
 /// always just the first sliver (_FeedAppBar), not a real Scaffold one.
 /// FeedScreen above is now a thin wrapper around this; its own behavior
-/// (FAB included) is unchanged.
+/// (FAB included, showAppBar: true) is unchanged.
+///
+/// [showAppBar] false (the Discover tab) drops the "FEED / Discover"
+/// sliver title + its refresh button entirely — redundant once this is a
+/// tab under Home's own header — and swaps in a plain RefreshIndicator
+/// instead, scoped to just this tab's pull gesture.
 class FeedBody extends StatefulWidget {
-  const FeedBody({super.key});
+  final bool showAppBar;
+  const FeedBody({super.key, this.showAppBar = true});
   @override
   State<FeedBody> createState() => _FeedBodyState();
 }
@@ -128,79 +134,87 @@ class _FeedBodyState extends State<FeedBody> {
 
   @override
   Widget build(BuildContext context) {
+    final scrollView = CustomScrollView(
+      controller: _scroll,
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      slivers: [
+        if (widget.showAppBar)
+          _FeedAppBar(onRefresh: () => context.read<FeedCubit>().refresh()),
+        BlocBuilder<FeedCubit, FeedState>(
+          builder: (context, s) {
+            if (s.initialLoading) {
+              return SliverToBoxAdapter(child: FeedSkeletonList(count: 6));
+            }
+
+            if (s.items.isEmpty) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyFeedView(error: s.error),
+              );
+            }
+
+            // Warm the very first few videos as soon as the feed loads,
+            // before the user has scrolled at all — otherwise the first
+            // tap of the session gets no preload head start.
+            if (s.items.isNotEmpty && _lastPreloadedIndex == -1) {
+              _lastPreloadedIndex = 0;
+              VideoPreloadService.instance.preloadAll(
+                s.items.take(_preloadAhead).map((p) => p.mediaUrl),
+              );
+            }
+
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 120),
+              sliver: SliverList.separated(
+                itemBuilder: (_, i) {
+                  // Every (_adEvery + 1)th slot is a sponsored banner.
+                  if ((i + 1) % (_adEvery + 1) == 0) {
+                    return const StyledBannerAd();
+                  }
+                  // Map list index → post index, skipping ad slots.
+                  final postIndex = i - (i + 1) ~/ (_adEvery + 1);
+
+                  if (postIndex >= s.items.length) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: FeedSkeletonList(count: 2),
+                    );
+                  }
+                  final post = s.items[postIndex];
+                  return FeedPostCard(
+                    post: post,
+                    onLike: () =>
+                        context.read<FeedCubit>().toggleLikeAt(postIndex),
+                    onOpenPost: () => _openPostAndBump(postIndex, post),
+                    onOpenProfile: () => _openProfile(post),
+                    onOpenVideoFeed: () => _openVideoFeed(postIndex),
+                    onCommentsChanged: (n) => context
+                        .read<FeedCubit>()
+                        .setCommentsCountAt(postIndex, n),
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(height: 14),
+                itemCount: () {
+                  final posts = s.items.length + (s.paging ? 1 : 0);
+                  return posts + posts ~/ _adEvery;
+                }(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+
     return Container(
       color: _FeedColors.bg,
-      child: CustomScrollView(
-        controller: _scroll,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        slivers: [
-          _FeedAppBar(onRefresh: () => context.read<FeedCubit>().refresh()),
-          BlocBuilder<FeedCubit, FeedState>(
-            builder: (context, s) {
-              if (s.initialLoading) {
-                return SliverToBoxAdapter(child: FeedSkeletonList(count: 6));
-              }
-
-              if (s.items.isEmpty) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyFeedView(error: s.error),
-                );
-              }
-
-              // Warm the very first few videos as soon as the feed loads,
-              // before the user has scrolled at all — otherwise the first
-              // tap of the session gets no preload head start.
-              if (s.items.isNotEmpty && _lastPreloadedIndex == -1) {
-                _lastPreloadedIndex = 0;
-                VideoPreloadService.instance.preloadAll(
-                  s.items.take(_preloadAhead).map((p) => p.mediaUrl),
-                );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 120),
-                sliver: SliverList.separated(
-                  itemBuilder: (_, i) {
-                    // Every (_adEvery + 1)th slot is a sponsored banner.
-                    if ((i + 1) % (_adEvery + 1) == 0) {
-                      return const StyledBannerAd();
-                    }
-                    // Map list index → post index, skipping ad slots.
-                    final postIndex = i - (i + 1) ~/ (_adEvery + 1);
-
-                    if (postIndex >= s.items.length) {
-                      return const Padding(
-                        padding: EdgeInsets.only(top: 4),
-                        child: FeedSkeletonList(count: 2),
-                      );
-                    }
-                    final post = s.items[postIndex];
-                    return FeedPostCard(
-                      post: post,
-                      onLike: () =>
-                          context.read<FeedCubit>().toggleLikeAt(postIndex),
-                      onOpenPost: () => _openPostAndBump(postIndex, post),
-                      onOpenProfile: () => _openProfile(post),
-                      onOpenVideoFeed: () => _openVideoFeed(postIndex),
-                      onCommentsChanged: (n) => context
-                          .read<FeedCubit>()
-                          .setCommentsCountAt(postIndex, n),
-                    );
-                  },
-                  separatorBuilder: (_, __) => const SizedBox(height: 14),
-                  itemCount: () {
-                    final posts = s.items.length + (s.paging ? 1 : 0);
-                    return posts + posts ~/ _adEvery;
-                  }(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+      child: widget.showAppBar
+          ? scrollView
+          : RefreshIndicator(
+              onRefresh: () => context.read<FeedCubit>().refresh(),
+              child: scrollView,
+            ),
     );
   }
 

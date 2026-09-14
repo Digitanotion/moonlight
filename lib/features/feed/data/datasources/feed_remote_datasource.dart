@@ -16,6 +16,7 @@ class FeedRemoteDataSource {
     // home video surface passes these.
     String? type,
     String? sort,
+    String? country,
   }) async {
     final res = await http.dio.get(
       '/api/v1/posts',
@@ -24,6 +25,7 @@ class FeedRemoteDataSource {
         'page': page,
         if (type != null) 'type': type,
         if (sort != null) 'sort': sort,
+        if (country != null) 'country': country,
       },
       options: Options(responseType: ResponseType.json),
     );

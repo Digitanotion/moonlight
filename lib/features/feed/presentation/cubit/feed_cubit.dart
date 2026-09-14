@@ -69,7 +69,21 @@ class FeedCubit extends Cubit<FeedState> {
   final String? type;
   final String? sort;
 
-  FeedCubit(this.repo, {this.type, this.sort}) : super(const FeedState());
+  // Unlike type/sort (fixed for an instance's lifetime), country can change
+  // at runtime — the user picks a different one from the same filter sheet
+  // the live directory already uses. Mutable; see setCountry().
+  String? country;
+
+  FeedCubit(this.repo, {this.type, this.sort, this.country})
+    : super(const FeedState());
+
+  /// Updates the country filter and reloads from page 1 if it actually
+  /// changed. No-op on a redundant call with the same value.
+  Future<void> setCountry(String? iso) async {
+    if (country == iso) return;
+    country = iso;
+    await loadFirstPage();
+  }
 
   static const _perPage = 20;
 
@@ -90,6 +104,7 @@ class FeedCubit extends Cubit<FeedState> {
         perPage: _perPage,
         type: type,
         sort: sort,
+        country: country,
       );
       final hydrated = page1.data.map(_applyLocalLike).toList();
       emit(
@@ -116,6 +131,7 @@ class FeedCubit extends Cubit<FeedState> {
         perPage: _perPage,
         type: type,
         sort: sort,
+        country: country,
       );
       final hydrated = r.data.map(_applyLocalLike).toList();
       emit(

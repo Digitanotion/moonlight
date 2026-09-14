@@ -10,10 +10,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/update_prompt.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
-import '../widgets/home_app_bar.dart';
 import '../widgets/home_top_tabs.dart';
 import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
-import '../widgets/bottom_nav.dart';
 import '../../../../core/injection_container.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -209,11 +207,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const HomeAppBar(),
-                          const SizedBox(height: 8),
-
-                          // Watch / Discover / Video Chat — replaces the
-                          // old "Live Now" header row + "See Posts" button
+                          // Logo + Watch/Discover/Video Chat tabs + account
+                          // button all live on one line inside HomeTopTabs
+                          // now — replaces the old separate header row,
+                          // "Live Now" row, and "See Posts" button
                           // entirely; Discover *is* the Posts feed now,
                           // reached by swipe instead of a page push.
                           const HomeTopTabs(),

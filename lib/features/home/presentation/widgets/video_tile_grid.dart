@@ -49,27 +49,6 @@ class VideoTileGrid extends StatelessWidget {
                   ),
                 ),
 
-                // Centered play glyph — this is a static thumbnail, not a
-                // live player, so it needs a clear "tap to watch" cue.
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.35),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                ),
-
                 // Author credit, bottom-left — small avatar + name.
                 Positioned(
                   left: 8,
@@ -104,6 +83,29 @@ class VideoTileGrid extends StatelessWidget {
                   right: 8,
                   child: _ViewsChip(views: post.views),
                 ),
+
+                // Country flag, top-left — lets the country filter's effect
+                // (Watch tab, videos included now) be visually verified on
+                // each card, same idea as the live tiles' own country cue.
+                if (post.author.countryFlagEmoji.isNotEmpty)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        post.author.countryFlagEmoji,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
