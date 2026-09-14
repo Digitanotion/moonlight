@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
@@ -40,70 +42,84 @@ class HomeBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tango-style glass bar — no solid fill behind it (Scaffold has
+    // extendBody: true so page content actually scrolls underneath and
+    // shows through the blur), a hairline border instead of a hard edge,
+    // and a soft shadow for depth rather than a heavy gradient block.
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.primary, AppColors.dark],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Container(
-          height: 66,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Row(
-            children: [
-              _NavItem(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                index: 0,
-                activeIndex: currentIndex,
-                onTap: _handleTabTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              height: 66,
+              decoration: BoxDecoration(
+                color: AppColors.dark.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.10),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
+              child: Row(
+                children: [
+                  _NavItem(
+                    icon: Icons.home_rounded,
+                    label: 'Home',
+                    index: 0,
+                    activeIndex: currentIndex,
+                    onTap: _handleTabTap,
+                  ),
 
-              _ActionItem(
-                icon: Icons.post_add_outlined,
-                label: 'New Post',
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  onCreatePost();
-                },
+                  _ActionItem(
+                    icon: Icons.post_add_outlined,
+                    label: 'New Post',
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      onCreatePost();
+                    },
+                  ),
+
+                  _CreatePostButton(
+                    onTap: () {
+                      HapticFeedback.heavyImpact();
+
+                      onGoLive();
+                    },
+                  ),
+
+                  _NavItem(
+                    icon: Icons.groups_2_outlined,
+                    label: 'Clubs',
+                    index: 3,
+                    activeIndex: currentIndex,
+                    onTap: _handleTabTap,
+                  ),
+
+                  // Was "Profile" (index 4) — that's reachable from the home
+                  // header's account button now, so this slot became Search
+                  // instead (also moved out of the home header, per feedback).
+                  _ActionItem(
+                    icon: Icons.search,
+                    label: 'Search',
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      onSearch();
+                    },
+                  ),
+                ],
               ),
-
-              _CreatePostButton(
-                onTap: () {
-                  HapticFeedback.heavyImpact();
-
-                  onGoLive();
-                },
-              ),
-
-              _NavItem(
-                icon: Icons.groups_2_outlined,
-                label: 'Clubs',
-                index: 3,
-                activeIndex: currentIndex,
-                onTap: _handleTabTap,
-              ),
-
-              // Was "Profile" (index 4) — that's reachable from the home
-              // header's account button now, so this slot became Search
-              // instead (also moved out of the home header, per feedback).
-              _ActionItem(
-                icon: Icons.search,
-                label: 'Search',
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  onSearch();
-                },
-              ),
-            ],
+            ),
           ),
         ),
       ),

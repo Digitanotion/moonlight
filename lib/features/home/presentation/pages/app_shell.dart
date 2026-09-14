@@ -74,6 +74,9 @@ class _AppShellState extends State<AppShell> {
         }
       },
       child: Scaffold(
+        // Lets page content scroll underneath the bottom nav so its new
+        // frosted-glass look actually has something to show through.
+        extendBody: true,
         body: AnimatedTabStack(index: _index, children: _tabs),
         bottomNavigationBar: HomeBottomNav(
           currentIndex: _index,
