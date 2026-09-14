@@ -17,6 +17,7 @@ class FeedRemoteDataSource {
     String? type,
     String? sort,
     String? country,
+    int? seed,
   }) async {
     final res = await http.dio.get(
       '/api/v1/posts',
@@ -26,6 +27,7 @@ class FeedRemoteDataSource {
         if (type != null) 'type': type,
         if (sort != null) 'sort': sort,
         if (country != null) 'country': country,
+        if (seed != null) 'seed': seed,
       },
       options: Options(responseType: ResponseType.json),
     );

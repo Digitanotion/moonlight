@@ -23,6 +23,7 @@ abstract class FeedRepository {
     String? type,
     String? sort,
     String? country,
+    int? seed,
   });
   Future<Post> toggleLike(String postUuid);
   Future<int> share(String postUuid);

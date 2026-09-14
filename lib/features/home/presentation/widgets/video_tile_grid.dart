@@ -77,13 +77,6 @@ class VideoTileGrid extends StatelessWidget {
                   ),
                 ),
 
-                // View count, top-right.
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: _ViewsChip(views: post.views),
-                ),
-
                 // Country flag, top-left — lets the country filter's effect
                 // (Watch tab, videos included now) be visually verified on
                 // each card, same idea as the live tiles' own country cue.
@@ -171,47 +164,6 @@ class _MiniAvatar extends StatelessWidget {
                 errorWidget: (_, _, _) =>
                     Container(color: const Color(0xFF2A2A3A)),
               ),
-      ),
-    );
-  }
-}
-
-class _ViewsChip extends StatelessWidget {
-  final int views;
-  const _ViewsChip({required this.views});
-
-  String get _label {
-    if (views >= 1000000) return '${(views / 1000000).toStringAsFixed(1)}M';
-    if (views >= 1000) return '${(views / 1000).toStringAsFixed(1)}K';
-    return '$views';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.play_circle_outline_rounded,
-            color: Colors.white70,
-            size: 11,
-          ),
-          const SizedBox(width: 3),
-          Text(
-            _label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }

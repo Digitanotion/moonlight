@@ -1,5 +1,7 @@
 // lib/features/feed/presentation/cubit/feed_cubit.dart
 
+import 'dart:math';
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:get_it/get_it.dart';
@@ -74,6 +76,15 @@ class FeedCubit extends Cubit<FeedState> {
   // the live directory already uses. Mutable; see setCountry().
   String? country;
 
+  // Trending's ranking includes a bounded random jitter server-side so a
+  // returning user doesn't see an identical order every app-open — but
+  // pagination within ONE scroll session must stay stable (page 2 can't
+  // reshuffle relative to page 1, or posts duplicate/vanish across pages).
+  // Fresh seed picked on every loadFirstPage() (new session = new shuffle),
+  // then reused as-is by loadNextPage() for the rest of that session.
+  int? _seed;
+  final Random _random = Random();
+
   FeedCubit(this.repo, {this.type, this.sort, this.country})
     : super(const FeedState());
 
@@ -97,6 +108,10 @@ class FeedCubit extends Cubit<FeedState> {
   // ── public API ───────────────────────────────────────────────────────────
 
   Future<void> loadFirstPage() async {
+    // New shuffle every full (re)load — sort=='trending' is the only mode
+    // that actually uses it server-side, but generating it unconditionally
+    // is harmless.
+    _seed = _random.nextInt(1 << 31);
     emit(state.copyWith(initialLoading: true, clearError: true, page: 1));
     try {
       final page1 = await repo.fetchFeed(
@@ -105,6 +120,7 @@ class FeedCubit extends Cubit<FeedState> {
         type: type,
         sort: sort,
         country: country,
+        seed: _seed,
       );
       final hydrated = page1.data.map(_applyLocalLike).toList();
       emit(
@@ -132,6 +148,9 @@ class FeedCubit extends Cubit<FeedState> {
         type: type,
         sort: sort,
         country: country,
+        // Same seed as this session's loadFirstPage() — keeps pagination
+        // stable instead of reshuffling mid-scroll.
+        seed: _seed,
       );
       final hydrated = r.data.map(_applyLocalLike).toList();
       emit(

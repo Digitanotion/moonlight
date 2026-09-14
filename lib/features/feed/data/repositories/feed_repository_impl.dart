@@ -16,6 +16,7 @@ class FeedRepositoryImpl implements FeedRepository {
     String? type,
     String? sort,
     String? country,
+    int? seed,
   }) async {
     final map = await remote.fetchFeed(
       page: page,
@@ -23,6 +24,7 @@ class FeedRepositoryImpl implements FeedRepository {
       type: type,
       sort: sort,
       country: country,
+      seed: seed,
     );
 
     final dataListRaw = (map['data'] as List?) ?? const [];
