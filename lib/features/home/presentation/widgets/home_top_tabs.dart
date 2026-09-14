@@ -28,6 +28,7 @@ import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/feed_screen.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_app_bar.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_discover_grid.dart';
+import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 
 class HomeTopTabs extends StatefulWidget {
   const HomeTopTabs({super.key});
@@ -189,6 +190,9 @@ class _HomeTopTabsState extends State<HomeTopTabs>
             ),
           ),
           const SizedBox(height: 4),
+          // Dismissible nudge, not a persistent bar — sits right under the
+          // header, out of the floating bottom nav's way entirely.
+          const EarnCashBanner(),
           Expanded(
             child: TabBarView(
               controller: _tabs,

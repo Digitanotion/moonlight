@@ -11,7 +11,6 @@ import 'package:moonlight/core/widgets/update_prompt.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import '../widgets/home_top_tabs.dart';
-import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 import '../../../../core/injection_container.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -202,38 +201,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // Reconnection banner
                 // _buildReconnectBanner(),
                 Expanded(
-                  child: Stack(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Logo + Watch/Discover/Video Chat tabs + account
-                          // button all live on one line inside HomeTopTabs
-                          // now — replaces the old separate header row,
-                          // "Live Now" row, and "See Posts" button
-                          // entirely; Discover *is* the Posts feed now,
-                          // reached by swipe instead of a page push.
-                          const HomeTopTabs(),
-                        ],
-                      ),
-
-                      // Floating — sits fixed above the grid, doesn't scroll
-                      // away with it, always reachable. Offset clears the
-                      // floating glass bottom nav (66 bar + 12 its own
-                      // bottom padding + safe area) plus a small gap above
-                      // it — the Scaffold's extendBody: true means this
-                      // Stack extends behind the nav, so without this the
-                      // banner sat underneath it instead of above.
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom:
-                            66 +
-                            12 +
-                            MediaQuery.of(context).padding.bottom +
-                            10,
-                        child: const EarnCashBanner(),
-                      ),
+                      // Logo + Watch/Discover/Video Chat tabs + account
+                      // button all live on one line inside HomeTopTabs
+                      // now — replaces the old separate header row,
+                      // "Live Now" row, and "See Posts" button
+                      // entirely; Discover *is* the Posts feed now,
+                      // reached by swipe instead of a page push. The
+                      // Earn Cash banner sits just under that header row,
+                      // inside HomeTopTabs — top of the page, but not
+                      // above the primary nav.
+                      const HomeTopTabs(),
                     ],
                   ),
                 ),
