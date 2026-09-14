@@ -76,6 +76,12 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   List<Post> _videoPosts = const [];
   List<int> _originalIndices = const [];
 
+  // Guards against re-bumping the same video's view count every time the
+  // user scrolls back to it within one pager session — the server already
+  // dedupes views per-user forever (PostView table), this just avoids
+  // redundant round trips client-side.
+  final Set<int> _viewedOriginalIndices = {};
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +90,22 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     _originalIndices = List.of(widget.originalIndices);
     _pageController = PageController(initialPage: widget.initialIndex);
     _preloadAround(widget.initialIndex);
+    // onPageChanged only fires on swipe — the first video shown needs its
+    // own bump. Post-frame so context.read<FeedCubit>() is safe to call.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _bumpView(widget.initialIndex);
+    });
+  }
+
+  /// Records a view for the video at [localIndex] in _videoPosts — this was
+  /// missing entirely for the scrollable video pager (both here and the
+  /// home grid use this screen), unlike the single-post view which already
+  /// bumps on open. Matches that same behavior now.
+  void _bumpView(int localIndex) {
+    if (localIndex < 0 || localIndex >= _originalIndices.length) return;
+    final originalIndex = _originalIndices[localIndex];
+    if (!_viewedOriginalIndices.add(originalIndex)) return; // already bumped
+    context.read<FeedCubit>().incrementViewsAt(originalIndex);
   }
 
   /// Rebuild the videos-only projection from the cubit's current items.
@@ -256,6 +278,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               _currentIndex = i;
               _preloadAround(i);
               _maybePaginate();
+              _bumpView(i);
             },
             itemBuilder: (context, i) {
               final post = _videoPosts[i];

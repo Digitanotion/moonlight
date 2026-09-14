@@ -8,6 +8,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
+import 'package:moonlight/widgets/video_thumbnail.dart';
 
 class VideoTileGrid extends StatelessWidget {
   final Post post;
@@ -119,24 +120,29 @@ class _Thumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = post.thumbUrl;
-    if (url == null || url.isEmpty) {
-      // No server-generated thumbnail — a calm gradient placeholder rather
-      // than decoding the video client-side just to fill a grid cell.
-      return Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1A1A2E), Color(0xFF0C0C12)],
-          ),
-        ),
+    if (url != null && url.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: url,
+        fit: BoxFit.cover,
+        errorWidget: (_, _, _) => _generated(),
+        placeholder: (_, _) => Container(color: const Color(0xFF1A1A2E)),
       );
     }
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: BoxFit.cover,
-      errorWidget: (_, _, _) => Container(color: const Color(0xFF1A1A2E)),
-      placeholder: (_, _) => Container(color: const Color(0xFF1A1A2E)),
+    // No server-generated thumbnail — extract a real frame from the video
+    // client-side. Same widget/package already used for this exact job on
+    // feed_post_card's video cards and chat video messages, so this gets
+    // its on-disk cache for free rather than re-decoding every rebuild.
+    return _generated();
+  }
+
+  Widget _generated() {
+    return LayoutBuilder(
+      builder: (context, constraints) => VideoThumbnailWidget(
+        videoUrl: post.mediaUrl,
+        width: constraints.maxWidth,
+        height: constraints.maxHeight,
+        fit: BoxFit.cover,
+      ),
     );
   }
 }
