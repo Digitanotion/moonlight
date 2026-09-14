@@ -59,7 +59,14 @@ class FeedBody extends StatefulWidget {
   State<FeedBody> createState() => _FeedBodyState();
 }
 
-class _FeedBodyState extends State<FeedBody> {
+class _FeedBodyState extends State<FeedBody>
+    with AutomaticKeepAliveClientMixin {
+  // Same reasoning as HomeDiscoverGrid's keep-alive — without this, the
+  // Discover tab could get disposed by TabBarView when swiped away from
+  // and reload from scratch (shimmer again) on every return visit.
+  @override
+  bool get wantKeepAlive => true;
+
   final _scroll = ScrollController();
 
   // How many items ahead of the current scroll position to keep
@@ -134,6 +141,7 @@ class _FeedBodyState extends State<FeedBody> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     final scrollView = CustomScrollView(
       controller: _scroll,
       physics: const BouncingScrollPhysics(

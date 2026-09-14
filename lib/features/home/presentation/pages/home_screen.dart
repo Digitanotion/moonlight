@@ -218,12 +218,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
 
                       // Floating — sits fixed above the grid, doesn't scroll
-                      // away with it, always reachable.
-                      const Positioned(
+                      // away with it, always reachable. Offset clears the
+                      // floating glass bottom nav (66 bar + 12 its own
+                      // bottom padding + safe area) plus a small gap above
+                      // it — the Scaffold's extendBody: true means this
+                      // Stack extends behind the nav, so without this the
+                      // banner sat underneath it instead of above.
+                      Positioned(
                         left: 0,
                         right: 0,
-                        bottom: 8,
-                        child: EarnCashBanner(),
+                        bottom:
+                            66 +
+                            12 +
+                            MediaQuery.of(context).padding.bottom +
+                            10,
+                        child: const EarnCashBanner(),
                       ),
                     ],
                   ),

@@ -34,7 +34,15 @@ class HomeDiscoverGrid extends StatefulWidget {
   State<HomeDiscoverGrid> createState() => _HomeDiscoverGridState();
 }
 
-class _HomeDiscoverGridState extends State<HomeDiscoverGrid> {
+class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
+    with AutomaticKeepAliveClientMixin {
+  // Without this, TabBarView can dispose this tab's State when swiped far
+  // enough away and rebuild it fresh next time — re-triggering
+  // loadFirstPage() and showing the shimmer again even though it had
+  // already loaded. This keeps it alive for the life of the tab strip.
+  @override
+  bool get wantKeepAlive => true;
+
   final _ctrl = ScrollController();
   late final FeedCubit _videoCubit;
 
@@ -99,6 +107,7 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     // No Expanded here — this is now a TabBarView page (HomeTopTabs), which
     // already gives its child the full bounded size. Wrapping in Expanded
     // would crash (it's only valid directly under a Flex/Column).
