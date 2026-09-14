@@ -11,10 +11,20 @@ class FeedRemoteDataSource {
   Future<Map<String, dynamic>> fetchFeed({
     int page = 1,
     int perPage = 20,
+    // Both optional and additive — omitting them (every existing caller)
+    // hits the exact same endpoint the same way as before. Only the new
+    // home video surface passes these.
+    String? type,
+    String? sort,
   }) async {
     final res = await http.dio.get(
       '/api/v1/posts',
-      queryParameters: {'per_page': perPage, 'page': page},
+      queryParameters: {
+        'per_page': perPage,
+        'page': page,
+        if (type != null) 'type': type,
+        if (sort != null) 'sort': sort,
+      },
       options: Options(responseType: ResponseType.json),
     );
     final data = res.data is Map

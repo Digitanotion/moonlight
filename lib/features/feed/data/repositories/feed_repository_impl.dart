@@ -10,12 +10,23 @@ class FeedRepositoryImpl implements FeedRepository {
   FeedRepositoryImpl(this.remote);
 
   @override
-  Future<Paginated<Post>> fetchFeed({int page = 1, int perPage = 20}) async {
-    final map = await remote.fetchFeed(page: page, perPage: perPage);
+  Future<Paginated<Post>> fetchFeed({
+    int page = 1,
+    int perPage = 20,
+    String? type,
+    String? sort,
+  }) async {
+    final map = await remote.fetchFeed(
+      page: page,
+      perPage: perPage,
+      type: type,
+      sort: sort,
+    );
 
     final dataListRaw = (map['data'] as List?) ?? const [];
-    final dataList =
-        dataListRaw.cast<Map<String, dynamic>>().toList(growable: false);
+    final dataList = dataListRaw.cast<Map<String, dynamic>>().toList(
+      growable: false,
+    );
 
     final posts = dataList.map<Post>((m) {
       final auRaw = (m['author'] as Map?) ?? <String, dynamic>{};
@@ -27,6 +38,7 @@ class FeedRepositoryImpl implements FeedRepository {
         countryFlagEmoji: '${au['countryFlagEmoji'] ?? ''}',
         roleLabel: '${au['roleLabel'] ?? ''}',
         roleColor: '${au['roleColor'] ?? '#ADB5BD'}',
+        isFollowing: au['isFollowing'] == true || au['is_following'] == true,
       );
 
       final int commentsCombined =
@@ -40,7 +52,8 @@ class FeedRepositoryImpl implements FeedRepository {
         author: user,
         mediaUrl: '${m['mediaUrl'] ?? ''}',
         caption: '${m['caption'] ?? ''}',
-        tags: (m['tags'] as List?)?.cast<dynamic>().map((e) => '$e').toList() ??
+        tags:
+            (m['tags'] as List?)?.cast<dynamic>().map((e) => '$e').toList() ??
             const [],
         createdAt: DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),
         likes: (m['likes'] as num?)?.toInt() ?? 0,

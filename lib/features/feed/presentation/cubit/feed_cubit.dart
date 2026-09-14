@@ -60,7 +60,16 @@ class FeedState extends Equatable {
 class FeedCubit extends Cubit<FeedState> {
   final FeedRepository repo;
 
-  FeedCubit(this.repo) : super(const FeedState());
+  // Both null by default — the Posts screen's instance never sets these and
+  // keeps getting exactly today's mixed photo/video, latest-first feed. The
+  // home video grid constructs its OWN FeedCubit instance with
+  // type: 'video', sort: 'trending' instead — same class, same pagination
+  // machinery, different data source. Fixed for the life of one instance so
+  // every page of a scroll session stays consistent.
+  final String? type;
+  final String? sort;
+
+  FeedCubit(this.repo, {this.type, this.sort}) : super(const FeedState());
 
   static const _perPage = 20;
 
@@ -76,7 +85,12 @@ class FeedCubit extends Cubit<FeedState> {
   Future<void> loadFirstPage() async {
     emit(state.copyWith(initialLoading: true, clearError: true, page: 1));
     try {
-      final page1 = await repo.fetchFeed(page: 1, perPage: _perPage);
+      final page1 = await repo.fetchFeed(
+        page: 1,
+        perPage: _perPage,
+        type: type,
+        sort: sort,
+      );
       final hydrated = page1.data.map(_applyLocalLike).toList();
       emit(
         state.copyWith(
@@ -97,7 +111,12 @@ class FeedCubit extends Cubit<FeedState> {
     emit(state.copyWith(paging: true, clearError: true));
     try {
       final next = state.page + 1;
-      final r = await repo.fetchFeed(page: next, perPage: _perPage);
+      final r = await repo.fetchFeed(
+        page: next,
+        perPage: _perPage,
+        type: type,
+        sort: sort,
+      );
       final hydrated = r.data.map(_applyLocalLike).toList();
       emit(
         state.copyWith(

@@ -13,7 +13,7 @@ import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/section_header.dart';
-import '../widgets/live_now_section.dart';
+import '../widgets/home_discover_grid.dart';
 import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 import '../widgets/bottom_nav.dart';
 import '../../../../core/injection_container.dart';
@@ -246,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           const SizedBox(height: 8),
 
                           // Vertical grid feed (pull-to-refresh inside)
-                          const LiveNowSection(),
+                          const HomeDiscoverGrid(),
                         ],
                       ),
 

@@ -17,7 +17,12 @@ class Paginated<T> {
 }
 
 abstract class FeedRepository {
-  Future<Paginated<Post>> fetchFeed({int page = 1, int perPage = 20});
+  Future<Paginated<Post>> fetchFeed({
+    int page = 1,
+    int perPage = 20,
+    String? type,
+    String? sort,
+  });
   Future<Post> toggleLike(String postUuid);
   Future<int> share(String postUuid);
   Future<int> recordView(String postUuid);
