@@ -123,6 +123,10 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Check Flutter Android Compatibility
+        run: |
+          flutter analyze --suggestions
+
       - name: Get Version Info
         id: get_version
         run: |
@@ -139,6 +143,11 @@ jobs:
           echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE }}" | base64 --decode > android/app/upload-keystore.jks
           echo "✅ Keystore decoded"
 
+      - name: Clean Flutter Build
+        run: |
+          flutter clean
+          flutter pub get
+
       - name: Build App Bundle (AAB)
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -146,7 +155,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "🚀 Building Android App Bundle..."
-          flutter build appbundle --release
+          flutter build appbundle --release --verbose
           echo "✅ AAB built successfully!"
           ls -lh build/app/outputs/bundle/release/
 
