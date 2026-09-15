@@ -60,8 +60,8 @@ class HomeBottomNav extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.primary.withOpacity(0.42),
-                    AppColors.dark.withOpacity(0.32),
+                    AppColors.primary.withOpacity(0.28),
+                    AppColors.dark.withOpacity(0.20),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -160,16 +160,10 @@ class _NavItem extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => onTap(index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
+        child: Padding(
+          // No highlight box behind the active icon anymore — the orange
+          // icon/label color change alone is the active indicator now.
           padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: _isActive
-                ? Colors.white.withOpacity(0.14)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
