@@ -7,6 +7,7 @@
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:moonlight/features/home/presentation/widgets/shimmer.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/widgets/video_thumbnail.dart';
 
@@ -120,7 +121,7 @@ class _Thumbnail extends StatelessWidget {
         imageUrl: url,
         fit: BoxFit.cover,
         errorWidget: (_, _, _) => _generated(),
-        placeholder: (_, _) => Container(color: const Color(0xFF1A1A2E)),
+        placeholder: (_, _) => const _ShimmerBox(),
       );
     }
     // No server-generated thumbnail — extract a real frame from the video
@@ -137,6 +138,9 @@ class _Thumbnail extends StatelessWidget {
         width: constraints.maxWidth,
         height: constraints.maxHeight,
         fit: BoxFit.cover,
+        // Overrides its default black-box-with-spinner — shimmer instead,
+        // matching modern social apps rather than a bare loading indicator.
+        loadingBuilder: (_, _, _) => const _ShimmerBox(),
       ),
     );
   }
@@ -166,5 +170,17 @@ class _MiniAvatar extends StatelessWidget {
               ),
       ),
     );
+  }
+}
+
+/// Shimmer sweep instead of a bare spinner while a thumbnail is loading —
+/// matches the shimmer used elsewhere in the app (e.g. the grid's own
+/// initial-load skeleton) rather than a generic circular indicator.
+class _ShimmerBox extends StatelessWidget {
+  const _ShimmerBox();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(child: Container(color: const Color(0xFF1A1A2E)));
   }
 }
