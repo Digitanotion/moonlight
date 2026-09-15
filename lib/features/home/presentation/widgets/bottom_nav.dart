@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:iconsax/iconsax.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 
 /// PROFESSIONAL HOME BOTTOM NAV
@@ -74,7 +75,7 @@ class HomeBottomNav extends StatelessWidget {
               child: Row(
                 children: [
                   _NavItem(
-                    icon: Icons.home_rounded,
+                    icon: Iconsax.home,
                     label: 'Home',
                     index: 0,
                     activeIndex: currentIndex,
@@ -82,7 +83,7 @@ class HomeBottomNav extends StatelessWidget {
                   ),
 
                   _ActionItem(
-                    icon: Icons.post_add_outlined,
+                    icon: Iconsax.gallery_add,
                     label: 'New Post',
                     onTap: () {
                       HapticFeedback.mediumImpact();
@@ -99,7 +100,7 @@ class HomeBottomNav extends StatelessWidget {
                   ),
 
                   _NavItem(
-                    icon: Icons.groups_2_outlined,
+                    icon: Iconsax.people,
                     label: 'Clubs',
                     index: 3,
                     activeIndex: currentIndex,
@@ -110,7 +111,7 @@ class HomeBottomNav extends StatelessWidget {
                   // header's account button now, so this slot became Search
                   // instead (also moved out of the home header, per feedback).
                   _ActionItem(
-                    icon: Icons.search,
+                    icon: Iconsax.search_normal,
                     label: 'Search',
                     onTap: () {
                       HapticFeedback.selectionClick();
@@ -261,11 +262,7 @@ class _CreatePostButton extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.videocam_outlined,
-              size: 30,
-              color: Colors.white,
-            ),
+            child: const Icon(Iconsax.video, size: 30, color: Colors.white),
           ),
         ),
       ),
