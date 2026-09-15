@@ -43,10 +43,10 @@ class HomeBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Tango-style glass bar — no solid fill behind it (Scaffold has
-    // extendBody: true so page content actually scrolls underneath and
-    // shows through the blur), a hairline border instead of a hard edge,
-    // and a soft shadow for depth rather than a heavy gradient block.
+    // Glass bar — blue-to-black gradient (matches the app's own primary
+    // gradient elsewhere) at low opacity plus a real blur, so it reads as
+    // tinted glass rather than a flat black bar; a hairline border instead
+    // of a hard edge, soft shadow for depth.
     return SafeArea(
       top: false,
       child: Padding(
@@ -58,7 +58,14 @@ class HomeBottomNav extends StatelessWidget {
             child: Container(
               height: 66,
               decoration: BoxDecoration(
-                color: AppColors.dark.withOpacity(0.55),
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary.withOpacity(0.42),
+                    AppColors.dark.withOpacity(0.32),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: Colors.white.withOpacity(0.10),
