@@ -42,13 +42,13 @@ Future<bool> _openStore(AppUpdateInfo info) async {
 ///     the instant a new version is live on the Play Store, no server config
 ///     needed. High-priority updates run immediately (Play's full-screen
 ///     flow); normal ones hand off to [AutoUpdateService], which downloads
-///     in the background (a progress ring wraps the home logo — see
-///     home_top_tabs.dart) and restarts the app on its own once ready,
-///     no tap required.
+///     in the background (a progress ring wraps the home logo, plus the
+///     dismissible banner in home_top_tabs.dart) and restarts the app on
+///     its own once ready — no tap, no dialog, ever, on Android.
 ///
-///  3. If the Play API isn't available (debug build, sideload, no Play
-///     Services) we fall back to our endpoint's soft "update available"
-///     sheet + a Play Store link.
+///  3. iOS has no equivalent of Play's API — it's the only platform that
+///     still gets the soft "update available" sheet + App Store link,
+///     since it's the only way iOS users ever find out an update exists.
 ///
 /// Fails open everywhere — a check that errors just means "no prompt".
 Future<void> maybePromptForUpdate(
@@ -72,13 +72,17 @@ Future<void> maybePromptForUpdate(
 
   if (onlyForced) return;
 
-  // ── 2. Google Play In-App Update (automatic on Play releases) ────────────
+  // ── 2. Android: Google Play In-App Update, fully silent ──────────────────
+  // Whether or not Play actually has anything to offer, Android's story
+  // ends here — no dialog. Attempting the check is enough; AutoUpdateService
+  // (via _tryPlayInAppUpdate) shows nothing itself, it just drives the ring
+  // and banner if there's something to download.
   if (Platform.isAndroid) {
-    final handled = await _tryPlayInAppUpdate(context);
-    if (handled) return;
+    await _tryPlayInAppUpdate(context);
+    return;
   }
 
-  // ── 3. Fallback: our endpoint's soft prompt ─────────────────────────────
+  // ── 3. iOS fallback: our endpoint's soft prompt ──────────────────────────
   if (info == null || info.forced || !context.mounted) return;
   // Only suppressed for the current session ("Later"). It comes back on the
   // next cold start and keeps coming back until the user actually updates.
@@ -91,6 +95,30 @@ Future<void> maybePromptForUpdate(
     backgroundColor: Colors.transparent,
     builder: (_) => _UpdateSheet(info: info),
   );
+}
+
+/// Silent, no-UI retry of the Android flexible-update check — meant to be
+/// called on every resume (not just launch), so a cold-launch check that
+/// missed the update (Play Core's availability cache can lag a few seconds
+/// right after a build goes live) gets picked up the next time the app
+/// comes back to the foreground, with zero user action. Never shows
+/// anything itself; AutoUpdateService's ring/banner pick up automatically
+/// if this finds something to start.
+Future<void> retryAutoUpdateCheckSilently() async {
+  if (!Platform.isAndroid) return;
+  if (AutoUpdateService.instance.stage.value != AutoUpdateStage.idle) {
+    return; // already tracking one — nothing to retry
+  }
+  try {
+    final result = await play.InAppUpdate.checkForUpdate().timeout(
+      const Duration(seconds: 6),
+    );
+    if (result.updateAvailability == play.UpdateAvailability.updateAvailable) {
+      await AutoUpdateService.instance.tryStart(result);
+    }
+  } catch (_) {
+    // No Play install / no Play Services / debug build — nothing to do.
+  }
 }
 
 /// Returns true if Play handled it (an update flow started / completed),
@@ -157,12 +185,9 @@ class _UpdateSheetState extends State<_UpdateSheet> {
     });
     final nav = Navigator.of(context);
     try {
-      // Android + Play install: let Play run a real background/immediate
-      // update. Falls through to the store link otherwise.
-      if (Platform.isAndroid && await _tryPlayInAppUpdate(context)) {
-        nav.pop();
-        return;
-      }
+      // This sheet only ever appears on iOS now (Android's whole update
+      // story is the silent Play flexible flow — see maybePromptForUpdate),
+      // so there's nothing to do here but open the store.
       final ok = await _openStore(info);
       if (ok) {
         nav.pop();

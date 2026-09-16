@@ -73,6 +73,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         maybePromptForUpdate(context, force: true, onlyForced: true);
       }
+      // Also silently retry the Android flexible-update check on every
+      // resume — Play Core's availability check can miss right at cold
+      // launch and only catch up a little later, and this is the free,
+      // no-dialog way it self-heals instead of waiting for another cold
+      // start. No-op on iOS and once a download is already tracked.
+      retryAutoUpdateCheckSilently();
       // Silently refresh the signed-in user's profile in the background so
       // cached fields (avatar, gender, verification, video-call flags, …)
       // stay current. No loading state, never blocks — this replaces the old
