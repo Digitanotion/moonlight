@@ -24,6 +24,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/about_moonlight_sheet.dart';
+import 'package:moonlight/core/widgets/update_progress_ring.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/feed_screen.dart';
@@ -183,14 +184,16 @@ class _HomeTopTabsState extends State<HomeTopTabs>
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Row(
               children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => showAboutMoonlightSheet(context),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    width: 20,
-                    height: 32,
-                    filterQuality: FilterQuality.medium,
+                UpdateProgressRing(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showAboutMoonlightSheet(context),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 20,
+                      height: 32,
+                      filterQuality: FilterQuality.medium,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -289,6 +292,9 @@ class _HomeTopTabsState extends State<HomeTopTabs>
           // Dismissible nudge, not a persistent bar — sits right under the
           // header, out of the floating bottom nav's way entirely.
           //const EarnCashBanner(),
+          // Background-update heads-up — only ever visible while
+          // AutoUpdateService actually has something to report.
+          const UpdateStatusBanner(),
           Expanded(
             child: TabBarView(
               controller: _tabs,

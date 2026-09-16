@@ -93,6 +93,13 @@ dev_dependencies:
   json_serializable: ^6.7.1
   flutter_launcher_icons: ^0.14.4
 
+# Local fork of in_app_update (packages/in_app_update_patched) — adds real
+# byte-level download progress to the flexible-update event stream, which
+# upstream discards. See that package's README-FORK.md.
+dependency_overrides:
+  in_app_update:
+    path: packages/in_app_update_patched
+
 flutter_launcher_icons:
   android: true
   ios: true

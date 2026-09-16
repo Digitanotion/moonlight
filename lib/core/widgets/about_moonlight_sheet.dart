@@ -5,8 +5,12 @@
 // chrome-less in-app web view (looks native, no browser toolbar).
 // Contact / social links open in their native apps.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/services/auto_update_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/core/widgets/update_prompt.dart';
 import 'package:moonlight/core/widgets/web_view_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -59,15 +63,19 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
   @override
   void initState() {
     super.initState();
-    PackageInfo.fromPlatform().then((info) {
-      if (mounted) setState(() => _version = info.version);
-    }).catchError((_) {});
+    PackageInfo.fromPlatform()
+        .then((info) {
+          if (mounted) setState(() => _version = info.version);
+        })
+        .catchError((_) {});
   }
 
   void _openPage(BuildContext context, String title, String url) {
     Navigator.of(context).pop();
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => WebViewScreen(title: title, url: url)),
+      MaterialPageRoute(
+        builder: (_) => WebViewScreen(title: title, url: url),
+      ),
     );
   }
 
@@ -133,6 +141,8 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                     ),
                   ],
                   const SizedBox(height: 14),
+                  const _UpdateStatusTile(),
+                  const SizedBox(height: 14),
                   Text(
                     'Go live, catch fun, and earn gifts. Join clubs, climb '
                     'the ranks, and connect with a global community.',
@@ -169,11 +179,8 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                       _LinkRow(
                         icon: Icons.article_outlined,
                         label: 'Press',
-                        onTap: () => _openPage(
-                          context,
-                          'Press',
-                          MoonlightLinks.press,
-                        ),
+                        onTap: () =>
+                            _openPage(context, 'Press', MoonlightLinks.press),
                       ),
                     ],
                   ),
@@ -246,16 +253,14 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                       _LinkRow(
                         icon: Icons.mail_outline_rounded,
                         label: MoonlightLinks.supportEmail,
-                        onTap: () => _launch(
-                          'mailto:${MoonlightLinks.supportEmail}',
-                        ),
+                        onTap: () =>
+                            _launch('mailto:${MoonlightLinks.supportEmail}'),
                       ),
                       _LinkRow(
                         icon: Icons.call_outlined,
                         label: MoonlightLinks.supportPhone,
-                        onTap: () => _launch(
-                          'tel:${MoonlightLinks.supportPhone}',
-                        ),
+                        onTap: () =>
+                            _launch('tel:${MoonlightLinks.supportPhone}'),
                       ),
                     ],
                   ),
@@ -305,6 +310,149 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The "place to check status of update" — shows what AutoUpdateService is
+/// doing right now (or lets the user trigger a fresh check) on Android;
+/// iOS has no equivalent API (Apple doesn't allow silent self-updates), so
+/// it just points at the App Store instead.
+class _UpdateStatusTile extends StatefulWidget {
+  const _UpdateStatusTile();
+
+  @override
+  State<_UpdateStatusTile> createState() => _UpdateStatusTileState();
+}
+
+class _UpdateStatusTileState extends State<_UpdateStatusTile> {
+  bool _checking = false;
+
+  Future<void> _checkNow() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      await maybePromptForUpdate(context, force: true);
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Platform.isAndroid) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: Colors.white.withValues(alpha: 0.55),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Updates for iOS are managed through the App Store.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ValueListenableBuilder<AutoUpdateStage>(
+      valueListenable: AutoUpdateService.instance.stage,
+      builder: (context, stage, _) {
+        return ValueListenableBuilder<double?>(
+          valueListenable: AutoUpdateService.instance.progress,
+          builder: (context, progress, _) {
+            final (label, icon) = switch (stage) {
+              AutoUpdateStage.downloading => (
+                progress != null
+                    ? 'Downloading update — ${(progress * 100).round()}%'
+                    : 'Downloading update…',
+                Icons.downloading_rounded,
+              ),
+              AutoUpdateStage.downloaded || AutoUpdateStage.restarting => (
+                'Update ready — restarting shortly',
+                Icons.check_circle_rounded,
+              ),
+              AutoUpdateStage.failed => (
+                'Update check failed — tap to retry',
+                Icons.error_outline_rounded,
+              ),
+              AutoUpdateStage.idle => (
+                'Moonlight is up to date',
+                Icons.verified_rounded,
+              ),
+            };
+
+            final tappable = stage == AutoUpdateStage.idle && !_checking;
+
+            return InkWell(
+              onTap: tappable ? _checkNow : null,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 18, color: AppColors.secondary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (_checking)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white54,
+                        ),
+                      )
+                    else if (stage == AutoUpdateStage.idle)
+                      Text(
+                        'Check now',
+                        style: TextStyle(
+                          color: AppColors.secondary.withValues(alpha: 0.9),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

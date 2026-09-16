@@ -6,6 +6,7 @@ import 'package:in_app_update/in_app_update.dart' as play;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:moonlight/core/services/app_update_service.dart';
+import 'package:moonlight/core/services/auto_update_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 
 /// Opens the store. Tries the `market://` deep link first (opens the Play
@@ -40,8 +41,10 @@ Future<bool> _openStore(AppUpdateInfo info) async {
 ///  2. Otherwise, let **Google Play's In-App Update API** decide — it knows
 ///     the instant a new version is live on the Play Store, no server config
 ///     needed. High-priority updates run immediately (Play's full-screen
-///     flow); normal ones download in the background (flexible) and we show
-///     a "restart to finish" prompt.
+///     flow); normal ones hand off to [AutoUpdateService], which downloads
+///     in the background (a progress ring wraps the home logo — see
+///     home_top_tabs.dart) and restarts the app on its own once ready,
+///     no tap required.
 ///
 ///  3. If the Play API isn't available (debug build, sideload, no Play
 ///     Services) we fall back to our endpoint's soft "update available"
@@ -69,13 +72,6 @@ Future<void> maybePromptForUpdate(
 
   if (onlyForced) return;
 
-  // ── 1b. A flexible update already finished downloading — re-offer "restart
-  //        to finish" (the one-shot SnackBar may have been swiped away).
-  //        Only on the full check (launch), not on every resume. ───────────
-  if (Platform.isAndroid && context.mounted) {
-    await _maybeOfferPendingInstall(context);
-  }
-
   // ── 2. Google Play In-App Update (automatic on Play releases) ────────────
   if (Platform.isAndroid) {
     final handled = await _tryPlayInAppUpdate(context);
@@ -97,51 +93,16 @@ Future<void> maybePromptForUpdate(
   );
 }
 
-/// If a flexible update already finished downloading (in a previous session
-/// or before the user swiped away the SnackBar), surface "restart to finish"
-/// again so it doesn't get permanently lost.
-Future<void> _maybeOfferPendingInstall(BuildContext context) async {
-  try {
-    final r = await play.InAppUpdate.checkForUpdate()
-        .timeout(const Duration(seconds: 6));
-    if (r.installStatus != play.InstallStatus.downloaded) return;
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(days: 1),
-        backgroundColor: AppColors.surface,
-        content: const Text(
-          'Update downloaded — restart to finish.',
-          style: TextStyle(color: Colors.white),
-        ),
-        action: SnackBarAction(
-          label: 'Restart',
-          textColor: const Color(0xFFFF7A00),
-          onPressed: () => play.InAppUpdate.completeFlexibleUpdate(),
-        ),
-      ),
-    );
-  } catch (_) {
-    // Not a Play install / API unavailable — nothing to do.
-  }
-}
-
 /// Returns true if Play handled it (an update flow started / completed),
 /// false if there's nothing to do OR the API is unavailable (→ fall back).
 Future<bool> _tryPlayInAppUpdate(BuildContext context) async {
   try {
-    final result = await play.InAppUpdate.checkForUpdate()
-        .timeout(const Duration(seconds: 6));
+    final result = await play.InAppUpdate.checkForUpdate().timeout(
+      const Duration(seconds: 6),
+    );
 
-    if (result.updateAvailability !=
-        play.UpdateAvailability.updateAvailable) {
+    if (result.updateAvailability != play.UpdateAvailability.updateAvailable) {
       return false;
-    }
-
-    // A flexible update already finished downloading — don't kick off another
-    // one; `_maybeOfferPendingInstall` shows the "restart to finish" prompt.
-    if (result.installStatus == play.InstallStatus.downloaded) {
-      return true;
     }
 
     // Play's own 0–5 priority (set in the Play Console). Treat 4–5 as
@@ -153,26 +114,11 @@ Future<bool> _tryPlayInAppUpdate(BuildContext context) async {
       return true;
     }
 
-    if (result.flexibleUpdateAllowed) {
-      await play.InAppUpdate.startFlexibleUpdate();
-      // Download finished in the background — prompt to apply it.
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            duration: const Duration(days: 1),
-            backgroundColor: AppColors.surface,
-            content: const Text(
-              'Update downloaded — restart to finish.',
-              style: TextStyle(color: Colors.white),
-            ),
-            action: SnackBarAction(
-              label: 'Restart',
-              textColor: const Color(0xFFFF7A00),
-              onPressed: () => play.InAppUpdate.completeFlexibleUpdate(),
-            ),
-          ),
-        );
-      }
+    // Everything else (including "a flexible update already finished
+    // downloading in a previous session") is owned end-to-end by
+    // AutoUpdateService — background download, progress ring on the home
+    // logo, then an automatic restart once ready. No tap required.
+    if (await AutoUpdateService.instance.tryStart(result)) {
       return true;
     }
 
@@ -225,7 +171,8 @@ class _UpdateSheetState extends State<_UpdateSheet> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = "Couldn't open the Play Store automatically. Search for "
+          _error =
+              "Couldn't open the Play Store automatically. Search for "
               '"Moonlight" in the Play Store app to update.';
         });
       }
