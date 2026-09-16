@@ -13,6 +13,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
+import 'package:moonlight/core/widgets/expandable_text.dart';
 import 'package:moonlight/features/post_view/domain/entities/comment.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/domain/repositories/post_repository.dart';
@@ -35,8 +36,11 @@ class CommentBottomSheet {
         return cubit;
       } catch (e) {
         debugPrint('❌ GetIt factory param failed: $e');
-        final cubit =
-            PostCubit(sl<PostRepository>(), postId, initialPost: initialPost);
+        final cubit = PostCubit(
+          sl<PostRepository>(),
+          postId,
+          initialPost: initialPost,
+        );
         if (initialPost == null) cubit.load();
         return cubit;
       }
@@ -139,7 +143,8 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
             ),
             const SizedBox(height: 12),
             BlocBuilder<PostCubit, PostState>(
-              buildWhen: (p, n) => p.post?.commentsCount != n.post?.commentsCount,
+              buildWhen: (p, n) =>
+                  p.post?.commentsCount != n.post?.commentsCount,
               builder: (context, state) => Text(
                 'Comments${state.post != null ? ' (${state.post!.commentsCount})' : ''}',
                 style: const TextStyle(
@@ -167,7 +172,10 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
                   }
                   return ListView.builder(
                     controller: sheetScrollCtrl,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     itemCount: state.comments.length,
                     itemBuilder: (context, i) => _CommentTile(
                       comment: state.comments[i],
@@ -199,8 +207,11 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
                             const SizedBox(width: 6),
                             GestureDetector(
                               onTap: () => setState(() => _replyingTo = null),
-                              child: const Icon(Icons.close,
-                                  size: 14, color: Colors.white54),
+                              child: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white54,
+                              ),
                             ),
                           ],
                         ),
@@ -233,8 +244,10 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
                         const SizedBox(width: 8),
                         IconButton(
                           onPressed: _send,
-                          icon: const Icon(Icons.send_rounded,
-                              color: Color(0xFFFF6A00)),
+                          icon: const Icon(
+                            Icons.send_rounded,
+                            color: Color(0xFFFF6A00),
+                          ),
                         ),
                       ],
                     ),
@@ -322,11 +335,7 @@ class _CommentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        left: isReply ? 36 : 0,
-        top: 10,
-        bottom: 4,
-      ),
+      padding: EdgeInsets.only(left: isReply ? 36 : 0, top: 10, bottom: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -369,16 +378,21 @@ class _CommentTile extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    Text(
+                    ExpandableText(
                       comment.text,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13.5),
+                      collapsedMaxLines: 3,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13.5,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         GestureDetector(
-                          onTap: () =>
-                              context.read<PostCubit>().toggleCommentLike(comment.id),
+                          onTap: () => context
+                              .read<PostCubit>()
+                              .toggleCommentLike(comment.id),
                           child: Row(
                             children: [
                               Icon(
@@ -395,7 +409,9 @@ class _CommentTile extends StatelessWidget {
                                 Text(
                                   '${comment.likes}',
                                   style: const TextStyle(
-                                      color: Colors.white38, fontSize: 11),
+                                    color: Colors.white38,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ],
                             ],
@@ -408,9 +424,10 @@ class _CommentTile extends StatelessWidget {
                             child: const Text(
                               'Reply',
                               style: TextStyle(
-                                  color: Colors.white38,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600),
+                                color: Colors.white38,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                       ],

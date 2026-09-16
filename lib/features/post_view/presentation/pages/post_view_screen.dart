@@ -12,6 +12,7 @@ import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart'; // ← NEW
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
+import 'package:moonlight/core/widgets/expandable_text.dart';
 import 'package:moonlight/core/widgets/sign_in_prompt.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/skeleton_line_plus.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/user_helper.dart';
@@ -524,11 +525,7 @@ class _ActionRow extends StatelessWidget {
 class _PostMedia extends StatefulWidget {
   final Post post;
   final bool fillScreen;
-  const _PostMedia({
-    super.key,
-    required this.post,
-    this.fillScreen = false,
-  });
+  const _PostMedia({super.key, required this.post, this.fillScreen = false});
 
   @override
   State<_PostMedia> createState() => _PostMediaState();
@@ -623,8 +620,10 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
       if (_lastKnownPosition != null && value.position == _lastKnownPosition) {
         _stallTicks++;
         if (_stallTicks >= _stallTicksBeforeRecovery) {
-          debugPrint('🎬 [PostView] Playback frozen (position stuck at '
-              '${value.position}) — self-healing');
+          debugPrint(
+            '🎬 [PostView] Playback frozen (position stuck at '
+            '${value.position}) — self-healing',
+          );
           _stallTicks = 0;
           _disposeVc();
           setState(() => _initialized = false);
@@ -669,7 +668,9 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
   void _disposeVc() {
     if (_vc == null) return;
     if (_borrowedFromPool) {
-      debugPrint('🎬 [PostView] Returning borrowed controller to pool on close');
+      debugPrint(
+        '🎬 [PostView] Returning borrowed controller to pool on close',
+      );
       VideoPreloadService.instance.donate(widget.post.mediaUrl, _vc!);
     } else {
       debugPrint('🎬 [PostView] Disposing cold-started controller on close');
@@ -762,7 +763,9 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
         _notifyPlayingState(true);
         return;
       }
-      debugPrint('🎬 [PostView] In-flight preload failed — falling back to cold start');
+      debugPrint(
+        '🎬 [PostView] In-flight preload failed — falling back to cold start',
+      );
       // Preload failed — fall through to a normal cold start below.
     } else {
       debugPrint('🎬 [PostView] Nothing preloaded/in-flight — COLD START');
@@ -1447,8 +1450,9 @@ class _Meta extends StatelessWidget {
           ),
           if (post.caption.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Text(
+            ExpandableText(
               post.caption,
+              collapsedMaxLines: 6,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14.5,

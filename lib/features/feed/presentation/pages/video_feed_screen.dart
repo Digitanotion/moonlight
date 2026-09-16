@@ -23,6 +23,7 @@ import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/core/widgets/expandable_text.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/widgets/feed_post_card.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
@@ -361,10 +362,9 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                         ),
                         if (post.caption.isNotEmpty) ...[
                           const SizedBox(height: 6),
-                          Text(
+                          ExpandableText(
                             post.caption,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
+                            collapsedMaxLines: 3,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 13.5,

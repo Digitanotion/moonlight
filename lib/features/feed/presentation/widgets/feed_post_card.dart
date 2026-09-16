@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:moonlight/core/services/video_cache_manager.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
+import 'package:moonlight/core/widgets/expandable_text.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/comment_bottom_sheet.dart';
 import 'package:path_provider/path_provider.dart';
@@ -38,6 +39,7 @@ class FeedPostCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onOpenPost;
   final VoidCallback onOpenProfile;
+
   /// Fired with the new comment total after the user comments from the sheet,
   /// so the feed can keep this card's count in sync without a refresh.
   final void Function(int newCount)? onCommentsChanged;
@@ -181,10 +183,9 @@ class FeedPostCard extends StatelessWidget {
           if (post.caption.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-              child: Text(
+              child: ExpandableText(
                 post.caption,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+                collapsedMaxLines: 3,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -336,7 +337,7 @@ class FeedVideoPlayer extends StatefulWidget {
   // edge-to-edge fullscreen view with no SafeArea, so it passes a
   // larger, safe-area-aware value instead — otherwise this icon renders
   // right under the notch/status bar and is invisible in practice.
-    final double muteIconTopOffset;
+  final double muteIconTopOffset;
   // Lets a parent (VideoFeedScreen) seed this video's initial mute state
   // from a shared, session-wide preference instead of each instance
   // always defaulting to muted — and be notified when the user toggles
@@ -373,7 +374,8 @@ class FeedVideoPlayer extends StatefulWidget {
 class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
   VideoPlayerController? _vc;
   bool _initialized = false;
-  late bool _muted = widget.initialMuted ?? true; // Twitter/IG default: autoplay starts muted
+  late bool _muted =
+      widget.initialMuted ?? true; // Twitter/IG default: autoplay starts muted
   bool _currentlyVisible = false;
   bool _loading = false;
 
@@ -756,9 +758,8 @@ class _VideoScrubTrackState extends State<_VideoScrubTrack> {
         if (_dragging) {
           progress = _dragFraction;
         } else if (total.inMilliseconds > 0) {
-          progress =
-              (value.position.inMilliseconds / total.inMilliseconds)
-                  .clamp(0.0, 1.0);
+          progress = (value.position.inMilliseconds / total.inMilliseconds)
+              .clamp(0.0, 1.0);
         } else {
           progress = 0;
         }
