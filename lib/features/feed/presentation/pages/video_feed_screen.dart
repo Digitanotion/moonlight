@@ -11,6 +11,8 @@
 // is already using (via BlocProvider.value at the navigation site) so
 // likes stay in sync with the regular feed rather than diverging.
 
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -145,6 +147,21 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
       if (prevIdx >= 0) urls.add(_videoPosts[prevIdx].mediaUrl);
     }
     VideoPreloadService.instance.preloadAll(urls);
+
+    // The immediate next video ALSO gets a real, initialized (already
+    // buffering) controller ready — not just its bytes warming on disk.
+    // This is what actually removes the "next video takes a moment"
+    // gap on swipe, matching how TikTok/Reels always keep the very next
+    // item's player warm. Deliberately just this one — see
+    // VideoPreloadService.preloadController's own doc for why.
+    final nextIndex = index + 1;
+    if (nextIndex < _videoPosts.length) {
+      unawaited(
+        VideoPreloadService.instance.preloadController(
+          _videoPosts[nextIndex].mediaUrl,
+        ),
+      );
+    }
   }
 
   @override

@@ -11,9 +11,12 @@
 // separate widget so the existing lives-only flow stays fully intact and
 // revertible if ever needed elsewhere.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/countries.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
@@ -82,6 +85,12 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
   }
 
   void _openVideo(List<Post> videos, int index) {
+    // Head start during the page-transition animation instead of the pager
+    // only starting to warm anything once it's already mounted — the
+    // tapped video otherwise had zero preload at all before this.
+    unawaited(
+      VideoPreloadService.instance.preloadController(videos[index].mediaUrl),
+    );
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => BlocProvider.value(

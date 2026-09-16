@@ -40,6 +40,7 @@ class VideoPreloadService {
 
   final Map<String, VideoPlayerController> _controllers = {};
   final Map<String, Future<void>> _initFutures = {};
+  final Map<String, Future<void>> _controllerInitFutures = {};
   // Tracks insertion order so we can evict the least-recently-used entry.
   final List<String> _order = [];
 
@@ -72,7 +73,9 @@ class VideoPreloadService {
     }
     final existing = _controllers[url];
     if (existing != null && existing != controller) {
-      debugPrint('🎬 [Donate] COLLISION — disposing incoming, keeping existing: ${_short(url)}');
+      debugPrint(
+        '🎬 [Donate] COLLISION — disposing incoming, keeping existing: ${_short(url)}',
+      );
       controller.dispose();
       return;
     }
@@ -129,6 +132,50 @@ class VideoPreloadService {
     }
   }
 
+  /// Pre-initializes a REAL VideoPlayerController — progressive network
+  /// streaming (or the on-disk cache file if [preload] already finished
+  /// it), not a full blocking download — and parks it in the shared
+  /// controller pool via [donate], the same mechanism already used for
+  /// feed↔post-view handoff. Unlike [preload] (byte-cache warming only,
+  /// no decoder), this is what actually removes the cold-start gap when
+  /// the user swipes forward: the very next video already has a decoder
+  /// warmed and buffering by the time they reach it, instead of only
+  /// starting to stream at that moment.
+  ///
+  /// Callers should use this sparingly — just the immediate next video in
+  /// a pager, never several at once. Holding more than a couple of live
+  /// hardware decoders concurrently is exactly what `maxCached` (and
+  /// `donate()`'s eviction) exists to prevent; see the class doc comment.
+  Future<void> preloadController(String url) async {
+    if (url.isEmpty || !_isVideoUrl(url)) return;
+    if (_controllers.containsKey(url) ||
+        _controllerInitFutures.containsKey(url)) {
+      return; // already ready, or already being warmed
+    }
+    final future = _initControllerAsync(url);
+    _controllerInitFutures[url] = future;
+    try {
+      await future;
+    } finally {
+      _controllerInitFutures.remove(url);
+    }
+  }
+
+  Future<void> _initControllerAsync(String url) async {
+    try {
+      final cachedFile = await VideoCacheManager.cachedFileFor(url);
+      final c = cachedFile != null
+          ? VideoPlayerController.file(cachedFile)
+          : VideoPlayerController.networkUrl(Uri.parse(url));
+      await c.initialize();
+      c.setLooping(true);
+      c.setVolume(0); // matches the pager's default-muted convention
+      donate(url, c);
+    } catch (e) {
+      debugPrint('⚠️ [PreloadController] FAILED: ${_short(url)} — $e');
+    }
+  }
+
   String _short(String url) {
     final tail = url.length > 40 ? url.substring(url.length - 40) : url;
     return '…$tail';
@@ -154,7 +201,9 @@ class VideoPreloadService {
       return null;
     }
     if (!c.value.isInitialized) {
-      debugPrint('🎬 [TakeIfReady] MISS (cached but not initialized yet): ${_short(url)}');
+      debugPrint(
+        '🎬 [TakeIfReady] MISS (cached but not initialized yet): ${_short(url)}',
+      );
       return null;
     }
 
