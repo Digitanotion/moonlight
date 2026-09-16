@@ -188,7 +188,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                   onTap: () => showAboutMoonlightSheet(context),
                   child: Image.asset(
                     'assets/images/logo.png',
-                    width: 32,
+                    width: 20,
                     height: 32,
                     filterQuality: FilterQuality.medium,
                   ),
@@ -233,7 +233,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text('Watch'),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 10),
                                 SizedBox(
                                   width: 38,
                                   height: 18,
@@ -254,7 +254,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text('Discover'),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 10),
                                 SizedBox(
                                   width: 14,
                                   height: 14,
@@ -268,7 +268,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                               ],
                             ),
                           ),
-                          const Tab(text: 'Video Chat'),
+                          const Tab(text: 'Video Calls'),
                         ],
                       );
                     },
@@ -345,8 +345,8 @@ class _RefreshingDotState extends State<_RefreshingDot>
         return Transform.scale(
           scale: scale,
           child: Container(
-            width: 7,
-            height: 7,
+            width: 4,
+            height: 4,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: AppColors.secondary,
@@ -372,21 +372,94 @@ class _LiveBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE53935),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Text(
-        'LIVE',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE53935),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: const Text(
+            'LIVE',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
         ),
-      ),
+        // Perched on the badge's top-right corner, outside its own bounds
+        // (Stack's clipBehavior: none lets it paint there without nudging
+        // the badge's own layout size — same trick as the refreshing dot).
+        const Positioned(top: -5, right: -5, child: _DancingLiveIcon()),
+      ],
+    );
+  }
+}
+
+/// Small live-tv glyph that wiggles and glows in a continuous loop —
+/// perched on the LIVE badge's corner for a bit of life instead of a
+/// static pill.
+class _DancingLiveIcon extends StatefulWidget {
+  const _DancingLiveIcon();
+
+  @override
+  State<_DancingLiveIcon> createState() => _DancingLiveIconState();
+}
+
+class _DancingLiveIconState extends State<_DancingLiveIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_ctrl.value);
+        final wiggle = (t - 0.5) * 0.35; // ~±10° back and forth
+        final scale = 0.9 + t * 0.25;
+        final glow = 2.0 + t * 5.0;
+        return Transform.rotate(
+          angle: wiggle,
+          child: Transform.scale(
+            scale: scale,
+            child: Container(
+              width: 14,
+              height: 14,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFE53935).withValues(alpha: 0.85),
+                    blurRadius: glow,
+                    spreadRadius: glow * 0.2,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.live_tv_rounded,
+                size: 9,
+                color: Color(0xFFE53935),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
