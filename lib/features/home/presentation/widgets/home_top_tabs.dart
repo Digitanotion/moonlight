@@ -60,6 +60,8 @@ class _HomeTopTabsState extends State<HomeTopTabs>
 
   int _lastRealIndex = 0; // Watch or Discover — never Video Chat
   bool _navigating = false;
+  bool _watchRefreshing = false;
+  bool _discoverRefreshing = false;
 
   @override
   void initState() {
@@ -134,13 +136,19 @@ class _HomeTopTabsState extends State<HomeTopTabs>
   // reacts to an actual index change. That's exactly what distinguishes
   // "switching to this tab" (no reload — it should already be preloaded)
   // from "re-tapping the tab I'm already on" (reload from the beginning).
-  void _onTabTap(int index) {
+  Future<void> _onTabTap(int index) async {
     if (index != _tabs.index) return;
     if (index == 0) {
+      if (_watchRefreshing) return;
+      setState(() => _watchRefreshing = true);
       context.read<LiveFeedBloc>().add(LiveFeedRefresh());
-      _watchVideoCubit.refresh();
+      await _watchVideoCubit.refresh();
+      if (mounted) setState(() => _watchRefreshing = false);
     } else if (index == 1) {
-      _discoverCubit.refresh();
+      if (_discoverRefreshing) return;
+      setState(() => _discoverRefreshing = true);
+      await _discoverCubit.refresh();
+      if (mounted) setState(() => _discoverRefreshing = false);
     }
   }
 
@@ -217,14 +225,28 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text('Watch'),
-                                if (hasLive) ...[
+                                if (_watchRefreshing) ...[
+                                  const SizedBox(width: 6),
+                                  const _RefreshingDot(),
+                                ] else if (hasLive) ...[
                                   const SizedBox(width: 6),
                                   const _LiveBadge(),
                                 ],
                               ],
                             ),
                           ),
-                          const Tab(text: 'Discover'),
+                          Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Discover'),
+                                if (_discoverRefreshing) ...[
+                                  const SizedBox(width: 6),
+                                  const _RefreshingDot(),
+                                ],
+                              ],
+                            ),
+                          ),
                           const Tab(text: 'Video Chat'),
                         ],
                       );
@@ -263,6 +285,61 @@ class _HomeTopTabsState extends State<HomeTopTabs>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Small dot next to a tab's label that grows and glows in a continuous
+/// pulse — the "refresh is happening" cue for the re-tap-to-refresh
+/// gesture, since the tab's own content swap (shimmer → data) can be too
+/// quick/subtle to notice on a fast connection.
+class _RefreshingDot extends StatefulWidget {
+  const _RefreshingDot();
+
+  @override
+  State<_RefreshingDot> createState() => _RefreshingDotState();
+}
+
+class _RefreshingDotState extends State<_RefreshingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_ctrl.value);
+        final scale = 0.75 + t * 1.0; // grows and shrinks
+        final glow = 3.0 + t * 9.0; // glows in step with the growth
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.secondary,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.secondary.withValues(alpha: 0.85),
+                  blurRadius: glow,
+                  spreadRadius: glow * 0.25,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
