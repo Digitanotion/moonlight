@@ -32,7 +32,6 @@ import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_ev
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_state.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_app_bar.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_discover_grid.dart';
-import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 
 class HomeTopTabs extends StatefulWidget {
   const HomeTopTabs({super.key});
@@ -220,18 +219,33 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                           fontSize: 15,
                         ),
                         tabs: [
+                          // Fixed-width trailing slot on Watch/Discover — the
+                          // live badge and the refreshing dot each mount and
+                          // unmount as their state flips, and doing that
+                          // inside a plain Row changed the Row's (and so the
+                          // Tab's) intrinsic width, visibly shoving every
+                          // tab after it sideways. Reserving the space up
+                          // front, always present whether or not anything
+                          // is drawn in it, keeps every tab's width — and
+                          // therefore every tab's position — constant.
                           Tab(
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text('Watch'),
-                                if (_watchRefreshing) ...[
-                                  const SizedBox(width: 6),
-                                  const _RefreshingDot(),
-                                ] else if (hasLive) ...[
-                                  const SizedBox(width: 6),
-                                  const _LiveBadge(),
-                                ],
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 38,
+                                  height: 18,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _watchRefreshing
+                                        ? const _RefreshingDot()
+                                        : hasLive
+                                        ? const _LiveBadge()
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -240,10 +254,17 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text('Discover'),
-                                if (_discoverRefreshing) ...[
-                                  const SizedBox(width: 6),
-                                  const _RefreshingDot(),
-                                ],
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _discoverRefreshing
+                                        ? const _RefreshingDot()
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -267,7 +288,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
           const SizedBox(height: 4),
           // Dismissible nudge, not a persistent bar — sits right under the
           // header, out of the floating bottom nav's way entirely.
-          const EarnCashBanner(),
+          //const EarnCashBanner(),
           Expanded(
             child: TabBarView(
               controller: _tabs,
