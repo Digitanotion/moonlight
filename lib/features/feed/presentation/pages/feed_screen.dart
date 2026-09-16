@@ -93,7 +93,17 @@ class _FeedBodyState extends State<FeedBody>
       milliseconds: 100,
     );
 
-    context.read<FeedCubit>().loadFirstPage();
+    // When this is the Discover tab, HomeTopTabs already kicked off
+    // loadFirstPage() on this exact cubit as soon as Home mounted, well
+    // before this widget's own State exists — calling it again here would
+    // silently discard that head start (and re-show the shimmer) the
+    // moment the tab is actually built. Only load if nothing is already
+    // in flight or loaded. FeedScreen's own standalone route always gets
+    // a fresh cubit, so this is a no-op there — unchanged behavior.
+    final cubit = context.read<FeedCubit>();
+    if (cubit.state.items.isEmpty && !cubit.state.initialLoading) {
+      cubit.loadFirstPage();
+    }
     _scroll.addListener(_onScroll);
   }
 

@@ -24,8 +24,12 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/about_moonlight_sheet.dart';
+import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/feed_screen.dart';
+import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_bloc.dart';
+import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_event.dart';
+import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_state.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_app_bar.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_discover_grid.dart';
 import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
@@ -43,6 +47,14 @@ class _HomeTopTabsState extends State<HomeTopTabs>
 
   late final TabController _tabs = TabController(length: 3, vsync: this);
   late final FeedCubit _discoverCubit = sl<FeedCubit>()..loadFirstPage();
+  // Owned here (not inside HomeDiscoverGrid) for the same reason as
+  // _discoverCubit: starts loading the moment Home mounts, and lets the
+  // tab bar's re-tap handler trigger a refresh on it directly.
+  late final FeedCubit _watchVideoCubit = FeedCubit(
+    sl<FeedRepository>(),
+    type: 'video',
+    sort: 'trending',
+  )..loadFirstPage();
   late final UnreadBadgeService _unreadService;
   Timer? _pollTimer;
 
@@ -53,6 +65,13 @@ class _HomeTopTabsState extends State<HomeTopTabs>
   void initState() {
     super.initState();
     _tabs.addListener(_onTabChange);
+    // Force both feed cubits to start loading right now, rather than
+    // leaning on the incidental timing of a `late final` field's first
+    // read (which happened to work via the TabBarView children list, but
+    // shouldn't be relied on) — this is what makes Discover (and Watch's
+    // videos) genuinely preloaded before the user ever swipes to them.
+    _discoverCubit;
+    _watchVideoCubit;
 
     WidgetsBinding.instance.addObserver(this);
     _unreadService = GetIt.instance<UnreadBadgeService>();
@@ -110,6 +129,21 @@ class _HomeTopTabsState extends State<HomeTopTabs>
     });
   }
 
+  // TabBar's onTap fires on every tap, including one on the tab that's
+  // already selected — unlike the TabController listener above, which only
+  // reacts to an actual index change. That's exactly what distinguishes
+  // "switching to this tab" (no reload — it should already be preloaded)
+  // from "re-tapping the tab I'm already on" (reload from the beginning).
+  void _onTabTap(int index) {
+    if (index != _tabs.index) return;
+    if (index == 0) {
+      context.read<LiveFeedBloc>().add(LiveFeedRefresh());
+      _watchVideoCubit.refresh();
+    } else if (index == 1) {
+      _discoverCubit.refresh();
+    }
+  }
+
   Future<void> _navigateToNotification() async {
     await Navigator.pushNamed(context, RouteNames.notifications);
     _unreadService.refresh();
@@ -125,6 +159,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
     _tabs.removeListener(_onTabChange);
     _tabs.dispose();
     _discoverCubit.close();
+    _watchVideoCubit.close();
     WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _unreadService.messageUnreadCount.removeListener(_refreshUnread);
@@ -153,29 +188,47 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: TabBar(
-                    controller: _tabs,
-                    isScrollable: true,
-                    padding: EdgeInsets.zero,
-                    tabAlignment: TabAlignment.start,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    indicatorColor: AppColors.primary_,
-                    dividerColor: Colors.transparent,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white38,
-                    labelStyle: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                    tabs: const [
-                      Tab(text: 'Watch'),
-                      Tab(text: 'Discover'),
-                      Tab(text: 'Video Chat'),
-                    ],
+                  child: BlocBuilder<LiveFeedBloc, LiveFeedState>(
+                    buildWhen: (p, n) => p.items.isEmpty != n.items.isEmpty,
+                    builder: (context, liveState) {
+                      final hasLive = liveState.items.isNotEmpty;
+                      return TabBar(
+                        controller: _tabs,
+                        onTap: _onTabTap,
+                        isScrollable: true,
+                        padding: EdgeInsets.zero,
+                        tabAlignment: TabAlignment.start,
+                        indicatorSize: TabBarIndicatorSize.label,
+                        indicatorColor: AppColors.primary_,
+                        dividerColor: Colors.transparent,
+                        labelColor: Colors.white,
+                        unselectedLabelColor: Colors.white38,
+                        labelStyle: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                        unselectedLabelStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                        tabs: [
+                          Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Watch'),
+                                if (hasLive) ...[
+                                  const SizedBox(width: 6),
+                                  const _LiveBadge(),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const Tab(text: 'Discover'),
+                          const Tab(text: 'Video Chat'),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -197,7 +250,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
             child: TabBarView(
               controller: _tabs,
               children: [
-                const HomeDiscoverGrid(),
+                HomeDiscoverGrid(videoCubit: _watchVideoCubit),
                 BlocProvider.value(
                   value: _discoverCubit,
                   child: const FeedBody(showAppBar: false),
@@ -209,6 +262,32 @@ class _HomeTopTabsState extends State<HomeTopTabs>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small red "LIVE" pill shown next to the Watch tab's label whenever at
+/// least one live stream is currently up.
+class _LiveBadge extends StatelessWidget {
+  const _LiveBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE53935),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'LIVE',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
       ),
     );
   }

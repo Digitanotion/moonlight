@@ -15,10 +15,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/countries.dart';
-import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/video_feed_screen.dart';
 import 'package:moonlight/features/home/domain/entities/live_item.dart';
@@ -32,7 +30,12 @@ import 'package:moonlight/features/home/presentation/widgets/video_tile_grid.dar
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 
 class HomeDiscoverGrid extends StatefulWidget {
-  const HomeDiscoverGrid({super.key});
+  // Owned by HomeTopTabs (like Discover's FeedCubit) instead of being
+  // created here — lets it start loading the moment Home mounts (not only
+  // once this tab's State is built) and lets the parent trigger a refresh
+  // from the tab bar's re-tap handler.
+  final FeedCubit videoCubit;
+  const HomeDiscoverGrid({super.key, required this.videoCubit});
   @override
   State<HomeDiscoverGrid> createState() => _HomeDiscoverGridState();
 }
@@ -47,7 +50,7 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
   bool get wantKeepAlive => true;
 
   final _ctrl = ScrollController();
-  late final FeedCubit _videoCubit;
+  FeedCubit get _videoCubit => widget.videoCubit;
 
   @override
   void initState() {
@@ -55,13 +58,6 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
     // Same LiveFeedBloc instance/event LiveNowSection used to start with —
     // that bloc itself is untouched, just driven from here now instead.
     context.read<LiveFeedBloc>().add(LiveFeedStarted(order: 'trending'));
-    // Own FeedCubit instance, own pagination state — completely separate
-    // from whatever instance the Posts screen is using.
-    _videoCubit = FeedCubit(
-      sl<FeedRepository>(),
-      type: 'video',
-      sort: 'trending',
-    )..loadFirstPage();
     _ctrl.addListener(_onScroll);
   }
 
@@ -75,7 +71,6 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
   @override
   void dispose() {
     _ctrl.dispose();
-    _videoCubit.close();
     super.dispose();
   }
 
