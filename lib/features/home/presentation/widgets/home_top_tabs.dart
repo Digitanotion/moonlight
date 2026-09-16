@@ -24,6 +24,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/unread_badge_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/about_moonlight_sheet.dart';
+import 'package:moonlight/core/widgets/pulsing_dot.dart';
 import 'package:moonlight/core/widgets/update_progress_ring.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
@@ -243,7 +244,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                                   child: Align(
                                     alignment: Alignment.centerLeft,
                                     child: _watchRefreshing
-                                        ? const _RefreshingDot()
+                                        ? const PulsingDot()
                                         : hasLive
                                         ? const _LiveBadge()
                                         : const SizedBox.shrink(),
@@ -264,7 +265,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
                                   child: Align(
                                     alignment: Alignment.centerLeft,
                                     child: _discoverRefreshing
-                                        ? const _RefreshingDot()
+                                        ? const PulsingDot()
                                         : const SizedBox.shrink(),
                                   ),
                                 ),
@@ -320,57 +321,6 @@ class _HomeTopTabsState extends State<HomeTopTabs>
 /// pulse — the "refresh is happening" cue for the re-tap-to-refresh
 /// gesture, since the tab's own content swap (shimmer → data) can be too
 /// quick/subtle to notice on a fast connection.
-class _RefreshingDot extends StatefulWidget {
-  const _RefreshingDot();
-
-  @override
-  State<_RefreshingDot> createState() => _RefreshingDotState();
-}
-
-class _RefreshingDotState extends State<_RefreshingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 650),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) {
-        final t = Curves.easeInOut.transform(_ctrl.value);
-        final scale = 0.75 + t * 1.0; // grows and shrinks
-        final glow = 3.0 + t * 9.0; // glows in step with the growth
-        return Transform.scale(
-          scale: scale,
-          child: Container(
-            width: 4,
-            height: 4,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.secondary,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.secondary.withValues(alpha: 0.85),
-                  blurRadius: glow,
-                  spreadRadius: glow * 0.25,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 /// Small red "LIVE" pill shown next to the Watch tab's label whenever at
 /// least one live stream is currently up.
 class _LiveBadge extends StatelessWidget {

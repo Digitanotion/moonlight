@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
 import 'package:moonlight/core/utils/countries.dart';
+import 'package:moonlight/core/widgets/pulsing_dot.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
 import 'package:moonlight/features/feed/presentation/pages/video_feed_screen.dart';
 import 'package:moonlight/features/home/domain/entities/live_item.dart';
@@ -196,12 +197,11 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
               }
               final videoIndex = i - lives.length;
               if (videoIndex >= videos.length) {
+                // Same pulsing-dot language as the tab bar's own refresh
+                // cue, instead of a plain spinner — a small red dot that
+                // grows and glows in place while the next page loads.
                 return const Center(
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                  child: PulsingDot(color: Color(0xFFE53935), size: 6),
                 );
               }
               return VideoTileGrid(
