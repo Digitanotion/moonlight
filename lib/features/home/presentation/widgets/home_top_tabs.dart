@@ -34,6 +34,7 @@ import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_ev
 import 'package:moonlight/features/home/presentation/bloc/live_feed/live_feed_state.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_app_bar.dart';
 import 'package:moonlight/features/home/presentation/widgets/home_discover_grid.dart';
+import 'package:moonlight/features/offerwall/presentation/widgets/earn_cash_banner.dart';
 
 class HomeTopTabs extends StatefulWidget {
   const HomeTopTabs({super.key});
@@ -292,7 +293,7 @@ class _HomeTopTabsState extends State<HomeTopTabs>
           const SizedBox(height: 4),
           // Dismissible nudge, not a persistent bar — sits right under the
           // header, out of the floating bottom nav's way entirely.
-          //const EarnCashBanner(),
+          const EarnCashBanner(),
           // Background-update heads-up — only ever visible while
           // AutoUpdateService actually has something to report.
           const UpdateStatusBanner(),
