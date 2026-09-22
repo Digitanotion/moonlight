@@ -116,74 +116,63 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                       animation: _glowCtrl,
                       builder: (context, child) {
                         final t = Curves.easeInOut.transform(_glowCtrl.value);
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(26),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(26),
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFF4A1D00),
-                                    Color(0xFF120600),
+                        // A layered "picture frame" — a thin outer gold
+                        // line with a gap before the card itself — instead
+                        // of one flat border, so the outline itself reads
+                        // as ornate rather than a plain rounded rectangle.
+                        return Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(
+                              color: const Color(
+                                0xFFFFD180,
+                              ).withValues(alpha: 0.55 + t * 0.25),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(26),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(26),
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF4A1D00),
+                                      Color(0xFF120600),
+                                    ],
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.secondary.withValues(
+                                      alpha: 0.5 + t * 0.35,
+                                    ),
+                                    width: 1.6,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.secondary.withValues(
+                                        alpha: 0.28 + t * 0.22,
+                                      ),
+                                      blurRadius: 30 + t * 16,
+                                      spreadRadius: 2,
+                                    ),
                                   ],
                                 ),
-                                border: Border.all(
-                                  color: AppColors.secondary.withValues(
-                                    alpha: 0.5 + t * 0.35,
-                                  ),
-                                  width: 1.6,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.secondary.withValues(
-                                      alpha: 0.28 + t * 0.22,
-                                    ),
-                                    blurRadius: 30 + t * 16,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
+                                child: child,
                               ),
-                              child: child,
                             ),
                           ),
                         );
                       },
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 40, 18, 20),
+                        padding: const EdgeInsets.fromLTRB(18, 60, 18, 20),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
-                              width: 118,
-                              height: 118,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  _SunburstRays(controller: _rayCtrl),
-                                  const Positioned(
-                                    top: -4,
-                                    left: 6,
-                                    child: _Sparkle(size: 14, delay: 0.0),
-                                  ),
-                                  const Positioned(
-                                    bottom: 2,
-                                    right: 2,
-                                    child: _Sparkle(size: 10, delay: 0.4),
-                                  ),
-                                  const Positioned(
-                                    top: 10,
-                                    right: -6,
-                                    child: _Sparkle(size: 12, delay: 0.7),
-                                  ),
-                                  _GlowIcon(controller: _glowCtrl),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 6),
                             const Text(
                               'Earn Real Cash Daily',
                               style: TextStyle(
@@ -216,6 +205,45 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                             ),
                             const SizedBox(height: 20),
                             _CtaButton(controller: _glowCtrl),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Hero icon — sits ABOVE the card, breaking through its
+                  // top edge (clipBehavior: none lets it overflow), so the
+                  // card's silhouette doesn't read as a plain rectangle
+                  // with an icon politely sitting inside it, matching the
+                  // reference's treasure-chest-bursting-through-the-top
+                  // composition.
+                  Positioned(
+                    top: -64,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: SizedBox(
+                        width: 118,
+                        height: 118,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            _SunburstRays(controller: _rayCtrl),
+                            const Positioned(
+                              top: -4,
+                              left: 6,
+                              child: _Sparkle(size: 14, delay: 0.0),
+                            ),
+                            const Positioned(
+                              bottom: 2,
+                              right: 2,
+                              child: _Sparkle(size: 10, delay: 0.4),
+                            ),
+                            const Positioned(
+                              top: 10,
+                              right: -6,
+                              child: _Sparkle(size: 12, delay: 0.7),
+                            ),
+                            _GlowIcon(controller: _glowCtrl),
                           ],
                         ),
                       ),
