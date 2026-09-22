@@ -540,19 +540,21 @@ class _CtaButton extends StatelessWidget {
 
 /// Two overlapping rotated rounded squares behind text — the classic cheap
 /// "sticker starburst" trick, no custom painting needed.
+/// A real jagged burst outline (CustomPainter, alternating spike/valley
+/// radius around the circle) instead of two overlapping rotated squares —
+/// the squares read as "a regular square", not a sticker-style starburst.
 class _Starburst extends StatelessWidget {
   const _Starburst();
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 76,
-      height: 76,
+      width: 78,
+      height: 78,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Transform.rotate(angle: 0, child: _spike()),
-          Transform.rotate(angle: math.pi / 4, child: _spike()),
+          CustomPaint(size: const Size(78, 78), painter: _StarburstPainter()),
           const Padding(
             padding: EdgeInsets.only(top: 2),
             child: Text(
@@ -570,23 +572,55 @@ class _Starburst extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _spike() {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: const LinearGradient(
+class _StarburstPainter extends CustomPainter {
+  static const _points = 14;
+  static const _innerRatio = 0.72; // valley depth relative to outer radius
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final outerRadius = size.shortestSide / 2;
+    final innerRadius = outerRadius * _innerRatio;
+
+    final path = Path();
+    for (var i = 0; i < _points * 2; i++) {
+      final angle = (math.pi / _points) * i - math.pi / 2;
+      final radius = i.isEven ? outerRadius : innerRadius;
+      final point = Offset(
+        center.dx + radius * math.cos(angle),
+        center.dy + radius * math.sin(angle),
+      );
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+
+    final rect = Rect.fromCircle(center: center, radius: outerRadius);
+
+    // Soft glow halo, painted first so the solid fill sits cleanly on top
+    // of it instead of the blur smearing over the star's crisp edges.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFFFF3B30).withValues(alpha: 0.55)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [Color(0xFFFF3B30), Color(0xFFFF8A00)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFF3B30).withValues(alpha: 0.5),
-            blurRadius: 16,
-          ),
-        ],
-      ),
+        ).createShader(rect),
     );
   }
+
+  @override
+  bool shouldRepaint(covariant _StarburstPainter oldDelegate) => false;
 }
