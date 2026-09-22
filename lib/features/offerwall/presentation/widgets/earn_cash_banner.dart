@@ -2,8 +2,9 @@
 //
 // The Watch-tab-only promo for the offerwall "Earn Cash" feature — floats
 // over the video/live grid with a dimmed backdrop, styled after a reference
-// screenshot of a flashy in-app purchase promo (glow border, a starburst
-// badge, a ticket-style price callout, a bold gradient CTA). Only rendered
+// screenshot of a flashy in-app purchase promo: a glowing hero icon behind
+// rotating sunburst rays, twinkling sparkle particles, drifting balloons,
+// a starburst discount-style badge, and a bold gradient CTA. Only rendered
 // while the Watch tab is active (see home_top_tabs.dart, which gates this
 // widget on _tabs.index == 0) — this widget itself doesn't know or care
 // which tab it's on, it just fills whatever Stack it's given.
@@ -32,7 +33,7 @@ class EarnCashBanner extends StatefulWidget {
 }
 
 class _EarnCashBannerState extends State<EarnCashBanner>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool _hidden = true; // hidden until we've checked, avoids a flash
   bool _dismissedThisSession = false;
 
@@ -40,6 +41,11 @@ class _EarnCashBannerState extends State<EarnCashBanner>
     vsync: this,
     duration: const Duration(seconds: 2),
   )..repeat(reverse: true);
+
+  late final AnimationController _rayCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 14),
+  )..repeat();
 
   @override
   void initState() {
@@ -50,6 +56,7 @@ class _EarnCashBannerState extends State<EarnCashBanner>
   @override
   void dispose() {
     _glowCtrl.dispose();
+    _rayCtrl.dispose();
     super.dispose();
   }
 
@@ -87,13 +94,18 @@ class _EarnCashBannerState extends State<EarnCashBanner>
               // accident.
               behavior: HitTestBehavior.opaque,
               onTap: () {},
-              child: Container(color: Colors.black.withValues(alpha: 0.6)),
+              child: Container(color: Colors.black.withValues(alpha: 0.65)),
             ),
           ),
+          // Balloons drift across the whole dimmed area, behind the card —
+          // painted before it in the Stack, ignoring pointer events.
+          const Positioned.fill(
+            child: IgnorePointer(child: _FloatingBalloons()),
+          ),
           Align(
-            alignment: const Alignment(0, -0.3),
+            alignment: const Alignment(0, -0.25),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 22),
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -105,33 +117,33 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                       builder: (context, child) {
                         final t = Curves.easeInOut.transform(_glowCtrl.value);
                         return ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(26),
                           child: BackdropFilter(
                             filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                             child: Container(
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(26),
                                 gradient: const LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                   colors: [
-                                    Color(0xFF3A1500),
-                                    Color(0xFF160800),
+                                    Color(0xFF4A1D00),
+                                    Color(0xFF120600),
                                   ],
                                 ),
                                 border: Border.all(
                                   color: AppColors.secondary.withValues(
-                                    alpha: 0.45 + t * 0.3,
+                                    alpha: 0.5 + t * 0.35,
                                   ),
-                                  width: 1.4,
+                                  width: 1.6,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppColors.secondary.withValues(
-                                      alpha: 0.22 + t * 0.18,
+                                      alpha: 0.28 + t * 0.22,
                                     ),
-                                    blurRadius: 22 + t * 14,
-                                    spreadRadius: 1,
+                                    blurRadius: 30 + t * 16,
+                                    spreadRadius: 2,
                                   ),
                                 ],
                               ),
@@ -141,21 +153,46 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                         );
                       },
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 34, 18, 18),
+                        padding: const EdgeInsets.fromLTRB(18, 40, 18, 20),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _GlowIcon(controller: _glowCtrl),
-                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: 118,
+                              height: 118,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  _SunburstRays(controller: _rayCtrl),
+                                  const Positioned(
+                                    top: -4,
+                                    left: 6,
+                                    child: _Sparkle(size: 14, delay: 0.0),
+                                  ),
+                                  const Positioned(
+                                    bottom: 2,
+                                    right: 2,
+                                    child: _Sparkle(size: 10, delay: 0.4),
+                                  ),
+                                  const Positioned(
+                                    top: 10,
+                                    right: -6,
+                                    child: _Sparkle(size: 12, delay: 0.7),
+                                  ),
+                                  _GlowIcon(controller: _glowCtrl),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
                             const Text(
                               'Earn Real Cash Daily',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -164,6 +201,9 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                ),
                               ),
                               child: const Text(
                                 'Complete simple tasks — get paid weekly',
@@ -174,9 +214,7 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            const _PriceTicket(),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 20),
                             _CtaButton(controller: _glowCtrl),
                           ],
                         ),
@@ -187,13 +225,13 @@ class _EarnCashBannerState extends State<EarnCashBanner>
                   // corner — outside the card's own bounds via
                   // clipBehavior: none, same technique already used for
                   // the LIVE badge/dancing icon in home_top_tabs.dart.
-                  const Positioned(top: -16, right: 6, child: _Starburst()),
+                  const Positioned(top: -20, right: 2, child: _Starburst()),
                   // Dismiss — a plain sibling of the tappable card (not
                   // nested inside its GestureDetector), so tapping it can
                   // never also trigger the "open Daily Tasks" navigation.
                   Positioned(
-                    top: 8,
-                    left: 8,
+                    top: 10,
+                    left: 10,
                     child: _CloseButton(
                       onTap: () => setState(() => _dismissedThisSession = true),
                     ),
@@ -242,73 +280,214 @@ class _GlowIcon extends StatelessWidget {
       builder: (context, _) {
         final t = Curves.easeInOut.transform(controller.value);
         return Container(
-          width: 64,
-          height: 64,
+          width: 68,
+          height: 68,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: const LinearGradient(
               colors: [AppColors.secondary, AppColors.primary2],
             ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.5),
+              width: 2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.secondary.withValues(alpha: 0.35 + t * 0.25),
-                blurRadius: 20 + t * 10,
-                spreadRadius: 1,
+                color: AppColors.secondary.withValues(alpha: 0.45 + t * 0.3),
+                blurRadius: 26 + t * 14,
+                spreadRadius: 2,
               ),
             ],
           ),
           alignment: Alignment.center,
-          child: const Text('💰', style: TextStyle(fontSize: 28)),
+          child: const Text('💰', style: TextStyle(fontSize: 30)),
         );
       },
     );
   }
 }
 
-/// Ticket-shaped "what it costs to unlock this" callout — echoes the
-/// reference screenshot's "NOW ONLY $0.5" ticket, but honestly showing the
-/// real one-time activation cost instead of a fake urgency price.
-class _PriceTicket extends StatelessWidget {
-  const _PriceTicket();
+/// Slowly-rotating light rays behind the hero icon — a classic "magical
+/// glow" treatment for a promo/reward hero graphic, drawn once with
+/// CustomPainter rather than needing illustration assets.
+class _SunburstRays extends StatelessWidget {
+  final AnimationController controller;
+  const _SunburstRays({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.confirmation_number_rounded,
-            size: 16,
-            color: AppColors.secondary,
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return Transform.rotate(
+          angle: controller.value * 2 * math.pi,
+          child: CustomPaint(
+            size: const Size(118, 118),
+            painter: _RaysPainter(),
           ),
-          const SizedBox(width: 8),
-          RichText(
-            text: const TextSpan(
-              style: TextStyle(
-                color: Color(0xFF160800),
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-              ),
-              children: [
-                TextSpan(text: 'Activate for 100 coins '),
-                TextSpan(
-                  text: '(\$1)',
-                  style: TextStyle(
-                    color: AppColors.secondary,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
+        );
+      },
+    );
+  }
+}
+
+class _RaysPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final outerRadius = size.shortestSide / 2;
+    const rayCount = 12;
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          AppColors.secondary.withValues(alpha: 0.55),
+          AppColors.secondary.withValues(alpha: 0.0),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: outerRadius));
+
+    for (var i = 0; i < rayCount; i++) {
+      final angle = (2 * math.pi / rayCount) * i;
+      final path = Path();
+      final halfWidth = 0.11;
+      path.moveTo(center.dx, center.dy);
+      path.lineTo(
+        center.dx + outerRadius * math.cos(angle - halfWidth),
+        center.dy + outerRadius * math.sin(angle - halfWidth),
+      );
+      path.lineTo(
+        center.dx + outerRadius * math.cos(angle + halfWidth),
+        center.dy + outerRadius * math.sin(angle + halfWidth),
+      );
+      path.close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RaysPainter oldDelegate) => false;
+}
+
+/// A single twinkling star — opacity and scale pulse on a loop, offset by
+/// [delay] (0.0–1.0 of the cycle) so a cluster of these never blinks in
+/// sync.
+class _Sparkle extends StatefulWidget {
+  final double size;
+  final double delay;
+  const _Sparkle({required this.size, required this.delay});
+
+  @override
+  State<_Sparkle> createState() => _SparkleState();
+}
+
+class _SparkleState extends State<_Sparkle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final phase = (_ctrl.value + widget.delay) % 1.0;
+        final t = Curves.easeInOut.transform(
+          phase < 0.5 ? phase * 2 : (1 - phase) * 2,
+        );
+        return Opacity(
+          opacity: 0.25 + t * 0.75,
+          child: Transform.scale(
+            scale: 0.6 + t * 0.5,
+            child: Icon(
+              Icons.auto_awesome_rounded,
+              size: widget.size,
+              color: Colors.amberAccent.withValues(alpha: 0.9),
             ),
           ),
-        ],
-      ),
+        );
+      },
+    );
+  }
+}
+
+/// A handful of emoji balloons drifting gently up and down around the
+/// card, each on its own phase/speed so they read as loosely floating
+/// rather than mechanically synced. Cheap, reliable across platforms —
+/// no custom illustration assets needed.
+class _FloatingBalloons extends StatelessWidget {
+  const _FloatingBalloons();
+
+  static const _balloons = [
+    (align: Alignment(-0.92, -0.7), size: 34.0, period: 3400, delay: 0.0),
+    (align: Alignment(0.88, -0.55), size: 26.0, period: 2800, delay: 0.3),
+    (align: Alignment(-0.8, 0.55), size: 24.0, period: 3100, delay: 0.6),
+    (align: Alignment(0.9, 0.72), size: 30.0, period: 3700, delay: 0.15),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        for (final b in _balloons)
+          Align(
+            alignment: b.align,
+            child: _Balloon(size: b.size, period: b.period, delay: b.delay),
+          ),
+      ],
+    );
+  }
+}
+
+class _Balloon extends StatefulWidget {
+  final double size;
+  final int period;
+  final double delay;
+  const _Balloon({
+    required this.size,
+    required this.period,
+    required this.delay,
+  });
+
+  @override
+  State<_Balloon> createState() => _BalloonState();
+}
+
+class _BalloonState extends State<_Balloon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: widget.period),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final phase = (_ctrl.value + widget.delay) % 1.0;
+        final bob = math.sin(phase * 2 * math.pi) * 10;
+        final sway = math.sin(phase * 2 * math.pi * 0.6) * 6;
+        return Transform.translate(
+          offset: Offset(sway, bob),
+          child: Opacity(
+            opacity: 0.85,
+            child: Text('🎈', style: TextStyle(fontSize: widget.size)),
+          ),
+        );
+      },
     );
   }
 }
@@ -325,16 +504,20 @@ class _CtaButton extends StatelessWidget {
         final t = Curves.easeInOut.transform(controller.value);
         return Container(
           width: double.infinity,
-          height: 48,
+          height: 50,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(25),
             gradient: const LinearGradient(
               colors: [AppColors.secondary, AppColors.primary2],
             ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.25),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.secondary.withValues(alpha: 0.4 + t * 0.25),
-                blurRadius: 16 + t * 8,
+                color: AppColors.secondary.withValues(alpha: 0.45 + t * 0.3),
+                blurRadius: 18 + t * 10,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -345,7 +528,7 @@ class _CtaButton extends StatelessWidget {
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w800,
-              fontSize: 15,
+              fontSize: 15.5,
               letterSpacing: 0.3,
             ),
           ),
@@ -363,8 +546,8 @@ class _Starburst extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 74,
-      height: 74,
+      width: 76,
+      height: 76,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -390,8 +573,8 @@ class _Starburst extends StatelessWidget {
 
   Widget _spike() {
     return Container(
-      width: 54,
-      height: 54,
+      width: 56,
+      height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         gradient: const LinearGradient(
@@ -400,7 +583,7 @@ class _Starburst extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: const Color(0xFFFF3B30).withValues(alpha: 0.5),
-            blurRadius: 14,
+            blurRadius: 16,
           ),
         ],
       ),
