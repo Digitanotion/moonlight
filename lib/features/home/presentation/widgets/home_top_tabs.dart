@@ -291,24 +291,36 @@ class _HomeTopTabsState extends State<HomeTopTabs>
             ),
           ),
           const SizedBox(height: 4),
-          // Dismissible nudge, not a persistent bar — sits right under the
-          // header, out of the floating bottom nav's way entirely.
-          const EarnCashBanner(),
           // Background-update heads-up — only ever visible while
           // AutoUpdateService actually has something to report.
           const UpdateStatusBanner(),
           Expanded(
-            child: TabBarView(
-              controller: _tabs,
+            child: Stack(
               children: [
-                HomeDiscoverGrid(videoCubit: _watchVideoCubit),
-                BlocProvider.value(
-                  value: _discoverCubit,
-                  child: const FeedBody(showAppBar: false),
+                TabBarView(
+                  controller: _tabs,
+                  children: [
+                    HomeDiscoverGrid(videoCubit: _watchVideoCubit),
+                    BlocProvider.value(
+                      value: _discoverCubit,
+                      child: const FeedBody(showAppBar: false),
+                    ),
+                    // Never actually seen — _onTabChange snaps back to the
+                    // last real tab before this one settles into view.
+                    const SizedBox.shrink(),
+                  ],
                 ),
-                // Never actually seen — _onTabChange snaps back to the
-                // last real tab before this one settles into view.
-                const SizedBox.shrink(),
+                // Floats over the Watch tab's content only — not inline in
+                // the page flow — with a dimmed backdrop behind it, per
+                // the reference: the promo overlays the stream grid, the
+                // header/tabs above and bottom nav below stay undimmed
+                // since this Stack only spans the content area.
+                ListenableBuilder(
+                  listenable: _tabs,
+                  builder: (context, _) => _tabs.index == 0
+                      ? const EarnCashBanner()
+                      : const SizedBox.shrink(),
+                ),
               ],
             ),
           ),

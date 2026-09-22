@@ -1,20 +1,19 @@
 // lib/features/offerwall/presentation/widgets/earn_cash_banner.dart
 //
-// The homepage/strategic-placement promo for the offerwall "Earn Cash"
-// feature. Per the client, this stays permanently visible pre-activation —
-// no user-dismiss (the X was removed on an earlier request, not added back
-// here even though the visual reference for this redesign had one). It
-// still hides for good once the user has actually activated, since at that
-// point the permanent access point is the account menu's "Earn Cash" row
-// (and the Wallet screen's actions sheet) — a "start earning" prompt stops
-// making sense once they already have.
+// The Watch-tab-only promo for the offerwall "Earn Cash" feature — floats
+// over the video/live grid with a dimmed backdrop, styled after a reference
+// screenshot of a flashy in-app purchase promo (glow border, a starburst
+// badge, a ticket-style price callout, a bold gradient CTA). Only rendered
+// while the Watch tab is active (see home_top_tabs.dart, which gates this
+// widget on _tabs.index == 0) — this widget itself doesn't know or care
+// which tab it's on, it just fills whatever Stack it's given.
 //
-// Redesigned to read as a real promo card — glow, a starburst badge, a
-// ticket-style price callout, a bold gradient CTA — rather than a slim
-// pill, per a reference screenshot of a flashy in-app purchase promo.
-// Kept inline on the homepage (not a full-screen modal/backdrop like the
-// reference) since this is still meant to be a permanent, non-intrusive
-// homepage element, not an interruption.
+// Dismissible via a close button in the top-left corner — session-only
+// (resets on next cold launch), not persisted. Also hides for good once
+// the user has actually activated, since at that point the permanent
+// access point is the account menu's "Earn Cash" row (and the Wallet
+// screen's actions sheet) — a "start earning" prompt stops making sense
+// once they already have.
 
 import 'dart:math' as math;
 import 'dart:ui';
@@ -35,6 +34,7 @@ class EarnCashBanner extends StatefulWidget {
 class _EarnCashBannerState extends State<EarnCashBanner>
     with SingleTickerProviderStateMixin {
   bool _hidden = true; // hidden until we've checked, avoids a flash
+  bool _dismissedThisSession = false;
 
   late final AnimationController _glowCtrl = AnimationController(
     vsync: this,
@@ -67,100 +67,165 @@ class _EarnCashBannerState extends State<EarnCashBanner>
 
   @override
   Widget build(BuildContext context) {
-    if (_hidden) return const SizedBox.shrink();
+    if (_hidden || _dismissedThisSession) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-      child: GestureDetector(
-        onTap: () => Navigator.pushNamed(context, RouteNames.dailyTasks),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AnimatedBuilder(
-              animation: _glowCtrl,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_glowCtrl.value);
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF3A1500), Color(0xFF160800)],
-                        ),
-                        border: Border.all(
-                          color: AppColors.secondary.withValues(
-                            alpha: 0.45 + t * 0.3,
-                          ),
-                          width: 1.4,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.secondary.withValues(
-                              alpha: 0.22 + t * 0.18,
+    // Floats over the Watch tab's content behind it, dimming it, rather
+    // than sitting inline in the page's normal flow — this widget is a
+    // direct Stack sibling of the TabBarView in home_top_tabs.dart (which
+    // only renders it while the Watch tab is active), sized to that same
+    // content area — below the header/tabs, above the bottom nav, neither
+    // of which this overlay covers since its Stack ancestor only spans
+    // the content region.
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              // Absorbs taps so they don't fall through to the grid
+              // underneath — deliberately doesn't dismiss on tap; only
+              // the close button does, so it can't be swiped away by
+              // accident.
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              child: Container(color: Colors.black.withValues(alpha: 0.6)),
+            ),
+          ),
+          Align(
+            alignment: const Alignment(0, -0.3),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap: () =>
+                        Navigator.pushNamed(context, RouteNames.dailyTasks),
+                    child: AnimatedBuilder(
+                      animation: _glowCtrl,
+                      builder: (context, child) {
+                        final t = Curves.easeInOut.transform(_glowCtrl.value);
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF3A1500),
+                                    Color(0xFF160800),
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: AppColors.secondary.withValues(
+                                    alpha: 0.45 + t * 0.3,
+                                  ),
+                                  width: 1.4,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.secondary.withValues(
+                                      alpha: 0.22 + t * 0.18,
+                                    ),
+                                    blurRadius: 22 + t * 14,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: child,
                             ),
-                            blurRadius: 22 + t * 14,
-                            spreadRadius: 1,
                           ),
-                        ],
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 34, 18, 18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _GlowIcon(controller: _glowCtrl),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Earn Real Cash Daily',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                'Complete simple tasks — get paid weekly',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const _PriceTicket(),
+                            const SizedBox(height: 16),
+                            _CtaButton(controller: _glowCtrl),
+                          ],
+                        ),
                       ),
-                      child: child,
                     ),
                   ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 34, 18, 18),
-                child: Column(
-                  children: [
-                    _GlowIcon(controller: _glowCtrl),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Earn Real Cash Daily',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  // Starburst badge, perched on the card's top-right
+                  // corner — outside the card's own bounds via
+                  // clipBehavior: none, same technique already used for
+                  // the LIVE badge/dancing icon in home_top_tabs.dart.
+                  const Positioned(top: -16, right: 6, child: _Starburst()),
+                  // Dismiss — a plain sibling of the tappable card (not
+                  // nested inside its GestureDetector), so tapping it can
+                  // never also trigger the "open Daily Tasks" navigation.
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: _CloseButton(
+                      onTap: () => setState(() => _dismissedThisSession = true),
                     ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        'Complete simple tasks — get paid weekly',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const _PriceTicket(),
-                    const SizedBox(height: 16),
-                    _CtaButton(controller: _glowCtrl),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            // Starburst badge, perched on the card's top-right corner —
-            // outside the card's own bounds via clipBehavior: none, same
-            // technique already used for the LIVE badge/dancing icon in
-            // home_top_tabs.dart, so it never affects the card's layout.
-            const Positioned(top: -16, right: 6, child: _Starburst()),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CloseButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CloseButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.4),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         ),
+        child: const Icon(Icons.close_rounded, color: Colors.white70, size: 15),
       ),
     );
   }
