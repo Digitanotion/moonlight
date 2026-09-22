@@ -5,12 +5,14 @@
 // requirement to start earning cash daily for life. You will be able to
 // withdraw your earnings every week."
 //
-// Being migrated from Adjoe/Torox to Tapjoy/Timewall — Tapjoy's Web
-// Offerwall is live now (a WebView pointed at Tapjoy's hosted offerwall
-// URL, keyed to the signed-in user so their reward postbacks credit the
-// right account — see OfferwallController::postbackTapjoy on the API
-// side). Timewall stays an honest placeholder until that account is set
-// up; building a fake-working tab would be worse than saying so.
+// Migrated from Adjoe/Torox to Tapjoy/Timewall, both live now:
+//  - Tapjoy: a WebView pointed at Tapjoy's hosted offerwall URL, keyed to
+//    the signed-in user (see OfferwallController::postbackTapjoy).
+//  - Timewall: NOT a WebView — their own docs say file uploads and other
+//    features break in one, and recommend an external browser for more
+//    revenue — so this tab is just a launch button (url_launcher) that
+//    opens Timewall's tasks page outside the app (see
+//    OfferwallController::postbackTimewall for the crediting side).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -20,6 +22,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/offerwall/presentation/cubit/offerwall_cubit.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/user_helper.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class DailyTasksScreen extends StatelessWidget {
@@ -161,7 +164,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                   controller: _tabs,
                   children: const [
                     _TapjoyOfferwallView(),
-                    _ProviderOfferwall(providerName: 'Timewall'),
+                    _TimewallOfferwallView(),
                   ],
                 ),
               ),
@@ -398,12 +401,35 @@ class _OfferwallErrorView extends StatelessWidget {
   }
 }
 
-/// Honest placeholder for one provider's offerwall surface. Swap the body
-/// for the real SDK/WebView once that vendor's keys are wired in
-/// (config/offerwall.php on the API side + this widget on the client side).
-class _ProviderOfferwall extends StatelessWidget {
-  final String providerName;
-  const _ProviderOfferwall({required this.providerName});
+/// Timewall explicitly recommends AGAINST embedding their offerwall in a
+/// WebView (their own dashboard: "loading the URL in web view will cause
+/// many features to break... you will earn a lot more revenue by opening
+/// in an external browser" — the file-upload control some tasks need
+/// specifically doesn't work in a WebView). So unlike Tapjoy, this tab is
+/// just a launcher — a button that opens Timewall's hosted tasks page in
+/// the device's own browser via url_launcher.
+class _TimewallOfferwallView extends StatelessWidget {
+  const _TimewallOfferwallView();
+
+  static const _placementId = '70b2a2de34c50797';
+
+  Future<void> _openTimewall(BuildContext context) async {
+    final userId = UserHelper.getCurrentUser(context)?.id ?? '';
+    if (userId.isEmpty) return;
+
+    final uri = Uri.parse(
+      'https://timewall.io/users/login'
+      '?oid=$_placementId'
+      '&uid=${Uri.encodeComponent(userId)}'
+      '&tab=tasks',
+    );
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        TopSnack.error(context, "Couldn't open Timewall. Please try again.");
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -414,15 +440,15 @@ class _ProviderOfferwall extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.hourglass_top_rounded,
-              color: Colors.white.withValues(alpha: 0.3),
+              Icons.open_in_browser_rounded,
+              color: const Color(0xFF1FBF75).withValues(alpha: 0.8),
               size: 40,
             ),
             const SizedBox(height: 16),
-            Text(
-              '$providerName tasks are finishing setup',
+            const Text(
+              'Timewall tasks open in your browser',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
@@ -430,10 +456,30 @@ class _ProviderOfferwall extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'We\'re putting the final touches on this partner\'s tasks. '
-              'Check back soon — your activation is already saved.',
+              'Surveys and tasks work best outside the app — tap below to '
+              'open Timewall, complete tasks, then come back here. Your '
+              'earnings sync automatically.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white54, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1FBF75),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () => _openTimewall(context),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: const Text(
+                  'Open Timewall Tasks',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
             ),
           ],
         ),
