@@ -176,6 +176,16 @@ class _DailyTasksViewState extends State<_DailyTasksView>
   }
 }
 
+/// Coins map 1:1 to USD cents everywhere in the offerwall system (the same
+/// convention the Tapjoy/Timewall currency conversion rates were set up
+/// with), so this is exact, not an approximation.
+String _formatUsd(int coins) {
+  final dollars = coins / 100;
+  return dollars == dollars.roundToDouble()
+      ? '\$${dollars.toStringAsFixed(0)}'
+      : '\$${dollars.toStringAsFixed(2)}';
+}
+
 class _ActivationGate extends StatelessWidget {
   final int costCoins;
   final bool activating;
@@ -225,8 +235,9 @@ class _ActivationGate extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Activate your participation with one time $costCoins coins '
-              'maintenance requirement to start earning cash daily for life. '
-              'You will be able to withdraw your earnings every week.',
+              '(${_formatUsd(costCoins)}) maintenance requirement to start '
+              'earning cash daily for life. You will be able to withdraw '
+              'your earnings every week.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white60, height: 1.5),
             ),
@@ -252,7 +263,7 @@ class _ActivationGate extends StatelessWidget {
                         ),
                       )
                     : Text(
-                        'Activate with $costCoins coins',
+                        'Activate with $costCoins coins (${_formatUsd(costCoins)})',
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
