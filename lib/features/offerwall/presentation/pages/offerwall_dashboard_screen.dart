@@ -6,12 +6,21 @@
 // withdrawal history, and the withdraw flow (min $15 / max $100 / once a
 // week, admin-approved — never automatic) all live here.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/offerwall/presentation/cubit/offerwall_cubit.dart';
+import 'package:moonlight/features/withdrawal/domain/repositories/withdrawal_repository.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+
+// Nigeria NUBAN is always exactly 10 digits — resolve immediately on hit,
+// same threshold the main wallet withdrawal screen uses.
+const int _kNubanLength = 10;
+const String _kOfferwallBankCountry = 'Nigeria';
 
 class OfferwallDashboardScreen extends StatelessWidget {
   const OfferwallDashboardScreen({super.key});
@@ -403,23 +412,144 @@ class _WithdrawSheet extends StatefulWidget {
 
 class _WithdrawSheetState extends State<_WithdrawSheet> {
   final _amountCtrl = TextEditingController();
-  final _bankNameCtrl = TextEditingController();
-  final _bankCodeCtrl = TextEditingController();
   final _accountNumberCtrl = TextEditingController();
   final _accountNameCtrl = TextEditingController();
-  final _paypalEmailCtrl = TextEditingController();
-  String _method = 'flutterwave';
+  final String _method = 'flutterwave'; // PayPal is disabled — see chips below.
   bool _submitting = false;
+
+  List<Map<String, dynamic>> _banks = [];
+  Map<String, dynamic>? _selectedBank;
+  bool _loadingBanks = false;
+  bool _resolvingAccountName = false;
+  String? _accountNameError;
+  Timer? _accountResolutionTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadBanks());
+  }
 
   @override
   void dispose() {
+    _accountResolutionTimer?.cancel();
     _amountCtrl.dispose();
-    _bankNameCtrl.dispose();
-    _bankCodeCtrl.dispose();
     _accountNumberCtrl.dispose();
     _accountNameCtrl.dispose();
-    _paypalEmailCtrl.dispose();
     super.dispose();
+  }
+
+  // ── Bank fetch + account-name resolution ──────────────────────────────────
+  // Same smooth flow as the main wallet withdrawal screen: select a bank,
+  // type the account number, and the account name auto-fills.
+
+  Future<void> _loadBanks() async {
+    setState(() {
+      _loadingBanks = true;
+      _selectedBank = null;
+      _banks = [];
+      _accountNameCtrl.clear();
+      _accountNameError = null;
+    });
+    try {
+      final banks = await sl<WithdrawalRepository>().fetchBanks(
+        _kOfferwallBankCountry,
+      );
+      if (mounted) setState(() => _banks = banks);
+    } catch (e) {
+      if (mounted) TopSnack.error(context, 'Could not load banks: $e');
+    } finally {
+      if (mounted) setState(() => _loadingBanks = false);
+    }
+  }
+
+  void _onBankSelected(Map<String, dynamic> bank) {
+    setState(() {
+      _selectedBank = bank;
+      _accountNameCtrl.clear();
+      _accountNameError = null;
+      _resolvingAccountName = false;
+    });
+    _accountResolutionTimer?.cancel();
+
+    final number = _accountNumberCtrl.text.trim();
+    if (number.length >= _kNubanLength) {
+      _triggerResolution(number, bank);
+    }
+  }
+
+  void _onAccountNumberChanged(String value) {
+    final number = value.trim();
+    final bank = _selectedBank;
+
+    setState(() {
+      _accountNameCtrl.clear();
+      _accountNameError = null;
+      _resolvingAccountName = false;
+    });
+    _accountResolutionTimer?.cancel();
+
+    if (bank == null || number.length < _kNubanLength) return;
+
+    if (number.length == _kNubanLength) {
+      _triggerResolution(number, bank);
+      return;
+    }
+
+    setState(() => _resolvingAccountName = true);
+    _accountResolutionTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      _triggerResolution(number, bank);
+    });
+  }
+
+  Future<void> _triggerResolution(
+    String number,
+    Map<String, dynamic> bank,
+  ) async {
+    setState(() {
+      _resolvingAccountName = true;
+      _accountNameError = null;
+    });
+    try {
+      final name = await sl<WithdrawalRepository>().resolveAccountName(
+        accountNumber: number,
+        bankCode: bank['code']?.toString() ?? '',
+      );
+      if (!mounted) return;
+      setState(() {
+        _accountNameCtrl.text = name;
+        _resolvingAccountName = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _accountNameCtrl.clear();
+        _resolvingAccountName = false;
+        _accountNameError =
+            'Could not verify this account. Check the '
+            'account number and bank.';
+      });
+    }
+  }
+
+  void _openBankSearchSheet() {
+    if (_banks.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1C1533),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _OfferwallBankSearchSheet(
+        banks: _banks,
+        onSelected: (bank) {
+          Navigator.pop(context);
+          _onBankSelected(bank);
+        },
+      ),
+    );
   }
 
   Future<void> _submit(OfferwallState state) async {
@@ -440,15 +570,10 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
       return;
     }
 
-    if (_method == 'flutterwave' &&
-        (_bankCodeCtrl.text.trim().isEmpty ||
-            _accountNumberCtrl.text.trim().isEmpty ||
-            _accountNameCtrl.text.trim().isEmpty)) {
+    if (_selectedBank == null ||
+        _accountNumberCtrl.text.trim().isEmpty ||
+        _accountNameCtrl.text.trim().isEmpty) {
       TopSnack.error(context, 'Fill in your bank details.');
-      return;
-    }
-    if (_method == 'paypal' && _paypalEmailCtrl.text.trim().isEmpty) {
-      TopSnack.error(context, 'Enter your PayPal email.');
       return;
     }
 
@@ -457,15 +582,11 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
       final message = await context.read<OfferwallCubit>().requestWithdrawal(
         amountUsdCents: cents,
         paymentMethod: _method,
-        bankAccountName: _method == 'flutterwave'
-            ? _accountNameCtrl.text.trim()
-            : null,
-        bankAccountNumber: _method == 'flutterwave'
-            ? _accountNumberCtrl.text.trim()
-            : null,
-        bankName: _method == 'flutterwave' ? _bankNameCtrl.text.trim() : null,
-        bankCode: _method == 'flutterwave' ? _bankCodeCtrl.text.trim() : null,
-        paypalEmail: _method == 'paypal' ? _paypalEmailCtrl.text.trim() : null,
+        bankAccountName: _accountNameCtrl.text.trim(),
+        bankAccountNumber: _accountNumberCtrl.text.trim(),
+        bankName: _selectedBank?['name']?.toString() ?? '',
+        bankCode: _selectedBank?['code']?.toString() ?? '',
+        bankCountry: _kOfferwallBankCountry,
       );
 
       if (!mounted) return;
@@ -555,31 +676,32 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'flutterwave', label: Text('Bank')),
-                  ButtonSegment(value: 'paypal', label: Text('PayPal')),
+              Row(
+                children: [
+                  Expanded(
+                    child: _OfferwallMethodChip(
+                      label: 'Bank Transfer',
+                      icon: Icons.account_balance_rounded,
+                      selected: true,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _OfferwallMethodChip(
+                      label: 'PayPal',
+                      icon: Icons.send_to_mobile_rounded,
+                      selected: false,
+                      disabled: true,
+                    ),
+                  ),
                 ],
-                selected: {_method},
-                onSelectionChanged: (s) => setState(() => _method = s.first),
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: const Color(0xFF1FBF75),
-                  selectedForegroundColor: Colors.white,
-                  backgroundColor: Colors.white.withValues(alpha: 0.06),
-                  foregroundColor: Colors.white70,
-                ),
               ),
-              const SizedBox(height: 12),
-              if (_method == 'flutterwave') ...[
-                _field(_bankNameCtrl, 'Bank name'),
-                const SizedBox(height: 10),
-                _field(_bankCodeCtrl, 'Bank code'),
-                const SizedBox(height: 10),
-                _field(_accountNumberCtrl, 'Account number'),
-                const SizedBox(height: 10),
-                _field(_accountNameCtrl, 'Account name'),
-              ] else
-                _field(_paypalEmailCtrl, 'PayPal email'),
+              const SizedBox(height: 16),
+              _bankSelector(),
+              const SizedBox(height: 10),
+              _accountNumberField(),
+              const SizedBox(height: 10),
+              _accountNameField(),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -614,6 +736,173 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
     );
   }
 
+  // ── Searchable bank selector ───────────────────────────────────────────────
+
+  Widget _bankSelector() {
+    return GestureDetector(
+      onTap: _loadingBanks || _banks.isEmpty ? null : _openBankSearchSheet,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _selectedBank != null
+                ? const Color(0xFF1FBF75).withValues(alpha: 0.5)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _loadingBanks
+                  ? const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF1FBF75),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Loading banks…',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                      ],
+                    )
+                  : _banks.isEmpty
+                  ? Row(
+                      children: [
+                        const Text(
+                          'No banks loaded',
+                          style: TextStyle(color: Colors.white38),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _loadBanks,
+                          child: const Text(
+                            'Retry',
+                            style: TextStyle(color: Color(0xFF1FBF75)),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      _selectedBank?['name']?.toString() ??
+                          'Tap to select your bank',
+                      style: TextStyle(
+                        color: _selectedBank != null
+                            ? Colors.white
+                            : Colors.white38,
+                        fontSize: 15,
+                      ),
+                    ),
+            ),
+            if (!_loadingBanks && _banks.isNotEmpty)
+              Icon(
+                Icons.search,
+                color: _selectedBank != null
+                    ? const Color(0xFF1FBF75)
+                    : Colors.white38,
+                size: 20,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Account number field ───────────────────────────────────────────────────
+
+  Widget _accountNumberField() {
+    return TextField(
+      controller: _accountNumberCtrl,
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(16),
+      ],
+      style: const TextStyle(color: Colors.white),
+      onChanged: _onAccountNumberChanged,
+      decoration: InputDecoration(
+        labelText: 'Account number',
+        labelStyle: const TextStyle(color: Colors.white54),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.06),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
+      ),
+    );
+  }
+
+  // ── Account name field (read-only, auto-populated) ─────────────────────────
+
+  Widget _accountNameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _accountNameCtrl,
+          readOnly: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            labelText: 'Account name',
+            hintText: _resolvingAccountName
+                ? 'Verifying…'
+                : 'Auto-filled from your account number',
+            labelStyle: const TextStyle(color: Colors.white54),
+            hintStyle: const TextStyle(color: Colors.white30),
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.06),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            suffixIcon: _resolvingAccountName
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF1FBF75),
+                      ),
+                    ),
+                  )
+                : (_accountNameCtrl.text.isNotEmpty
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          color: Color(0xFF1FBF75),
+                        )
+                      : null),
+          ),
+        ),
+        if (_accountNameError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              _accountNameError!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _field(
     TextEditingController ctrl,
     String label, {
@@ -637,6 +926,194 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
           vertical: 12,
         ),
       ),
+    );
+  }
+}
+
+// ── Payment method chip ────────────────────────────────────────────────────
+// PayPal stays visible but disabled — same treatment as the main wallet
+// withdrawal screen: grayed out, a help icon, and a "not available" message
+// on tap instead of being selectable.
+
+class _OfferwallMethodChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool disabled;
+
+  const _OfferwallMethodChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    this.disabled = false,
+  });
+
+  void _showDisabledMessage(BuildContext context) {
+    TopSnack.info(context, 'PayPal is not available at the moment.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selected && !disabled;
+    return GestureDetector(
+      onTap: disabled ? () => _showDisabledMessage(context) : null,
+      child: Opacity(
+        opacity: disabled ? 0.55 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF1FBF75)
+                : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? Colors.white : Colors.white70,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+              if (disabled) ...[
+                const SizedBox(width: 6),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showDisabledMessage(context),
+                  child: const Icon(
+                    Icons.help_outline_rounded,
+                    size: 16,
+                    color: Colors.white38,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bank search sheet ───────────────────────────────────────────────────────
+
+class _OfferwallBankSearchSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> banks;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+
+  const _OfferwallBankSearchSheet({
+    required this.banks,
+    required this.onSelected,
+  });
+
+  @override
+  State<_OfferwallBankSearchSheet> createState() =>
+      _OfferwallBankSearchSheetState();
+}
+
+class _OfferwallBankSearchSheetState extends State<_OfferwallBankSearchSheet> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _query.isEmpty
+        ? widget.banks
+        : widget.banks
+              .where(
+                (b) => (b['name']?.toString().toLowerCase() ?? '').contains(
+                  _query.toLowerCase(),
+                ),
+              )
+              .toList();
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Select your bank',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() => _query = v),
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Search bank',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.06),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, _) => Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                  itemBuilder: (_, i) {
+                    final bank = filtered[i];
+                    return ListTile(
+                      title: Text(
+                        bank['name']?.toString() ?? '',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      onTap: () => widget.onSelected(bank),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
