@@ -636,7 +636,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             ),
           ),
           const SizedBox(height: 4),
-           const Text(
+          const Text(
             'Minimum: \$1.00',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
@@ -686,14 +686,12 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                   icon: Icons.send_to_mobile,
                   accentColor: const Color.fromARGB(255, 245, 245, 245),
                   selected: _selectedMethod == _PaymentMethod.paypal,
+                  disabled: true,
+                  disabledMessage: 'PayPal is not available at the moment.',
                   onTap: () {
                     // if (_selectedMethod != _PaymentMethod.paypal) {
                     //   setState(() => _selectedMethod = _PaymentMethod.paypal);
                     // }
-                    TopSnack.info(
-                      context,
-                      "PayPal is coming soon. Stay tuned!",
-                    );
                   },
                 ),
               ),
@@ -774,7 +772,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     if (v == null || v.isEmpty) return 'Enter an amount';
                     final dollars = double.tryParse(v) ?? 0.0;
                     final cents = (dollars * 100).round();
-                   if (cents < 100) {
+                    if (cents < 100) {
                       return 'Minimum withdrawal is \$1.00';
                     }
                     if (cents > _withdrawableCents) {
@@ -1670,6 +1668,12 @@ class _MethodCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Visible but inert — grayed out, can't be selected. Tapping the card
+  /// (or specifically the help icon that replaces the usual selected
+  /// checkmark) shows [disabledMessage] instead of selecting it.
+  final bool disabled;
+  final String? disabledMessage;
+
   const _MethodCard({
     required this.label,
     required this.sublabel,
@@ -1677,61 +1681,85 @@ class _MethodCard extends StatelessWidget {
     required this.accentColor,
     required this.selected,
     required this.onTap,
+    this.disabled = false,
+    this.disabledMessage,
     Key? key,
   }) : super(key: key);
 
+  void _showDisabledMessage(BuildContext context) {
+    TopSnack.info(context, disabledMessage ?? 'Not available at the moment.');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isSelected = selected && !disabled;
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: selected
-              ? accentColor.withOpacity(0.15)
-              : const Color(0xFF141433),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? accentColor : Colors.white12,
-            width: selected ? 1.5 : 1,
+      onTap: disabled ? () => _showDisabledMessage(context) : onTap,
+      child: Opacity(
+        opacity: disabled ? 0.55 : 1,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? accentColor.withOpacity(0.15)
+                : const Color(0xFF141433),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? accentColor : Colors.white12,
+              width: isSelected ? 1.5 : 1,
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  icon,
-                  color: selected ? accentColor : Colors.white38,
-                  size: 22,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    color: disabled
+                        ? Colors.white24
+                        : (isSelected ? accentColor : Colors.white38),
+                    size: 22,
+                  ),
+                  const Spacer(),
+                  if (disabled)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _showDisabledMessage(context),
+                      child: const Icon(
+                        Icons.help_outline_rounded,
+                        color: Colors.white38,
+                        size: 18,
+                      ),
+                    )
+                  else if (isSelected)
+                    Icon(Icons.check_circle, color: accentColor, size: 18),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: disabled
+                      ? Colors.white38
+                      : (isSelected ? Colors.white : Colors.white54),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
-                const Spacer(),
-                if (selected)
-                  Icon(Icons.check_circle, color: accentColor, size: 18),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white54,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              sublabel,
-              style: TextStyle(
-                color: selected
-                    ? accentColor.withOpacity(0.85)
-                    : Colors.white30,
-                fontSize: 11,
+              const SizedBox(height: 2),
+              Text(
+                disabled ? 'Not available' : sublabel,
+                style: TextStyle(
+                  color: isSelected
+                      ? accentColor.withOpacity(0.85)
+                      : Colors.white30,
+                  fontSize: 11,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
