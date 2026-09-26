@@ -53,11 +53,13 @@ class _AppLogoLoaderState extends State<AppLogoLoader>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Only an explicit tight constraint (a SizedBox/ConstrainedBox the
+        // caller wrapped us in) should grow the loader — a merely bounded
+        // constraint (e.g. Center() inside a full-screen Scaffold body) must
+        // NOT be read as "fill the screen", same as CircularProgressIndicator
+        // never fills loose bounds either.
         final double diameter =
-            widget.size ??
-            (constraints.hasBoundedWidth && constraints.hasBoundedHeight
-                ? constraints.biggest.shortestSide
-                : 36);
+            widget.size ?? (constraints.isTight ? constraints.maxWidth : 36);
 
         return SizedBox(
           width: diameter,
