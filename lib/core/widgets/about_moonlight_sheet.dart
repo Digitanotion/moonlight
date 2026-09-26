@@ -34,7 +34,7 @@ class MoonlightLinks {
 
   // Contact / social
   static const supportEmail = 'okwupat2003@gmail.com';
-  static const supportPhone = '+2348037525545';
+  static const supportPhone = '+447344194054';
   static const facebook = 'https://facebook.com/moonlightlivestreamapp';
   static const tiktok = 'https://www.tiktok.com/@moonlight.livestream';
   static const linkedin =
