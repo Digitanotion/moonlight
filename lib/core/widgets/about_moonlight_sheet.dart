@@ -39,6 +39,15 @@ class MoonlightLinks {
   static const tiktok = 'https://www.tiktok.com/@moonlight.livestream';
   static const linkedin =
       'https://www.linkedin.com/company/franokwy-ventures-ltd/';
+
+  /// "Live Support" deep link — same support number as [supportPhone],
+  /// routed through WhatsApp on the backend without naming it in the UI.
+  static String liveSupportUrl({
+    String message = "Hi Moonlight support, I need help with...",
+  }) {
+    final digitsOnly = supportPhone.replaceAll('+', '');
+    return 'https://wa.me/$digitsOnly?text=${Uri.encodeComponent(message)}';
+  }
 }
 
 Future<void> showAboutMoonlightSheet(BuildContext context) {
@@ -141,8 +150,6 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                     ),
                   ],
                   const SizedBox(height: 14),
-                  const _UpdateStatusTile(),
-                  const SizedBox(height: 14),
                   Text(
                     'Go live, catch fun, and earn gifts. Join clubs, climb '
                     'the ranks, and connect with a global community.',
@@ -153,6 +160,9 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                       height: 1.5,
                     ),
                   ),
+
+                  const SizedBox(height: 14),
+                  const _UpdateStatusTile(),
                   const SizedBox(height: 24),
 
                   _LinkGroup(
@@ -250,6 +260,11 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                   _LinkGroup(
                     label: 'Contact',
                     children: [
+                      _LinkRow(
+                        icon: Icons.headset_mic_outlined,
+                        label: 'Live Support',
+                        onTap: () => _launch(MoonlightLinks.liveSupportUrl()),
+                      ),
                       _LinkRow(
                         icon: Icons.mail_outline_rounded,
                         label: MoonlightLinks.supportEmail,

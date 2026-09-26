@@ -13,6 +13,9 @@ import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/core/widgets/about_moonlight_sheet.dart'
+    show MoonlightLinks;
+import 'package:url_launcher/url_launcher.dart';
 
 /// Single entry point for Notifications/Messages/Profile — avatar with a
 /// combined unread dot, opens a compact sheet with all three. Reduces the
@@ -95,10 +98,24 @@ class AccountButton extends StatelessWidget {
                     _MenuRow(
                       icon: Icons.person_outline,
                       label: 'My Profile',
-                      isLast: true,
                       onTap: () {
                         Navigator.pop(sheetContext);
                         Navigator.pushNamed(context, RouteNames.myProfile);
+                      },
+                    ),
+                    _MenuRow(
+                      icon: Icons.headset_mic_outlined,
+                      label: 'Live Support',
+                      isLast: true,
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        final uri = Uri.parse(MoonlightLinks.liveSupportUrl());
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
                       },
                     ),
                   ],
