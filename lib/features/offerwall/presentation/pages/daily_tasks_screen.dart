@@ -19,6 +19,8 @@
 //    one that verifies postbacks, so it can never ship inside the app
 //    (see OfferwallService::buildCpxLaunchUrl on the API side).
 
+import 'package:flutter/foundation.dart' show Factory;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -364,7 +366,21 @@ class _TapjoyOfferwallViewState extends State<_TapjoyOfferwallView> {
     return Stack(
       children: [
         if (!_hasError && _controller != null)
-          Positioned.fill(child: WebViewWidget(controller: _controller!)),
+          Positioned.fill(
+            child: WebViewWidget(
+              controller: _controller!,
+              // Without this, vertical scrolling inside the page can get
+              // lost to ancestor gesture handling (this WebView sits
+              // inside a TabBarView) — explicitly claiming vertical drag
+              // is the standard fix for "can't scroll inside the
+              // WebView" in this exact setup.
+              gestureRecognizers: {
+                Factory<VerticalDragGestureRecognizer>(
+                  () => VerticalDragGestureRecognizer(),
+                ),
+              },
+            ),
+          ),
         if (_hasError)
           _OfferwallErrorView(
             message: 'Could not load Tapjoy tasks.',
@@ -493,7 +509,21 @@ class _CpxOfferwallViewState extends State<_CpxOfferwallView> {
     return Stack(
       children: [
         if (!_hasError && _controller != null)
-          Positioned.fill(child: WebViewWidget(controller: _controller!)),
+          Positioned.fill(
+            child: WebViewWidget(
+              controller: _controller!,
+              // Without this, vertical scrolling inside the page can get
+              // lost to ancestor gesture handling (this WebView sits
+              // inside a TabBarView) — explicitly claiming vertical drag
+              // is the standard fix for "can't scroll inside the
+              // WebView" in this exact setup.
+              gestureRecognizers: {
+                Factory<VerticalDragGestureRecognizer>(
+                  () => VerticalDragGestureRecognizer(),
+                ),
+              },
+            ),
+          ),
         if (_hasError)
           _OfferwallErrorView(
             message: 'Could not load CPX Research tasks.',
