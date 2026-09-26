@@ -380,8 +380,7 @@ class GiftBroadcast {
       senderUuid: '${sender['user_uuid'] ?? ''}',
       senderDisplayName:
           '${sender['display_name'] ?? sender['displayName'] ?? ''}',
-      senderAvatarUrl:
-          '${sender['avatar_url'] ?? sender['avatarUrl'] ?? ''}',
+      senderAvatarUrl: '${sender['avatar_url'] ?? sender['avatarUrl'] ?? ''}',
       timestamp: DateTime.tryParse('${m['timestamp'] ?? ''}') ?? DateTime.now(),
       comboIndex: comboMap == null
           ? null

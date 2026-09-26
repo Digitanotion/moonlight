@@ -12,6 +12,7 @@ import 'package:moonlight/features/onboarding/presentation/widgets/onboarding_pa
 import 'package:moonlight/features/onboarding/presentation/widgets/secondary_button.dart';
 import 'package:moonlight/features/onboarding/presentation/widgets/skip_button.dart';
 
+
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({Key? key}) : super(key: key);
 
@@ -263,11 +264,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 //   Container(
                 //     color: Colors.black.withOpacity(0.5),
                 //     child: const Center(
-                //       child: CircularProgressIndicator(
-                //         valueColor: AlwaysStoppedAnimation<Color>(
-                //           AppColors.primary_,
-                //         ),
-                //       ),
+                //       child: AppLogoLoader(),
                 //     ),
                 //   ),
               ],

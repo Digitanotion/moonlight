@@ -50,7 +50,9 @@ class CallKitService {
       if (first is! CallKitParams) return null;
 
       if (first.isAccepted && first.id.isNotEmpty) {
-        debugPrint('📞 [CallKit] Found already-accepted call on resume: ${first.id}');
+        debugPrint(
+          '📞 [CallKit] Found already-accepted call on resume: ${first.id}',
+        );
         return first.id;
       }
       return null;
@@ -80,7 +82,9 @@ class CallKitService {
       if (first is! CallKitParams) return null;
 
       if (!first.isAccepted && first.id.isNotEmpty) {
-        debugPrint('📞 [CallKit] Found still-ringing call on resume: ${first.id}');
+        debugPrint(
+          '📞 [CallKit] Found still-ringing call on resume: ${first.id}',
+        );
         return first.id;
       }
       return null;
@@ -131,7 +135,8 @@ class CallKitService {
       avatar: callerAvatarUrl,
       handle: callerName,
       type: 1, // video
-      duration: 45000, // doc 1M — ring timeout ~45s, matches backend's VIDEO_CALL_RING_TIMEOUT_SECONDS
+      duration:
+          45000, // doc 1M — ring timeout ~45s, matches backend's VIDEO_CALL_RING_TIMEOUT_SECONDS
       missedCallNotification: const NotificationParams(
         showNotification: true,
         isShowCallback: false,
@@ -140,10 +145,10 @@ class CallKitService {
       extra: <String, dynamic>{'session_uuid': sessionUuid},
       android: const AndroidParams(
         isCustomNotification: true,
-        // FIX: Changed from true to false. Suppressing this stops CallKit from 
-        // painting its own overlay when backgrounded or completely killed, 
+        // FIX: Changed from true to false. Suppressing this stops CallKit from
+        // painting its own overlay when backgrounded or completely killed,
         // which leaves nothing to draw if the main Dart/Flutter thread is paused.
-        isCustomSmallExNotification: false, 
+        isCustomSmallExNotification: false,
         isShowLogo: false,
         isShowCallID: false,
         // Plain filename, no URI prefix — this is the only format
@@ -221,7 +226,9 @@ class CallKitService {
             // notification layer needs to be told explicitly, or it
             // just lingers (and keeps making sound) even though the
             // call was already answered elsewhere.
-            NotificationService().dismissIncomingCallNotification(callKitParams.id);
+            NotificationService().dismissIncomingCallNotification(
+              callKitParams.id,
+            );
             RingtonePlayer().stop();
           }
 
@@ -229,7 +236,9 @@ class CallKitService {
           if (callKitParams != null) {
             debugPrint('📞 [CallKit] Declined: ${callKitParams.id}');
             bloc.add(CallRejectRequested(callKitParams.id));
-            NotificationService().dismissIncomingCallNotification(callKitParams.id);
+            NotificationService().dismissIncomingCallNotification(
+              callKitParams.id,
+            );
             RingtonePlayer().stop();
           }
 
@@ -237,7 +246,7 @@ class CallKitService {
           debugPrint('📞 [CallKit] Timed out: $id');
           NotificationService().dismissIncomingCallNotification(id);
           RingtonePlayer().stop();
-          // No explicit bloc event required if backend handles timeout tracking
+        // No explicit bloc event required if backend handles timeout tracking
 
         default:
           break;
@@ -245,7 +254,7 @@ class CallKitService {
     });
   }
 
-  /// Disposes of the active stream subscription explicitly to clear memory 
+  /// Disposes of the active stream subscription explicitly to clear memory
   /// allocations if the service lifecycle ever shifts.
   void dispose() {
     _eventSub?.cancel();

@@ -5,6 +5,8 @@ import 'package:moonlight/core/utils/formatting.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/donate_club_cubit.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class SupportClubPage extends StatefulWidget {
   final String clubName;
   final String clubDescription;
@@ -71,9 +73,7 @@ class _SupportClubPageState extends State<SupportClubPage> {
               BlocBuilder<DonateClubCubit, DonateClubState>(
                 builder: (context, state) {
                   if (state.balance == null) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.orange),
-                    );
+                    return const Center(child: AppLogoLoader());
                   }
 
                   return _paymentSource(state.balance!);
@@ -562,7 +562,7 @@ class _ProcessingDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: Color(0xFFFF7A00)),
+            const AppLogoLoader(),
             const SizedBox(height: 16),
             const Text(
               'Processing Your Payment...',

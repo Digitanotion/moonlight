@@ -19,6 +19,8 @@ import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubTreasuryScreen extends StatefulWidget {
   final String clubUuid;
   final String clubName;
@@ -93,11 +95,7 @@ class _ClubTreasuryScreenState extends State<ClubTreasuryScreen>
                     _buildTopBar(context, state),
 
                     if (state.loading && state.summary == null)
-                      const Expanded(
-                        child: Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                      )
+                      const Expanded(child: Center(child: AppLogoLoader()))
                     else ...[
                       // ── PIN not set warning (all admins see, only owner acts) ──
                       if (!treasuryReady)
@@ -232,14 +230,7 @@ class _ClubTreasuryScreenState extends State<ClubTreasuryScreen>
             ),
           ),
           if (state.loading)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
+            const SizedBox(width: 20, height: 20, child: AppLogoLoader())
           else
             IconButton(
               icon: const Icon(Icons.refresh_rounded, color: Colors.white70),

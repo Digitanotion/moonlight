@@ -10,6 +10,8 @@ import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class UserClubsSection extends StatefulWidget {
   final String userUuid;
 
@@ -67,14 +69,7 @@ class _UserClubsSectionState extends State<UserClubsSection> {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
         child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFFFF6A00),
-            ),
-          ),
+          child: SizedBox(width: 22, height: 22, child: AppLogoLoader()),
         ),
       );
     }
@@ -85,8 +80,11 @@ class _UserClubsSectionState extends State<UserClubsSection> {
         child: Center(
           child: Column(
             children: [
-              const Icon(Icons.wifi_off_rounded,
-                  color: Color(0xFF8B8FB8), size: 28),
+              const Icon(
+                Icons.wifi_off_rounded,
+                color: Color(0xFF8B8FB8),
+                size: 28,
+              ),
               const SizedBox(height: 8),
               const Text(
                 "Couldn't load clubs",
@@ -98,8 +96,10 @@ class _UserClubsSectionState extends State<UserClubsSection> {
                   setState(() => _loading = true);
                   _fetch();
                 },
-                child: const Text('Retry',
-                    style: TextStyle(color: Color(0xFFFF6A00))),
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(color: Color(0xFFFF6A00)),
+                ),
               ),
             ],
           ),
@@ -164,7 +164,8 @@ class _ClubCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasAvatar = (club.avatarUrl ?? '').isNotEmpty &&
+    final hasAvatar =
+        (club.avatarUrl ?? '').isNotEmpty &&
         Uri.tryParse(club.avatarUrl!)?.hasScheme == true;
     final roleLabel = club.roleBadgeLabel;
     final subtitle = (club.motto ?? '').isNotEmpty
@@ -208,8 +209,7 @@ class _ClubCard extends StatelessWidget {
                           imageUrl: club.avatarUrl!,
                           fit: BoxFit.cover,
                           placeholder: (_, __) => const _ClubPlaceholder(),
-                          errorWidget: (_, __, ___) =>
-                              const _ClubPlaceholder(),
+                          errorWidget: (_, __, ___) => const _ClubPlaceholder(),
                         )
                       : const _ClubPlaceholder(),
                 ),
@@ -365,8 +365,7 @@ class _ClubPlaceholder extends StatelessWidget {
   const _ClubPlaceholder();
   @override
   Widget build(BuildContext context) => Container(
-        color: const Color(0xFFFF6A00).withOpacity(0.15),
-        child: const Icon(Icons.groups_rounded,
-            size: 24, color: Color(0xFFFF6A00)),
-      );
+    color: const Color(0xFFFF6A00).withOpacity(0.15),
+    child: const Icon(Icons.groups_rounded, size: 24, color: Color(0xFFFF6A00)),
+  );
 }

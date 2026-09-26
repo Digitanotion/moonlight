@@ -26,6 +26,8 @@ import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/features/home/domain/entities/live_item.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// ===================================================================
 /// LIVE VIEWER SCREEN (unchanged behavior) - kept intact for drop-in
 /// ===================================================================
@@ -565,9 +567,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> {
                                         ? const SizedBox(
                                             height: 18,
                                             width: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
+                                            child: AppLogoLoader(),
                                           )
                                         : const Text(
                                             'Unlock Stream',
@@ -2289,7 +2289,7 @@ class _WaitingOverlay extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Colors.white),
+                const AppLogoLoader(),
                 const SizedBox(height: 16),
                 const Text(
                   'Connecting to stream...',
@@ -2393,7 +2393,7 @@ class _RemovalOverlay extends StatelessWidget {
                   style: TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 20),
-                const CircularProgressIndicator(color: Colors.white),
+                const AppLogoLoader(),
               ],
             ),
           ),
@@ -2786,9 +2786,7 @@ class _PremiumBlockedOverlay extends StatelessWidget {
                                     ? const SizedBox(
                                         height: 18,
                                         width: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
+                                        child: AppLogoLoader(),
                                       )
                                     : const Text(
                                         'Unlock',

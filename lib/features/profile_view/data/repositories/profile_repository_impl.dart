@@ -15,7 +15,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final map = await remote.getUser(uuid);
     final d = (map['data'] as Map).cast<String, dynamic>();
 
-      return UserProfile(
+    return UserProfile(
       uuid: '${d['uuid']}',
       handle: '@${d['user_slug']}',
       fullName: '${d['fullname'] ?? d['user_slug']}',
@@ -90,8 +90,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
         mediaUrl: '${m['mediaUrl']}',
         caption: '${m['caption']}',
         tags: (m['tags'] as List).map((e) => '$e').toList(),
-        createdAt:
-            DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),
+        createdAt: DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),
         likes: (m['likes'] as num?)?.toInt() ?? 0,
         commentsCount: (m['commentsCount'] as num?)?.toInt() ?? 0,
         shares: (m['shares'] as num?)?.toInt() ?? 0,

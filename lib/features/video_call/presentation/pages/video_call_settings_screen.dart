@@ -256,8 +256,9 @@ class _VideoCallSettingsScreenState extends State<VideoCallSettingsScreen> {
               ),
               const SizedBox(height: 8),
 
-                            GestureDetector(
-                onTap: () => Navigator.of(context).pushNamed(RouteNames.editProfile),
+              GestureDetector(
+                onTap: () =>
+                    Navigator.of(context).pushNamed(RouteNames.editProfile),
                 child: _ActionCard(
                   icon: Icons.photo_camera_rounded,
                   iconColor: AppColors.accentGreen,
@@ -288,9 +289,7 @@ class _VideoCallSettingsScreenState extends State<VideoCallSettingsScreen> {
                     const Divider(color: Colors.white12, height: 24),
                     _ToggleRow(
                       icon: Icons.person_rounded,
-                      iconColor: _enabled
-                          ? AppColors.primary2
-                          : Colors.white38,
+                      iconColor: _enabled ? AppColors.primary2 : Colors.white38,
                       title: 'Show call button on my profile',
                       subtitle: 'Let visitors call you from your profile page.',
                       value: _enabled,
@@ -546,4 +545,3 @@ class _MiniButton extends StatelessWidget {
     );
   }
 }
-

@@ -422,9 +422,9 @@ class _ParticlesPainter extends CustomPainter {
 }
 
 /// Usage in your LiveViewerOrchestrator or ViewerBloc:
-/// 
+///
 /// When you receive a participant.removed event with the current user's UUID:
-/// 
+///
 /// ```dart
 /// // In your ViewerBloc or wherever you handle removal
 /// on<ViewerRemovedEvent>((event, emit) {

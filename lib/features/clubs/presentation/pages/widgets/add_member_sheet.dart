@@ -6,6 +6,8 @@ import 'package:moonlight/features/clubs/domain/entities/user_search_result.dart
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 Future<bool?> showAddMemberSheet(BuildContext context, String club) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -270,10 +272,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                   ? const SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
+                      child: AppLogoLoader(),
                     )
                   : Text(
                       'Add ${_selectedUsers.isEmpty ? '' : '(${_selectedUsers.length})'} to Club',

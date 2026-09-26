@@ -6,6 +6,8 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/domain/entities/suggested_club.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// A tall, image-led card for the "Suggested" carousel on the Discover screen.
 ///
 /// Cover art with a bottom scrim, the club name and member count laid over it,
@@ -257,14 +259,7 @@ class _JoinPill extends StatelessWidget {
                 ],
         ),
         child: joining
-            ? const SizedBox(
-                width: 15,
-                height: 15,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
+            ? const SizedBox(width: 15, height: 15, child: AppLogoLoader())
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

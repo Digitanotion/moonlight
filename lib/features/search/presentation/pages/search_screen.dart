@@ -100,7 +100,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildInitialContent(SearchState state) {
-    final hasAnyContent = state.suggestedUsers.isNotEmpty ||
+    final hasAnyContent =
+        state.suggestedUsers.isNotEmpty ||
         state.popularClubs.isNotEmpty ||
         state.trendingTags.isNotEmpty;
 
@@ -128,7 +129,9 @@ class _SearchScreenState extends State<SearchScreen> {
         if (state.isLoadingUsers)
           const _SuggestedUsersSkeletonRow()
         else if (state.suggestedUsers.isEmpty)
-          const _InlineEmptyHint(text: 'No suggestions yet — follow a few creators to get started')
+          const _InlineEmptyHint(
+            text: 'No suggestions yet — follow a few creators to get started',
+          )
         else
           _SuggestedUsersCarousel(
             users: state.suggestedUsers,
@@ -147,19 +150,14 @@ class _SearchScreenState extends State<SearchScreen> {
         else if (state.popularClubs.isEmpty)
           const _InlineEmptyHint(text: 'No clubs to show right now')
         else
-          _ClubsCarousel(
-            clubs: state.popularClubs,
-            onOpenClub: _openClub,
-          ),
+          _ClubsCarousel(clubs: state.popularClubs, onOpenClub: _openClub),
 
         const SizedBox(height: 36),
 
         if (!hasAnyContent)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 36),
-            child: Center(
-              child: _DiscoverHint(),
-            ),
+            child: Center(child: _DiscoverHint()),
           ),
       ],
     );
@@ -296,10 +294,16 @@ class _SearchBarField extends StatelessWidget {
                 controller: controller,
                 focusNode: focusNode,
                 onChanged: onChanged,
-                style: const TextStyle(color: AppColors.textWhite, fontSize: 15),
+                style: const TextStyle(
+                  color: AppColors.textWhite,
+                  fontSize: 15,
+                ),
                 decoration: const InputDecoration(
                   hintText: 'Search creators, clubs or tags',
-                  hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14.5),
+                  hintStyle: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14.5,
+                  ),
                   border: InputBorder.none,
                   isDense: true,
                 ),
@@ -310,8 +314,11 @@ class _SearchBarField extends StatelessWidget {
               child: controller.text.isNotEmpty
                   ? IconButton(
                       key: const ValueKey('clear'),
-                      icon: const Icon(Icons.close_rounded,
-                          color: AppColors.textSecondary, size: 20),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: AppColors.textSecondary,
+                        size: 20,
+                      ),
                       onPressed: onClear,
                     )
                   : const SizedBox(width: 8, key: ValueKey('empty')),
@@ -390,8 +397,11 @@ class _DiscoverHint extends StatelessWidget {
               ],
             ),
           ),
-          child: const Icon(Icons.explore_rounded,
-              color: AppColors.textWhite, size: 28),
+          child: const Icon(
+            Icons.explore_rounded,
+            color: AppColors.textWhite,
+            size: 28,
+          ),
         ),
         const SizedBox(height: 16),
         const Text(
@@ -406,7 +416,11 @@ class _DiscoverHint extends StatelessWidget {
         const Text(
           'Start searching to find creators, clubs and trending content',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13.5, height: 1.4),
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 13.5,
+            height: 1.4,
+          ),
         ),
       ],
     );
@@ -424,11 +438,17 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_rounded, color: Colors.white38, size: 40),
+            const Icon(
+              Icons.cloud_off_rounded,
+              color: Colors.white38,
+              size: 40,
+            ),
             const SizedBox(height: 12),
-            Text(message,
-                style: const TextStyle(color: AppColors.textSecondary),
-                textAlign: TextAlign.center),
+            Text(
+              message,
+              style: const TextStyle(color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -474,7 +494,11 @@ class _TagChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (trending) ...[
-            const Icon(Icons.trending_up_rounded, size: 13, color: AppColors.secondary),
+            const Icon(
+              Icons.trending_up_rounded,
+              size: 13,
+              color: AppColors.secondary,
+            ),
             const SizedBox(width: 5),
           ],
           Text(
@@ -495,7 +519,10 @@ class _TagChip extends StatelessWidget {
 class _SuggestedUsersCarousel extends StatelessWidget {
   final List<UserResult> users;
   final ValueChanged<UserResult> onOpenProfile;
-  const _SuggestedUsersCarousel({required this.users, required this.onOpenProfile});
+  const _SuggestedUsersCarousel({
+    required this.users,
+    required this.onOpenProfile,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -557,11 +584,15 @@ class _SuggestedUserCardState extends State<_SuggestedUserCard> {
               child: CircleAvatar(
                 radius: 30,
                 backgroundColor: AppColors.dark,
-                backgroundImage: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                backgroundImage:
+                    (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
                     ? NetworkImage(user.avatarUrl!)
                     : null,
                 child: (user.avatarUrl == null || user.avatarUrl!.isEmpty)
-                    ? const Icon(Icons.person_rounded, color: AppColors.textWhite)
+                    ? const Icon(
+                        Icons.person_rounded,
+                        color: AppColors.textWhite,
+                      )
                     : null,
               ),
             ),
@@ -581,7 +612,10 @@ class _SuggestedUserCardState extends State<_SuggestedUserCard> {
               '@${user.username}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
             ),
             const SizedBox(height: 10),
             _PillButton(
@@ -611,10 +645,8 @@ class _ClubsCarousel extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: clubs.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (_, i) => _ClubCard(
-          club: clubs[i],
-          onTap: () => onOpenClub(clubs[i]),
-        ),
+        itemBuilder: (_, i) =>
+            _ClubCard(club: clubs[i], onTap: () => onOpenClub(clubs[i])),
       ),
     );
   }
@@ -635,7 +667,8 @@ class _ClubCardState extends State<_ClubCard> {
   @override
   Widget build(BuildContext context) {
     final club = widget.club;
-    final hasCover = club.coverImageUrl != null && club.coverImageUrl!.isNotEmpty;
+    final hasCover =
+        club.coverImageUrl != null && club.coverImageUrl!.isNotEmpty;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -653,9 +686,8 @@ class _ClubCardState extends State<_ClubCard> {
                 ? Image.network(
                     club.coverImageUrl!,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: AppColors.primary.withOpacity(0.25),
-                    ),
+                    errorBuilder: (_, __, ___) =>
+                        Container(color: AppColors.primary.withOpacity(0.25)),
                   )
                 : Container(
                     decoration: BoxDecoration(
@@ -669,8 +701,11 @@ class _ClubCardState extends State<_ClubCard> {
                       ),
                     ),
                     child: const Center(
-                      child: Icon(Icons.groups_2_rounded,
-                          color: Colors.white38, size: 34),
+                      child: Icon(
+                        Icons.groups_2_rounded,
+                        color: Colors.white38,
+                        size: 34,
+                      ),
                     ),
                   ),
             const DecoratedBox(
@@ -792,11 +827,15 @@ class _SearchUserTile extends StatelessWidget {
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: AppColors.dark.withOpacity(0.4),
-                  backgroundImage: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                  backgroundImage:
+                      (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
                       ? NetworkImage(user.avatarUrl!)
                       : null,
                   child: (user.avatarUrl == null || user.avatarUrl!.isEmpty)
-                      ? const Icon(Icons.person_rounded, color: AppColors.textWhite)
+                      ? const Icon(
+                          Icons.person_rounded,
+                          color: AppColors.textWhite,
+                        )
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -815,12 +854,18 @@ class _SearchUserTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         '@${user.username}',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                ),
               ],
             ),
           ),
@@ -837,7 +882,8 @@ class _SearchClubTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasCover = club.coverImageUrl != null && club.coverImageUrl!.isNotEmpty;
+    final hasCover =
+        club.coverImageUrl != null && club.coverImageUrl!.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -865,7 +911,10 @@ class _SearchClubTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: hasCover
                         ? Image.network(club.coverImageUrl!, fit: BoxFit.cover)
-                        : const Icon(Icons.groups_2_rounded, color: AppColors.textWhite),
+                        : const Icon(
+                            Icons.groups_2_rounded,
+                            color: AppColors.textWhite,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -884,12 +933,18 @@ class _SearchClubTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         '${club.membersCount.formatCount()} members',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                ),
               ],
             ),
           ),
@@ -910,7 +965,8 @@ class _TrendingTagsSkeleton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: 5,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (_, __) => shimmerBox(w: 78, h: 40, r: BorderRadius.circular(20)),
+        itemBuilder: (_, __) =>
+            shimmerBox(w: 78, h: 40, r: BorderRadius.circular(20)),
       ),
     );
   }

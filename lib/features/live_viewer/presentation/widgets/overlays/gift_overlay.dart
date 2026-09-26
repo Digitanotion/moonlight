@@ -31,7 +31,9 @@ class GiftOverlay extends StatelessWidget {
             padding: const EdgeInsets.only(left: 12, top: 180),
             // key on the gift so a new gift restarts the entrance animation
             child: _GiftSplash(
-              key: ValueKey('${g.from}|${g.giftName}|${g.coins}|${s.showGiftToast}'),
+              key: ValueKey(
+                '${g.from}|${g.giftName}|${g.coins}|${s.showGiftToast}',
+              ),
               from: g.from,
               hostName: hostName,
               giftName: g.giftName,
@@ -104,7 +106,11 @@ class _GiftSplashState extends State<_GiftSplash>
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0x59FFB020), Color(0x4DFF3D81), Color(0x3AA24BFF)],
+                  colors: [
+                    Color(0x59FFB020),
+                    Color(0x4DFF3D81),
+                    Color(0x3AA24BFF),
+                  ],
                 ),
                 border: Border.all(color: const Color(0x80FFD27A)),
                 boxShadow: [
@@ -130,27 +136,31 @@ class _GiftSplashState extends State<_GiftSplash>
                           overflow: TextOverflow.ellipsis,
                           text: TextSpan(
                             style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.5,
-                                height: 1.3),
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              height: 1.3,
+                            ),
                             children: [
                               TextSpan(
                                 text: widget.from,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFFFFD27A)),
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFFFD27A),
+                                ),
                               ),
                               const TextSpan(text: ' sent '),
                               TextSpan(
                                 text: widget.hostName,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w700),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                               TextSpan(
                                 text: '  ${widget.giftName}',
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFFFFE7B0)),
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFFFE7B0),
+                                ),
                               ),
                             ],
                           ),
@@ -163,8 +173,7 @@ class _GiftSplashState extends State<_GiftSplash>
                             gradient: const LinearGradient(
                               colors: [Color(0x33FFC24B), Color(0x1AFF8A00)],
                             ),
-                            border:
-                                Border.all(color: const Color(0x66FFD27A)),
+                            border: Border.all(color: const Color(0x66FFD27A)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -185,8 +194,9 @@ class _GiftSplashState extends State<_GiftSplash>
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                        color: Color(0x66FFC24B),
-                                        blurRadius: 5),
+                                      color: Color(0x66FFC24B),
+                                      blurRadius: 5,
+                                    ),
                                   ],
                                 ),
                                 alignment: Alignment.center,
@@ -204,9 +214,10 @@ class _GiftSplashState extends State<_GiftSplash>
                               Text(
                                 '${widget.coins}',
                                 style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800),
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ],
                           ),
@@ -240,8 +251,11 @@ class _GiftArt extends StatelessWidget {
         future: GiftVisuals.build(code, size: 38, title: name),
         builder: (_, snap) =>
             snap.data ??
-            const Icon(Icons.card_giftcard_rounded,
-                size: 26, color: Color(0xFFFFD27A)),
+            const Icon(
+              Icons.card_giftcard_rounded,
+              size: 26,
+              color: Color(0xFFFFD27A),
+            ),
       ),
     );
   }

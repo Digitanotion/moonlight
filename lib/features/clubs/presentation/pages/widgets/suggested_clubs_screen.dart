@@ -11,6 +11,8 @@ import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_state.dart'
 import 'package:moonlight/features/home/presentation/widgets/bottom_nav.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class SuggestedClubsScreen extends StatelessWidget {
   const SuggestedClubsScreen({super.key});
 
@@ -69,11 +71,7 @@ class SuggestedClubsScreen extends StatelessWidget {
                       BlocBuilder<DiscoverClubsCubit, DiscoverClubsState>(
                         builder: (context, state) {
                           if (state.loading) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            );
+                            return const Center(child: AppLogoLoader());
                           }
 
                           return _suggested(state.clubs, state, context);
@@ -88,11 +86,7 @@ class SuggestedClubsScreen extends StatelessWidget {
                       BlocBuilder<MyClubsCubit, MyClubsState>(
                         builder: (context, state) {
                           if (state.loading) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            );
+                            return const Center(child: AppLogoLoader());
                           }
 
                           if (state.clubs.isEmpty) {

@@ -23,6 +23,8 @@ import 'package:moonlight/features/profile_view/data/datasources/follow_list_rem
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
 
@@ -65,7 +67,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       barrierDismissible: false,
       builder: (_) => WillPopScope(
         onWillPop: () async => false,
-        child: const Center(child: CircularProgressIndicator()),
+        child: const Center(child: AppLogoLoader()),
       ),
     );
   }

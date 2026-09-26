@@ -32,6 +32,8 @@ import 'package:moonlight/features/video_call/presentation/pages/active_call_scr
 import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart'; // ← NEW
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -176,9 +178,7 @@ class _BareSplash extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
+              const AppLogoLoader(),
             ],
           ),
         ),

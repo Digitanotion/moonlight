@@ -10,6 +10,7 @@ import 'package:moonlight/widgets/image_placeholder.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import '../../../../core/injection_container.dart';
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
 import '../../../../features/live_viewer/presentation/pages/live_viewer_pager.dart'
     as pager_show;
 
@@ -220,12 +221,7 @@ class _LiveTileGridState extends State<LiveTileGrid>
                           child: SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
+                            child: AppLogoLoader(),
                           ),
                         ),
                       ),

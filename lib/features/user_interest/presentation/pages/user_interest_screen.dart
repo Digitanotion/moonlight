@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/widgets/moon_snack.dart';
 import '../cubit/user_interest_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class UserInterestScreen extends StatelessWidget {
   const UserInterestScreen({super.key});
 
@@ -120,10 +122,7 @@ class UserInterestScreen extends StatelessWidget {
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.black,
-                                ),
+                                child: AppLogoLoader(),
                               )
                             : const Text(
                                 'Continue',

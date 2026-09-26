@@ -14,6 +14,8 @@ import 'package:moonlight/features/clubs/presentation/pages/support_club_page.da
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubProfileScreen extends StatefulWidget {
   const ClubProfileScreen({super.key});
 
@@ -91,9 +93,7 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
         },
         builder: (context, state) {
           if (state.loading) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            );
+            return const Center(child: AppLogoLoader());
           }
 
           final club = state.profile;
@@ -943,14 +943,7 @@ class _JoinButton extends StatelessWidget {
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.orange,
-                    ),
-                  ),
+                  SizedBox(width: 12, height: 12, child: AppLogoLoader()),
                   SizedBox(width: 8),
                   Text(
                     'Pending',
@@ -1010,14 +1003,7 @@ class _JoinButton extends StatelessWidget {
               border: Border.all(color: const Color(0xFFFF7A00), width: 1.5),
             ),
             child: isJoining
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFFFF7A00),
-                    ),
-                  )
+                ? const SizedBox(width: 16, height: 16, child: AppLogoLoader())
                 : Text(
                     requiresApproval ? 'Request to Join' : 'Join',
                     style: const TextStyle(

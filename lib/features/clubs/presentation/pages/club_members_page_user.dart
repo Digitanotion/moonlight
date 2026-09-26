@@ -4,6 +4,8 @@ import '../cubit/club_members_cubit.dart';
 import '../cubit/club_members_state.dart';
 import 'widgets/club_member_card.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubMembersPageUser extends StatefulWidget {
   final String club;
   const ClubMembersPageUser({super.key, required this.club});
@@ -77,9 +79,7 @@ class _MembersList extends StatelessWidget {
     return BlocBuilder<ClubMembersCubit, ClubMembersState>(
       builder: (context, state) {
         if (state.loading && state.members.isEmpty) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFFFF7A00)),
-          );
+          return const Center(child: AppLogoLoader());
         }
 
         if (state.members.isEmpty) {
@@ -114,9 +114,7 @@ class _MembersList extends StatelessWidget {
             if (index >= state.members.length) {
               return const Padding(
                 padding: EdgeInsets.all(16),
-                child: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF7A00)),
-                ),
+                child: Center(child: AppLogoLoader()),
               );
             }
             return ClubMemberCard(member: state.members[index]);

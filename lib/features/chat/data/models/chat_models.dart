@@ -207,8 +207,7 @@ class Message extends Equatable {
   static List<MessageReactionGroup> reactionsFromPayload(
     Object? raw, {
     String? myUuid,
-  }) =>
-      _parseReactions(raw, myUuid: myUuid);
+  }) => _parseReactions(raw, myUuid: myUuid);
 
   static List<MessageReactionGroup> _parseReactions(
     Object? raw, {
@@ -223,19 +222,23 @@ class Message extends Equatable {
       }
       return raw
           .whereType<Map>()
-          .map((m) => MessageReactionGroup.fromJson(
-                Map<String, dynamic>.from(m),
-                myUuid: myUuid,
-              ))
+          .map(
+            (m) => MessageReactionGroup.fromJson(
+              Map<String, dynamic>.from(m),
+              myUuid: myUuid,
+            ),
+          )
           .toList();
     }
     if (raw is Map && raw['summary'] is List) {
       return (raw['summary'] as List)
           .whereType<Map>()
-          .map((m) => MessageReactionGroup.fromJson(
-                Map<String, dynamic>.from(m),
-                myUuid: myUuid,
-              ))
+          .map(
+            (m) => MessageReactionGroup.fromJson(
+              Map<String, dynamic>.from(m),
+              myUuid: myUuid,
+            ),
+          )
           .toList();
     }
     return const [];
@@ -331,8 +334,10 @@ class MessageReactionEvent {
   }) {
     return MessageReactionEvent(
       messageUuid: (json['message_uuid'] ?? json['uuid'] ?? '').toString(),
-      reactions:
-          Message.reactionsFromPayload(json['reactions'], myUuid: myUuid),
+      reactions: Message.reactionsFromPayload(
+        json['reactions'],
+        myUuid: myUuid,
+      ),
     );
   }
 }

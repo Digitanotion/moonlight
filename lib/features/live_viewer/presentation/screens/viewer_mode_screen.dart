@@ -61,12 +61,16 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
 
   // In the OS PiP window OR the in-app mini window we render ONLY the video —
   // every overlay (chat, buttons, banners) is hidden.
-  bool _pip = PipService.instance.isInPipMode.value ||
+  bool _pip =
+      PipService.instance.isInPipMode.value ||
       MiniPlayerController.instance.minimized;
   void _onPipChanged() {
     if (mounted) {
-      setState(() => _pip = PipService.instance.isInPipMode.value ||
-          MiniPlayerController.instance.minimized);
+      setState(
+        () => _pip =
+            PipService.instance.isInPipMode.value ||
+            MiniPlayerController.instance.minimized,
+      );
     }
   }
 

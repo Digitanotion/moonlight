@@ -45,8 +45,7 @@ class AdService {
 
   String get _interstitialUnitId =>
       _pick(_useTestAds ? _testInterstitial : _prodInterstitial);
-  String get bannerUnitId =>
-      _pick(_useTestAds ? _testBanner : _prodBanner);
+  String get bannerUnitId => _pick(_useTestAds ? _testBanner : _prodBanner);
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
@@ -114,7 +113,9 @@ class AdService {
         onAdFailedToLoad: (error) {
           _isLoadingInterstitial = false;
           _cachedInterstitial = null;
-          debugPrint('⚠️ [Ads] interstitial load failed: ${error.code} ${error.message}');
+          debugPrint(
+            '⚠️ [Ads] interstitial load failed: ${error.code} ${error.message}',
+          );
           // Back off exponentially (30s, 1m, 2m, 4m …) capped at ~15m so we
           // don't hammer AdMob when there's simply no fill.
           _interstitialRetry = (_interstitialRetry + 1).clamp(1, 5);
@@ -183,7 +184,9 @@ class AdService {
       listener: BannerAdListener(
         onAdLoaded: (_) => onLoaded(),
         onAdFailedToLoad: (ad, error) {
-          debugPrint('⚠️ [Ads] banner load failed: ${error.code} ${error.message}');
+          debugPrint(
+            '⚠️ [Ads] banner load failed: ${error.code} ${error.message}',
+          );
           ad.dispose();
           onFailed();
         },

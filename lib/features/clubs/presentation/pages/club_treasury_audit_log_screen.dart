@@ -6,6 +6,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubTreasuryAuditLogScreen extends StatefulWidget {
   final String clubUuid;
 
@@ -66,9 +68,7 @@ class _ClubTreasuryAuditLogScreenState
               _buildTopBar(context),
               Expanded(
                 child: _loading
-                    ? const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      )
+                    ? const Center(child: AppLogoLoader())
                     : _error != null
                     ? _ErrorView(message: _error!, onRetry: _load)
                     : _logs.isEmpty

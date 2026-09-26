@@ -236,7 +236,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
 
   // ── Health service ────────────────────────────────────────────────────────
 
-void _startHealthService() {
+  void _startHealthService() {
     if (repo is! ViewerRepositoryImpl) return;
     final implRepo = repo as ViewerRepositoryImpl;
 
@@ -255,7 +255,6 @@ void _startHealthService() {
     _healthSub = null;
     _streamHealthService?.dispose();
     _streamHealthService = null;
-
 
     _streamHealthService = StreamHealthService(
       http: implRepo.http,
@@ -287,7 +286,7 @@ void _startHealthService() {
     }, onError: (e) => _logEvent('HEALTH_ERROR', 'Error: $e'));
 
     _streamHealthService!.start();
-      _healthPauseSub?.cancel();
+    _healthPauseSub?.cancel();
     _healthPauseSub = repo.healthPauseStream.listen((paused) {
       if (paused) {
         _streamHealthService?.stop();
@@ -865,7 +864,7 @@ void _startHealthService() {
 
   // ── User action handlers ──────────────────────────────────────────────────
 
-   Future<void> _onFollowToggled(
+  Future<void> _onFollowToggled(
     FollowToggled e,
     Emitter<ViewerState> emit,
   ) async {
@@ -894,9 +893,14 @@ void _startHealthService() {
       if (cur == null) {
         _safeEmit(emit, state.copyWith(host: fresh));
       } else if (cur.isFollowed != fresh.isFollowed) {
-        _safeEmit(emit, state.copyWith(host: cur.copyWith(isFollowed: fresh.isFollowed)));
+        _safeEmit(
+          emit,
+          state.copyWith(host: cur.copyWith(isFollowed: fresh.isFollowed)),
+        );
       }
-    } catch (_) {/* best-effort */}
+    } catch (_) {
+      /* best-effort */
+    }
   }
 
   Future<void> _onCommentSent(CommentSent e, Emitter<ViewerState> emit) async {

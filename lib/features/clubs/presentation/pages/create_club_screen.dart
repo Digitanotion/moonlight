@@ -11,6 +11,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/create_club_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/create_club_state.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class CreateClubScreen extends StatelessWidget {
   const CreateClubScreen({super.key});
 
@@ -150,9 +152,7 @@ class _CreateClubViewState extends State<_CreateClubView> {
                             ),
                           ),
                           child: state.loading
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white,
-                                )
+                              ? const AppLogoLoader()
                               : const Text(
                                   'Create Club',
                                   style: TextStyle(

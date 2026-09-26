@@ -85,8 +85,9 @@ class AppUpdateService {
       // real package id when it's missing or not a recognisable store URL.
       // (A blank/wrong store_url used to make the whole prompt vanish.)
       final storeUrl = _resolveStoreUrl((p['store_url'] ?? '').toString(), pkg);
-      final marketUrl =
-          (Platform.isAndroid && pkg.isNotEmpty) ? 'market://details?id=$pkg' : '';
+      final marketUrl = (Platform.isAndroid && pkg.isNotEmpty)
+          ? 'market://details?id=$pkg'
+          : '';
 
       final forced = globalForce || (minBuild > 0 && currentBuild < minBuild);
       final available = forced || currentBuild < latestBuild;

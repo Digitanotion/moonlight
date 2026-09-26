@@ -4,6 +4,8 @@ import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 const appId = "2cb821b4813a4e87af6e9ccd9077e6a8";
 const token =
     "07IAAyY2I4MjFiNDgxM2E0ZTg3YWY2ZTljY2Q5MDc3ZTZhOLeRx2jXrcdohjNZGSAALWuA6OPiNcugNvAMuQKZ1J2k5faqmyrRv4iiYSLjPmcBAAEAUwARAGxpdmVfRmNqZGs3Z2hqRHJRJAA5ZmM3OTM3NC00OGNhLTQ3YjUtOGIxNy1jYjk2N2RlNzExYTAEAAEA163HaAIA163HaAMA163HaAQA163HaA==";
@@ -126,7 +128,7 @@ class _MyAppState extends State<MyApp> {
                           canvas: const VideoCanvas(uid: 0),
                         ),
                       )
-                    : const CircularProgressIndicator(),
+                    : const AppLogoLoader(),
               ),
             ),
           ),

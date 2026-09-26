@@ -7,6 +7,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import '../../domain/entities/participant.dart';
 import '../bloc/participants_bloc.dart';
 import '../../domain/repositories/participants_repository.dart';
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
 import 'package:moonlight/widgets/top_snack.dart'; // Import TopSnack
 import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart'; // Import to get active guest info
 
@@ -414,7 +415,7 @@ class _ViewersListPageState extends State<ViewersListPage> {
         },
         builder: (context, state) {
           if (state.loading && state.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: AppLogoLoader());
           }
 
           if (!state.loading && state.items.isEmpty) {
@@ -436,7 +437,7 @@ class _ViewersListPageState extends State<ViewersListPage> {
                 if (i >= state.items.length) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(child: CircularProgressIndicator()),
+                    child: Center(child: AppLogoLoader()),
                   );
                 }
                 final p = state.items[i];

@@ -7,6 +7,8 @@ import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubTreasurySetupScreen extends StatefulWidget {
   final String clubUuid;
   final bool pinOnly;
@@ -285,14 +287,7 @@ class _ClubTreasurySetupScreenState extends State<ClubTreasurySetupScreen> {
               elevation: 0,
             ),
             child: state.submitting
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
+                ? const SizedBox(width: 22, height: 22, child: AppLogoLoader())
                 : Text(
                     _isChanging ? 'Update PIN' : 'Save Treasury PIN',
                     style: const TextStyle(

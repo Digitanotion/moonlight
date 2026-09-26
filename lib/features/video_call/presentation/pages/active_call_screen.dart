@@ -10,6 +10,8 @@ import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/video_call/data/models/video_call_session_model.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 String _firstName(String? full) {
   final t = (full ?? '').trim();
   if (t.isEmpty) return 'Unknown';
@@ -51,8 +53,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         final session = state.session;
         // Each side shows the OTHER person — caller sees the callee,
         // callee sees the caller.
-        final VideoCallUserSummary? otherParty =
-            state.isCaller ? session?.callee : session?.caller;
+        final VideoCallUserSummary? otherParty = state.isCaller
+            ? session?.callee
+            : session?.caller;
         final name = _firstName(otherParty?.displayName);
         final avatarUrl = otherParty?.avatarUrl;
         final showTimer = state.isCaller && state.countdownEndsAt != null;
@@ -109,7 +112,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                     top: MediaQuery.of(context).padding.top + 64,
                     right: 14,
                     child: AnimatedSlide(
-                      offset: _controlsVisible ? Offset.zero : const Offset(0, -0.15),
+                      offset: _controlsVisible
+                          ? Offset.zero
+                          : const Offset(0, -0.15),
                       duration: const Duration(milliseconds: 220),
                       child: AnimatedOpacity(
                         opacity: _controlsVisible ? 1 : 0.35,
@@ -245,8 +250,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                                             ? Icons.mic_rounded
                                             : Icons.mic_off_rounded,
                                         active: agora.isMicEnabled,
-                                        onTap: () => agora
-                                            .setMicEnabled(!agora.isMicEnabled),
+                                        onTap: () => agora.setMicEnabled(
+                                          !agora.isMicEnabled,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
@@ -588,9 +594,7 @@ class _CountdownPillState extends State<_CountdownPill> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                widget.paused
-                    ? Icons.pause_rounded
-                    : Icons.schedule_rounded,
+                widget.paused ? Icons.pause_rounded : Icons.schedule_rounded,
                 color: Colors.white,
                 size: 13,
               ),
@@ -665,14 +669,7 @@ class _ReconnectingBanner extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                ),
-              ),
+              const SizedBox(width: 16, height: 16, child: AppLogoLoader()),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -757,7 +754,7 @@ class _ExtendBanner extends StatelessWidget {
             //         ? const SizedBox(
             //             width: 14,
             //             height: 14,
-            //             child: CircularProgressIndicator(strokeWidth: 2),
+            //             child: AppLogoLoader(),
             //           )
             //         : Text(
             //             'Add time',
@@ -869,7 +866,11 @@ class CallSummaryScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 24),
                       if (settled > 0)
-                        _summaryRow('Coins spent', '$settled', AppColors.primary2),
+                        _summaryRow(
+                          'Coins spent',
+                          '$settled',
+                          AppColors.primary2,
+                        ),
                       if (refunded > 0)
                         _summaryRow(
                           'Coins refunded',

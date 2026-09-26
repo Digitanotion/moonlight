@@ -137,8 +137,9 @@ class ChatCubit extends Cubit<ChatState> {
         final other = result.participantsRead
             .where((p) => p.userUuid != null && p.userUuid != myUuid)
             .toList();
-        _otherPartyLastReadAt =
-            other.isNotEmpty ? other.first.lastReadAt : null;
+        _otherPartyLastReadAt = other.isNotEmpty
+            ? other.first.lastReadAt
+            : null;
       }
 
       // Store last page for future reference
@@ -663,8 +664,10 @@ class ChatCubit extends Cubit<ChatState> {
     _emitMessagesUpdated();
 
     try {
-      final authoritative =
-          await _repository.reactToMessage(messageUuid, target);
+      final authoritative = await _repository.reactToMessage(
+        messageUuid,
+        target,
+      );
       final i = _allMessages.indexWhere((m) => m.uuid == messageUuid);
       if (i != -1) {
         _allMessages[i] = _allMessages[i].copyWith(reactions: authoritative);
@@ -694,10 +697,7 @@ class ChatCubit extends Cubit<ChatState> {
       if (g.emoji == previousEmoji) {
         final c = g.count - 1;
         if (c > 0) {
-          out.add(g.copyWith(
-            count: c,
-            mine: false,
-          ));
+          out.add(g.copyWith(count: c, mine: false));
         }
       } else {
         out.add(g);
@@ -706,23 +706,27 @@ class ChatCubit extends Cubit<ChatState> {
     if (newEmoji != null) {
       final existingIdx = out.indexWhere((g) => g.emoji == newEmoji);
       if (existingIdx != -1) {
-        out[existingIdx] = out[existingIdx]
-            .copyWith(count: out[existingIdx].count + 1, mine: true);
-      } else {
-        out.add(MessageReactionGroup(
-          emoji: newEmoji,
-          count: 1,
+        out[existingIdx] = out[existingIdx].copyWith(
+          count: out[existingIdx].count + 1,
           mine: true,
-          users: [
-            if (myUuid != null)
-              ChatUser(
-                uuid: myUuid,
-                userSlug: mySlug ?? '',
-                fullName: myName ?? '',
-                avatarUrl: myAvatar,
-              ),
-          ],
-        ));
+        );
+      } else {
+        out.add(
+          MessageReactionGroup(
+            emoji: newEmoji,
+            count: 1,
+            mine: true,
+            users: [
+              if (myUuid != null)
+                ChatUser(
+                  uuid: myUuid,
+                  userSlug: mySlug ?? '',
+                  fullName: myName ?? '',
+                  avatarUrl: myAvatar,
+                ),
+            ],
+          ),
+        );
       }
     }
     return out;
@@ -731,10 +735,12 @@ class ChatCubit extends Cubit<ChatState> {
   void _emitMessagesUpdated() {
     final uuid = _currentConversationUuid;
     if (uuid == null) return;
-    emit(ChatMessageUpdated(
-      messages: List.from(_allMessages),
-      conversationUuid: uuid,
-    ));
+    emit(
+      ChatMessageUpdated(
+        messages: List.from(_allMessages),
+        conversationUuid: uuid,
+      ),
+    );
   }
 
   /* -------------------------------------------------------------------------- */
@@ -845,15 +851,12 @@ class ChatCubit extends Cubit<ChatState> {
       },
     );
 
-    _messageReactionSubscription =
-        _repository.messageReactionStream().listen(
+    _messageReactionSubscription = _repository.messageReactionStream().listen(
       (event) {
         if (_currentConversationUuid != conversationUuid) return;
-        final i =
-            _allMessages.indexWhere((m) => m.uuid == event.messageUuid);
+        final i = _allMessages.indexWhere((m) => m.uuid == event.messageUuid);
         if (i == -1) return;
-        _allMessages[i] =
-            _allMessages[i].copyWith(reactions: event.reactions);
+        _allMessages[i] = _allMessages[i].copyWith(reactions: event.reactions);
         _emitMessagesUpdated();
       },
       onError: (e) {

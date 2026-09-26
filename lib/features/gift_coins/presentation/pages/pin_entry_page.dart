@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/transfer_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class PinEntryPage extends StatefulWidget {
   final String recipientUsername;
   final int amount;
@@ -282,10 +284,7 @@ class _PinEntryPageState extends State<PinEntryPage> {
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
+                                    child: AppLogoLoader(),
                                   )
                                 : const Text('Confirm Transfer'),
                           ),

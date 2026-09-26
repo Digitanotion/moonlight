@@ -37,8 +37,8 @@ class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
       setState(() => _showToast = true);
       final duration = switch (status) {
         ConnectionStatus.disconnected => const Duration(seconds: 4),
-        ConnectionStatus.slow        => const Duration(seconds: 3),
-        _                            => const Duration(seconds: 2),
+        ConnectionStatus.slow => const Duration(seconds: 3),
+        _ => const Duration(seconds: 2),
       };
       _hideTimer = Timer(duration, () {
         if (mounted) setState(() => _showToast = false);
@@ -54,27 +54,27 @@ class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
   }
 
   Color _bgColor() => switch (_currentStatus) {
-    ConnectionStatus.connected    => Colors.green,
+    ConnectionStatus.connected => Colors.green,
     ConnectionStatus.disconnected => Colors.red,
-    ConnectionStatus.slow         => Colors.orange,
+    ConnectionStatus.slow => Colors.orange,
   };
 
   IconData _icon() => switch (_currentStatus) {
-    ConnectionStatus.connected    => Icons.wifi,
+    ConnectionStatus.connected => Icons.wifi,
     ConnectionStatus.disconnected => Icons.wifi_off,
-    ConnectionStatus.slow         => Icons.signal_cellular_alt,
+    ConnectionStatus.slow => Icons.signal_cellular_alt,
   };
 
   String _title() => switch (_currentStatus) {
-    ConnectionStatus.connected    => 'Connected',
+    ConnectionStatus.connected => 'Connected',
     ConnectionStatus.disconnected => 'No Connection',
-    ConnectionStatus.slow         => 'Slow Network',
+    ConnectionStatus.slow => 'Slow Network',
   };
 
   String _message() => switch (_currentStatus) {
-    ConnectionStatus.connected    => "You're back online",
+    ConnectionStatus.connected => "You're back online",
     ConnectionStatus.disconnected => 'Check your internet connection',
-    ConnectionStatus.slow         => 'Connection is slow',
+    ConnectionStatus.slow => 'Connection is slow',
   };
 
   @override
@@ -96,7 +96,10 @@ class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
                 elevation: 8,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: _bgColor(),
                     borderRadius: BorderRadius.circular(16),
@@ -108,19 +111,33 @@ class _SimpleConnectionToastState extends State<SimpleConnectionToast> {
                       ),
                     ],
                   ),
-                  child: Row(children: [
-                    Icon(_icon(), color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_title(), style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w600)),
-                        Text(_message(), style: const TextStyle(
-                            color: Colors.white, fontSize: 12)),
-                      ],
-                    )),
-                  ]),
+                  child: Row(
+                    children: [
+                      Icon(_icon(), color: Colors.white),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _title(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              _message(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );

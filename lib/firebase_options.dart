@@ -85,5 +85,4 @@ class DefaultFirebaseOptions {
     projectId: 'moonlightapp-12a0c',
     storageBucket: 'moonlightapp-12a0c.firebasestorage.app',
   );
-
 }

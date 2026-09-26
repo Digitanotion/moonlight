@@ -33,6 +33,8 @@ import 'package:moonlight/widgets/top_snack.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class DailyTasksScreen extends StatelessWidget {
   const DailyTasksScreen({super.key});
 
@@ -138,9 +140,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
       body: BlocBuilder<OfferwallCubit, OfferwallState>(
         builder: (context, state) {
           if (state.loading) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1FBF75)),
-            );
+            return const Center(child: AppLogoLoader());
           }
 
           if (!state.activated) {
@@ -267,10 +267,7 @@ class _ActivationGate extends StatelessWidget {
                     ? const SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.4,
-                        ),
+                        child: AppLogoLoader(),
                       )
                     : Text(
                         'Activate with $costCoins coins (${_formatUsd(costCoins)})',
@@ -386,10 +383,7 @@ class _TapjoyOfferwallViewState extends State<_TapjoyOfferwallView> {
             message: 'Could not load Tapjoy tasks.',
             onRetry: _retry,
           ),
-        if (_loading && !_hasError)
-          const Center(
-            child: CircularProgressIndicator(color: Color(0xFF1FBF75)),
-          ),
+        if (_loading && !_hasError) const Center(child: AppLogoLoader()),
       ],
     );
   }
@@ -529,10 +523,7 @@ class _CpxOfferwallViewState extends State<_CpxOfferwallView> {
             message: 'Could not load CPX Research tasks.',
             onRetry: _load,
           ),
-        if (_loading && !_hasError)
-          const Center(
-            child: CircularProgressIndicator(color: Color(0xFF1FBF75)),
-          ),
+        if (_loading && !_hasError) const Center(child: AppLogoLoader()),
       ],
     );
   }

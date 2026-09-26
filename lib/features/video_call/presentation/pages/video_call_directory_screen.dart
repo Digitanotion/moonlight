@@ -294,9 +294,11 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
             void onSearch(String query) {
               setSheetState(() {
                 filtered = allCountriesSorted()
-                    .where((e) =>
-                        e.value.toLowerCase().contains(query.toLowerCase()) ||
-                        e.key.toLowerCase().contains(query.toLowerCase()))
+                    .where(
+                      (e) =>
+                          e.value.toLowerCase().contains(query.toLowerCase()) ||
+                          e.key.toLowerCase().contains(query.toLowerCase()),
+                    )
                     .toList();
               });
             }
@@ -316,8 +318,9 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
                       children: [
                         Text(
                           'Filter by country',
-                          style: AppTextStyles.titleMedium
-                              .copyWith(color: Colors.white),
+                          style: AppTextStyles.titleMedium.copyWith(
+                            color: Colors.white,
+                          ),
                         ),
                         const Spacer(),
                         if (_country != null)
@@ -339,10 +342,13 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Search country...',
-                        hintStyle:
-                            TextStyle(color: Colors.white.withOpacity(0.4)),
-                        prefixIcon: Icon(Icons.search,
-                            color: Colors.white.withOpacity(0.5)),
+                        hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          color: Colors.white.withOpacity(0.5),
+                        ),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.06),
                         border: OutlineInputBorder(
@@ -350,7 +356,9 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
                           borderSide: BorderSide.none,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -372,7 +380,8 @@ class _VideoCallDirectoryScreenState extends State<VideoCallDirectoryScreen> {
                             trailing: Text(
                               entry.key,
                               style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5)),
+                                color: Colors.white.withOpacity(0.5),
+                              ),
                             ),
                             onTap: () {
                               setState(() => _country = entry.key);

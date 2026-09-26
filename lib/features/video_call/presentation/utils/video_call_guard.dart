@@ -19,8 +19,9 @@ import 'package:moonlight/core/theme/app_colors.dart';
 /// Returns `true` when the gender is unknown so we never wrongly block a
 /// legitimate caller on a hydration race — the backend still enforces it.
 bool currentUserCanStartCall() {
-  final gender =
-      sl<CurrentUserService>().currentUser?.gender?.toLowerCase().trim();
+  final gender = sl<CurrentUserService>().currentUser?.gender
+      ?.toLowerCase()
+      .trim();
   if (gender == null || gender.isEmpty) return true;
   return gender == 'male';
 }
@@ -40,7 +41,10 @@ Future<void> showLadiesCannotCallDialog(BuildContext context) {
           Expanded(
             child: Text(
               'Calls not available',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

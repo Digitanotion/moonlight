@@ -15,6 +15,8 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class LiveParticipantsSheet extends StatefulWidget {
   final String livestreamParam;
   final int? viewerCount;
@@ -147,8 +149,11 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
                     child: Row(
                       children: [
-                        const Icon(Icons.remove_red_eye_rounded,
-                            color: Colors.white, size: 18),
+                        const Icon(
+                          Icons.remove_red_eye_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           'Watching now',
@@ -183,9 +188,7 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
 
   Widget _body(ScrollController scrollCtrl) {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
-      );
+      return const Center(child: AppLogoLoader());
     }
     if (_error != null) {
       return Center(
@@ -202,8 +205,10 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
                 });
                 _load();
               },
-              child: const Text('Retry',
-                  style: TextStyle(color: AppColors.secondary)),
+              child: const Text(
+                'Retry',
+                style: TextStyle(color: AppColors.secondary),
+              ),
             ),
           ],
         ),
@@ -211,8 +216,10 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
     }
     if (_people.isEmpty) {
       return const Center(
-        child: Text('No one else is here yet',
-            style: TextStyle(color: Colors.white54)),
+        child: Text(
+          'No one else is here yet',
+          style: TextStyle(color: Colors.white54),
+        ),
       );
     }
     return ListView.separated(
@@ -250,7 +257,10 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
                         imageUrl: p.avatar,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => const Icon(
-                            Icons.person, color: Colors.white38, size: 20),
+                          Icons.person,
+                          color: Colors.white38,
+                          size: 20,
+                        ),
                       )
                     : const Icon(Icons.person, color: Colors.white38, size: 20),
               ),
@@ -281,9 +291,13 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
                     ],
                   ),
                   if (isMe)
-                    Text('You',
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.4), fontSize: 11)),
+                    Text(
+                      'You',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 11,
+                      ),
+                    ),
                 ],
               ),
             ),

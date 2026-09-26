@@ -194,7 +194,8 @@ String humanizeErrorText(String input) {
   if (s.isEmpty) return 'Something went wrong. Please try again.';
 
   // If what's left still looks like a raw dump, don't show it.
-  final looksTechnical = s.contains(RegExp(r'#\d+\s')) ||
+  final looksTechnical =
+      s.contains(RegExp(r'#\d+\s')) ||
       s.startsWith('{') ||
       s.startsWith('[') ||
       s.contains('package:') ||

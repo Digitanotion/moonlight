@@ -27,6 +27,8 @@ import 'package:moonlight/features/video_call/presentation/widgets/duration_pick
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ProfileViewPage extends StatefulWidget {
   const ProfileViewPage({super.key});
 
@@ -209,7 +211,7 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: Colors.orange),
+                AppLogoLoader(),
                 SizedBox(height: 16),
                 Text('Blocking user...', style: TextStyle(color: Colors.white)),
               ],
@@ -290,6 +292,7 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
     _scroll.dispose();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -460,7 +463,8 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                               BlocBuilder<ProfileCubit, ProfileState>(
                                 builder: (context, s) {
                                   final target = s.user;
-                                  final canCall = target != null &&
+                                  final canCall =
+                                      target != null &&
                                       target.gender == 'female' &&
                                       target.isVideoCallOnline == true &&
                                       target.videoCallEnabled == true;
@@ -475,8 +479,9 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
                                           onPressed: () =>
                                               _openVideoCall(context, target),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                const Color(0xFFFF7A00),
+                                            backgroundColor: const Color(
+                                              0xFFFF7A00,
+                                            ),
                                             foregroundColor: Colors.white,
                                             shape: const CircleBorder(),
                                             padding: EdgeInsets.zero,
@@ -572,159 +577,159 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
       ),
     );
   }
-
 }
 
-  void _startConversation(BuildContext context, String targetUserUuid) async {
-    if (targetUserUuid.isEmpty) {
-      TopSnack.error(context, 'Unable to start conversation');
-      return;
-    }
+void _startConversation(BuildContext context, String targetUserUuid) async {
+  if (targetUserUuid.isEmpty) {
+    TopSnack.error(context, 'Unable to start conversation');
+    return;
+  }
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black.withOpacity(0.8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: Colors.orange),
-              SizedBox(height: 16),
-              Text(
-                'Starting conversation...',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => Dialog(
+      backgroundColor: Colors.black.withOpacity(0.8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppLogoLoader(),
+            SizedBox(height: 16),
+            Text(
+              'Starting conversation...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
         ),
       ),
-    );
+    ),
+  );
 
-    StreamSubscription? subscription;
-    ChatCubit? chatCubit;
+  StreamSubscription? subscription;
+  ChatCubit? chatCubit;
 
-    try {
-      final chatRepository = GetIt.I<ChatRepository>();
-      chatCubit = ChatCubit(chatRepository);
+  try {
+    final chatRepository = GetIt.I<ChatRepository>();
+    chatCubit = ChatCubit(chatRepository);
 
-      subscription = chatCubit.stream.listen(
-        (state) {
-          if (state is ChatDirectConversationStarted) {
-            Navigator.pop(context);
+    subscription = chatCubit.stream.listen(
+      (state) {
+        if (state is ChatDirectConversationStarted) {
+          Navigator.pop(context);
 
-            Navigator.pushNamed(
-              context,
-              RouteNames.chat,
-              arguments: {'conversation': state.conversation, 'isClub': false},
-            );
+          Navigator.pushNamed(
+            context,
+            RouteNames.chat,
+            arguments: {'conversation': state.conversation, 'isClub': false},
+          );
 
-            subscription?.cancel();
-            chatCubit?.close();
-          } else if (state is ChatError) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error: ${state.message}'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            subscription?.cancel();
-            chatCubit?.close();
-          }
-        },
-        onError: (error) {
+          subscription?.cancel();
+          chatCubit?.close();
+        } else if (state is ChatError) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: $error'),
+              content: Text('Error: ${state.message}'),
               backgroundColor: Colors.red,
             ),
           );
           subscription?.cancel();
           chatCubit?.close();
-        },
-      );
-
-      chatCubit.startDirectConversation(targetUserUuid);
-    } catch (e) {
-      subscription?.cancel();
-      chatCubit?.close();
-
-      Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to start conversation: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<int?> _fetchCoinBalance() async {
-    try {
-      final res = await sl<DioClient>().dio.get('/api/v1/wallet');
-      final data = res.data;
-      final map = data is Map ? data.cast<String, dynamic>() : {};
-      final inner = map['data'];
-      final innerMap = inner is Map ? inner.cast<String, dynamic>() : {};
-      final coins = innerMap['balance'];
-      return int.tryParse('${coins ?? 0}') ?? 0;
-    } catch (e) {
-      debugPrint('⚠️ Failed to fetch wallet balance: $e');
-      return null;
-    }
-  }
-
-  Future<void> _openVideoCall(BuildContext context, UserProfile targetUser) async {
-    // Ladies cannot start calls (server-enforced) — explain up front
-    // rather than letting the call fail mid-ring.
-    if (!currentUserCanStartCall()) {
-      await showLadiesCannotCallDialog(context);
-      return;
-    }
-
-    final balance = await _fetchCoinBalance();
-    if (!context.mounted) return;
-
-    if (balance == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not load your coin balance. Try again.'),
-        ),
-      );
-      return;
-    }
-
-    final minutes = await DurationPickerSheet.show(
-      context,
-      calleeDisplayName: targetUser.fullName,
-      ratePerMinute: 100, // TODO: same hardcoded rate as the directory screen — source from config if one exists
-      callerCoinBalance: balance,
+        }
+      },
+      onError: (error) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $error'), backgroundColor: Colors.red),
+        );
+        subscription?.cancel();
+        chatCubit?.close();
+      },
     );
 
-    if (minutes == null || !context.mounted) return; // user cancelled
+    chatCubit.startDirectConversation(targetUserUuid);
+  } catch (e) {
+    subscription?.cancel();
+    chatCubit?.close();
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => BlocProvider.value(
-          value: sl<VideoCallBloc>(),
-          child: OutgoingCallScreen(
-            calleeUserSlug: targetUser.handle.replaceFirst('@', ''),
-            calleeDisplayName: targetUser.fullName,
-            calleeAvatarUrl: targetUser.avatarUrl,
-            initiatedFrom: 'profile',
-            initialMinutes: minutes,
-          ),
-        ),
-        fullscreenDialog: true,
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Failed to start conversation: ${e.toString()}'),
+        backgroundColor: Colors.red,
       ),
     );
   }
+}
+
+Future<int?> _fetchCoinBalance() async {
+  try {
+    final res = await sl<DioClient>().dio.get('/api/v1/wallet');
+    final data = res.data;
+    final map = data is Map ? data.cast<String, dynamic>() : {};
+    final inner = map['data'];
+    final innerMap = inner is Map ? inner.cast<String, dynamic>() : {};
+    final coins = innerMap['balance'];
+    return int.tryParse('${coins ?? 0}') ?? 0;
+  } catch (e) {
+    debugPrint('⚠️ Failed to fetch wallet balance: $e');
+    return null;
+  }
+}
+
+Future<void> _openVideoCall(
+  BuildContext context,
+  UserProfile targetUser,
+) async {
+  // Ladies cannot start calls (server-enforced) — explain up front
+  // rather than letting the call fail mid-ring.
+  if (!currentUserCanStartCall()) {
+    await showLadiesCannotCallDialog(context);
+    return;
+  }
+
+  final balance = await _fetchCoinBalance();
+  if (!context.mounted) return;
+
+  if (balance == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not load your coin balance. Try again.'),
+      ),
+    );
+    return;
+  }
+
+  final minutes = await DurationPickerSheet.show(
+    context,
+    calleeDisplayName: targetUser.fullName,
+    ratePerMinute:
+        100, // TODO: same hardcoded rate as the directory screen — source from config if one exists
+    callerCoinBalance: balance,
+  );
+
+  if (minutes == null || !context.mounted) return; // user cancelled
+
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => BlocProvider.value(
+        value: sl<VideoCallBloc>(),
+        child: OutgoingCallScreen(
+          calleeUserSlug: targetUser.handle.replaceFirst('@', ''),
+          calleeDisplayName: targetUser.fullName,
+          calleeAvatarUrl: targetUser.avatarUrl,
+          initiatedFrom: 'profile',
+          initialMinutes: minutes,
+        ),
+      ),
+      fullscreenDialog: true,
+    ),
+  );
+}
 
 class _ProfileAvatar extends StatelessWidget {
   final String? avatarUrl;
@@ -1279,11 +1284,7 @@ class _PostTileState extends State<PostTile> {
             ),
             if (_loading)
               const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: SizedBox(width: 20, height: 20, child: AppLogoLoader()),
               ),
             const Center(
               child: Icon(

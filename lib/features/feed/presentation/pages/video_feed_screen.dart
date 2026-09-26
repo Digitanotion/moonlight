@@ -33,6 +33,8 @@ import 'package:moonlight/features/post_view/presentation/widgets/comment_bottom
 import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class VideoFeedScreen extends StatefulWidget {
   // Seed list captured at navigation time. The screen no longer treats
   // this as the whole world — it re-derives the live video list from the
@@ -283,9 +285,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
           _syncFromFeed(state);
 
           if (_videoPosts.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            );
+            return const Center(child: AppLogoLoader());
           }
 
           return PageView.builder(

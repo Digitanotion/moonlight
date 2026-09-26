@@ -340,18 +340,20 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     );
     on<AcceptJoinRequest>(_onAccept);
     on<DeclineJoinRequest>(_onDecline);
-   on<PauseStatusChanged>(
-      (e, emit) => emit(state.copyWith(
-        isPaused: e.paused,
-        // Resuming (paused -> false) after a video call is exactly when
-        // her own camera isn't actually reconnected to the stream yet
-        // (see _joinAgoraFromSession's leave() call on the video call
-        // side) — flag it so the UI can show a "rejoin" prompt. Doesn't
-        // fire on a genuine manual pause/unpause by the host herself,
-        // since that goes through TogglePause/_onTogglePause instead,
-        // a completely separate event.
-        needsManualRejoin: !e.paused,
-      )),
+    on<PauseStatusChanged>(
+      (e, emit) => emit(
+        state.copyWith(
+          isPaused: e.paused,
+          // Resuming (paused -> false) after a video call is exactly when
+          // her own camera isn't actually reconnected to the stream yet
+          // (see _joinAgoraFromSession's leave() call on the video call
+          // side) — flag it so the UI can show a "rejoin" prompt. Doesn't
+          // fire on a genuine manual pause/unpause by the host herself,
+          // since that goes through TogglePause/_onTogglePause instead,
+          // a completely separate event.
+          needsManualRejoin: !e.paused,
+        ),
+      ),
     );
 
     // NEW handlers

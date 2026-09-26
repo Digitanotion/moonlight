@@ -80,10 +80,7 @@ class VideoCallAgoraService with ChangeNotifier {
   }
 
   Future<void> _ensurePermissions() async {
-    final statuses = await [
-      Permission.microphone,
-      Permission.camera,
-    ].request();
+    final statuses = await [Permission.microphone, Permission.camera].request();
     final denied = statuses.values.any(
       (s) => s.isDenied || s.isPermanentlyDenied || s.isRestricted,
     );
@@ -166,27 +163,24 @@ class VideoCallAgoraService with ChangeNotifier {
           _setNotifier(remoteUid, uid);
           _notify();
         },
-        onUserOffline: (
-          RtcConnection conn,
-          int uid,
-          UserOfflineReasonType reason,
-        ) {
-          if (kDebugMode) {
-            debugPrint('[VideoCallAgora] Remote offline: $uid ($reason)');
-          }
-          if (remoteUid.value == uid) {
-            _setNotifier(remoteUid, null);
-            _setNotifier(remoteHasVideo, false);
-            _setNotifier(remoteHasAudio, false);
-            _setNotifier(remoteStreamHealthy, false);
-            // The peer chose to leave → the call has ended, not a network
-            // blip. Anything else (dropped) is a genuine disconnect.
-            if (reason == UserOfflineReasonType.userOfflineQuit) {
-              _setNotifier(remotePeerLeft, remotePeerLeft.value + 1);
-            }
-          }
-          _notify();
-        },
+        onUserOffline:
+            (RtcConnection conn, int uid, UserOfflineReasonType reason) {
+              if (kDebugMode) {
+                debugPrint('[VideoCallAgora] Remote offline: $uid ($reason)');
+              }
+              if (remoteUid.value == uid) {
+                _setNotifier(remoteUid, null);
+                _setNotifier(remoteHasVideo, false);
+                _setNotifier(remoteHasAudio, false);
+                _setNotifier(remoteStreamHealthy, false);
+                // The peer chose to leave → the call has ended, not a network
+                // blip. Anything else (dropped) is a genuine disconnect.
+                if (reason == UserOfflineReasonType.userOfflineQuit) {
+                  _setNotifier(remotePeerLeft, remotePeerLeft.value + 1);
+                }
+              }
+              _notify();
+            },
         onRemoteVideoStats: (RtcConnection conn, RemoteVideoStats stats) {
           if (stats.uid != remoteUid.value) return;
           // If the peer deliberately turned their camera off, there are
@@ -200,65 +194,69 @@ class VideoCallAgoraService with ChangeNotifier {
           _setNotifier(remoteStreamHealthy, flowing);
           _notify();
         },
-        onConnectionStateChanged: (
-          RtcConnection conn,
-          ConnectionStateType state,
-          ConnectionChangedReasonType reason,
-        ) {
-          final ok = state == ConnectionStateType.connectionStateConnected;
-          if (kDebugMode) {
-            debugPrint('[VideoCallAgora] connection=$state ok=$ok');
-          }
-          _setNotifier(connectionHealthy, ok);
-          _notify();
-        },
-        onRemoteVideoStateChanged: (
-          RtcConnection conn,
-          int uid,
-          RemoteVideoState state,
-          RemoteVideoStateReason reason,
-          int elapsed,
-        ) {
-          if (uid != remoteUid.value) return;
-          final decoding =
-              state == RemoteVideoState.remoteVideoStateDecoding;
-          final starting =
-              state == RemoteVideoState.remoteVideoStateStarting;
-          _setNotifier(remoteHasVideo, decoding || starting);
+        onConnectionStateChanged:
+            (
+              RtcConnection conn,
+              ConnectionStateType state,
+              ConnectionChangedReasonType reason,
+            ) {
+              final ok = state == ConnectionStateType.connectionStateConnected;
+              if (kDebugMode) {
+                debugPrint('[VideoCallAgora] connection=$state ok=$ok');
+              }
+              _setNotifier(connectionHealthy, ok);
+              _notify();
+            },
+        onRemoteVideoStateChanged:
+            (
+              RtcConnection conn,
+              int uid,
+              RemoteVideoState state,
+              RemoteVideoStateReason reason,
+              int elapsed,
+            ) {
+              if (uid != remoteUid.value) return;
+              final decoding =
+                  state == RemoteVideoState.remoteVideoStateDecoding;
+              final starting =
+                  state == RemoteVideoState.remoteVideoStateStarting;
+              _setNotifier(remoteHasVideo, decoding || starting);
 
-          if (reason ==
-              RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted) {
-            _remoteCameraMutedByPeer = true;
-          } else if (reason ==
-                  RemoteVideoStateReason
-                      .remoteVideoStateReasonRemoteUnmuted ||
-              decoding ||
-              starting) {
-            _remoteCameraMutedByPeer = false;
-          }
+              if (reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted) {
+                _remoteCameraMutedByPeer = true;
+              } else if (reason ==
+                      RemoteVideoStateReason
+                          .remoteVideoStateReasonRemoteUnmuted ||
+                  decoding ||
+                  starting) {
+                _remoteCameraMutedByPeer = false;
+              }
 
-          // "Healthy" = we're seeing them, OR they deliberately turned
-          // their camera off (network fine — don't freeze the timer).
-          // Frozen/stopped for any other reason is a network problem.
-          _setNotifier(
-            remoteStreamHealthy,
-            decoding || starting || _remoteCameraMutedByPeer,
-          );
-          _notify();
-        },
-        onRemoteAudioStateChanged: (
-          RtcConnection conn,
-          int uid,
-          RemoteAudioState state,
-          RemoteAudioStateReason reason,
-          int elapsed,
-        ) {
-          final hasAudio = state == RemoteAudioState.remoteAudioStateDecoding;
-          if (uid == remoteUid.value) {
-            _setNotifier(remoteHasAudio, hasAudio);
-          }
-          _notify();
-        },
+              // "Healthy" = we're seeing them, OR they deliberately turned
+              // their camera off (network fine — don't freeze the timer).
+              // Frozen/stopped for any other reason is a network problem.
+              _setNotifier(
+                remoteStreamHealthy,
+                decoding || starting || _remoteCameraMutedByPeer,
+              );
+              _notify();
+            },
+        onRemoteAudioStateChanged:
+            (
+              RtcConnection conn,
+              int uid,
+              RemoteAudioState state,
+              RemoteAudioStateReason reason,
+              int elapsed,
+            ) {
+              final hasAudio =
+                  state == RemoteAudioState.remoteAudioStateDecoding;
+              if (uid == remoteUid.value) {
+                _setNotifier(remoteHasAudio, hasAudio);
+              }
+              _notify();
+            },
         onLeaveChannel: (RtcConnection conn, RtcStats stats) {
           _joined = false;
           _setNotifier(remoteUid, null);

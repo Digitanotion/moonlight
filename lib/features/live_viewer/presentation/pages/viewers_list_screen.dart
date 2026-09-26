@@ -7,6 +7,8 @@ import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ViewersListScreen extends StatefulWidget {
   final int livestreamIdNumeric;
   final String livestreamParam;
@@ -347,14 +349,7 @@ class _ViewersListScreenState extends State<ViewersListScreen> {
                 ),
                 if (_isRefreshing) ...[
                   const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.orange,
-                    ),
-                  ),
+                  const SizedBox(width: 16, height: 16, child: AppLogoLoader()),
                 ],
               ],
             ),
@@ -363,9 +358,7 @@ class _ViewersListScreenState extends State<ViewersListScreen> {
           // Participants List
           Expanded(
             child: _isLoading && !_isRefreshing
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.orange),
-                  )
+                ? const Center(child: AppLogoLoader())
                 : _errorMessage != null
                 ? _buildErrorWidget()
                 : _filteredParticipants.isEmpty

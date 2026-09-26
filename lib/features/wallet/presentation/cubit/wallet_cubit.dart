@@ -25,13 +25,7 @@ class WalletCubit extends Cubit<WalletState> {
       final packages = results[1] as List<CoinPackage>;
       final recent = results[2] as List<TransactionModel>;
 
-      emit(
-        WalletLoaded(
-          balance: balance,
-          packages: packages,
-          recent: recent,
-        ),
-      );
+      emit(WalletLoaded(balance: balance, packages: packages, recent: recent));
     } catch (e) {
       emit(WalletError(message: e.toString()));
     }

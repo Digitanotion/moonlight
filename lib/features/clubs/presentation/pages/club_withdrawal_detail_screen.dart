@@ -15,6 +15,8 @@ import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubWithdrawalDetailScreen extends StatefulWidget {
   final String clubUuid;
   final String requestUuid;
@@ -96,11 +98,7 @@ class _ClubWithdrawalDetailScreenState
                   children: [
                     _buildTopBar(context),
                     if (_loading)
-                      const Expanded(
-                        child: Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                      )
+                      const Expanded(child: Center(child: AppLogoLoader()))
                     else if (_request == null)
                       const Expanded(
                         child: Center(
@@ -261,10 +259,7 @@ class _ClubWithdrawalDetailScreenState
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                        child: AppLogoLoader(),
                       )
                     : const Text(
                         'Approve',
@@ -1265,14 +1260,7 @@ class _ShareableReceiptCardState extends State<ShareableReceiptCard> {
         OutlinedButton.icon(
           onPressed: _sharing ? null : _share,
           icon: _sharing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.greenAccent,
-                  ),
-                )
+              ? const SizedBox(width: 16, height: 16, child: AppLogoLoader())
               : const Icon(Icons.share_rounded, size: 18),
           label: Text(_sharing ? 'Preparing…' : 'Share Receipt'),
           style: OutlinedButton.styleFrom(

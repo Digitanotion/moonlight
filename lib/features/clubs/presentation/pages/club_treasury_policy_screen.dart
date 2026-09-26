@@ -8,6 +8,8 @@ import 'package:moonlight/features/clubs/domain/entities/club_treasury.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubTreasuryPolicyScreen extends StatefulWidget {
   final String clubUuid;
   final ClubTreasuryPolicy? policy;
@@ -183,10 +185,7 @@ class _ClubTreasuryPolicyScreenState extends State<ClubTreasuryPolicyScreen> {
                                   ? const SizedBox(
                                       width: 22,
                                       height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
+                                      child: AppLogoLoader(),
                                     )
                                   : const Text(
                                       'Save Policy',

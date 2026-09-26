@@ -9,6 +9,8 @@ import 'package:moonlight/features/livestream/domain/repositories/participants_r
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ViewersListSheet extends StatefulWidget {
   const ViewersListSheet({super.key});
 
@@ -376,7 +378,7 @@ class _ViewersListSheetState extends State<ViewersListSheet> {
       },
       builder: (context, state) {
         if (state.loading && state.items.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: AppLogoLoader());
         }
 
         if (!state.loading && state.items.isEmpty) {
@@ -398,7 +400,7 @@ class _ViewersListSheetState extends State<ViewersListSheet> {
               if (i >= state.items.length) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: AppLogoLoader()),
                 );
               }
               final p = state.items[i];

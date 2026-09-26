@@ -4,6 +4,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class SecondaryButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed; // ✅ Change to nullable
@@ -36,14 +38,7 @@ class SecondaryButton extends StatelessWidget {
             ? Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
+                  SizedBox(width: 20, height: 20, child: AppLogoLoader()),
                   if (loadingText != null) ...[
                     const SizedBox(width: 12),
                     Text(

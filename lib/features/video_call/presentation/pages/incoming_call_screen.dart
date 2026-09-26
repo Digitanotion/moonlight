@@ -10,6 +10,8 @@ import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.
 import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart';
 import 'package:moonlight/features/video_call/presentation/pages/active_call_screen.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class IncomingCallScreen extends StatefulWidget {
   const IncomingCallScreen({super.key});
 
@@ -101,7 +103,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                   CachedNetworkImage(
                     imageUrl: avatarUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(color: AppColors.dark),
+                    errorWidget: (_, __, ___) =>
+                        Container(color: AppColors.dark),
                   ),
                 ClipRect(
                   child: BackdropFilter(
@@ -149,7 +152,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                                   alignment: Alignment.center,
                                   children: List.generate(3, (i) {
                                     final delay = i * 0.33;
-                                    var t = (_ringController.value + delay) % 1.0;
+                                    var t =
+                                        (_ringController.value + delay) % 1.0;
                                     return Opacity(
                                       opacity: (1 - t).clamp(0.0, 1.0) * 0.5,
                                       child: Container(
@@ -186,14 +190,18 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: AppColors.primary2.withOpacity(0.5),
+                                      color: AppColors.primary2.withOpacity(
+                                        0.5,
+                                      ),
                                       blurRadius: 30,
                                       spreadRadius: 4,
                                     ),
                                   ],
                                 ),
                                 child: ClipOval(
-                                  child: (avatarUrl != null && avatarUrl.isNotEmpty)
+                                  child:
+                                      (avatarUrl != null &&
+                                          avatarUrl.isNotEmpty)
                                       ? CachedNetworkImage(
                                           imageUrl: avatarUrl,
                                           fit: BoxFit.cover,
@@ -256,15 +264,17 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                                 RingtonePlayer().stop();
                                 final uuid = state.session?.uuid;
                                 if (uuid != null) {
-                                  context
-                                      .read<VideoCallBloc>()
-                                      .add(CallRejectRequested(uuid));
+                                  context.read<VideoCallBloc>().add(
+                                    CallRejectRequested(uuid),
+                                  );
                                 } else {
                                   // No session to reject — still force
                                   // this screen closed rather than leaving
                                   // the user stuck on a dead-end Decline
                                   // button that visibly does nothing.
-                                  context.read<VideoCallBloc>().add(CallDismissed());
+                                  context.read<VideoCallBloc>().add(
+                                    CallDismissed(),
+                                  );
                                 }
                               },
                             ),
@@ -276,9 +286,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                               onTap: () {
                                 final uuid = state.session?.uuid;
                                 if (uuid != null) {
-                                  context
-                                      .read<VideoCallBloc>()
-                                      .add(CallAcceptRequested(uuid));
+                                  context.read<VideoCallBloc>().add(
+                                    CallAcceptRequested(uuid),
+                                  );
                                 }
                               },
                             ),
@@ -353,10 +363,7 @@ class _CallActionButton extends StatelessWidget {
             child: loading
                 ? const Padding(
                     padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
+                    child: AppLogoLoader(),
                   )
                 : Icon(icon, color: Colors.white, size: 32),
           ),

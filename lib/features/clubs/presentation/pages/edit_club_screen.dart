@@ -12,6 +12,8 @@ import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.da
 import 'package:moonlight/features/clubs/presentation/cubit/edit_club_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/edit_club_state.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class EditClubScreen extends StatelessWidget {
   final String clubUuid;
 
@@ -234,7 +236,7 @@ class _EditClubViewState extends State<_EditClubView> {
         if (state.loading && !_hydrated) {
           return const Scaffold(
             backgroundColor: AppColors.bgBottom,
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(child: AppLogoLoader()),
           );
         }
 
@@ -325,10 +327,7 @@ class _EditClubViewState extends State<_EditClubView> {
                                   SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
+                                    child: AppLogoLoader(),
                                   ),
                                   SizedBox(width: 12),
                                   Text(
@@ -371,14 +370,7 @@ class _EditClubViewState extends State<_EditClubView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade400),
-              ),
-            ),
+            SizedBox(width: 20, height: 20, child: AppLogoLoader()),
             const SizedBox(width: 12),
             const Text(
               'Saving changes...',
@@ -411,14 +403,7 @@ class _EditClubViewState extends State<_EditClubView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade400),
-              ),
-            ),
+            SizedBox(width: 20, height: 20, child: AppLogoLoader()),
             const SizedBox(width: 12),
             const Text(
               'Saving your changes...',

@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../domain/models/transaction_model.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class TransactionReceiptScreen extends StatefulWidget {
   static const routeName = RouteNames.transactionReceipt;
   const TransactionReceiptScreen({Key? key}) : super(key: key);
@@ -329,7 +331,7 @@ class _TransactionReceiptScreenState extends State<TransactionReceiptScreen>
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(12.0),
-                  child: CircularProgressIndicator(color: Color(0xFFFF7A00)),
+                  child: AppLogoLoader(),
                 ),
               )
             else

@@ -8,6 +8,8 @@ import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
 import 'package:moonlight/features/profile_view/presentation/cubit/follow_list_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// Entry point — push this screen with [FollowListScreen.route].
 class FollowListScreen extends StatelessWidget {
   final String userUuid;
@@ -701,14 +703,7 @@ class _LoadingMore extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 20),
       child: Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Color(0xFFFF7A00),
-          ),
-        ),
+        child: SizedBox(width: 24, height: 24, child: AppLogoLoader()),
       ),
     );
   }

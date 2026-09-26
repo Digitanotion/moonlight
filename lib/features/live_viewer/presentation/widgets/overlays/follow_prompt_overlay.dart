@@ -49,9 +49,7 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
       // Re-verify against the server first — the viewer may have followed
       // the host from their profile / the participants sheet / a previous
       // session, none of which flow through ViewerBloc.
-      context
-          .read<ViewerBloc>()
-          .add(const HostFollowStateRefreshRequested());
+      context.read<ViewerBloc>().add(const HostFollowStateRefreshRequested());
       await Future<void>.delayed(const Duration(milliseconds: 600));
       if (!mounted || _acted) return;
       final isFollowed =
@@ -149,10 +147,17 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
                           ? CachedNetworkImage(
                               imageUrl: host.avatarUrl,
                               fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) =>
-                                  const Icon(Icons.person, color: Colors.white70, size: 18),
+                              errorWidget: (_, __, ___) => const Icon(
+                                Icons.person,
+                                color: Colors.white70,
+                                size: 18,
+                              ),
                             )
-                          : const Icon(Icons.person, color: Colors.white70, size: 18),
+                          : const Icon(
+                              Icons.person,
+                              color: Colors.white70,
+                              size: 18,
+                            ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -161,11 +166,14 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
                       'Follow ${host.name} to see more from them',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 12.5),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                                   ElevatedButton(
+                  ElevatedButton(
                     onPressed: () {
                       context.read<ViewerBloc>().add(const FollowToggled());
                       // Hide now and never prompt again this session — the
@@ -175,7 +183,10 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF7A00),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
                       minimumSize: Size.zero,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
@@ -192,7 +203,11 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
                   ),
                   IconButton(
                     onPressed: _dismiss,
-                    icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white54,
+                      size: 18,
+                    ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),

@@ -37,6 +37,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:moonlight/features/livestream/data/models/premium_package_model.dart';
 import 'package:moonlight/features/livestream/data/models/wallet_model.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // Add this class BEFORE the LiveHostPage class definition.
 // It replaces the AnimatedBuilder(animation: agora) camera block.
 
@@ -305,7 +307,7 @@ class _LiveHostPageState extends State<LiveHostPage>
     _connectionListener = connectionListener;
   }
 
- void dispose() {
+  void dispose() {
     ScreenGuard.release();
     _beautyAppliedOnJoin = false;
     agora.removeListener(_onAgoraStateChanged);
@@ -2061,8 +2063,11 @@ class _HeaderBar extends StatelessWidget {
               onTap: onShare,
               child: const Padding(
                 padding: EdgeInsets.only(top: 2, right: 10, left: 2),
-                child: Icon(Icons.ios_share_rounded,
-                    color: Colors.white, size: 18),
+                child: Icon(
+                  Icons.ios_share_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
             ),
           ],
@@ -3324,16 +3329,7 @@ class _PremiumBottomSheetState extends State<_PremiumBottomSheet> {
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: _loading
-          ? SizedBox(
-              height: 220,
-              child: Center(
-                child: CircularProgressIndicator(
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFFF6A00),
-                  ),
-                ),
-              ),
-            )
+          ? SizedBox(height: 220, child: Center(child: AppLogoLoader()))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

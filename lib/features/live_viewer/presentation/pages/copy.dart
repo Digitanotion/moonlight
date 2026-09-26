@@ -1,3 +1,4 @@
+
 // // lib/features/live_viewer/presentation/screens/live_viewer_screen.dart
 // import 'dart:ui';
 // import 'package:flutter/material.dart';
@@ -562,9 +563,7 @@
 //                                         ? const SizedBox(
 //                                             height: 18,
 //                                             width: 18,
-//                                             child: CircularProgressIndicator(
-//                                               strokeWidth: 2,
-//                                             ),
+//                                             child: AppLogoLoader(),
 //                                           )
 //                                         : const Text(
 //                                             'Unlock Stream',
@@ -1843,7 +1842,7 @@
 //             child: Column(
 //               mainAxisSize: MainAxisSize.min,
 //               children: [
-//                 const CircularProgressIndicator(color: Colors.white),
+//                 const AppLogoLoader(),
 //                 const SizedBox(height: 16),
 //                 const Text(
 //                   'Connecting to stream...',
@@ -1890,7 +1889,7 @@
 //   //             mainAxisSize: MainAxisSize.min,
 //   //             children: [
 //   //               const SizedBox(height: 8),
-//   //               const CircularProgressIndicator(color: Colors.white),
+//   //               const AppLogoLoader(),
 //   //               const SizedBox(height: 16),
 //   //               const Text(
 //   //                 'Waiting for host approval…',
@@ -2033,7 +2032,7 @@
 //                   style: TextStyle(color: Colors.white70),
 //                 ),
 //                 const SizedBox(height: 20),
-//                 const CircularProgressIndicator(color: Colors.white),
+//                 const AppLogoLoader(),
 //               ],
 //             ),
 //           ),
@@ -2368,9 +2367,7 @@
 //                                     ? const SizedBox(
 //                                         height: 18,
 //                                         width: 18,
-//                                         child: CircularProgressIndicator(
-//                                           strokeWidth: 2,
-//                                         ),
+//                                         child: AppLogoLoader(),
 //                                       )
 //                                     : const Text(
 //                                         'Unlock',

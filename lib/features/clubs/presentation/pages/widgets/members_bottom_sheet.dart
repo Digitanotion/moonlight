@@ -7,6 +7,8 @@ import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.da
 import 'package:moonlight/features/clubs/presentation/cubit/club_members_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_members_state.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 void showMembersSheet(BuildContext context, String club) {
   showModalBottomSheet(
     context: context,
@@ -42,7 +44,7 @@ class _MembersSheet extends StatelessWidget {
         // print('  - Club: ${state.club?.name}');
 
         if (state.loading) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: AppLogoLoader());
         }
 
         if (state.error != null) {

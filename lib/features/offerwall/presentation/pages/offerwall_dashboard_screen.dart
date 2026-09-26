@@ -17,6 +17,8 @@ import 'package:moonlight/features/offerwall/presentation/cubit/offerwall_cubit.
 import 'package:moonlight/features/withdrawal/domain/repositories/withdrawal_repository.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // Nigeria NUBAN is always exactly 10 digits — resolve immediately on hit,
 // same threshold the main wallet withdrawal screen uses.
 const int _kNubanLength = 10;
@@ -718,10 +720,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.4,
-                          ),
+                          child: AppLogoLoader(),
                         )
                       : const Text(
                           'Request withdrawal',
@@ -758,14 +757,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
               child: _loadingBanks
                   ? const Row(
                       children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFF1FBF75),
-                          ),
-                        ),
+                        SizedBox(width: 16, height: 16, child: AppLogoLoader()),
                         SizedBox(width: 12),
                         Text(
                           'Loading banks…',
@@ -877,10 +869,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                     child: SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF1FBF75),
-                      ),
+                      child: AppLogoLoader(),
                     ),
                   )
                 : (_accountNameCtrl.text.isNotEmpty

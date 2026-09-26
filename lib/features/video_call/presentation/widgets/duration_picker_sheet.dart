@@ -106,10 +106,7 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
                   decoration: BoxDecoration(
                     gradient: selected
                         ? const LinearGradient(
-                            colors: [
-                              AppColors.primary_,
-                              AppColors.primary2,
-                            ],
+                            colors: [AppColors.primary_, AppColors.primary2],
                           )
                         : null,
                     color: selected ? null : Colors.white.withOpacity(0.08),
@@ -140,9 +137,7 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
             children: [
               _StepperButton(
                 icon: Icons.remove_rounded,
-                onTap: _minutes > 1
-                    ? () => setState(() => _minutes--)
-                    : null,
+                onTap: _minutes > 1 ? () => setState(() => _minutes--) : null,
               ),
               SizedBox(
                 width: 70,
@@ -156,9 +151,7 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
               ),
               _StepperButton(
                 icon: Icons.add_rounded,
-                onTap: _minutes < 120
-                    ? () => setState(() => _minutes++)
-                    : null,
+                onTap: _minutes < 120 ? () => setState(() => _minutes++) : null,
               ),
             ],
           ),

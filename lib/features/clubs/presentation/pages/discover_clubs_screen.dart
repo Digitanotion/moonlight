@@ -20,6 +20,8 @@ import '../cubit/discover_clubs_state.dart';
 import '../cubit/search_clubs_cubit.dart';
 import '../cubit/search_clubs_state.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class DiscoverClubsScreen extends StatefulWidget {
   const DiscoverClubsScreen({super.key});
 
@@ -398,14 +400,7 @@ class _SearchHeader extends SliverPersistentHeaderDelegate {
               ),
             ),
             if (loading)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.secondary,
-                ),
-              )
+              const SizedBox(width: 16, height: 16, child: AppLogoLoader())
             else if (hasText)
               GestureDetector(
                 onTap: onClear,

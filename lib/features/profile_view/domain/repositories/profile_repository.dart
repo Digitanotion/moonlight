@@ -87,14 +87,16 @@ class ProfileClub {
       name: '${d['name'] ?? ''}',
       // Backend (ClubResource) returns `coverImageUrl`; keep older
       // field names as fallbacks in case any endpoint still uses them.
-      avatarUrl: d['coverImageUrl']?.toString() ??
+      avatarUrl:
+          d['coverImageUrl']?.toString() ??
           d['avatar_url']?.toString() ??
           d['logo_url']?.toString() ??
           d['image_url']?.toString(),
       description: d['description']?.toString() ?? d['bio']?.toString(),
       motto: d['motto']?.toString(),
       location: d['location']?.toString(),
-      membersCount: (d['membersCount'] as num?)?.toInt() ??
+      membersCount:
+          (d['membersCount'] as num?)?.toInt() ??
           (d['members_count'] as num?)?.toInt() ??
           0,
       isPrivate: d['isPrivate'] == true || d['is_private'] == true,

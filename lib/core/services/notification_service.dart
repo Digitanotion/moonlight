@@ -27,7 +27,8 @@ void notificationTapBackground(NotificationResponse response) {
 }
 
 void _handleActionTap(NotificationResponse response) {
-  if (response.actionId != 'ACCEPT_CALL' && response.actionId != 'DECLINE_CALL') {
+  if (response.actionId != 'ACCEPT_CALL' &&
+      response.actionId != 'DECLINE_CALL') {
     return; // plain tap, not an action button — handled elsewhere
   }
   if (response.payload == null) return;
@@ -74,10 +75,7 @@ void _handleActionTap(NotificationResponse response) {
     if (token == null || token.isEmpty) return;
     http.post(
       Uri.parse('$apiBaseUrl/api/v1/video-call/$sessionUuid/$action'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     );
   });
 
@@ -153,7 +151,8 @@ class NotificationService {
       onDidReceiveNotificationResponse: (NotificationResponse details) async {
         print('🎯 NOTIFICATION CLICKED!');
 
-        if (details.actionId == 'ACCEPT_CALL' || details.actionId == 'DECLINE_CALL') {
+        if (details.actionId == 'ACCEPT_CALL' ||
+            details.actionId == 'DECLINE_CALL') {
           _handleActionTap(details);
           return;
         }
@@ -201,9 +200,12 @@ class NotificationService {
     // picks this up: it's a plain local notification, not an FCM one, so
     // FCM's own getInitialMessage() never sees it.
     try {
-      final launchDetails = await _notificationsPlugin.getNotificationAppLaunchDetails();
+      final launchDetails = await _notificationsPlugin
+          .getNotificationAppLaunchDetails();
       if (launchDetails?.didNotificationLaunchApp == true) {
-        final payload = _parseNotificationPayload(launchDetails!.notificationResponse?.payload);
+        final payload = _parseNotificationPayload(
+          launchDetails!.notificationResponse?.payload,
+        );
         final sessionUuid = payload?['session_uuid']?.toString();
         if (sessionUuid != null && sessionUuid.isNotEmpty) {
           print('📞 Cold-started via incoming-call notification: $sessionUuid');
@@ -260,7 +262,7 @@ class NotificationService {
       }
     }
 
-  return null;
+    return null;
   }
 
   Future<void> _createNotificationChannel() async {

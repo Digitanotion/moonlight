@@ -13,6 +13,8 @@ import 'package:moonlight/widgets/video_thumbnail.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMe;
@@ -208,11 +210,7 @@ class MessageBubble extends StatelessWidget {
                   height: 150,
                   placeholder: (context, url) => Container(
                     color: AppColors.card,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary_,
-                      ),
-                    ),
+                    child: Center(child: AppLogoLoader()),
                   ),
                   errorWidget: (context, url, error) {
                     debugPrint('Image load error: $error');
@@ -378,12 +376,7 @@ class MessageBubble extends StatelessWidget {
   Widget _buildVideoThumbnailLoading() {
     return Container(
       color: Colors.black,
-      child: Center(
-        child: CircularProgressIndicator(
-          color: AppColors.primary_,
-          strokeWidth: 2,
-        ),
-      ),
+      child: Center(child: AppLogoLoader()),
     );
   }
 
@@ -800,8 +793,8 @@ class MessageBubble extends StatelessWidget {
                                 color: g.mine
                                     ? AppColors.secondary.withOpacity(0.22)
                                     : (isMe
-                                        ? Colors.black.withOpacity(0.06)
-                                        : Colors.white.withOpacity(0.08)),
+                                          ? Colors.black.withOpacity(0.06)
+                                          : Colors.white.withOpacity(0.08)),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: g.mine
@@ -812,8 +805,10 @@ class MessageBubble extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(g.emoji,
-                                      style: const TextStyle(fontSize: 13)),
+                                  Text(
+                                    g.emoji,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
                                   if (g.count > 1) ...[
                                     const SizedBox(width: 3),
                                     Text(
@@ -824,8 +819,8 @@ class MessageBubble extends StatelessWidget {
                                         color: g.mine
                                             ? AppColors.secondary
                                             : (isMe
-                                                ? AppColors.chatOutgoingMeta
-                                                : Colors.white70),
+                                                  ? AppColors.chatOutgoingMeta
+                                                  : Colors.white70),
                                       ),
                                     ),
                                   ],
@@ -915,8 +910,9 @@ class MessageBubble extends StatelessWidget {
                                 padding: const EdgeInsets.all(8),
                                 decoration: message.myReaction == e
                                     ? BoxDecoration(
-                                        color: AppColors.secondary
-                                            .withOpacity(0.22),
+                                        color: AppColors.secondary.withOpacity(
+                                          0.22,
+                                        ),
                                         shape: BoxShape.circle,
                                       )
                                     : null,
@@ -1023,9 +1019,7 @@ class MessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 for (final g in groups)
-                  for (final u in (g.users.isEmpty
-                      ? [null]
-                      : g.users))
+                  for (final u in (g.users.isEmpty ? [null] : g.users))
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
@@ -1037,8 +1031,11 @@ class MessageBubble extends StatelessWidget {
                                 ? NetworkImage(u!.avatarUrl!)
                                 : null,
                             child: (u?.avatarUrl ?? '').isEmpty
-                                ? const Icon(Icons.person,
-                                    size: 15, color: Colors.white38)
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 15,
+                                    color: Colors.white38,
+                                  )
                                 : null,
                           ),
                           const SizedBox(width: 10),
@@ -1047,8 +1044,8 @@ class MessageBubble extends StatelessWidget {
                               u == null
                                   ? '${g.count} ${g.count == 1 ? "person" : "people"}'
                                   : (u.fullName.isNotEmpty
-                                      ? u.fullName
-                                      : u.userSlug),
+                                        ? u.fullName
+                                        : u.userSlug),
                               style: TextStyle(
                                 color: AppColors.onSurface,
                                 fontSize: 13.5,
@@ -1186,11 +1183,7 @@ class MessageBubble extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.reply,
-                  size: 12,
-                  color: AppColors.secondary,
-                ),
+                const Icon(Icons.reply, size: 12, color: AppColors.secondary),
                 const SizedBox(width: 4),
                 Text(
                   isRepliedMessageMe

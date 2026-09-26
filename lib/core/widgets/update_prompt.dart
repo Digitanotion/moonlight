@@ -9,6 +9,8 @@ import 'package:moonlight/core/services/app_update_service.dart';
 import 'package:moonlight/core/services/auto_update_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// Opens the store. Tries the `market://` deep link first (opens the Play
 /// Store app directly), then the https URL. Returns false if nothing could
 /// be launched — the caller then keeps the prompt visible instead of leaving
@@ -292,10 +294,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                        child: AppLogoLoader(),
                       )
                     : const Text(
                         'Update now',

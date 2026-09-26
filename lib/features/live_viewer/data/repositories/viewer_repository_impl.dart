@@ -231,8 +231,8 @@ class ViewerRepositoryImpl implements ViewerRepository {
         // Backend returns this as 'isFollowed' (camelCase) — 'is_followed'
         // never matched, so a viewer who already follows the host still saw
         // the periodic "Follow" prompt.
-        isFollowed: hostData['isFollowed'] == true ||
-            hostData['is_followed'] == true,
+        isFollowed:
+            hostData['isFollowed'] == true || hostData['is_followed'] == true,
         callable: hostData['callable'] == true,
         uuid: hostData['uuid']?.toString(),
         fans: hostData['fans'] == null
@@ -397,7 +397,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     }
   }
 
-   Future<bool> toggleFollow(bool follow) async {
+  Future<bool> toggleFollow(bool follow) async {
     try {
       // Was previously calling $_basePath/follow and /unfollow — two
       // separate, unrelated pre-existing endpoints (GET-only, judging
@@ -562,17 +562,20 @@ class ViewerRepositoryImpl implements ViewerRepository {
     // Previously the 422 was swallowed by _safePost and the client wired up
     // Pusher + Agora anyway → a dead black screen with no feedback.
     final statusStr = (statusData['status'] ?? '').toString().toLowerCase();
-    final isEnded = statusData['has_ended'] == true ||
+    final isEnded =
+        statusData['has_ended'] == true ||
         statusData['ended_at'] != null ||
         statusStr == 'ended';
-    final isOffline = statusStr == 'offline' ||
+    final isOffline =
+        statusStr == 'offline' ||
         statusStr == 'unavailable' ||
         statusStr == 'not_available' ||
         statusStr == 'not available';
     // _safePost returns {} on any failure (incl. the 422). Treat an empty
     // enter response as "not joinable" ONLY when /status didn't confirm
     // the stream is live — a lone network hiccup on /enter shouldn't block.
-    final enterRejected = enterData.isEmpty &&
+    final enterRejected =
+        enterData.isEmpty &&
         statusData.isNotEmpty && // status call succeeded…
         statusStr != 'online' && // …and did NOT say the stream is live
         statusStr != 'live' &&
@@ -934,22 +937,33 @@ class ViewerRepositoryImpl implements ViewerRepository {
               .toString();
 
       final avatar = chatData['avatar']?.toString();
-      final isHost = (chatData['role']?.toString() == 'host') ||
+      final isHost =
+          (chatData['role']?.toString() == 'host') ||
           (hostSlug != null && hostSlug == username);
 
       if (chatData['type']?.toString() == 'gift') {
-        _chatCtrl.add(_giftChatFrom(messageId, username, avatar, isHost,
-            chatData['meta'], text));
+        _chatCtrl.add(
+          _giftChatFrom(
+            messageId,
+            username,
+            avatar,
+            isHost,
+            chatData['meta'],
+            text,
+          ),
+        );
         return;
       }
 
-      _chatCtrl.add(ChatMessage(
-        id: messageId,
-        username: username,
-        text: text,
-        isHost: isHost,
-        avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
-      ));
+      _chatCtrl.add(
+        ChatMessage(
+          id: messageId,
+          username: username,
+          text: text,
+          isHost: isHost,
+          avatarUrl: (avatar != null && avatar.isNotEmpty) ? avatar : null,
+        ),
+      );
     } catch (e) {
       debugPrint('❌ Failed to process chat: $e');
     }
@@ -975,8 +989,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
       giftCode: meta['gift_code']?.toString(),
       giftImageUrl: meta['gift_image']?.toString(),
       coins: meta['coins'] is num ? (meta['coins'] as num).toInt() : null,
-      quantity:
-          meta['quantity'] is num ? (meta['quantity'] as num).toInt() : 1,
+      quantity: meta['quantity'] is num ? (meta['quantity'] as num).toInt() : 1,
       fromHost: isHost,
     );
   }
@@ -997,8 +1010,16 @@ class ViewerRepositoryImpl implements ViewerRepository {
         final avatar = m['avatar']?.toString();
         final isHost = hostSlug == username;
         if (m['type']?.toString() == 'gift') {
-          _chatCtrl.add(_giftChatFrom(
-              '${m['id']}', username, avatar, isHost, m['meta'], '${m['text']}'));
+          _chatCtrl.add(
+            _giftChatFrom(
+              '${m['id']}',
+              username,
+              avatar,
+              isHost,
+              m['meta'],
+              '${m['text']}',
+            ),
+          );
           continue;
         }
         _chatCtrl.add(

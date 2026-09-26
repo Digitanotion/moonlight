@@ -15,6 +15,8 @@ import 'package:moonlight/core/widgets/web_view_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// All external destinations, kept in one place.
 class MoonlightLinks {
   static const site = 'https://moonlightstream.app';
@@ -447,10 +449,7 @@ class _UpdateStatusTileState extends State<_UpdateStatusTile> {
                       const SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white54,
-                        ),
+                        child: AppLogoLoader(),
                       )
                     else if (stage == AutoUpdateStage.idle)
                       Text(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class SocialAuthButton extends StatelessWidget {
   final String icon;
   final String text;
@@ -30,11 +32,7 @@ class SocialAuthButton extends StatelessWidget {
         elevation: 0,
       ),
       child: isLoading
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const SizedBox(width: 20, height: 20, child: AppLogoLoader())
           : Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

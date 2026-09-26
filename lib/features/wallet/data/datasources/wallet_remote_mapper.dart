@@ -122,7 +122,7 @@ class WalletRemoteMapper {
     }();
 
     // ── coinsChange ─────────────────────────────────────────────────────────────
-   // ── coinsChange ─────────────────────────────────────────────────────────────
+    // ── coinsChange ─────────────────────────────────────────────────────────────
     final coinsChange = () {
       final v =
           txnJson['coins_change'] ??
@@ -130,7 +130,9 @@ class WalletRemoteMapper {
           txnJson['coins_added'] ??
           txnJson['coins'] ??
           0;
-      final resolved = (v is num) ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
+      final resolved = (v is num)
+          ? v.toInt()
+          : (int.tryParse(v.toString()) ?? 0);
 
       // Earning-type transactions (video call, gift received) deliberately
       // store coins_change as 0 on the backend — the actual earned amount

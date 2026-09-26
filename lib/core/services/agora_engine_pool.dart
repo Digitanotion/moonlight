@@ -390,7 +390,8 @@ class AgoraEnginePool {
             if (slot == null) return;
             final hostUid = slot.hostUid.value;
             if (hostUid == null) return;
-            final isPoor = rxQuality == QualityType.qualityPoor ||
+            final isPoor =
+                rxQuality == QualityType.qualityPoor ||
                 rxQuality == QualityType.qualityBad ||
                 rxQuality == QualityType.qualityVbad ||
                 rxQuality == QualityType.qualityDown;
@@ -400,8 +401,8 @@ class AgoraEnginePool {
                   streamType: isPoor
                       ? VideoStreamType.videoStreamLow
                       : (slot.currentPosition == SlotPosition.current
-                          ? VideoStreamType.videoStreamHigh
-                          : VideoStreamType.videoStreamLow),
+                            ? VideoStreamType.videoStreamHigh
+                            : VideoStreamType.videoStreamLow),
                   connection: connection,
                 )
                 .catchError((_) {});
@@ -424,11 +425,9 @@ class AgoraEnginePool {
 
   void _emit(EngineSlot slot, SlotEventKind kind) {
     if (_eventsCtrl.isClosed) return;
-    _eventsCtrl.add(SlotEvent(
-      position: slot.currentPosition,
-      epoch: slot.epoch,
-      kind: kind,
-    ));
+    _eventsCtrl.add(
+      SlotEvent(position: slot.currentPosition, epoch: slot.epoch, kind: kind),
+    );
   }
 
   // ── Join / leave ─────────────────────────────────────────────────────────
@@ -466,7 +465,7 @@ class AgoraEnginePool {
         options: ChannelMediaOptions(
           clientRoleType: ClientRoleType.clientRoleAudience,
           channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
-          autoSubscribeAudio: isCurrent,   // ← only current plays audio
+          autoSubscribeAudio: isCurrent, // ← only current plays audio
           autoSubscribeVideo: true,
           publishCameraTrack: false,
           publishMicrophoneTrack: false,
@@ -490,17 +489,20 @@ class AgoraEnginePool {
         slot.state = SlotJoinState.idle;
       }
       if (_eventsCtrl.isClosed) return;
-      _eventsCtrl.add(SlotEvent(
-        position: slot.currentPosition,
-        epoch: myEpoch,
-        kind: SlotEventKind.joinFailed,
-      ));
+      _eventsCtrl.add(
+        SlotEvent(
+          position: slot.currentPosition,
+          epoch: myEpoch,
+          kind: SlotEventKind.joinFailed,
+        ),
+      );
     }
   }
 
   Future<void> _leaveSlot(EngineSlot slot) async {
     if (slot.state == SlotJoinState.idle ||
-        slot.state == SlotJoinState.unavailable) return;
+        slot.state == SlotJoinState.unavailable)
+      return;
     final connection = slot.connection;
     if (connection == null) {
       slot.softReset();
@@ -668,8 +670,7 @@ class AgoraEnginePool {
     for (final slot in [newPreviousSlot, newNextSlot]) {
       final conn = slot.connection;
       if (conn == null) continue;
-      if (slot.state == SlotJoinState.joined &&
-          slot.hostUid.value != null) {
+      if (slot.state == SlotJoinState.joined && slot.hostUid.value != null) {
         _engine
             .setRemoteVideoStreamTypeEx(
               uid: slot.hostUid.value!,
@@ -693,12 +694,14 @@ class AgoraEnginePool {
     // NEXT swipe instant.
     final newExposedIndex = direction > 0 ? newIndex + 1 : newIndex - 1;
 
-    unawaited(_backgroundRejoin(
-      slot: recycledSlot,
-      index: newExposedIndex,
-      itemCount: itemCount,
-      resolve: resolve,
-    ));
+    unawaited(
+      _backgroundRejoin(
+        slot: recycledSlot,
+        index: newExposedIndex,
+        itemCount: itemCount,
+        resolve: resolve,
+      ),
+    );
 
     debugPrint(
       '🔄 [Pool] Rotated ${direction > 0 ? "→" : "←"} to index=$newIndex',
@@ -857,7 +860,9 @@ class AgoraEnginePool {
     if (_disposed || !_initialized) return;
     await leaveAll();
     if (_engineContextReady) {
-      try { await _engine.release(); } catch (_) {}
+      try {
+        await _engine.release();
+      } catch (_) {}
       _engineContextReady = false;
     }
     _initialized = false;
@@ -911,10 +916,14 @@ class AgoraEnginePool {
       final hostUid = slot!.hostUid.value;
       if (hostUid != null) {
         await _engine.muteRemoteAudioStreamEx(
-          uid: hostUid, mute: muted, connection: conn,
+          uid: hostUid,
+          mute: muted,
+          connection: conn,
         );
         await _engine.muteRemoteVideoStreamEx(
-          uid: hostUid, mute: muted, connection: conn,
+          uid: hostUid,
+          mute: muted,
+          connection: conn,
         );
       }
     } catch (e) {
@@ -930,12 +939,16 @@ class AgoraEnginePool {
     for (final slot in [_identityA, _identityB, _identityC]) {
       final conn = slot.connection;
       if (conn != null) {
-        try { await _engine.leaveChannelEx(connection: conn); } catch (_) {}
+        try {
+          await _engine.leaveChannelEx(connection: conn);
+        } catch (_) {}
       }
       slot.dispose();
     }
     if (_engineContextReady) {
-      try { await _engine.release(); } catch (_) {}
+      try {
+        await _engine.release();
+      } catch (_) {}
     }
     _map.clear();
     if (!_eventsCtrl.isClosed) await _eventsCtrl.close();

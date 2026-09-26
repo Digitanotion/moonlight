@@ -5,6 +5,8 @@ import 'package:moonlight/features/settings/domain/entities/blocked_user.dart';
 import 'package:moonlight/features/settings/domain/repositories/blocked_users_repository.dart';
 import 'package:moonlight/features/settings/presentation/cubit/blocked_users_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class BlockedUsersPage extends StatelessWidget {
   const BlockedUsersPage({super.key});
 
@@ -105,13 +107,7 @@ class _BlockedUsersContent extends StatelessWidget {
 
               // Loading and empty states
               if (state.status == BlockedUsersStatus.loading)
-                const Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.deepOrangeAccent,
-                    ),
-                  ),
-                )
+                const Expanded(child: Center(child: AppLogoLoader()))
               else if (state.blockedUsers.isEmpty)
                 Expanded(
                   child: Column(

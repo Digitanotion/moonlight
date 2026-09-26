@@ -91,7 +91,9 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
 
       return complete;
     } on TimeoutException {
-      debugPrint('⚠️ OnboardingBloc: live profile check timed out (slow/no network)');
+      debugPrint(
+        '⚠️ OnboardingBloc: live profile check timed out (slow/no network)',
+      );
       return null;
     } catch (e) {
       debugPrint('⚠️ OnboardingBloc: live profile check failed: $e');

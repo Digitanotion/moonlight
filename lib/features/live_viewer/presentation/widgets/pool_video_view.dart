@@ -23,11 +23,10 @@ import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class PoolVideoView extends StatefulWidget {
-  const PoolVideoView({
-    super.key,
-    required this.pool,
-  });
+  const PoolVideoView({super.key, required this.pool});
 
   final AgoraEnginePool pool;
 
@@ -90,7 +89,10 @@ class _PoolVideoViewState extends State<PoolVideoView> {
     if (slot == null) return;
     // Only seed if this page's channel matches the current slot.
     final expected = widget._expectedChannel;
-    if (expected != null && slot.channelId != null && slot.channelId != expected) return;
+    if (expected != null &&
+        slot.channelId != null &&
+        slot.channelId != expected)
+      return;
     if (slot.hostUid.value != null) {
       _buildController(slot);
     }
@@ -119,7 +121,7 @@ class _PoolVideoViewState extends State<PoolVideoView> {
         // Only clear if this is OUR channel starting a fresh join.
         // Do NOT clear if it's a different channel joining — that's
         // the background pre-join for another page, not us.
-        if (slot.channelId == widget._expectedChannel && 
+        if (slot.channelId == widget._expectedChannel &&
             slot.channelId != _controllerChannel) {
           _disposeController();
           if (mounted) setState(() => _hasVideo = false);
@@ -138,7 +140,7 @@ class _PoolVideoViewState extends State<PoolVideoView> {
               .catchError((_) {});
           _buildController(slot);
         }
-        // hostUidReady will fire shortly after if uid not yet known — handled below.
+      // hostUidReady will fire shortly after if uid not yet known — handled below.
 
       case SlotEventKind.hostUidReady:
         _buildController(slot);
@@ -150,7 +152,7 @@ class _PoolVideoViewState extends State<PoolVideoView> {
       case SlotEventKind.leftChannel:
       case SlotEventKind.joinFailed:
         // Only clear if the slot that left/failed is OUR channel.
-        if (slot.channelId == widget._expectedChannel || 
+        if (slot.channelId == widget._expectedChannel ||
             slot.channelId == _controllerChannel) {
           _disposeController();
           if (mounted) setState(() => _hasVideo = false);
@@ -173,7 +175,9 @@ class _PoolVideoViewState extends State<PoolVideoView> {
     if (_controllerChannel == channel &&
         _controllerUid == hostUid &&
         _controller != null) {
-      debugPrint('🎮 [PoolVideoView] controller reuse: ch=$channel uid=$hostUid');
+      debugPrint(
+        '🎮 [PoolVideoView] controller reuse: ch=$channel uid=$hostUid',
+      );
       return;
     }
 
@@ -211,7 +215,9 @@ class _PoolVideoViewState extends State<PoolVideoView> {
   }
 
   void _disposeController() {
-    try { _controller?.dispose(); } catch (_) {}
+    try {
+      _controller?.dispose();
+    } catch (_) {}
     _controller = null;
     _controllerChannel = null;
     _controllerUid = null;
@@ -236,9 +242,7 @@ class _PoolVideoViewState extends State<PoolVideoView> {
           // frames never paint over the old surface.
           KeyedSubtree(
             key: ValueKey('surface_${_controllerChannel}_$_controllerUid'),
-            child: AgoraVideoView(
-              controller: _controller!,
-            ),
+            child: AgoraVideoView(controller: _controller!),
           ),
           if (!_hasVideo) const _LoadingPlaceholder(),
         ],
@@ -255,14 +259,7 @@ class _LoadingPlaceholder extends StatelessWidget {
     return Container(
       color: Colors.black,
       child: const Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Colors.white38,
-          ),
-        ),
+        child: SizedBox(width: 28, height: 28, child: AppLogoLoader()),
       ),
     );
   }

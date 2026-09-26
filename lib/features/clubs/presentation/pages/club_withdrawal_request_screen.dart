@@ -9,6 +9,8 @@ import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_d
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // ── Country list (matches Flutterwave payout docs) ────────────────────────
 // Kept in sync with withdrawal_page.dart's _kSupportedCountries.
 class _CountryInfo {
@@ -256,10 +258,7 @@ class _ClubWithdrawalRequestScreenState
                                     ? const SizedBox(
                                         width: 16,
                                         height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white54,
-                                        ),
+                                        child: AppLogoLoader(),
                                       )
                                     : null,
                               ),
@@ -363,10 +362,7 @@ class _ClubWithdrawalRequestScreenState
                                     ? const SizedBox(
                                         width: 22,
                                         height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
+                                        child: AppLogoLoader(),
                                       )
                                     : const Row(
                                         mainAxisAlignment:
@@ -572,13 +568,7 @@ class _ClubWithdrawalRequestScreenState
   Widget _buildBankDropdown() {
     if (_loadingBanks) {
       return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(12),
-          child: CircularProgressIndicator(
-            color: Colors.white54,
-            strokeWidth: 2,
-          ),
-        ),
+        child: Padding(padding: EdgeInsets.all(12), child: AppLogoLoader()),
       );
     }
 

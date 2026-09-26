@@ -19,6 +19,8 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/chat/presentation/widgets/upload_progress_widget.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ChatScreen extends StatefulWidget {
   final ChatConversations conversation;
   final bool isClub;
@@ -597,9 +599,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }
       isLoadingMore = true;
     } else if (state is ChatMessagesLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.primary_),
-      );
+      return Center(child: AppLogoLoader());
     } else if (state is ChatMessageSent ||
         state is ChatMessageReceived ||
         state is ChatMessageUpdated ||
@@ -734,7 +734,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF241428), // solid, dark — readable on any content behind it
+            color: const Color(
+              0xFF241428,
+            ), // solid, dark — readable on any content behind it
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.textRed.withOpacity(0.4)),
             boxShadow: [
@@ -765,10 +767,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               GestureDetector(
                 onTap: () {
                   setState(() => _bannerError = null);
-                  context.read<ChatCubit>().loadMessages(widget.conversation.uuid);
+                  context.read<ChatCubit>().loadMessages(
+                    widget.conversation.uuid,
+                  );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primary_,
                     borderRadius: BorderRadius.circular(16),
@@ -925,11 +932,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             final bool showTail = _shouldShowTail(messages, index, isMe);
 
             // "Seen"/"Sent" under the last outgoing message only.
-            final bool isLastOutgoing = isMe &&
+            final bool isLastOutgoing =
+                isMe &&
                 !widget.isClub &&
                 messages
                     .skip(index + 1)
-                    .every((m) => m.sender?.uuid != _getCurrentUserUuid(context));
+                    .every(
+                      (m) => m.sender?.uuid != _getCurrentUserUuid(context),
+                    );
 
             return Column(
               children: [
@@ -1184,17 +1194,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
       child: Center(
         child: isLoadingMore
-            ? SizedBox(
-                height: 40,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      AppColors.primary_,
-                    ),
-                  ),
-                ),
-              )
+            ? SizedBox(height: 40, child: Center(child: AppLogoLoader()))
             : Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -1727,9 +1727,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const Center(
-            child: CircularProgressIndicator(color: AppColors.primary_),
-          ),
+          builder: (context) => const Center(child: AppLogoLoader()),
         );
 
         // Validate and compress image
@@ -1895,9 +1893,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const Center(
-            child: CircularProgressIndicator(color: AppColors.primary_),
-          ),
+          builder: (context) => const Center(child: AppLogoLoader()),
         );
 
         final compressedFile = await FileUtils.validateAndCompressImage(photo);
@@ -2725,30 +2721,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     children: [
                       // Faint doodle texture (WhatsApp-style) behind messages
                       Positioned.fill(
-                        child: CustomPaint(
-                          painter: _ChatTexturePainter(),
-                        ),
+                        child: CustomPaint(painter: _ChatTexturePainter()),
                       ),
                       Stack(
-                      children: [
-                        // Messages List
-                        _buildContent(context, state),
+                        children: [
+                          // Messages List
+                          _buildContent(context, state),
 
-                        if (_bannerError != null) _buildErrorBanner(),
+                          if (_bannerError != null) _buildErrorBanner(),
 
-                        // WhatsApp-style scroll to bottom indicator
-                        if (_showScrollToBottomIndicator)
-                          _buildScrollToBottomIndicator(),
+                          // WhatsApp-style scroll to bottom indicator
+                          if (_showScrollToBottomIndicator)
+                            _buildScrollToBottomIndicator(),
 
-                        // New Message Indicator
-                        if (_showNewMessageIndicator)
-                          Positioned(
-                            bottom: 80,
-                            left: 0,
-                            right: 0,
-                            child: _buildNewMessageIndicator(),
-                          ),
-                      ],
+                          // New Message Indicator
+                          if (_showNewMessageIndicator)
+                            Positioned(
+                              bottom: 80,
+                              left: 0,
+                              right: 0,
+                              child: _buildNewMessageIndicator(),
+                            ),
+                        ],
                       ),
                     ],
                   ),
@@ -2896,12 +2890,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         fit: BoxFit.cover,
                         width: 40,
                         height: 40,
-                        placeholder: (context, url) => Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.primary_,
-                          ),
-                        ),
+                        placeholder: (context, url) =>
+                            Center(child: AppLogoLoader()),
                         errorWidget: (context, url, error) => Icon(
                           widget.isClub ? Icons.groups : Icons.person,
                           color: Colors.white70,

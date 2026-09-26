@@ -1,3 +1,4 @@
+
 // import 'dart:async';
 // import 'package:flutter/material.dart';
 // import 'package:uuid/uuid.dart';
@@ -450,9 +451,7 @@
 //                                       ? const SizedBox(
 //                                           height: 18,
 //                                           width: 18,
-//                                           child: CircularProgressIndicator(
-//                                             strokeWidth: 2,
-//                                           ),
+//                                           child: AppLogoLoader(),
 //                                         )
 //                                       : const Text(
 //                                           'Proceed',

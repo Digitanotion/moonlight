@@ -215,7 +215,8 @@ class _CallAcceptedReceived extends VideoCallEvent {
   _CallAcceptedReceived(this.payload);
 }
 
-class CallDismissed extends VideoCallEvent {} // reset to idle after viewing summary
+class CallDismissed
+    extends VideoCallEvent {} // reset to idle after viewing summary
 
 /// Fired when the app was cold-started (or backgrounded) by tapping an
 /// incoming-call push notification — the bloc's live Pusher listener never
@@ -320,7 +321,9 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     // local-state match (the original bug) meant exactly that case
     // silently never got dismissed.
     try {
-      debugPrint('📞 [CallKit] Attempting to dismiss native UI for: $resolvedUuid');
+      debugPrint(
+        '📞 [CallKit] Attempting to dismiss native UI for: $resolvedUuid',
+      );
       await CallKitService().endCall(resolvedUuid);
       debugPrint('📞 [CallKit] endCall() completed without throwing');
     } catch (err, st) {
@@ -370,6 +373,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
       );
     }
   }
+
   Future<void> _onInitiate(
     CallInitiateRequested e,
     Emitter<VideoCallState> emit,
@@ -545,7 +549,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     }
   }
 
-Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
+  Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
     final creds = session.agora;
     if (creds == null || creds.token.isEmpty) {
       throw StateError('No Agora credentials in session response');
@@ -565,7 +569,9 @@ Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
       try {
         await sl<AgoraService>().leave();
       } catch (e) {
-        debugPrint('⚠️ Failed to release livestream Agora engine before call join: $e');
+        debugPrint(
+          '⚠️ Failed to release livestream Agora engine before call join: $e',
+        );
       }
     }
 
@@ -628,7 +634,7 @@ Future<void> _joinAgoraFromSession(VideoCallSessionModel session) async {
     }
   }
 
-Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
+  Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     final sessionUuid = state.session?.uuid;
     // Capture this BEFORE resetting anything below — determines which
     // phase to land on once the end() call completes.
@@ -676,7 +682,10 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
 
     emit(state.copyWith(actionLoading: true, clearError: true));
     try {
-      final session = await repo.end(sessionUuid: sessionUuid, reason: e.reason);
+      final session = await repo.end(
+        sessionUuid: sessionUuid,
+        reason: e.reason,
+      );
       emit(
         state.copyWith(
           actionLoading: false,
@@ -798,7 +807,8 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
   ) async {
     // If the live socket already caught this (foreground tap on a call
     // already ringing in-state), don't clobber it with a fetch.
-    if (state.phase != VideoCallPhase.idle && state.session?.uuid == e.sessionUuid) {
+    if (state.phase != VideoCallPhase.idle &&
+        state.session?.uuid == e.sessionUuid) {
       return;
     }
 
@@ -982,11 +992,13 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
       final session = e.visible
           ? await repo.resume(sessionUuid)
           : await repo.pause(sessionUuid);
-      emit(state.copyWith(
-        session: session,
-        isPaused: session.isPaused,
-        localEndsAt: _anchorEndsAt(session),
-      ));
+      emit(
+        state.copyWith(
+          session: session,
+          isPaused: session.isPaused,
+          localEndsAt: _anchorEndsAt(session),
+        ),
+      );
     } catch (err) {
       // Our own network is likely down — keep the local freeze, it
       // reconciles to the true server value on reconnect.
@@ -1033,9 +1045,11 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
         };
         if (terminal.contains(session.status)) {
           _stopActiveResolutionPoll();
-          add(_CallResolvedByOtherParty({
-            'meta': {'session_uuid': uuid},
-          }));
+          add(
+            _CallResolvedByOtherParty({
+              'meta': {'session_uuid': uuid},
+            }),
+          );
         }
       } catch (_) {
         // Transient — keep polling.
@@ -1057,18 +1071,21 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     if (sessionUuid.isEmpty || state.session?.uuid != sessionUuid) return;
     if (state.phase != VideoCallPhase.active) return;
 
-    final paused = meta['paused'] == true ||
+    final paused =
+        meta['paused'] == true ||
         (e.payload['type'] ?? '') == 'video_call_paused';
 
     // Pull the authoritative session so our countdown matches the
     // server's freshly-adjusted ends_at.
     try {
       final session = await repo.status(sessionUuid);
-      emit(state.copyWith(
-        session: session,
-        isPaused: session.isPaused,
-        localEndsAt: _anchorEndsAt(session),
-      ));
+      emit(
+        state.copyWith(
+          session: session,
+          isPaused: session.isPaused,
+          localEndsAt: _anchorEndsAt(session),
+        ),
+      );
     } catch (_) {
       emit(state.copyWith(isPaused: paused));
     }
@@ -1090,7 +1107,9 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
   /// be pure waste.
   void _startResolutionPoll(String sessionUuid) {
     _stopResolutionPoll();
-    _resolutionPollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    _resolutionPollTimer = Timer.periodic(const Duration(seconds: 3), (
+      _,
+    ) async {
       if (_isDisposed) return;
       try {
         final session = await repo.status(sessionUuid);
@@ -1115,7 +1134,8 @@ Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
           VideoCallPhase.ringingOutgoing,
           VideoCallPhase.ringingIncoming,
         }.contains(state.phase);
-        final stillSameSession = state.session?.uuid == sessionUuid || state.session == null;
+        final stillSameSession =
+            state.session?.uuid == sessionUuid || state.session == null;
         if (!stillWaiting || !stillSameSession) return;
 
         if (session.status == 'active') {

@@ -1,3 +1,4 @@
+
 // // lib/features/wallet/presentation/pages/set_pin_page.dart
 // import 'package:flutter/material.dart';
 // import 'package:flutter_bloc/flutter_bloc.dart';
@@ -438,7 +439,7 @@
 //               if (loading)
 //                 Container(
 //                   color: Colors.black.withOpacity(0.45),
-//                   child: const Center(child: CircularProgressIndicator()),
+//                   child: const Center(child: AppLogoLoader()),
 //                 ),
 //             ],
 //           );

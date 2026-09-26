@@ -6,6 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/livestream/presentation/bloc/live_host_bloc.dart';
 import 'package:moonlight/core/services/agora_service.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // ─── LiveSettingsMenu ─────────────────────────────────────────────────────────
 
 class LiveSettingsMenu extends StatefulWidget {
@@ -179,14 +181,7 @@ class _SettingsMenuContent extends StatelessWidget {
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
+                  SizedBox(width: 20, height: 20, child: AppLogoLoader()),
                   SizedBox(width: 8),
                   Text(
                     'Resetting camera…',

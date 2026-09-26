@@ -55,7 +55,6 @@
 //   }
 // }
 
-
 // lib/core/services/share_service.dart
 //
 // Shares a text link ONLY — never downloads or sends the raw media file.
@@ -82,8 +81,8 @@ class ShareService {
     final excerpt = caption.isEmpty
         ? ''
         : caption.length <= 140
-            ? '$caption\n\n'
-            : '${caption.substring(0, 140)}…\n\n';
+        ? '$caption\n\n'
+        : '${caption.substring(0, 140)}…\n\n';
 
     await Share.share(
       '${excerpt}$link',

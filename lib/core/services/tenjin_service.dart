@@ -34,20 +34,20 @@ class TenjinService {
     // connect() must be called on EVERY app launch, not just first launch.
     // Tenjin may suspend accounts that only call connect on first open.
     _sdk.connect();
-// Print everything needed for Tenjin test device registration
-final analyticsId = await _sdk.getAnalyticsInstallationId();
-debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-debugPrint('TENJIN TEST DEVICE SETUP');
-debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-debugPrint('App: Moonlight Livestream App');
-debugPrint('Analytics Installation ID: $analyticsId');
-debugPrint('Platform: ${Platform.operatingSystem}');
-debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-debugPrint('For Google Advertising ID: Settings → Google → Ads → Advertising ID');
-debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    // Print everything needed for Tenjin test device registration
+    final analyticsId = await _sdk.getAnalyticsInstallationId();
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('TENJIN TEST DEVICE SETUP');
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('App: Moonlight Livestream App');
+    debugPrint('Analytics Installation ID: $analyticsId');
+    debugPrint('Platform: ${Platform.operatingSystem}');
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint(
+      'For Google Advertising ID: Settings → Google → Ads → Advertising ID',
+    );
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
-
-  
 
   // ── Custom events ────────────────────────────────────────────────────────
   // Only call these AFTER initialize() has been called.

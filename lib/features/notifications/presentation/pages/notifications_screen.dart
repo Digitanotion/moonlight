@@ -8,6 +8,8 @@ import 'package:moonlight/features/notifications/data/models/notification_model.
 import 'package:moonlight/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:moonlight/features/notifications/presentation/pages/notification_navigator.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -49,15 +51,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             pinned: true,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new,
-                  size: 20, color: Colors.white),
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                size: 20,
+                color: Colors.white,
+              ),
               onPressed: () => Navigator.pop(context),
             ),
-            title: const Text('Notifications',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Notifications',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             actions: [
               BlocBuilder<NotificationsBloc, NotificationsState>(
                 buildWhen: (p, n) => n is NotificationsLoaded,
@@ -68,14 +76,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   final hasUnread = state.items.any((n) => !n.isRead);
                   if (!hasUnread) return const SizedBox.shrink();
                   return TextButton(
-                    onPressed: () => context
-                        .read<NotificationsBloc>()
-                        .add(MarkAllNotificationsRead()),
-                    child: const Text('Mark all read',
-                        style: TextStyle(
-                            color: Color(0xFFFF6A00),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700)),
+                    onPressed: () => context.read<NotificationsBloc>().add(
+                      MarkAllNotificationsRead(),
+                    ),
+                    child: const Text(
+                      'Mark all read',
+                      style: TextStyle(
+                        color: Color(0xFFFF6A00),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   );
                 },
               ),
@@ -85,9 +96,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         body: BlocBuilder<NotificationsBloc, NotificationsState>(
           builder: (context, state) {
             if (state is NotificationsLoading) {
-              return const Center(
-                  child: CircularProgressIndicator(
-                      color: Color(0xFFFF6A00), strokeWidth: 2));
+              return const Center(child: AppLogoLoader());
             }
             if (state is NotificationsError) {
               return _buildError(context);
@@ -109,8 +118,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return RefreshIndicator(
       color: const Color(0xFFFF6A00),
       backgroundColor: const Color(0xFF0E1024),
-      onRefresh: () async =>
-          context.read<NotificationsBloc>().add(FetchNotifications(refresh: true)),
+      onRefresh: () async => context.read<NotificationsBloc>().add(
+        FetchNotifications(refresh: true),
+      ),
       child: ListView.builder(
         controller: _scroll,
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -119,9 +129,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (i >= state.items.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(
-                  child: CircularProgressIndicator(
-                      color: Color(0xFFFF6A00), strokeWidth: 2)),
+              child: Center(child: AppLogoLoader()),
             );
           }
           return _NotificationTile(notification: state.items[i]);
@@ -132,44 +140,68 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildEmpty() {
     return Center(
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Container(
-          width: 72, height: 72,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF0E1024),
-            border: Border.all(color: const Color(0xFF1A1D3D)),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF0E1024),
+              border: Border.all(color: const Color(0xFF1A1D3D)),
+            ),
+            child: const Icon(
+              Icons.notifications_none_rounded,
+              size: 32,
+              color: Colors.white38,
+            ),
           ),
-          child: const Icon(Icons.notifications_none_rounded,
-              size: 32, color: Colors.white38),
-        ),
-        const SizedBox(height: 16),
-        const Text('No notifications yet',
+          const SizedBox(height: 16),
+          const Text(
+            'No notifications yet',
             style: TextStyle(
-                color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        const Text('Activity will appear here',
-            style: TextStyle(color: Color(0xFF8B8FB8), fontSize: 13.5)),
-      ]),
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Activity will appear here',
+            style: TextStyle(color: Color(0xFF8B8FB8), fontSize: 13.5),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildError(BuildContext context) {
     return Center(
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.error_outline_rounded, color: Colors.white38, size: 40),
-        const SizedBox(height: 12),
-        const Text('Failed to load notifications',
-            style: TextStyle(color: Colors.white, fontSize: 15)),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF6A00)),
-          onPressed: () =>
-              context.read<NotificationsBloc>().add(FetchNotifications()),
-          child: const Text('Retry'),
-        ),
-      ]),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.white38,
+            size: 40,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Failed to load notifications',
+            style: TextStyle(color: Colors.white, fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6A00),
+            ),
+            onPressed: () =>
+                context.read<NotificationsBloc>().add(FetchNotifications()),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -183,12 +215,19 @@ class _NotificationTile extends StatelessWidget {
   bool get _isNavigable {
     // Types that have a meaningful destination
     const navigable = {
-      'post.liked', 'post.comment', 'post.comment_liked',
-      'post.comment_replied', 'post.tagged',
-      'user.followed', 'user.follow_request',
-      'live.started', 'live.guest_invited',
-      'wallet.coins_received', 'wallet.gift_received',
-      'auth.login', 'auth.password_changed',
+      'post.liked',
+      'post.comment',
+      'post.comment_liked',
+      'post.comment_replied',
+      'post.tagged',
+      'user.followed',
+      'user.follow_request',
+      'live.started',
+      'live.guest_invited',
+      'wallet.coins_received',
+      'wallet.gift_received',
+      'auth.login',
+      'auth.password_changed',
     };
     return navigable.contains(notification.type);
   }
@@ -216,7 +255,9 @@ class _NotificationTile extends StatelessWidget {
   /// has a destination screen.
   void _handleTap(BuildContext context) {
     if (!notification.isRead) {
-      context.read<NotificationsBloc>().add(MarkNotificationRead(notification.id));
+      context.read<NotificationsBloc>().add(
+        MarkNotificationRead(notification.id),
+      );
     }
     showModalBottomSheet(
       context: context,
@@ -232,11 +273,13 @@ class _NotificationTile extends StatelessWidget {
           Navigator.pop(sheetContext); // close sheet first
           final handled = NotificationNavigator.navigate(context, notification);
           if (!handled) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(notification.title),
-              backgroundColor: const Color(0xFF0E1024),
-              behavior: SnackBarBehavior.floating,
-            ));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(notification.title),
+                backgroundColor: const Color(0xFF0E1024),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
         },
       ),
@@ -256,9 +299,7 @@ class _NotificationTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         decoration: BoxDecoration(
-          color: unread
-              ? accentColor.withOpacity(0.06)
-              : Colors.transparent,
+          color: unread ? accentColor.withOpacity(0.06) : Colors.transparent,
           border: Border(
             left: BorderSide(
               color: unread ? accentColor : Colors.transparent,
@@ -267,146 +308,195 @@ class _NotificationTile extends StatelessWidget {
             bottom: const BorderSide(color: Color(0xFF1A1D3D), width: 0.5),
           ),
         ),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Avatar or icon
-          _buildAvatar(n, accentColor),
-          const SizedBox(width: 12),
-          // Content
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: Text(n.title,
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight:
-                              unread ? FontWeight.w700 : FontWeight.w500,
-                          height: 1.3)),
-                ),
-                const SizedBox(width: 8),
-                Text(timeAgoFrom(n.createdAt),
-                    style: TextStyle(
-                        color: const Color(0xFF8B8FB8),
-                        fontSize: 11,
-                        fontWeight: unread ? FontWeight.w600 : FontWeight.normal)),
-              ]),
-              if (n.body.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(n.body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar or icon
+            _buildAvatar(n, accentColor),
+            const SizedBox(width: 12),
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          n.title,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: unread
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        timeAgoFrom(n.createdAt),
+                        style: TextStyle(
+                          color: const Color(0xFF8B8FB8),
+                          fontSize: 11,
+                          fontWeight: unread
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (n.body.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      n.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Color(0xFF8B8FB8),
                         fontSize: 13,
-                        height: 1.4)),
-              ],
-              // "Read more" affordance appears whenever the body is long
-              // enough that it's likely truncated at 2 lines above — a
-              // cheap length check rather than measuring text layout.
-              if (n.body.length > 80) ...[
-                const SizedBox(height: 4),
-                Text('Read more',
-                    style: TextStyle(
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                  // "Read more" affordance appears whenever the body is long
+                  // enough that it's likely truncated at 2 lines above — a
+                  // cheap length check rather than measuring text layout.
+                  if (n.body.length > 80) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Read more',
+                      style: TextStyle(
                         color: accentColor,
                         fontSize: 11.5,
-                        fontWeight: FontWeight.w700)),
-              ],
-              if (_isNavigable) ...[
-                const SizedBox(height: 6),
-                Row(children: [
-                  Icon(_iconFor(n.type), size: 12, color: accentColor),
-                  const SizedBox(width: 4),
-                  Text(_ctaLabel(n.type),
-                      style: TextStyle(
-                          color: accentColor,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(width: 4),
-                  Icon(Icons.arrow_forward_ios_rounded,
-                      size: 9, color: accentColor.withOpacity(0.7)),
-                ]),
-              ],
-            ]),
-          ),
-          // Unread dot
-          if (unread) ...[
-            const SizedBox(width: 8),
-            Container(
-              width: 8, height: 8,
-              margin: const EdgeInsets.only(top: 4),
-              decoration: BoxDecoration(
-                  shape: BoxShape.circle, color: accentColor),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  if (_isNavigable) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(_iconFor(n.type), size: 12, color: accentColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          _ctaLabel(n.type),
+                          style: TextStyle(
+                            color: accentColor,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 9,
+                          color: accentColor.withOpacity(0.7),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
+            // Unread dot
+            if (unread) ...[
+              const SizedBox(width: 8),
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accentColor,
+                ),
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
     );
   }
 
   Widget _buildAvatar(NotificationModel n, Color accentColor) {
     final avatarUrl = n.actor?.avatarUrl ?? '';
-    final hasAvatar = avatarUrl.isNotEmpty &&
-        Uri.tryParse(avatarUrl)?.hasScheme == true;
+    final hasAvatar =
+        avatarUrl.isNotEmpty && Uri.tryParse(avatarUrl)?.hasScheme == true;
 
-    return Stack(clipBehavior: Clip.none, children: [
-      Container(
-        width: 46, height: 46,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF1A1D3D), width: 1.5),
-        ),
-        child: ClipOval(
-          child: hasAvatar
-              ? CachedNetworkImage(
-                  imageUrl: avatarUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                      color: accentColor.withOpacity(0.15),
-                      child: Icon(Icons.person_rounded,
-                          size: 22, color: Colors.white54)),
-                  errorWidget: (_, __, ___) => Container(
-                      color: accentColor.withOpacity(0.15),
-                      child: Icon(Icons.person_rounded,
-                          size: 22, color: Colors.white54)),
-                )
-              : Container(
-                  color: accentColor.withOpacity(0.15),
-                  child: Icon(_iconFor(n.type), size: 22, color: accentColor)),
-        ),
-      ),
-      // Small type icon badge on avatar
-      Positioned(
-        bottom: -2, right: -2,
-        child: Container(
-          width: 18, height: 18,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: accentColor,
-            border: Border.all(color: const Color(0xFF05060F), width: 1.5),
+            border: Border.all(color: const Color(0xFF1A1D3D), width: 1.5),
           ),
-          child: Icon(_iconFor(n.type), size: 10, color: Colors.white),
+          child: ClipOval(
+            child: hasAvatar
+                ? CachedNetworkImage(
+                    imageUrl: avatarUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      color: accentColor.withOpacity(0.15),
+                      child: Icon(
+                        Icons.person_rounded,
+                        size: 22,
+                        color: Colors.white54,
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: accentColor.withOpacity(0.15),
+                      child: Icon(
+                        Icons.person_rounded,
+                        size: 22,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  )
+                : Container(
+                    color: accentColor.withOpacity(0.15),
+                    child: Icon(_iconFor(n.type), size: 22, color: accentColor),
+                  ),
+          ),
         ),
-      ),
-    ]);
+        // Small type icon badge on avatar
+        Positioned(
+          bottom: -2,
+          right: -2,
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accentColor,
+              border: Border.all(color: const Color(0xFF05060F), width: 1.5),
+            ),
+            child: Icon(_iconFor(n.type), size: 10, color: Colors.white),
+          ),
+        ),
+      ],
+    );
   }
 
   String _ctaLabel(String type) => switch (type) {
-    'post.liked'           => 'View post',
-    'post.comment'         => 'View comment',
-    'post.comment_liked'   => 'View comment',
+    'post.liked' => 'View post',
+    'post.comment' => 'View comment',
+    'post.comment_liked' => 'View comment',
     'post.comment_replied' => 'View reply',
-    'post.tagged'          => 'View post',
-    'user.followed'        => 'View profile',
-    'user.follow_request'  => 'View profile',
-    'live.started'         => 'Join stream',
-    'live.guest_invited'   => 'Join as guest',
-    'wallet.coins_received'=> 'View wallet',
+    'post.tagged' => 'View post',
+    'user.followed' => 'View profile',
+    'user.follow_request' => 'View profile',
+    'live.started' => 'Join stream',
+    'live.guest_invited' => 'Join as guest',
+    'wallet.coins_received' => 'View wallet',
     'wallet.gift_received' => 'View wallet',
-    'auth.login'           => 'Review security',
-    'auth.password_changed'=> 'Review security',
-    _                      => 'View',
+    'auth.login' => 'Review security',
+    'auth.password_changed' => 'Review security',
+    _ => 'View',
   };
 }
 
@@ -438,8 +528,8 @@ class _NotificationDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final n = notification;
     final avatarUrl = n.actor?.avatarUrl ?? '';
-    final hasAvatar = avatarUrl.isNotEmpty &&
-        Uri.tryParse(avatarUrl)?.hasScheme == true;
+    final hasAvatar =
+        avatarUrl.isNotEmpty && Uri.tryParse(avatarUrl)?.hasScheme == true;
 
     return SafeArea(
       child: Container(
@@ -459,7 +549,8 @@ class _NotificationDetailSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 4),
               child: Container(
-                width: 36, height: 4,
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(2),
@@ -474,81 +565,120 @@ class _NotificationDetailSheet extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Stack(clipBehavior: Clip.none, children: [
-                          Container(
-                            width: 50, height: 50,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: const Color(0xFF1A1D3D), width: 1.5),
-                            ),
-                            child: ClipOval(
-                              child: hasAvatar
-                                  ? CachedNetworkImage(
-                                      imageUrl: avatarUrl,
-                                      fit: BoxFit.cover,
-                                      placeholder: (_, __) => Container(
-                                          color: accentColor.withOpacity(0.15),
-                                          child: Icon(Icons.person_rounded,
-                                              size: 24, color: Colors.white54)),
-                                      errorWidget: (_, __, ___) => Container(
-                                          color: accentColor.withOpacity(0.15),
-                                          child: Icon(Icons.person_rounded,
-                                              size: 24, color: Colors.white54)),
-                                    )
-                                  : Container(
-                                      color: accentColor.withOpacity(0.15),
-                                      child: Icon(icon,
-                                          size: 24, color: accentColor)),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: -2, right: -2,
-                            child: Container(
-                              width: 20, height: 20,
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: accentColor,
                                 border: Border.all(
-                                    color: const Color(0xFF0E1024), width: 1.5),
+                                  color: const Color(0xFF1A1D3D),
+                                  width: 1.5,
+                                ),
                               ),
-                              child: Icon(icon, size: 11, color: Colors.white),
+                              child: ClipOval(
+                                child: hasAvatar
+                                    ? CachedNetworkImage(
+                                        imageUrl: avatarUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(
+                                          color: accentColor.withOpacity(0.15),
+                                          child: Icon(
+                                            Icons.person_rounded,
+                                            size: 24,
+                                            color: Colors.white54,
+                                          ),
+                                        ),
+                                        errorWidget: (_, __, ___) => Container(
+                                          color: accentColor.withOpacity(0.15),
+                                          child: Icon(
+                                            Icons.person_rounded,
+                                            size: 24,
+                                            color: Colors.white54,
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        color: accentColor.withOpacity(0.15),
+                                        child: Icon(
+                                          icon,
+                                          size: 24,
+                                          color: accentColor,
+                                        ),
+                                      ),
+                              ),
                             ),
-                          ),
-                        ]),
+                            Positioned(
+                              bottom: -2,
+                              right: -2,
+                              child: Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: accentColor,
+                                  border: Border.all(
+                                    color: const Color(0xFF0E1024),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Icon(
+                                  icon,
+                                  size: 11,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if ((n.actor?.fullname ?? '').isNotEmpty)
-                                Text(n.actor!.fullname,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w700)),
-                              Text(timeAgoFrom(n.createdAt),
+                                Text(
+                                  n.actor!.fullname,
                                   style: const TextStyle(
-                                      color: Color(0xFF8B8FB8), fontSize: 12)),
+                                    color: Colors.white,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              Text(
+                                timeAgoFrom(n.createdAt),
+                                style: const TextStyle(
+                                  color: Color(0xFF8B8FB8),
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 18),
-                    Text(n.title,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            height: 1.35)),
+                    Text(
+                      n.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        height: 1.35,
+                      ),
+                    ),
                     if (n.body.isNotEmpty) ...[
                       const SizedBox(height: 10),
-                      Text(n.body,
-                          style: const TextStyle(
-                              color: Color(0xFFC5C8D6),
-                              fontSize: 14.5,
-                              height: 1.55)),
+                      Text(
+                        n.body,
+                        style: const TextStyle(
+                          color: Color(0xFFC5C8D6),
+                          fontSize: 14.5,
+                          height: 1.55,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -565,12 +695,16 @@ class _NotificationDetailSheet extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 13),
                         side: BorderSide(color: Colors.white.withOpacity(0.15)),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                      child: const Text('Close',
-                          style: TextStyle(
-                              color: Colors.white70,
-                              fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                   if (isNavigable) ...[
@@ -583,13 +717,17 @@ class _NotificationDetailSheet extends StatelessWidget {
                           backgroundColor: accentColor,
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                           elevation: 0,
                         ),
-                        child: Text(ctaLabel,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800)),
+                        child: Text(
+                          ctaLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                   ],

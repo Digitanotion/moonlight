@@ -7,6 +7,8 @@ import 'package:moonlight/features/livestream/data/repositories/live_session_rep
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
 import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class LiveGiftsPage extends StatefulWidget {
   final int livestreamId;
   const LiveGiftsPage({super.key, required this.livestreamId});
@@ -57,7 +59,7 @@ class _LiveGiftsPageState extends State<LiveGiftsPage> {
       ),
       backgroundColor: const Color(0xFF020024),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: AppLogoLoader())
           : Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -125,11 +127,7 @@ class _LiveGiftsPageState extends State<LiveGiftsPage> {
                                         return const SizedBox(
                                           width: 56,
                                           height: 56,
-                                          child: Center(
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          ),
+                                          child: Center(child: AppLogoLoader()),
                                         );
                                       },
                                     ),

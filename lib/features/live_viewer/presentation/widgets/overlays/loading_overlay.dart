@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class LoadingOverlay extends StatelessWidget {
   const LoadingOverlay({super.key});
 
@@ -29,7 +31,7 @@ class LoadingOverlay extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Colors.white),
+                const AppLogoLoader(),
                 const SizedBox(height: 16),
                 const Text(
                   'Connecting to stream...',

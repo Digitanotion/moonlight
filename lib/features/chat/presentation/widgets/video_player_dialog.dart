@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
 import 'package:chewie/chewie.dart'; // Add this dependency if not already
 
 class VideoPlayerDialog extends StatefulWidget {
@@ -86,7 +87,7 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
         child: Stack(
           children: [
             if (_isInitializing)
-              const Center(child: CircularProgressIndicator(color: Colors.blue))
+              const Center(child: AppLogoLoader())
             else if (_chewieController != null)
               Chewie(controller: _chewieController!),
 

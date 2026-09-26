@@ -78,11 +78,11 @@ class PostCubit extends Cubit<PostState> {
   /// the UI quietly instead of showing a loading state over content the
   /// user can already see and interact with.
   PostCubit(this.repo, this.postId, {Post? initialPost})
-      : super(
-          initialPost != null
-              ? PostState(post: initialPost, loading: false)
-              : const PostState(),
-        ) {
+    : super(
+        initialPost != null
+            ? PostState(post: initialPost, loading: false)
+            : const PostState(),
+      ) {
     if (initialPost != null) {
       // Seeded — reconcile silently in the background rather than
       // re-running the full load() flow, which would flip loading=true
@@ -100,8 +100,9 @@ class PostCubit extends Cubit<PostState> {
     try {
       final mem = GetIt.I<LikeMemory>();
       final post = await repo.getPost(postId);
-      final hydrated =
-          mem.isLiked(post.id) ? post.copyWith(isLiked: true) : post;
+      final hydrated = mem.isLiked(post.id)
+          ? post.copyWith(isLiked: true)
+          : post;
 
       final page1 = await repo.getComments(postId, page: 1, perPage: 50);
       final updatedPost = hydrated.copyWith(commentsCount: page1.total);

@@ -4,6 +4,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_theme.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class PrimaryButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
@@ -31,9 +33,7 @@ class PrimaryButton extends StatelessWidget {
         ),
         onPressed: onPressed,
         child: isLoading
-            ? const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              )
+            ? const AppLogoLoader()
             : Text(
                 text,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(

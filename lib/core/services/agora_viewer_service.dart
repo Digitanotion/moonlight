@@ -111,48 +111,51 @@ class AgoraViewerService with ChangeNotifier {
           _startStatsUpdateTimer();
         },
 
-        onRemoteVideoStateChanged: (
-          RtcConnection connection,
-          int remoteUid,
-          RemoteVideoState state,
-          RemoteVideoStateReason reason,
-          int elapsed,
-        ) {
-          if (!_isOurConnection(connection)) return;
-          final hasVideo =
-              state == RemoteVideoState.remoteVideoStateDecoding ||
-              state == RemoteVideoState.remoteVideoStateStarting;
-          if (hostUid.value == remoteUid) {
-            _hasVideo.value = hasVideo;
-          } else if (guestUid.value == remoteUid) {
-            _guestHasVideo.value = hasVideo;
-          } else if (hostUid.value == null && hasVideo) {
-            hostUid.value = remoteUid;
-            _hasVideo.value = true;
-          }
-          notifyListeners();
-        },
+        onRemoteVideoStateChanged:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              RemoteVideoState state,
+              RemoteVideoStateReason reason,
+              int elapsed,
+            ) {
+              if (!_isOurConnection(connection)) return;
+              final hasVideo =
+                  state == RemoteVideoState.remoteVideoStateDecoding ||
+                  state == RemoteVideoState.remoteVideoStateStarting;
+              if (hostUid.value == remoteUid) {
+                _hasVideo.value = hasVideo;
+              } else if (guestUid.value == remoteUid) {
+                _guestHasVideo.value = hasVideo;
+              } else if (hostUid.value == null && hasVideo) {
+                hostUid.value = remoteUid;
+                _hasVideo.value = true;
+              }
+              notifyListeners();
+            },
 
-        onNetworkQuality: (
-          RtcConnection connection,
-          int uid,
-          QualityType txQuality,
-          QualityType rxQuality,
-        ) {
-          if (!_isOurConnection(connection)) return;
-          if (uid != 0) return;
-          _selfQualityCtrl.add(_convertQuality(rxQuality));
-        },
+        onNetworkQuality:
+            (
+              RtcConnection connection,
+              int uid,
+              QualityType txQuality,
+              QualityType rxQuality,
+            ) {
+              if (!_isOurConnection(connection)) return;
+              if (uid != 0) return;
+              _selfQualityCtrl.add(_convertQuality(rxQuality));
+            },
 
-        onConnectionStateChanged: (
-          RtcConnection connection,
-          ConnectionStateType state,
-          ConnectionChangedReasonType reason,
-        ) {
-          if (!_isOurConnection(connection)) return;
-          _connectionState.value = _convertConnectionState(state);
-          notifyListeners();
-        },
+        onConnectionStateChanged:
+            (
+              RtcConnection connection,
+              ConnectionStateType state,
+              ConnectionChangedReasonType reason,
+            ) {
+              if (!_isOurConnection(connection)) return;
+              _connectionState.value = _convertConnectionState(state);
+              notifyListeners();
+            },
 
         onLeaveChannel: (RtcConnection connection, RtcStats stats) {
           if (!_isOurConnection(connection)) return;
@@ -183,36 +186,38 @@ class AgoraViewerService with ChangeNotifier {
           notifyListeners();
         },
 
-        onUserOffline: (
-          RtcConnection connection,
-          int remoteUid,
-          UserOfflineReasonType reason,
-        ) {
-          if (!_isOurConnection(connection)) return;
-          if (hostUid.value == remoteUid) {
-            hostUid.value = null;
-            _hasVideo.value = false;
-          } else if (guestUid.value == remoteUid) {
-            guestUid.value = null;
-            _guestHasVideo.value = false;
-          }
-          _remoteVideoStats.remove(remoteUid);
-          notifyListeners();
-        },
+        onUserOffline:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              UserOfflineReasonType reason,
+            ) {
+              if (!_isOurConnection(connection)) return;
+              if (hostUid.value == remoteUid) {
+                hostUid.value = null;
+                _hasVideo.value = false;
+              } else if (guestUid.value == remoteUid) {
+                guestUid.value = null;
+                _guestHasVideo.value = false;
+              }
+              _remoteVideoStats.remove(remoteUid);
+              notifyListeners();
+            },
 
-        onTokenPrivilegeWillExpire: (RtcConnection connection, String token) async {
-          if (!_isOurConnection(connection)) return;
-          try {
-            final role = _isCoHost ? 'publisher' : 'audience';
-            final newToken = await onTokenRefresh(role);
-            await engine.updateChannelMediaOptionsEx(
-              connection: connection,
-              options: ChannelMediaOptions(token: newToken),
-            );
-          } catch (e) {
-            debugPrint('⚠️ [Viewer] token refresh failed: $e');
-          }
-        },
+        onTokenPrivilegeWillExpire:
+            (RtcConnection connection, String token) async {
+              if (!_isOurConnection(connection)) return;
+              try {
+                final role = _isCoHost ? 'publisher' : 'audience';
+                final newToken = await onTokenRefresh(role);
+                await engine.updateChannelMediaOptionsEx(
+                  connection: connection,
+                  options: ChannelMediaOptions(token: newToken),
+                );
+              } catch (e) {
+                debugPrint('⚠️ [Viewer] token refresh failed: $e');
+              }
+            },
 
         onConnectionLost: (RtcConnection connection) {
           if (!_isOurConnection(connection)) return;
@@ -227,7 +232,8 @@ class AgoraViewerService with ChangeNotifier {
         },
 
         onLocalAudioStats: (RtcConnection connection, LocalAudioStats stats) {},
-        onRemoteAudioStats: (RtcConnection connection, RemoteAudioStats stats) {},
+        onRemoteAudioStats:
+            (RtcConnection connection, RemoteAudioStats stats) {},
       ),
     );
   }
@@ -276,7 +282,10 @@ class AgoraViewerService with ChangeNotifier {
     _connectionState.value = ConnectionState.connecting;
 
     final localUid = int.tryParse(uid) ?? 0;
-    _standaloneConnection = RtcConnection(channelId: channel, localUid: localUid);
+    _standaloneConnection = RtcConnection(
+      channelId: channel,
+      localUid: localUid,
+    );
 
     await engine.setVideoEncoderConfiguration(
       const VideoEncoderConfiguration(
@@ -351,7 +360,10 @@ class AgoraViewerService with ChangeNotifier {
     final baseUid = int.tryParse(uid ?? '') ?? 0;
     final publishUid = baseUid == 0 ? 1 : baseUid;
 
-    _coHostConnection = RtcConnection(channelId: targetChannel, localUid: publishUid);
+    _coHostConnection = RtcConnection(
+      channelId: targetChannel,
+      localUid: publishUid,
+    );
 
     try {
       debugPrint('🔄 [Viewer] Starting promotion to co-host...');
@@ -375,7 +387,10 @@ class AgoraViewerService with ChangeNotifier {
         }
       }
 
-      final statuses = await [Permission.microphone, Permission.camera].request();
+      final statuses = await [
+        Permission.microphone,
+        Permission.camera,
+      ].request();
       if (statuses.values.any(
         (s) => s.isDenied || s.isPermanentlyDenied || s.isRestricted,
       )) {
@@ -396,7 +411,9 @@ class AgoraViewerService with ChangeNotifier {
 
       await engine.enableVideo();
       await engine.setCameraCapturerConfiguration(
-        const CameraCapturerConfiguration(cameraDirection: CameraDirection.cameraFront),
+        const CameraCapturerConfiguration(
+          cameraDirection: CameraDirection.cameraFront,
+        ),
       );
 
       await Future.delayed(const Duration(milliseconds: 150));
@@ -419,7 +436,9 @@ class AgoraViewerService with ChangeNotifier {
         ),
       );
 
-      debugPrint('✅ [Viewer] Co-host joined as broadcaster: ch=$targetChannel uid=$publishUid');
+      debugPrint(
+        '✅ [Viewer] Co-host joined as broadcaster: ch=$targetChannel uid=$publishUid',
+      );
 
       // Explicitly confirm mute state via updateChannelMediaOptionsEx on
       // the co-host connection — this is the correct Ex-API way to mute
@@ -440,7 +459,9 @@ class AgoraViewerService with ChangeNotifier {
       _isMicMuted = true;
       _isCamMuted = true;
 
-      debugPrint('✅ [Viewer] Co-host joined — mic/cam OFF until guest enables them');
+      debugPrint(
+        '✅ [Viewer] Co-host joined — mic/cam OFF until guest enables them',
+      );
 
       // Start local preview so the guest can see themselves in the split
       // screen bottom half. This is viewfinder-only — the camera is NOT
@@ -448,7 +469,9 @@ class AgoraViewerService with ChangeNotifier {
       // explicitly tap the camera button to start publishing.
       await engine.startPreview();
       _previewing = true;
-      debugPrint('✅ [Viewer] Local preview started (viewfinder only, not publishing)');
+      debugPrint(
+        '✅ [Viewer] Local preview started (viewfinder only, not publishing)',
+      );
 
       _isCoHost = true;
       _connectionState.value = ConnectionState.connected;
@@ -778,15 +801,18 @@ Engine exists: ${_pool.isInitialized}
     _ => NetworkQuality.unknown,
   };
 
-  ConnectionState _convertConnectionState(ConnectionStateType state) =>
-      switch (state) {
-        ConnectionStateType.connectionStateConnected => ConnectionState.connected,
-        ConnectionStateType.connectionStateConnecting => ConnectionState.connecting,
-        ConnectionStateType.connectionStateReconnecting => ConnectionState.reconnecting,
-        ConnectionStateType.connectionStateDisconnected => ConnectionState.disconnected,
-        ConnectionStateType.connectionStateFailed => ConnectionState.failed,
-        _ => ConnectionState.disconnected,
-      };
+  ConnectionState _convertConnectionState(
+    ConnectionStateType state,
+  ) => switch (state) {
+    ConnectionStateType.connectionStateConnected => ConnectionState.connected,
+    ConnectionStateType.connectionStateConnecting => ConnectionState.connecting,
+    ConnectionStateType.connectionStateReconnecting =>
+      ConnectionState.reconnecting,
+    ConnectionStateType.connectionStateDisconnected =>
+      ConnectionState.disconnected,
+    ConnectionStateType.connectionStateFailed => ConnectionState.failed,
+    _ => ConnectionState.disconnected,
+  };
 
   Future<ConnectionStats> getConnectionStats() async => ConnectionStats(
     bitrate: _lastRtcStats?.txKBitRate?.toDouble() ?? 0,

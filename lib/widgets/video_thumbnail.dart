@@ -5,6 +5,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
   final File? localFile;
@@ -103,12 +105,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
                   width: widget.width,
                   height: widget.height,
                   color: Colors.black,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primary_,
-                      strokeWidth: 2,
-                    ),
-                  ),
+                  child: Center(child: AppLogoLoader()),
                 ),
                 null,
               ) ??
@@ -116,12 +113,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
                 width: widget.width,
                 height: widget.height,
                 color: Colors.black,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primary_,
-                    strokeWidth: 2,
-                  ),
-                ),
+                child: Center(child: AppLogoLoader()),
               );
         }
 

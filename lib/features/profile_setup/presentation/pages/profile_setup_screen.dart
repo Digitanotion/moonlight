@@ -12,7 +12,7 @@
 // DataSource already relies on for flags/ISO codes — instead of the old
 // CountryLocalDataSource, which only returns bare name strings with no
 // ISO code or flag support.
- 
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,7 +21,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/utils/countries.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_setup_cubit.dart';
- 
+
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class _C {
   static const bg = Color(0xFF05060F);
   static const surface = Color(0xFF0E1024);
@@ -30,20 +32,20 @@ class _C {
   static const textSecondary = Color(0xFF8B8FB8);
   static const success = Color(0xFF22C55E);
 }
- 
+
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
- 
+
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
 }
- 
+
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _fullnameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   final _picker = ImagePicker();
- 
+
   @override
   void dispose() {
     _fullnameCtrl.dispose();
@@ -51,7 +53,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _bioCtrl.dispose();
     super.dispose();
   }
- 
+
   Future<void> _pickAvatar() async {
     final picked = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -62,7 +64,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       context.read<ProfileSetupCubit>().setAvatarPath(picked.path);
     }
   }
- 
+
   void _openCountryPicker() async {
     final iso = await showModalBottomSheet<String>(
       context: context,
@@ -74,7 +76,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       context.read<ProfileSetupCubit>().setCountry(iso);
     }
   }
- 
+
   Future<void> _pickDob(DateTime? current) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -96,14 +98,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       context.read<ProfileSetupCubit>().setDob(picked);
     }
   }
- 
+
   bool _isRequiredDone(ProfileSetupState s) {
     return s.fullname.trim().isNotEmpty &&
         (s.country ?? '').isNotEmpty &&
         (s.gender ?? '').isNotEmpty &&
         (s.phone ?? '').trim().length >= 7;
   }
- 
+
   int _requiredFieldsFilledCount(ProfileSetupState s) {
     var count = 0;
     if (s.fullname.trim().isNotEmpty) count++;
@@ -112,7 +114,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     if ((s.phone ?? '').trim().length >= 7) count++;
     return count;
   }
- 
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<ProfileSetupCubit, ProfileSetupState>(
@@ -133,7 +135,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       builder: (context, state) {
         final canContinue = _isRequiredDone(state);
         final filledCount = _requiredFieldsFilledCount(state);
- 
+
         return Scaffold(
           backgroundColor: _C.bg,
           body: SafeArea(
@@ -170,7 +172,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       Text(
                         '$filledCount/4',
                         style: TextStyle(
-                          color: filledCount == 4 ? _C.success : _C.textSecondary,
+                          color: filledCount == 4
+                              ? _C.success
+                              : _C.textSecondary,
                           fontWeight: FontWeight.w800,
                           fontSize: 12.5,
                         ),
@@ -178,7 +182,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ],
                   ),
                 ),
- 
+
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
@@ -205,15 +209,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             height: 1.4,
                           ),
                         ),
- 
+
                         const SizedBox(height: 18),
- 
+
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: _C.accent.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: _C.accent.withOpacity(0.25)),
+                            border: Border.all(
+                              color: _C.accent.withOpacity(0.25),
+                            ),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,8 +230,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                   color: _C.accent.withOpacity(0.16),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.info_outline_rounded,
-                                    size: 16, color: _C.accent),
+                                child: const Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 16,
+                                  color: _C.accent,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -237,7 +246,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       color: Colors.white70,
                                     ),
                                     children: [
-                                      const TextSpan(text: 'The fields marked '),
+                                      const TextSpan(
+                                        text: 'The fields marked ',
+                                      ),
                                       const TextSpan(
                                         text: '*',
                                         style: TextStyle(
@@ -259,9 +270,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             ],
                           ),
                         ),
- 
+
                         const SizedBox(height: 26),
- 
+
                         Center(
                           child: GestureDetector(
                             onTap: _pickAvatar,
@@ -328,14 +339,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             ),
                           ),
                         ),
- 
+
                         const SizedBox(height: 32),
- 
+
                         const _FieldLabel(text: 'Full name', required: true),
                         const SizedBox(height: 6),
                         Text(
                           "This is how people will recognize you across Moonlight.",
-                          style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                          style: TextStyle(
+                            color: _C.textSecondary,
+                            fontSize: 11.5,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         _TextField(
@@ -346,28 +360,34 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               context.read<ProfileSetupCubit>().setFullname(v),
                           textCapitalization: TextCapitalization.words,
                         ),
- 
+
                         const SizedBox(height: 22),
- 
+
                         const _FieldLabel(text: 'Country', required: true),
                         const SizedBox(height: 6),
                         Text(
                           "Helps us show you local creators, clubs and content.",
-                          style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                          style: TextStyle(
+                            color: _C.textSecondary,
+                            fontSize: 11.5,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         _CountrySelectField(
                           iso2: state.country,
                           onTap: _openCountryPicker,
                         ),
- 
+
                         const SizedBox(height: 22),
- 
+
                         const _FieldLabel(text: 'Gender', required: true),
                         const SizedBox(height: 6),
                         Text(
                           "Used to personalize your experience — never shared publicly beyond your profile.",
-                          style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                          style: TextStyle(
+                            color: _C.textSecondary,
+                            fontSize: 11.5,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         _GenderSelector(
@@ -375,20 +395,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           onSelect: (g) =>
                               context.read<ProfileSetupCubit>().setGender(g),
                         ),
- 
+
                         const SizedBox(height: 22),
- 
+
                         const _FieldLabel(text: 'Phone number', required: true),
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            Icon(Icons.lock_outline_rounded,
-                                size: 12, color: _C.textSecondary),
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 12,
+                              color: _C.textSecondary,
+                            ),
                             const SizedBox(width: 5),
                             Expanded(
                               child: Text(
                                 'Only used for account security — never shown on your profile.',
-                                style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                                style: TextStyle(
+                                  color: _C.textSecondary,
+                                  fontSize: 11.5,
+                                ),
                               ),
                             ),
                           ],
@@ -407,13 +433,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           onChanged: (v) =>
                               context.read<ProfileSetupCubit>().setPhone(v),
                         ),
- 
+
                         const SizedBox(height: 30),
                         Row(
                           children: [
                             Expanded(child: Divider(color: _C.border)),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               child: Text(
                                 'OPTIONAL',
                                 style: TextStyle(
@@ -428,12 +456,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           ],
                         ),
                         const SizedBox(height: 22),
- 
+
                         const _FieldLabel(text: 'Bio'),
                         const SizedBox(height: 6),
                         Text(
                           "A short line about yourself — shows up on your profile.",
-                          style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                          style: TextStyle(
+                            color: _C.textSecondary,
+                            fontSize: 11.5,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Container(
@@ -446,33 +477,46 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             controller: _bioCtrl,
                             maxLines: 3,
                             maxLength: 150,
-                            style: const TextStyle(color: Colors.white, fontSize: 14.5),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14.5,
+                            ),
                             onChanged: (v) =>
                                 context.read<ProfileSetupCubit>().setBio(v),
                             decoration: InputDecoration(
                               hintText: "e.g. Streamer, gamer, coffee addict ☕",
-                              hintStyle: TextStyle(color: _C.textSecondary.withOpacity(0.7)),
+                              hintStyle: TextStyle(
+                                color: _C.textSecondary.withOpacity(0.7),
+                              ),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.all(16),
-                              counterStyle: TextStyle(color: _C.textSecondary, fontSize: 11),
+                              counterStyle: TextStyle(
+                                color: _C.textSecondary,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
- 
+
                         const SizedBox(height: 22),
- 
+
                         const _FieldLabel(text: 'Date of birth'),
                         const SizedBox(height: 6),
                         Text(
                           "Helps us tailor age-appropriate content for you.",
-                          style: TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                          style: TextStyle(
+                            color: _C.textSecondary,
+                            fontSize: 11.5,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         GestureDetector(
                           onTap: () => _pickDob(state.dob),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                             decoration: BoxDecoration(
                               color: _C.surface,
                               borderRadius: BorderRadius.circular(14),
@@ -480,8 +524,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.cake_outlined,
-                                    color: _C.textSecondary, size: 20),
+                                Icon(
+                                  Icons.cake_outlined,
+                                  color: _C.textSecondary,
+                                  size: 20,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
@@ -496,8 +543,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     ),
                                   ),
                                 ),
-                                Icon(Icons.chevron_right_rounded,
-                                    color: _C.textSecondary),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: _C.textSecondary,
+                                ),
                               ],
                             ),
                           ),
@@ -506,7 +555,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ),
                   ),
                 ),
- 
+
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
                   child: Column(
@@ -532,7 +581,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _C.accent,
-                            disabledBackgroundColor: _C.accent.withOpacity(0.25),
+                            disabledBackgroundColor: _C.accent.withOpacity(
+                              0.25,
+                            ),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
@@ -543,10 +594,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               ? const SizedBox(
                                   width: 22,
                                   height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.4,
-                                    color: Colors.white,
-                                  ),
+                                  child: AppLogoLoader(),
                                 )
                               : const Text(
                                   'Continue',
@@ -567,21 +615,31 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       },
     );
   }
- 
+
   String _formatDob(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 }
- 
+
 class _FieldLabel extends StatelessWidget {
   final String text;
   final bool required;
   const _FieldLabel({required this.text, this.required = false});
- 
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -602,7 +660,7 @@ class _FieldLabel extends StatelessWidget {
     );
   }
 }
- 
+
 class _TextField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
@@ -611,7 +669,7 @@ class _TextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final TextCapitalization textCapitalization;
- 
+
   const _TextField({
     required this.controller,
     required this.hint,
@@ -621,7 +679,7 @@ class _TextField extends StatelessWidget {
     this.inputFormatters,
     this.textCapitalization = TextCapitalization.none,
   });
- 
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -648,12 +706,12 @@ class _TextField extends StatelessWidget {
     );
   }
 }
- 
+
 class _CountrySelectField extends StatelessWidget {
   final String? iso2;
   final VoidCallback onTap;
   const _CountrySelectField({required this.iso2, required this.onTap});
- 
+
   @override
   Widget build(BuildContext context) {
     final hasValue = (iso2 ?? '').isNotEmpty;
@@ -679,7 +737,9 @@ class _CountrySelectField extends StatelessWidget {
               child: Text(
                 hasValue ? countryDisplayName(iso2) : 'Select your country',
                 style: TextStyle(
-                  color: hasValue ? Colors.white : _C.textSecondary.withOpacity(0.7),
+                  color: hasValue
+                      ? Colors.white
+                      : _C.textSecondary.withOpacity(0.7),
                   fontSize: 14.5,
                 ),
               ),
@@ -691,19 +751,19 @@ class _CountrySelectField extends StatelessWidget {
     );
   }
 }
- 
+
 class _CountryPickerSheet extends StatefulWidget {
   const _CountryPickerSheet();
- 
+
   @override
   State<_CountryPickerSheet> createState() => _CountryPickerSheetState();
 }
- 
+
 class _CountryPickerSheetState extends State<_CountryPickerSheet> {
   late final List<MapEntry<String, String>> _all;
   List<MapEntry<String, String>> _filtered = [];
   final _searchCtrl = TextEditingController();
- 
+
   @override
   void initState() {
     super.initState();
@@ -711,26 +771,28 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
     _filtered = _all;
     _searchCtrl.addListener(_onSearch);
   }
- 
+
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
   }
- 
+
   void _onSearch() {
     final q = _searchCtrl.text.trim().toLowerCase();
     setState(() {
       _filtered = q.isEmpty
           ? _all
           : _all
-              .where((e) =>
-                  e.value.toLowerCase().contains(q) ||
-                  e.key.toLowerCase().contains(q))
-              .toList();
+                .where(
+                  (e) =>
+                      e.value.toLowerCase().contains(q) ||
+                      e.key.toLowerCase().contains(q),
+                )
+                .toList();
     });
   }
- 
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -773,8 +835,11 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                         color: Colors.white.withOpacity(0.08),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close_rounded,
-                          color: Colors.white70, size: 18),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
                     ),
                   ),
                 ],
@@ -794,10 +859,15 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                   autofocus: false,
                   style: const TextStyle(color: Colors.white, fontSize: 14.5),
                   decoration: InputDecoration(
-                    prefixIcon: Icon(Icons.search_rounded,
-                        color: _C.textSecondary, size: 20),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: _C.textSecondary,
+                      size: 20,
+                    ),
                     hintText: 'Search countries…',
-                    hintStyle: TextStyle(color: _C.textSecondary.withOpacity(0.7)),
+                    hintStyle: TextStyle(
+                      color: _C.textSecondary.withOpacity(0.7),
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -815,7 +885,9 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       itemCount: _filtered.length,
                       itemBuilder: (context, i) {
                         final entry = _filtered[i];
@@ -826,7 +898,9 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                             onTap: () => Navigator.pop(context, entry.key),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 12),
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
                               child: Row(
                                 children: [
                                   Text(
@@ -858,19 +932,19 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
     );
   }
 }
- 
+
 class _GenderSelector extends StatelessWidget {
   final String? selected;
   final ValueChanged<String> onSelect;
   const _GenderSelector({required this.selected, required this.onSelect});
- 
+
   static const _options = [
     ('male', 'Male', Icons.male_rounded),
     ('female', 'Female', Icons.female_rounded),
     ('other', 'Other', Icons.transgender_rounded),
     ('prefer_not_to_say', "Prefer not to say", Icons.visibility_off_rounded),
   ];
- 
+
   @override
   Widget build(BuildContext context) {
     return Wrap(

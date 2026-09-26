@@ -31,18 +31,15 @@ class ErrorNormalizerInterceptor extends Interceptor {
     if (resp != null && resp.data != null) {
       apiEx = ApiException(
         code: resp.statusCode,
-        message: _messageFromBody(resp.data) ??
-            _friendlyForStatus(resp.statusCode),
+        message:
+            _messageFromBody(resp.data) ?? _friendlyForStatus(resp.statusCode),
         errors: (resp.data is Map && resp.data['errors'] is Map)
             ? Map<String, dynamic>.from(resp.data['errors'])
             : null,
         data: resp.data,
       );
     } else {
-      apiEx = ApiException(
-        code: null,
-        message: _friendlyForType(err.type),
-      );
+      apiEx = ApiException(code: null, message: _friendlyForType(err.type));
     }
 
     handler.next(

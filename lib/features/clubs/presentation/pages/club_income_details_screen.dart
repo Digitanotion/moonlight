@@ -12,6 +12,8 @@ import 'package:moonlight/features/clubs/presentation/cubit/club_income_state.da
 import 'package:moonlight/features/clubs/domain/entities/club_transaction.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubIncomeDetailsScreen extends StatelessWidget {
   final String clubUuid;
 
@@ -49,9 +51,7 @@ class _View extends StatelessWidget {
                 const SizedBox(height: 18),
                 Expanded(
                   child: state.loading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        )
+                      ? const Center(child: AppLogoLoader())
                       : _IncomeList(transactions: state.transactions),
                 ),
               ],

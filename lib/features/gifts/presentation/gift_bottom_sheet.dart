@@ -10,6 +10,8 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart'
     hide ConnectionState;
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class GiftBottomSheet extends StatefulWidget {
   final String toUserUuid;
   final String livestreamId; // numeric as string (e.g., "63")
@@ -328,7 +330,7 @@ class _GiftTile extends StatelessWidget {
                         child: SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: AppLogoLoader(),
                         ),
                       );
                     },

@@ -11,6 +11,8 @@ import '../widgets/shimmer_gift.dart';
 import '../widgets/success_gift_dialog.dart';
 import '../widgets/user_tile.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 const int maxPerGift = 1000; // matches your screenshots
 
 class GiftCoinsPage extends StatefulWidget {
@@ -226,11 +228,7 @@ class _GiftCoinsPageState extends State<GiftCoinsPage> {
           onPressed: enabled && !loading ? _onSendPressed : null,
           icon: const Icon(Icons.card_giftcard),
           label: loading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const SizedBox(height: 20, width: 20, child: AppLogoLoader())
               : const Text('Send Gift'),
           style: ElevatedButton.styleFrom(
             backgroundColor: enabled
@@ -328,9 +326,7 @@ class _GiftCoinsPageState extends State<GiftCoinsPage> {
                           child: searching
                               ? const Padding(
                                   padding: EdgeInsets.all(12),
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
+                                  child: Center(child: AppLogoLoader()),
                                 )
                               : results.isEmpty
                               ? const Padding(

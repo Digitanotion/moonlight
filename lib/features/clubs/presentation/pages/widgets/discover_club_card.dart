@@ -5,6 +5,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
 import 'package:moonlight/features/clubs/presentation/pages/widgets/delete_club_dialog.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// The shared full-width club row — used for "My Clubs" and for search
 /// results on the Discover screen.
 ///
@@ -414,14 +416,7 @@ class _ActionPill extends StatelessWidget {
               : Border.all(color: Colors.white.withOpacity(0.2)),
         ),
         child: busy
-            ? const SizedBox(
-                width: 15,
-                height: 15,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
+            ? const SizedBox(width: 15, height: 15, child: AppLogoLoader())
             : Text(
                 label,
                 style: const TextStyle(

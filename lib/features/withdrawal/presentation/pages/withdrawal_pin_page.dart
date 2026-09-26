@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class WithdrawalPinPage extends StatefulWidget {
   final double amountUsdCents;
   final String bankAccountName;
@@ -271,10 +273,7 @@ class _WithdrawalPinPageState extends State<WithdrawalPinPage> {
                   ? const SizedBox(
                       width: 64,
                       height: 64,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Colors.deepOrangeAccent,
-                      ),
+                      child: AppLogoLoader(),
                     )
                   : Icon(
                       _errorText != null ? Icons.lock_open : Icons.security,

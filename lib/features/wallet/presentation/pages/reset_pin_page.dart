@@ -5,6 +5,8 @@ import 'package:moonlight/features/wallet/presentation/cubit/reset_pin_cubit.dar
 import 'package:moonlight/core/injection_container.dart' show sl;
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 enum _ResetPinStage { current, newPin, confirm }
 
 class ResetPinPage extends StatefulWidget {
@@ -669,11 +671,7 @@ class _ResetPinPageState extends State<ResetPinPage>
               if (loading)
                 Container(
                   color: Colors.black.withOpacity(0.45),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.deepOrangeAccent,
-                    ),
-                  ),
+                  child: const Center(child: AppLogoLoader()),
                 ),
             ],
           );

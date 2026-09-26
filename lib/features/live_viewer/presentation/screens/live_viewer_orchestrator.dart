@@ -35,8 +35,8 @@ class LiveViewerOrchestrator extends StatefulWidget {
     super.key,
     required this.repository,
     this.onVideoReady,
-    this.pool,       // ← NEW
-    this.channelId,  // ← NEW
+    this.pool, // ← NEW
+    this.channelId, // ← NEW
   });
 
   @override
@@ -79,7 +79,9 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
     if (slot.channelId != widget.channelId) return;
 
     _videoReadyFired = true;
-    debugPrint('🎬 [Orchestrator/pool] first frame ready on ${widget.channelId}');
+    debugPrint(
+      '🎬 [Orchestrator/pool] first frame ready on ${widget.channelId}',
+    );
     widget.onVideoReady?.call();
   }
 
@@ -92,7 +94,9 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
         _videoReadyFired = true;
         debugPrint('🎬 [Orchestrator] Host video ready — fading placeholder');
         widget.onVideoReady?.call();
-        sl<AgoraViewerService>().hostHasVideo.removeListener(_onHostVideoChanged);
+        sl<AgoraViewerService>().hostHasVideo.removeListener(
+          _onHostVideoChanged,
+        );
       }
     } catch (e) {
       debugPrint('⚠️ [Orchestrator] _onHostVideoChanged error: $e');
@@ -103,7 +107,9 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
   void dispose() {
     if (widget.pool == null) {
       try {
-        sl<AgoraViewerService>().hostHasVideo.removeListener(_onHostVideoChanged);
+        sl<AgoraViewerService>().hostHasVideo.removeListener(
+          _onHostVideoChanged,
+        );
       } catch (_) {}
     }
     super.dispose();

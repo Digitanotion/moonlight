@@ -5,6 +5,8 @@ import 'package:moonlight/core/injection_container.dart' as di;
 import 'package:moonlight/features/settings/presentation/cubit/change_username_cubit.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ChangeUsernamePage extends StatefulWidget {
   const ChangeUsernamePage({super.key});
 
@@ -297,10 +299,7 @@ class _ChangeUsernamePageState extends State<ChangeUsernamePage> {
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
+                                      child: AppLogoLoader(),
                                     )
                                   : isValid
                                   ? const Icon(
@@ -559,10 +558,7 @@ class _ChangeUsernamePageState extends State<ChangeUsernamePage> {
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
+                                      child: AppLogoLoader(),
                                     )
                                   : const Text(
                                       'Update Username',
@@ -606,11 +602,7 @@ class _ChangeUsernamePageState extends State<ChangeUsernamePage> {
                   if (loading)
                     Container(
                       color: Colors.black.withOpacity(0.4),
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: Colors.deepOrangeAccent,
-                        ),
-                      ),
+                      child: const Center(child: AppLogoLoader()),
                     ),
                 ],
               ),

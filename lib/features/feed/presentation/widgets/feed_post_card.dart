@@ -16,6 +16,8 @@ import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // ── Design tokens (shared with feed_screen.dart) ──────────────────────────
 class _C {
   static const surface = Color(0xFF0E1024);
@@ -875,16 +877,7 @@ class _ModernVideoLoaderState extends State<_ModernVideoLoader>
             children: [
               RotationTransition(
                 turns: _ctrl,
-                child: SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    strokeCap: StrokeCap.round,
-                    valueColor: AlwaysStoppedAnimation(_C.accent),
-                    backgroundColor: Colors.white.withOpacity(0.08),
-                  ),
-                ),
+                child: SizedBox(width: 36, height: 36, child: AppLogoLoader()),
               ),
               Icon(
                 Icons.play_arrow_rounded,
@@ -1141,14 +1134,7 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget>
       color: _C.border,
       child: Center(
         child: loading
-            ? SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: _C.accent.withOpacity(0.7),
-                ),
-              )
+            ? SizedBox(width: 22, height: 22, child: AppLogoLoader())
             : const Icon(
                 Icons.videocam_off_rounded,
                 color: Colors.white24,

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class GiftVisuals {
   static const String _base = 'assets/gifts/';
   static Set<String>? _assets; // cache
@@ -18,7 +20,9 @@ class GiftVisuals {
           .where((k) => k.startsWith(_base) && k.endsWith('.svg'))
           .toSet();
       return;
-    } catch (_) {/* fall through to legacy + probe */}
+    } catch (_) {
+      /* fall through to legacy + probe */
+    }
     try {
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifest = jsonDecode(manifestJson);
@@ -89,7 +93,8 @@ class GiftVisuals {
   }) async {
     await _ensureManifestLoaded();
     final svgPath = '$_base$code.svg';
-    final hasSvg = _assets!.contains(svgPath) ||
+    final hasSvg =
+        _assets!.contains(svgPath) ||
         (code.isNotEmpty && await _assetExists(svgPath));
 
     // ── Original priority (restored): emoji → bundled SVG → material →
@@ -130,7 +135,9 @@ class GiftVisuals {
     }
 
     // Remote image URL from the DB.
-    if (imageUrl != null && imageUrl.isNotEmpty && imageUrl.startsWith('http')) {
+    if (imageUrl != null &&
+        imageUrl.isNotEmpty &&
+        imageUrl.startsWith('http')) {
       final w = _remoteImage(imageUrl, size, code, title, color);
       if (w != null) return w;
     }
@@ -161,7 +168,7 @@ class GiftVisuals {
               child: SizedBox(
                 width: size * 0.35,
                 height: size * 0.35,
-                child: const CircularProgressIndicator(strokeWidth: 2),
+                child: const AppLogoLoader(),
               ),
             ),
           ),

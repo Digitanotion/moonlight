@@ -22,6 +22,8 @@ import 'package:moonlight/features/post_view/presentation/widgets/user_helper.da
 import '../../domain/entities/create_post_payload.dart';
 import '../cubit/create_post_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 const int _kMaxCaptionLength = 200;
 
 class CreatePostScreen extends StatefulWidget {
@@ -341,10 +343,7 @@ class _TopBar extends StatelessWidget {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                        child: AppLogoLoader(),
                       )
                     : const Text(
                         'Post',
@@ -393,7 +392,7 @@ class _ComposerRow extends StatelessWidget {
               height: 1.35,
             ),
             decoration: const InputDecoration(
-              hintText: "What's on your mind?",
+              hintText: "What do you want to share?",
               hintStyle: TextStyle(
                 color: Colors.white38,
                 fontSize: 20,
@@ -551,14 +550,7 @@ class _MediaArea extends StatelessWidget {
             child: Column(
               children: [
                 if (picking)
-                  const SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.secondary,
-                    ),
-                  )
+                  const SizedBox(width: 26, height: 26, child: AppLogoLoader())
                 else ...[
                   const Icon(
                     Icons.add_photo_alternate_rounded,

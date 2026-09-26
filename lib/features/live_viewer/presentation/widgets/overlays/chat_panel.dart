@@ -163,7 +163,10 @@ class _GiftChatLine extends StatelessWidget {
                     imageUrl: message.avatarUrl!,
                     fit: BoxFit.cover,
                     errorWidget: (_, __, ___) => const Icon(
-                        Icons.person, size: 16, color: Colors.white70),
+                      Icons.person,
+                      size: 16,
+                      color: Colors.white70,
+                    ),
                   )
                 : const Icon(Icons.person, size: 16, color: Colors.white70),
           ),
@@ -248,11 +251,13 @@ class _CoinBadge extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFFFFE083), Color(0xFFF5A623), Color(0xFFCE7A16)],
+                colors: [
+                  Color(0xFFFFE083),
+                  Color(0xFFF5A623),
+                  Color(0xFFCE7A16),
+                ],
               ),
-              boxShadow: [
-                BoxShadow(color: Color(0x66FFC24B), blurRadius: 4),
-              ],
+              boxShadow: [BoxShadow(color: Color(0x66FFC24B), blurRadius: 4)],
             ),
             alignment: Alignment.center,
             child: const Text(
@@ -315,8 +320,11 @@ class _GiftGlyphState extends State<_GiftGlyph> {
         future: _future,
         builder: (_, snap) =>
             snap.data ??
-            const Icon(Icons.card_giftcard_rounded,
-                size: 20, color: Colors.white),
+            const Icon(
+              Icons.card_giftcard_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
       ),
     );
   }

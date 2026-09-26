@@ -25,6 +25,8 @@ import 'package:moonlight/features/wallet/domain/models/transaction_model.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:moonlight/core/utils/formatting.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 String _typeLabel(String type) {
@@ -261,10 +263,7 @@ class _TopBar extends StatelessWidget {
                     child: SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white54,
-                      ),
+                      child: AppLogoLoader(),
                     ),
                   ),
                 )

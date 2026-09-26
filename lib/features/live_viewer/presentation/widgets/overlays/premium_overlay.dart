@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/features/gifts/presentation/gift_bottom_sheet.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class PremiumOverlay extends StatelessWidget {
   final int? fee;
   final VoidCallback onOpenPayment;
@@ -131,9 +133,7 @@ class PremiumOverlay extends StatelessWidget {
                                     ? const SizedBox(
                                         height: 18,
                                         width: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
+                                        child: AppLogoLoader(),
                                       )
                                     : const Text(
                                         'Unlock',

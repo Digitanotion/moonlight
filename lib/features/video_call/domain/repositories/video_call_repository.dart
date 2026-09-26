@@ -11,7 +11,7 @@ abstract class VideoCallRepository {
   // sourced from 'video_call_accepted'. The caller should call join()
   // upon receiving this to get their own Agora token.
   Stream<Map<String, dynamic>> callAcceptedStream();
-   Stream<Map<String, dynamic>> callResolvedStream();
+  Stream<Map<String, dynamic>> callResolvedStream();
 
   /// Fired when the OTHER party paused / resumed the call's countdown
   /// because the media connection dropped — sourced from

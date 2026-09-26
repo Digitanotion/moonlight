@@ -5,6 +5,8 @@ import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/live_stream_service.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // In HostVideoContainer - UPDATED VERSION
 class HostVideoContainer extends StatelessWidget {
   final ViewerRepositoryImpl repository;
@@ -26,9 +28,7 @@ class HostVideoContainer extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                  ),
+                  AppLogoLoader(),
                   SizedBox(height: 16),
                   Text(
                     'Connecting to live stream...',

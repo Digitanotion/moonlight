@@ -7,7 +7,8 @@ class RequestIdInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    options.headers['X-Request-ID'] = options.headers['X-Request-ID'] ?? _uuid.v4();
+    options.headers['X-Request-ID'] =
+        options.headers['X-Request-ID'] ?? _uuid.v4();
     handler.next(options);
   }
 }

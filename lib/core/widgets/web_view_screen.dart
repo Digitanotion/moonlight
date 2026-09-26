@@ -59,10 +59,13 @@ class _WebViewScreenState extends State<WebViewScreen> {
           if (!_hasError)
             Positioned.fill(child: WebViewWidget(controller: _controller)),
 
-          if (_hasError) _ErrorView(onRetry: () {
-            setState(() => _hasError = false);
-            _controller.reload();
-          }),
+          if (_hasError)
+            _ErrorView(
+              onRetry: () {
+                setState(() => _hasError = false);
+                _controller.reload();
+              },
+            ),
 
           // Slim top progress line (under the status bar).
           if (_loading && !_hasError)

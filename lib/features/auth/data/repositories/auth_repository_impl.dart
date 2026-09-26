@@ -43,7 +43,7 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-@override
+  @override
   Future<Either<Failure, User>> getCurrentUser() async {
     // Prefer a fresh fetch from the server, and update the local cache
     // with it. Falls back to the local cache only if the network call

@@ -10,6 +10,8 @@ import 'package:moonlight/features/home/presentation/widgets/shimmer.dart';
 import 'package:moonlight/widgets/states.dart';
 import 'package:moonlight/features/home/presentation/widgets/section_header.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class LiveNowSection extends StatefulWidget {
   const LiveNowSection({super.key});
   @override
@@ -151,7 +153,7 @@ class _LiveNowSectionState extends State<LiveNowSection> {
                         child: SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: AppLogoLoader(),
                         ),
                       );
                     }

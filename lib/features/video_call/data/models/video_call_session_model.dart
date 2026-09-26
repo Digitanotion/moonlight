@@ -42,7 +42,8 @@ class VideoCallAgoraCredentials {
 
 class VideoCallSessionModel {
   final String uuid;
-  final String status; // pending|ringing|active|completed|rejected|no_answer|cancelled
+  final String
+  status; // pending|ringing|active|completed|rejected|no_answer|cancelled
   final String channelName;
   final String initiatedFrom;
   final int? livestreamId;
@@ -96,7 +97,9 @@ class VideoCallSessionModel {
       status: (map['status'] ?? '').toString(),
       channelName: (map['channel_name'] ?? '').toString(),
       initiatedFrom: (map['initiated_from'] ?? '').toString(),
-      livestreamId: map['livestream_id'] == null ? null : int.tryParse('${map['livestream_id']}'),
+      livestreamId: map['livestream_id'] == null
+          ? null
+          : int.tryParse('${map['livestream_id']}'),
       rateCoinsPerMinute:
           int.tryParse('${map['rate_coins_per_minute'] ?? 0}') ?? 0,
       totalMinutesRequested:

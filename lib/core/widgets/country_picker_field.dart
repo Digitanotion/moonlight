@@ -77,7 +77,9 @@ class CountrySelectField extends StatelessWidget {
               child: Text(
                 hasValue ? countryDisplayName(iso2) : placeholder,
                 style: TextStyle(
-                  color: hasValue ? Colors.white : textSecondary.withOpacity(0.7),
+                  color: hasValue
+                      ? Colors.white
+                      : textSecondary.withOpacity(0.7),
                   fontSize: 14.5,
                 ),
               ),
@@ -149,10 +151,12 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
       _filtered = q.isEmpty
           ? _all
           : _all
-              .where((e) =>
-                  e.value.toLowerCase().contains(q) ||
-                  e.key.toLowerCase().contains(q))
-              .toList();
+                .where(
+                  (e) =>
+                      e.value.toLowerCase().contains(q) ||
+                      e.key.toLowerCase().contains(q),
+                )
+                .toList();
     });
   }
 
@@ -221,7 +225,10 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       const Icon(Icons.search, color: Colors.white54, size: 20),
@@ -229,12 +236,19 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                       Expanded(
                         child: TextField(
                           controller: _searchCtrl,
-                          style: const TextStyle(color: Colors.white, fontSize: 15),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                          ),
                           decoration: InputDecoration(
                             hintText: 'Search country or code…',
-                            hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                            hintStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                            ),
                             border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                            ),
                             isDense: true,
                           ),
                           cursorColor: c.accent,
@@ -307,7 +321,9 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                               onTap: () => Navigator.pop(context, entry.key),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                                 child: Row(
                                   children: [
                                     Container(
@@ -345,7 +361,9 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                                           Text(
                                             entry.key,
                                             style: TextStyle(
-                                              color: Colors.white.withOpacity(0.5),
+                                              color: Colors.white.withOpacity(
+                                                0.5,
+                                              ),
                                               fontSize: 12,
                                             ),
                                           ),

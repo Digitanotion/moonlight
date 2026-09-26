@@ -59,8 +59,9 @@ class ProfileRemoteDataSource {
     }
   }
 
-  late final FollowListRemoteDataSource followList =
-      FollowListRemoteDataSource(http);
+  late final FollowListRemoteDataSource followList = FollowListRemoteDataSource(
+    http,
+  );
 
   Map<String, dynamic> _toMap(dynamic raw) {
     return raw is Map

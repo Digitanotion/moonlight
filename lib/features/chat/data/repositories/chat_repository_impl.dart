@@ -487,7 +487,8 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
-  Stream<MessageEditEvent> messageEditedStream() => _messageEditStreamCtrl.stream;
+  Stream<MessageEditEvent> messageEditedStream() =>
+      _messageEditStreamCtrl.stream;
 
   @override
   Stream<MessageReactionEvent> messageReactionStream() =>

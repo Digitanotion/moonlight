@@ -7,6 +7,8 @@ import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_d
 import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ClubTreasuryPayoutProfileScreen extends StatefulWidget {
   final String clubUuid;
 
@@ -200,10 +202,7 @@ class _ClubTreasuryPayoutProfileScreenState
                                   ? const SizedBox(
                                       width: 16,
                                       height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white54,
-                                      ),
+                                      child: AppLogoLoader(),
                                     )
                                   : null,
                             ),
@@ -491,13 +490,7 @@ class _BankDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     if (loading) {
       return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(12),
-          child: CircularProgressIndicator(
-            color: Colors.white54,
-            strokeWidth: 2,
-          ),
-        ),
+        child: Padding(padding: EdgeInsets.all(12), child: AppLogoLoader()),
       );
     }
     return Container(
@@ -649,14 +642,7 @@ class _SubmitButton extends StatelessWidget {
           elevation: 0,
         ),
         child: submitting
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
+            ? const SizedBox(width: 22, height: 22, child: AppLogoLoader())
             : const Text(
                 'Save Payout Profile',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),

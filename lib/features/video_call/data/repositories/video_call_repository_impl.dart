@@ -270,7 +270,9 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
 
   @override
   Future<VideoCallSessionModel> resume(String sessionUuid) async {
-    final res = await _client.dio.post('/api/v1/video-call/$sessionUuid/resume');
+    final res = await _client.dio.post(
+      '/api/v1/video-call/$sessionUuid/resume',
+    );
     return _sessionFromResponse(res.data);
   }
 

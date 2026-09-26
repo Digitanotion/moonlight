@@ -27,6 +27,8 @@ import 'package:moonlight/core/utils/asset_paths.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
   @override
@@ -217,9 +219,7 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 32),
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
+                const AppLogoLoader(),
               ],
             ),
           ),

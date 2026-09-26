@@ -55,8 +55,8 @@ class LiveViewerScreen extends StatefulWidget {
     super.key,
     required this.repository,
     this.routeArgs,
-    this.pool,       // ← NEW (optional)
-    this.channelId,  // ← NEW (optional)
+    this.pool, // ← NEW (optional)
+    this.channelId, // ← NEW (optional)
     this.onPremiumUnlocked,
   });
 
@@ -116,21 +116,22 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     // Standalone open (deep link / notification). The pager owns PiP for the
     // pool path so we don't double-arm.
     if (widget.pool == null) PipService.instance.acquire();
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    )
-      ..addListener(() {
-        _videoReadyProgress.value = _fadeController!.value;
-      })
-      ..addStatusListener((s) {
-        // Once the placeholder has fully faded out for this stream, latch it
-        // shut. Anything that later resets `_videoReadyProgress` (a rebuild
-        // coinciding with a transient bloc state, the keyboard opening under
-        // the chat field, …) can no longer bring "Joining stream…" back —
-        // only a real stream switch does, via didUpdateWidget.
-        if (s == AnimationStatus.completed) _firstFrameSeen = true;
-      });
+    _fadeController =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 350),
+          )
+          ..addListener(() {
+            _videoReadyProgress.value = _fadeController!.value;
+          })
+          ..addStatusListener((s) {
+            // Once the placeholder has fully faded out for this stream, latch it
+            // shut. Anything that later resets `_videoReadyProgress` (a rebuild
+            // coinciding with a transient bloc state, the keyboard opening under
+            // the chat field, …) can no longer bring "Joining stream…" back —
+            // only a real stream switch does, via didUpdateWidget.
+            if (s == AnimationStatus.completed) _firstFrameSeen = true;
+          });
     _initPremium();
   }
 
@@ -171,10 +172,12 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   void notifyVideoReady() {
     if (_fadeController == null || _fadeController!.isAnimating) return;
     if (_fadeController!.value >= 1.0) {
-      _firstFrameSeen = true; // already faded (e.g. value restored) — latch anyway
+      _firstFrameSeen =
+          true; // already faded (e.g. value restored) — latch anyway
       return;
     }
-    _fadeController!.forward(); // status listener latches `_firstFrameSeen` on completion
+    _fadeController!
+        .forward(); // status listener latches `_firstFrameSeen` on completion
   }
 
   Future<void> _checkPremiumStatus() async {
@@ -290,7 +293,9 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
             : _paymentStatusMessage,
         onOpenPayment: _premiumState == PremiumVerificationState.error
             ? () {
-                setState(() => _premiumState = PremiumVerificationState.checking);
+                setState(
+                  () => _premiumState = PremiumVerificationState.checking,
+                );
                 _checkPremiumStatus();
               }
             : () => _processPremiumPayment(context),
@@ -308,7 +313,9 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     _viewerBloc?.close();
     // Only call the old single-engine leave if NOT in pool mode.
     if (widget.pool == null) {
-      try { sl<AgoraViewerService>().leave(); } catch (_) {}
+      try {
+        sl<AgoraViewerService>().leave();
+      } catch (_) {}
     }
     widget.repository.dispose();
     super.dispose();
@@ -330,7 +337,10 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
     if (!_premiumCheckComplete) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: LiveLoadingPlaceholder(avatarUrl: hostAvatarUrl, hostName: hostName),
+        body: LiveLoadingPlaceholder(
+          avatarUrl: hostAvatarUrl,
+          hostName: hostName,
+        ),
       );
     }
 
@@ -338,7 +348,10 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
-          child: Text('Invalid repository type', style: TextStyle(color: Colors.white)),
+          child: Text(
+            'Invalid repository type',
+            style: TextStyle(color: Colors.white),
+          ),
         ),
       );
     }
@@ -471,11 +484,12 @@ class LiveViewerOrchestratorWrapper extends StatelessWidget {
       }
     });
 
-    final screenState = context.findAncestorStateOfType<_LiveViewerScreenState>();
+    final screenState = context
+        .findAncestorStateOfType<_LiveViewerScreenState>();
     return LiveViewerOrchestrator(
       repository: repository,
       onVideoReady: screenState?.notifyVideoReady,
-      pool: pool,           // ← NEW
+      pool: pool, // ← NEW
       channelId: channelId, // ← NEW
     );
   }

@@ -5,6 +5,8 @@ import 'package:moonlight/features/wallet/presentation/cubit/set_new_pin_cubit.d
 import 'package:moonlight/core/injection_container.dart' show sl;
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 enum _NewPinStage { enter, confirm }
 
 class SetNewPinPage extends StatefulWidget {
@@ -457,11 +459,7 @@ class _SetNewPinPageState extends State<SetNewPinPage>
               if (loading)
                 Container(
                   color: Colors.black.withOpacity(0.45),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.deepOrangeAccent,
-                    ),
-                  ),
+                  child: const Center(child: AppLogoLoader()),
                 ),
             ],
           );

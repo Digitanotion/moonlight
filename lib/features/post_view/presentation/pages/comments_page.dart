@@ -11,6 +11,8 @@ import 'package:moonlight/features/post_view/presentation/widgets/skeleton_line_
 import '../../domain/entities/comment.dart';
 import '../cubit/post_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class _C {
   static const bg = Color(0xFF05060F);
   static const surface = Color(0xFF0E1024);
@@ -34,7 +36,11 @@ class CommentsPage extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Comments',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 17,
+          ),
         ),
         actions: [
           IconButton(
@@ -53,24 +59,28 @@ class CommentsPage extends StatelessWidget {
         child: (cubit.state.loading && comments.isEmpty)
             ? const _CommentsShimmer()
             : comments.isEmpty
-                ? const _EmptyComments()
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    itemCount: comments.length + (cubit.state.commentsLoading ? 1 : 0),
-                    separatorBuilder: (_, __) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Container(height: 1, color: _C.border),
-                    ),
-                    itemBuilder: (_, i) {
-                      if (i >= comments.length) {
-                        return const Padding(
-                          padding: EdgeInsets.only(top: 8, bottom: 16),
-                          child: _LoadingMoreRow(),
-                        );
-                      }
-                      return _CommentTile(c: comments[i]);
-                    },
-                  ),
+            ? const _EmptyComments()
+            : ListView.separated(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                itemCount:
+                    comments.length + (cubit.state.commentsLoading ? 1 : 0),
+                separatorBuilder: (_, __) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Container(height: 1, color: _C.border),
+                ),
+                itemBuilder: (_, i) {
+                  if (i >= comments.length) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 8, bottom: 16),
+                      child: _LoadingMoreRow(),
+                    );
+                  }
+                  return _CommentTile(c: comments[i]);
+                },
+              ),
       ),
       bottomNavigationBar: _CommentInput(
         onSubmit: (t) => context.read<PostCubit>().addComment(t),
@@ -99,12 +109,20 @@ class _EmptyComments extends StatelessWidget {
                 color: _C.surface,
                 border: Border.all(color: _C.border),
               ),
-              child: const Icon(Icons.mode_comment_rounded, color: _C.accent, size: 26),
+              child: const Icon(
+                Icons.mode_comment_rounded,
+                color: _C.accent,
+                size: 26,
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
               'No comments yet',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 6),
             const Text(
@@ -125,11 +143,7 @@ class _LoadingMoreRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2, color: _C.accent),
-      ),
+      child: SizedBox(width: 20, height: 20, child: AppLogoLoader()),
     );
   }
 }
@@ -195,7 +209,12 @@ class _RolePillTinted extends StatelessWidget {
       ),
       child: Text(
         label.toUpperCase(),
-        style: const TextStyle(color: _C.accent, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+        style: const TextStyle(
+          color: _C.accent,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -220,14 +239,22 @@ class _CommentTileState extends State<_CommentTile> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          24 + MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 44,
               height: 4,
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(4)),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -243,7 +270,10 @@ class _CommentTileState extends State<_CommentTile> {
                     child: Image.network(
                       'https://i.pravatar.cc/150?img=5',
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, color: Colors.white54),
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.person_rounded,
+                        color: Colors.white54,
+                      ),
                     ),
                   ),
                 ),
@@ -261,9 +291,15 @@ class _CommentTileState extends State<_CommentTile> {
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: const InputDecoration(
                         hintText: 'Write a reply…',
-                        hintStyle: TextStyle(color: _C.textSecondary, fontSize: 14),
+                        hintStyle: TextStyle(
+                          color: _C.textSecondary,
+                          fontSize: 14,
+                        ),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),
@@ -278,8 +314,15 @@ class _CommentTileState extends State<_CommentTile> {
                   },
                   child: Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: _C.accent, borderRadius: BorderRadius.circular(20)),
-                    child: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                    decoration: BoxDecoration(
+                      color: _C.accent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.send_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
@@ -312,7 +355,10 @@ class _CommentTileState extends State<_CommentTile> {
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
                     color: _C.accent.withOpacity(0.16),
-                    child: const Icon(Icons.person_rounded, color: Colors.white70),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Colors.white70,
+                    ),
                   ),
                 ),
               ),
@@ -327,29 +373,47 @@ class _CommentTileState extends State<_CommentTile> {
                       Expanded(
                         child: Text(
                           c.user.name,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                          ),
                         ),
                       ),
-                      if (c.user.roleLabel.isNotEmpty) _RolePillTinted(label: c.user.roleLabel),
+                      if (c.user.roleLabel.isNotEmpty)
+                        _RolePillTinted(label: c.user.roleLabel),
                     ],
                   ),
                   const SizedBox(height: 5),
-                  Text(c.text, style: const TextStyle(color: Colors.white, fontSize: 13.5, height: 1.4)),
+                  Text(
+                    c.text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13.5,
+                      height: 1.4,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Text(
                         timeAgo(DateTime.now().difference(c.createdAt)),
-                        style: const TextStyle(color: _C.textSecondary, fontSize: 11.5),
+                        style: const TextStyle(
+                          color: _C.textSecondary,
+                          fontSize: 11.5,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       GestureDetector(
-                        onTap: () => context.read<PostCubit>().toggleCommentLike(c.id),
+                        onTap: () =>
+                            context.read<PostCubit>().toggleCommentLike(c.id),
                         behavior: HitTestBehavior.opaque,
                         child: Row(
                           children: [
                             Icon(
-                              c.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              c.isLiked
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
                               size: 14,
                               color: c.isLiked ? _C.accent : _C.textSecondary,
                             ),
@@ -370,7 +434,11 @@ class _CommentTileState extends State<_CommentTile> {
                         onTap: () => _openReplySheet(context),
                         child: const Text(
                           'Reply',
-                          style: TextStyle(color: _C.accent, fontSize: 11.5, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            color: _C.accent,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
@@ -384,8 +452,14 @@ class _CommentTileState extends State<_CommentTile> {
                           Container(width: 18, height: 1, color: _C.border),
                           const SizedBox(width: 8),
                           Text(
-                            _expanded ? 'Hide replies (${c.replies.length})' : 'View replies (${c.replies.length})',
-                            style: const TextStyle(color: _C.accent, fontSize: 11.5, fontWeight: FontWeight.w700),
+                            _expanded
+                                ? 'Hide replies (${c.replies.length})'
+                                : 'View replies (${c.replies.length})',
+                            style: const TextStyle(
+                              color: _C.accent,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ],
                       ),
@@ -418,7 +492,11 @@ class _CommentTileState extends State<_CommentTile> {
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
                             color: _C.accent.withOpacity(0.16),
-                            child: const Icon(Icons.person_rounded, size: 14, color: Colors.white70),
+                            child: const Icon(
+                              Icons.person_rounded,
+                              size: 14,
+                              color: Colors.white70,
+                            ),
                           ),
                         ),
                       ),
@@ -430,14 +508,28 @@ class _CommentTileState extends State<_CommentTile> {
                         children: [
                           Text(
                             r.user.name,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(height: 4),
-                          Text(r.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
+                          Text(
+                            r.text,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
                           const SizedBox(height: 6),
                           Text(
                             timeAgo(DateTime.now().difference(r.createdAt)),
-                            style: const TextStyle(color: _C.textSecondary, fontSize: 11),
+                            style: const TextStyle(
+                              color: _C.textSecondary,
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),
@@ -487,7 +579,8 @@ class _CommentInputState extends State<_CommentInput> {
                 child: Image.network(
                   'https://i.pravatar.cc/150?img=5',
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, color: Colors.white54),
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.person_rounded, color: Colors.white54),
                 ),
               ),
             ),
@@ -506,7 +599,10 @@ class _CommentInputState extends State<_CommentInput> {
                     hintText: 'Write a comment...',
                     hintStyle: TextStyle(color: _C.textSecondary, fontSize: 14),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
@@ -520,8 +616,15 @@ class _CommentInputState extends State<_CommentInput> {
               },
               child: Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: _C.accent, borderRadius: BorderRadius.circular(20)),
-                child: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                decoration: BoxDecoration(
+                  color: _C.accent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.send_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],

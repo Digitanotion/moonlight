@@ -8,6 +8,8 @@ import 'package:moonlight/features/settings/presentation/cubit/account_settings_
 import 'package:moonlight/widgets/ml_confirm_dialog.dart';
 import 'package:intl/intl.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class DeleteAccountFlow extends StatefulWidget {
   const DeleteAccountFlow({super.key});
 
@@ -193,7 +195,7 @@ class _DeleteAccountFlowState extends State<DeleteAccountFlow> {
         if (state.isDeletionLoading)
           const Padding(
             padding: EdgeInsets.only(top: 16),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: AppLogoLoader()),
           ),
       ],
     );
@@ -357,7 +359,7 @@ class _DeleteAccountFlowState extends State<DeleteAccountFlow> {
               ),
             ),
             child: isLoading
-                ? const CircularProgressIndicator(color: Colors.white)
+                ? const AppLogoLoader()
                 : const Text('Request Account Deletion'),
           ),
 
@@ -365,7 +367,7 @@ class _DeleteAccountFlowState extends State<DeleteAccountFlow> {
           if (state.isDeletionLoading)
             const Padding(
               padding: EdgeInsets.only(top: 16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: AppLogoLoader()),
             ),
 
           const SizedBox(height: 16),

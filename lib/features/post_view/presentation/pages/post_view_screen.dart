@@ -25,6 +25,8 @@ import '../cubit/post_actions.dart';
 import '../widgets/chips.dart';
 import '../widgets/sheets.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class _C {
   static const bg = Color(0xFF05060F);
   static const surface = Color(0xFF0E1024);
@@ -982,14 +984,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
             // Buffering
             if (_buffering)
               const Center(
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white70,
-                  ),
-                ),
+                child: SizedBox(width: 40, height: 40, child: AppLogoLoader()),
               ),
 
             // Play/pause glyph
@@ -1509,14 +1504,7 @@ class _Meta extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _C.accent,
-                  ),
-                ),
+                child: SizedBox(width: 22, height: 22, child: AppLogoLoader()),
               ),
             ),
         ],
@@ -2370,7 +2358,7 @@ class _PostMenuButton extends StatelessWidget {
                     maxLines: 4,
                     style: const TextStyle(color: Colors.white, fontSize: 14.5),
                     decoration: InputDecoration(
-                      hintText: "What's on your mind?",
+                      hintText: "What do you want to share?",
                       hintStyle: TextStyle(color: _C.textSecondary),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.all(16),
@@ -2558,10 +2546,7 @@ class _ConfirmDeleteSheet extends StatelessWidget {
                       ? const SizedBox(
                           height: 18,
                           width: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          child: AppLogoLoader(),
                         )
                       : Text(
                           confirmText,

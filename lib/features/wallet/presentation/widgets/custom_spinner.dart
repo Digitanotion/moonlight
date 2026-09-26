@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class CustomSpinner extends StatelessWidget {
   final double size;
   final Color? color;
@@ -9,13 +11,6 @@ class CustomSpinner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = color ?? Theme.of(context).colorScheme.secondary;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CircularProgressIndicator(
-        strokeWidth: 3,
-        valueColor: AlwaysStoppedAnimation<Color>(c),
-      ),
-    );
+    return SizedBox(width: size, height: size, child: AppLogoLoader());
   }
 }

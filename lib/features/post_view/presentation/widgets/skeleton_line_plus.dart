@@ -84,9 +84,11 @@ class ShimmerBone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scope = ShimmerScope.of(context);
-    final w = width ?? (widthFactor != null
-        ? MediaQuery.of(context).size.width * widthFactor!
-        : double.infinity);
+    final w =
+        width ??
+        (widthFactor != null
+            ? MediaQuery.of(context).size.width * widthFactor!
+            : double.infinity);
 
     return ClipRRect(
       borderRadius: borderRadius,

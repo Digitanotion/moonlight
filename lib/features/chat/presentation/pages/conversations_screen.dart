@@ -9,6 +9,8 @@ import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart
 import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
 import 'package:moonlight/features/chat/presentation/widgets/conversation_item.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ConversationsScreen extends StatefulWidget {
   const ConversationsScreen({Key? key}) : super(key: key);
 
@@ -124,9 +126,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   Widget _buildContent(BuildContext context, ChatState state) {
     if (state is ChatLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColors.primary_),
-      );
+      return Center(child: AppLogoLoader());
     }
 
     if (state is ChatError) {
@@ -158,7 +158,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         return bTime.compareTo(aTime); // Most recent first
       });
 
-            if (filteredConvs.isEmpty) {
+      if (filteredConvs.isEmpty) {
         return Column(
           children: [
             if (_bannerError != null) _buildErrorBanner(),
@@ -176,38 +176,38 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     }
 
     // Initial state
-    return Center(child: CircularProgressIndicator(color: AppColors.primary_));
+    return Center(child: AppLogoLoader());
   }
 
   Widget _buildEmptyState() {
     return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(''),
-              Icon(
-                _selectedTab == 0 ? Icons.chat_bubble_outline : Icons.group,
-                size: 64,
-                color: AppColors.textSecondary.withOpacity(0.5),
-              ),
-              SizedBox(height: 16),
-              Text(
-                _selectedTab == 0 ? 'No messages yet' : 'No club conversations',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
-              ),
-              SizedBox(height: 8),
-              Text(
-                _selectedTab == 0
-                    ? 'Start a conversation with someone!'
-                     : 'Join a club to start chatting',
-                style: TextStyle(
-                  color: AppColors.textSecondary.withOpacity(0.7),
-                  fontSize: 14,
-                ),
-              ),
-            ],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(''),
+          Icon(
+            _selectedTab == 0 ? Icons.chat_bubble_outline : Icons.group,
+            size: 64,
+            color: AppColors.textSecondary.withOpacity(0.5),
           ),
-        );
+          SizedBox(height: 16),
+          Text(
+            _selectedTab == 0 ? 'No messages yet' : 'No club conversations',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+          ),
+          SizedBox(height: 8),
+          Text(
+            _selectedTab == 0
+                ? 'Start a conversation with someone!'
+                : 'Join a club to start chatting',
+            style: TextStyle(
+              color: AppColors.textSecondary.withOpacity(0.7),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildConversationsList(List<ChatConversations> filteredConvs) {
@@ -265,10 +265,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<ChatCubit, ChatState>(
-        listener: (context, state) {
+      listener: (context, state) {
         if (state is ChatConversationsLoaded) {
           _lastKnownConversations = state.conversations;
           if (_bannerError != null) setState(() => _bannerError = null);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 /// A black placeholder widget with a white text in the center.
 ///
 /// The widget takes a [String] parameter which is the text to be displayed.
@@ -125,13 +127,7 @@ Widget buildConnectingPlaceholder(String who) {
                 //   //     ),
                 //   //   ],
                 //   // ),
-                //   child: CircularProgressIndicator(
-                //     strokeWidth: 3,
-                //     valueColor: AlwaysStoppedAnimation<Color>(
-                //       Colors.orange.shade400.withOpacity(0.3),
-                //     ),
-                //     backgroundColor: Colors.orange.withOpacity(0.1),
-                //   ),
+                //   child: AppLogoLoader(),
                 // ),
               ],
             ),
@@ -222,9 +218,7 @@ Widget buildVideoPlaceholder(String text) {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-          ),
+          const AppLogoLoader(),
           const SizedBox(height: 16),
           Text(
             text,

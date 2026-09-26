@@ -11,6 +11,8 @@ import '../cubit/withdrawal_cubit.dart';
 import 'withdrawal_pin_page.dart';
 import 'package:intl/intl.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Nigeria NUBAN is always exactly 10 digits → resolve immediately on hit.
 // All other FLW-supported countries vary (9-16 digits) → 600 ms debounce.
@@ -378,14 +380,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: const [
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
-                ),
-              ),
+              SizedBox(width: 44, height: 44, child: AppLogoLoader()),
               SizedBox(height: 20),
               Text(
                 'Processing…',
@@ -938,10 +933,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                             SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.deepOrangeAccent,
-                              ),
+                              child: AppLogoLoader(),
                             ),
                             SizedBox(width: 12),
                             Text(
@@ -1139,12 +1131,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(
-                            Colors.deepOrangeAccent,
-                          ),
-                        ),
+                        child: AppLogoLoader(),
                       )
                     : hasName
                     ? const Icon(
@@ -1303,14 +1290,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
-            ),
-          ),
+          const SizedBox(width: 16, height: 16, child: AppLogoLoader()),
           const SizedBox(width: 12),
           Text(
             _selectedMethod == _PaymentMethod.paypal
@@ -1397,11 +1377,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           }
 
           if (state is WithdrawalLoading) {
-            return const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
-              ),
-            );
+            return const Center(child: AppLogoLoader());
           }
 
           return Form(
@@ -1466,10 +1442,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                           SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(Colors.white),
-                            ),
+                            child: AppLogoLoader(),
                           ),
                           SizedBox(width: 10),
                           Text(
@@ -1793,14 +1766,7 @@ class _FxPreviewWidget extends StatelessWidget {
             padding: EdgeInsets.only(top: 8, bottom: 8),
             child: Row(
               children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.deepOrangeAccent),
-                  ),
-                ),
+                SizedBox(width: 16, height: 16, child: AppLogoLoader()),
                 SizedBox(width: 10),
                 Text(
                   'Fetching exchange rate…',

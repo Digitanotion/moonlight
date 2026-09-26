@@ -5,6 +5,8 @@ import 'package:moonlight/features/settings/domain/repositories/change_email_rep
 import 'package:moonlight/features/settings/presentation/cubit/change_email_cubit.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ChangeEmailPage extends StatefulWidget {
   const ChangeEmailPage({super.key});
 
@@ -128,12 +130,7 @@ class _ChangeEmailPageState extends State<ChangeEmailPage> {
                   if (loading)
                     Container(
                       color: Colors.black.withOpacity(0.5),
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: Colors.blueAccent,
-                          strokeWidth: 2,
-                        ),
-                      ),
+                      child: const Center(child: AppLogoLoader()),
                     ),
                 ],
               ),

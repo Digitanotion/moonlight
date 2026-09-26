@@ -33,6 +33,7 @@ abstract class ChatRepository {
   });
   Future<Message> editMessage(String messageUuid, String newBody);
   Future<void> deleteMessage(String messageUuid);
+
   /// Set / replace / clear (emoji == null) the current user's reaction on a
   /// message. Returns the authoritative grouped reaction set.
   Future<List<MessageReactionGroup>> reactToMessage(

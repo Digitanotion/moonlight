@@ -9,6 +9,8 @@ import 'package:moonlight/features/auth/presentation/widgets/auth_button.dart';
 import 'package:moonlight/features/auth/presentation/widgets/social_auth_button.dart';
 import 'package:moonlight/features/auth/presentation/widgets/terms_and_policy.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -162,9 +164,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         state is AuthLoading && state.loadingType == 'google';
 
     if (isRegisterLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.green),
-      );
+      return const Center(child: AppLogoLoader());
     }
 
     return Column(

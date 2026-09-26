@@ -7,6 +7,8 @@ import 'package:moonlight/core/widgets/country_picker_field.dart';
 import 'package:moonlight/widgets/moon_snack.dart';
 import '../cubit/edit_profile_cubit.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
   @override
@@ -82,7 +84,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             decoration: BoxDecoration(gradient: gradient),
             child: SafeArea(
               child: state.loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: AppLogoLoader())
                   : SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -309,10 +311,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   ? const SizedBox(
                                       height: 20,
                                       width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.black,
-                                      ),
+                                      child: AppLogoLoader(),
                                     )
                                   : const Text(
                                       'Save Changes',

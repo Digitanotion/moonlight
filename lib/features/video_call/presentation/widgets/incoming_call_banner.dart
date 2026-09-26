@@ -27,6 +27,8 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class IncomingCallBanner extends StatefulWidget {
   final Widget child;
   const IncomingCallBanner({super.key, required this.child});
@@ -278,13 +280,7 @@ class _RoundButton extends StatelessWidget {
         height: 42,
         decoration: BoxDecoration(shape: BoxShape.circle, color: color),
         child: loading
-            ? const Padding(
-                padding: EdgeInsets.all(11),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
+            ? const Padding(padding: EdgeInsets.all(11), child: AppLogoLoader())
             : Icon(icon, color: Colors.white, size: 20),
       ),
     );

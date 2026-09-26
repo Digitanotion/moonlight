@@ -23,13 +23,13 @@ class NotificationActor {
 }
 
 class NotificationMeta {
-  final String? postUuid;   // uuid of the post (for navigation)
-  final int? postId;        // numeric id (fallback)
+  final String? postUuid; // uuid of the post (for navigation)
+  final int? postId; // numeric id (fallback)
   final int? commentId;
   final int? parentCommentId;
   final bool isReply;
-  final String? userUuid;   // for follow notifications
-  final String? liveUuid;   // for live stream notifications
+  final String? userUuid; // for follow notifications
+  final String? liveUuid; // for live stream notifications
 
   const NotificationMeta({
     this.postUuid,
@@ -41,23 +41,22 @@ class NotificationMeta {
     this.liveUuid,
   });
 
-  factory NotificationMeta.fromJson(Map<String, dynamic> j) =>
-      NotificationMeta(
-        postUuid: j['post_uuid']?.toString(),
-        postId: (j['post_id'] as num?)?.toInt(),
-        commentId: (j['comment_id'] as num?)?.toInt(),
-        parentCommentId: (j['parent_comment_id'] as num?)?.toInt(),
-        isReply: j['is_reply'] == true,
-        userUuid: j['user_uuid']?.toString(),
-        liveUuid: j['live_uuid']?.toString(),
-      );
+  factory NotificationMeta.fromJson(Map<String, dynamic> j) => NotificationMeta(
+    postUuid: j['post_uuid']?.toString(),
+    postId: (j['post_id'] as num?)?.toInt(),
+    commentId: (j['comment_id'] as num?)?.toInt(),
+    parentCommentId: (j['parent_comment_id'] as num?)?.toInt(),
+    isReply: j['is_reply'] == true,
+    userUuid: j['user_uuid']?.toString(),
+    liveUuid: j['live_uuid']?.toString(),
+  );
 
   static NotificationMeta empty() => const NotificationMeta();
 }
 
 class NotificationModel {
   final String id;
-  final String type;       // e.g. "post.comment_replied", "post.liked"
+  final String type; // e.g. "post.comment_replied", "post.liked"
   final String title;
   final String body;
   final bool isRead;
@@ -89,7 +88,8 @@ class NotificationModel {
       title: data['title']?.toString() ?? '',
       body: data['body']?.toString() ?? '',
       isRead: json['read_at'] != null,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
       actionUrl: data['action_url']?.toString() ?? '',
       actor: actorJson != null ? NotificationActor.fromJson(actorJson) : null,
@@ -103,14 +103,14 @@ class NotificationModel {
       NotificationModel.fromJson(map);
 
   NotificationModel copyWith({bool? isRead}) => NotificationModel(
-        id: id,
-        type: type,
-        title: title,
-        body: body,
-        isRead: isRead ?? this.isRead,
-        createdAt: createdAt,
-        actionUrl: actionUrl,
-        actor: actor,
-        meta: meta,
-      );
+    id: id,
+    type: type,
+    title: title,
+    body: body,
+    isRead: isRead ?? this.isRead,
+    createdAt: createdAt,
+    actionUrl: actionUrl,
+    actor: actor,
+    meta: meta,
+  );
 }

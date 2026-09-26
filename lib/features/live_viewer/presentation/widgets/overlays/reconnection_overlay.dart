@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 
+import 'package:moonlight/core/widgets/app_logo_loader.dart';
+
 class ReconnectionOverlay extends StatelessWidget {
   const ReconnectionOverlay({super.key});
 
@@ -24,12 +26,11 @@ class ReconnectionOverlay extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                  ),
+                  const AppLogoLoader(),
                   const SizedBox(height: 20),
                   Text(
-                    state.reconnectMessage ?? 'Something went wrong. Reconnecting...',
+                    state.reconnectMessage ??
+                        'Something went wrong. Reconnecting...',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,

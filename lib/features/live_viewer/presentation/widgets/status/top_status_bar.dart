@@ -34,7 +34,7 @@ class _TopStatusBarState extends State<TopStatusBar> {
     return '$n';
   }
 
-   void _handleAvatarTap(BuildContext context) {
+  void _handleAvatarTap(BuildContext context) {
     final host = context.read<ViewerBloc>().state.host;
     if (host == null) return;
 
@@ -78,9 +78,7 @@ class _TopStatusBarState extends State<TopStatusBar> {
   Widget build(BuildContext context) {
     return BlocBuilder<ViewerBloc, ViewerState>(
       buildWhen: (p, n) =>
-          p.elapsed != n.elapsed ||
-          p.viewers != n.viewers ||
-          p.host != n.host,
+          p.elapsed != n.elapsed || p.viewers != n.viewers || p.host != n.host,
       builder: (context, state) {
         final host = state.host;
         return Padding(
@@ -149,8 +147,11 @@ class _TopStatusBarState extends State<TopStatusBar> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.remove_red_eye_rounded,
-                            color: Colors.white, size: 15),
+                        const Icon(
+                          Icons.remove_red_eye_rounded,
+                          color: Colors.white,
+                          size: 15,
+                        ),
                         const SizedBox(width: 5),
                         Text(
                           _compact(state.viewers),
@@ -198,8 +199,11 @@ class _TopStatusBarState extends State<TopStatusBar> {
                 child: _glass(
                   child: const Padding(
                     padding: EdgeInsets.all(8),
-                    child: Icon(Icons.picture_in_picture_alt_rounded,
-                        color: Colors.white, size: 18),
+                    child: Icon(
+                      Icons.picture_in_picture_alt_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
@@ -209,8 +213,11 @@ class _TopStatusBarState extends State<TopStatusBar> {
                 child: _glass(
                   child: const Padding(
                     padding: EdgeInsets.all(8),
-                    child: Icon(Icons.ios_share_rounded,
-                        color: Colors.white, size: 18),
+                    child: Icon(
+                      Icons.ios_share_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
@@ -240,17 +247,17 @@ class _TopStatusBarState extends State<TopStatusBar> {
 }
 
 class _StreamerInfoPopup extends StatelessWidget {
-  final dynamic host; // HostInfo, kept dynamic to avoid a second import cycle here
+  final dynamic
+  host; // HostInfo, kept dynamic to avoid a second import cycle here
 
   const _StreamerInfoPopup({required this.host});
 
   void _goToProfile(BuildContext context) {
     if (host.uuid == null || host.uuid!.isEmpty) return;
     Navigator.of(context).pop(); // close the dialog first
-    Navigator.of(context).pushNamed(
-      RouteNames.profileView,
-      arguments: {'userUuid': host.uuid},
-    );
+    Navigator.of(
+      context,
+    ).pushNamed(RouteNames.profileView, arguments: {'userUuid': host.uuid});
   }
 
   @override
@@ -277,10 +284,17 @@ class _StreamerInfoPopup extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: host.avatarUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) =>
-                              const Icon(Icons.person, color: Colors.white54, size: 32),
+                          errorWidget: (_, __, ___) => const Icon(
+                            Icons.person,
+                            color: Colors.white54,
+                            size: 32,
+                          ),
                         )
-                      : const Icon(Icons.person, color: Colors.white54, size: 32),
+                      : const Icon(
+                          Icons.person,
+                          color: Colors.white54,
+                          size: 32,
+                        ),
                 ),
               ),
             ),
@@ -298,24 +312,35 @@ class _StreamerInfoPopup extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (host.fans != null) ...[
-                  const Icon(Icons.favorite, color: Colors.orangeAccent, size: 15),
+                  const Icon(
+                    Icons.favorite,
+                    color: Colors.orangeAccent,
+                    size: 15,
+                  ),
                   const SizedBox(width: 4),
-                  Text('${host.fans} Fans',
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '${host.fans} Fans',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                   const SizedBox(width: 14),
                 ],
                 if (host.country != null && host.country!.isNotEmpty) ...[
                   const Icon(Icons.public, color: Colors.white54, size: 15),
                   const SizedBox(width: 4),
-                  Text('${host.country}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '${host.country}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                 ],
               ],
             ),
             const SizedBox(height: 16),
             Text(
               'Tap the photo again to view profile',
-              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.4),
+                fontSize: 11,
+              ),
             ),
           ],
         ),
