@@ -33,7 +33,7 @@ class MoonlightLinks {
   static const communityGuidelines = '$site/community-guidelines';
 
   // Contact / social
-  static const supportEmail = 'okwupat2003@gmail.com';
+  static const supportEmail = 'support@moonlightstream.app';
   static const supportPhone = '+447344194054';
   static const facebook = 'https://facebook.com/moonlightlivestreamapp';
   static const tiktok = 'https://www.tiktok.com/@moonlight.livestream';
