@@ -39,4 +39,13 @@ class OfferwallRemoteDataSource {
     final res = await dio.post('/api/v1/offerwall/withdraw', data: data);
     return Map<String, dynamic>.from(res.data as Map);
   }
+
+  /// The signed CPX Research offerwall URL for the signed-in user. Fetched
+  /// from the backend (not built on-device) because CPX's signing secret
+  /// must never ship inside the app — see OfferwallService::buildCpxLaunchUrl
+  /// on the API side for why.
+  Future<String> getCpxLaunchUrl() async {
+    final res = await dio.get('/api/v1/offerwall/cpx/launch-url');
+    return (res.data as Map)['url'] as String;
+  }
 }

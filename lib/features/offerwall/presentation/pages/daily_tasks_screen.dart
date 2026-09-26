@@ -5,7 +5,7 @@
 // requirement to start earning cash daily for life. You will be able to
 // withdraw your earnings every week."
 //
-// Migrated from Adjoe/Torox to Tapjoy/Timewall, both live now:
+// Migrated from Adjoe/Torox to Tapjoy/Timewall/CPX Research, all live now:
 //  - Tapjoy: a WebView pointed at Tapjoy's hosted offerwall URL, keyed to
 //    the signed-in user (see OfferwallController::postbackTapjoy).
 //  - Timewall: NOT a WebView — their own docs say file uploads and other
@@ -13,12 +13,18 @@
 //    revenue — so this tab is just a launch button (url_launcher) that
 //    opens Timewall's tasks page outside the app (see
 //    OfferwallController::postbackTimewall for the crediting side).
+//  - CPX Research: a WebView, like Tapjoy, but the URL itself has to be
+//    fetched from our own backend first (GET /offerwall/cpx/launch-url)
+//    rather than built on-device — CPX's URL-signing secret is the same
+//    one that verifies postbacks, so it can never ship inside the app
+//    (see OfferwallService::buildCpxLaunchUrl on the API side).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
+import 'package:moonlight/features/offerwall/data/datasources/offerwall_remote_data_source.dart';
 import 'package:moonlight/features/offerwall/presentation/cubit/offerwall_cubit.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/user_helper.dart';
 import 'package:moonlight/widgets/top_snack.dart';
@@ -46,7 +52,7 @@ class _DailyTasksView extends StatefulWidget {
 
 class _DailyTasksViewState extends State<_DailyTasksView>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
 
   @override
   void dispose() {
@@ -156,6 +162,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                   tabs: const [
                     Tab(text: 'Tapjoy'),
                     Tab(text: 'Timewall'),
+                    Tab(text: 'CPX'),
                   ],
                 ),
               ),
@@ -165,6 +172,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                   children: const [
                     _TapjoyOfferwallView(),
                     _TimewallOfferwallView(),
+                    _CpxOfferwallView(),
                   ],
                 ),
               ),
@@ -408,6 +416,94 @@ class _OfferwallErrorView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// CPX Research's offerwall, like Tapjoy, is fine to embed in a WebView —
+/// but unlike Tapjoy's SDK key, the signed launch URL can't be built on
+/// this device: it's signed with the same secret that verifies postbacks,
+/// so it's fetched from our backend (which keeps that secret server-side)
+/// instead.
+class _CpxOfferwallView extends StatefulWidget {
+  const _CpxOfferwallView();
+
+  @override
+  State<_CpxOfferwallView> createState() => _CpxOfferwallViewState();
+}
+
+class _CpxOfferwallViewState extends State<_CpxOfferwallView> {
+  WebViewController? _controller;
+  bool _loading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+
+    String url;
+    try {
+      url = await sl<OfferwallRemoteDataSource>().getCpxLaunchUrl();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _hasError = true;
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(AppColors.dark)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageStarted: (_) => setState(() {
+              _loading = true;
+              _hasError = false;
+            }),
+            onPageFinished: (_) => setState(() => _loading = false),
+            onWebResourceError: (err) {
+              if (err.isForMainFrame ?? true) {
+                setState(() {
+                  _loading = false;
+                  _hasError = true;
+                });
+              }
+            },
+          ),
+        )
+        ..loadRequest(Uri.parse(url));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        if (!_hasError && _controller != null)
+          Positioned.fill(child: WebViewWidget(controller: _controller!)),
+        if (_hasError)
+          _OfferwallErrorView(
+            message: 'Could not load CPX Research tasks.',
+            onRetry: _load,
+          ),
+        if (_loading && !_hasError)
+          const Center(
+            child: CircularProgressIndicator(color: Color(0xFF1FBF75)),
+          ),
+      ],
     );
   }
 }
