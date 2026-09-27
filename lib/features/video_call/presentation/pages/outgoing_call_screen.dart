@@ -235,7 +235,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                                     imageUrl: widget.calleeAvatarUrl!,
                                     fit: BoxFit.cover,
                                     memCacheWidth: 280,
-                                    memCacheHeight: 280,
                                     errorWidget: (_, __, ___) =>
                                         _avatarFallback(),
                                   )

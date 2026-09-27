@@ -209,7 +209,6 @@ class MessageBubble extends StatelessWidget {
                   width: 200,
                   height: 150,
                   memCacheWidth: 400,
-                  memCacheHeight: 300,
                   placeholder: (context, url) => Container(
                     color: AppColors.card,
                     child: Center(child: AppLogoLoader()),

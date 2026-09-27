@@ -590,7 +590,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                           imageUrl: fallback,
                           fit: BoxFit.cover,
                           memCacheWidth: 400,
-                          memCacheHeight: 400,
                           placeholder: (c, _) =>
                               Container(color: Colors.white12),
                           errorWidget: (c, _, __) =>
@@ -602,7 +601,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                       imageUrl: p.mediaUrl,
                       fit: BoxFit.cover,
                       memCacheWidth: 400,
-                      memCacheHeight: 400,
                       placeholder: (c, _) => Container(color: Colors.white12),
                       errorWidget: (c, _, __) =>
                           Container(color: Colors.white12),

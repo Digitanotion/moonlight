@@ -337,7 +337,6 @@ class _Thumb extends StatelessWidget {
               imageUrl: url!,
               fit: BoxFit.cover,
               memCacheWidth: (size * 2).round(),
-              memCacheHeight: (size * 2).round(),
               errorWidget: (_, _, _) => _icon(),
               placeholder: (_, _) => _icon(),
             )

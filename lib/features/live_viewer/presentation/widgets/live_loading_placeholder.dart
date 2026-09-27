@@ -224,7 +224,6 @@ class _HostAvatar extends StatelessWidget {
               imageUrl: url!,
               fit: BoxFit.cover,
               memCacheWidth: (size * 2).round(),
-              memCacheHeight: (size * 2).round(),
               fadeInDuration: Duration.zero,
               placeholder: (_, __) => _fallback(),
               errorWidget: (_, __, ___) => _fallback(),

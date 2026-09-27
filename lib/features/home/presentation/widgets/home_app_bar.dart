@@ -150,7 +150,6 @@ class AccountButton extends StatelessWidget {
                 imageUrl: avatarUrl,
                 fit: BoxFit.cover,
                 memCacheWidth: 72,
-                memCacheHeight: 72,
                 errorWidget: (_, _, _) =>
                     Container(color: Colors.white.withValues(alpha: 0.08)),
               ),

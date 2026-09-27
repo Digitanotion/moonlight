@@ -95,7 +95,6 @@ class FeedPostCard extends StatelessWidget {
           imageUrl: avatar,
           fit: BoxFit.cover,
           memCacheWidth: 76,
-          memCacheHeight: 76,
           errorWidget: (_, __, ___) =>
               const Icon(Icons.person_rounded, color: Colors.white38),
         ),

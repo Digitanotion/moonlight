@@ -761,7 +761,6 @@ class _ProfileAvatar extends StatelessWidget {
           width: size,
           height: size,
           memCacheWidth: (size * 2).round(),
-          memCacheHeight: (size * 2).round(),
           imageBuilder: (context, imageProvider) => Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -1268,7 +1267,6 @@ class _PostTileState extends State<PostTile> {
               imageUrl: fallback,
               fit: BoxFit.cover,
               memCacheWidth: 400,
-              memCacheHeight: 400,
               placeholder: (c, _) => Container(color: Colors.white12),
               errorWidget: (c, _, __) => Container(color: Colors.white12),
             ),
@@ -1292,7 +1290,6 @@ class _PostTileState extends State<PostTile> {
       imageUrl: mediaUrl,
       fit: BoxFit.cover,
       memCacheWidth: 400,
-      memCacheHeight: 400,
       placeholder: (c, _) => Container(color: Colors.white12),
       errorWidget: (c, _, __) => Container(color: Colors.white12),
     );

@@ -167,7 +167,6 @@ class _MiniAvatar extends StatelessWidget {
                 imageUrl: url,
                 fit: BoxFit.cover,
                 memCacheWidth: 36,
-                memCacheHeight: 36,
                 errorWidget: (_, _, _) =>
                     Container(color: const Color(0xFF2A2A3A)),
               ),

@@ -1325,7 +1325,6 @@ class _MiniAvatar extends StatelessWidget {
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
                 memCacheWidth: (radius * 4).round(),
-                memCacheHeight: (radius * 4).round(),
                 errorWidget: (_, __, ___) => Container(
                   color: _C.accent.withOpacity(0.16),
                   child: Icon(
@@ -2755,7 +2754,6 @@ class SafeCircleAvatar extends StatelessWidget {
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
                 memCacheWidth: (radius * 4).round(),
-                memCacheHeight: (radius * 4).round(),
                 placeholder: (_, __) => Container(
                   color: _C.accent.withOpacity(0.12),
                   child: Icon(

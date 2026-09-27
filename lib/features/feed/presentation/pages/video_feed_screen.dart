@@ -713,7 +713,6 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
                           imageUrl: avatarUrl,
                           fit: BoxFit.cover,
                           memCacheWidth: 96,
-                          memCacheHeight: 96,
                           errorWidget: (_, _, _) =>
                               _AuthorInitials(name: widget.author.name),
                           placeholder: (_, _) =>

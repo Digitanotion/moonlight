@@ -208,7 +208,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                                           imageUrl: avatarUrl,
                                           fit: BoxFit.cover,
                                           memCacheWidth: 280,
-                                          memCacheHeight: 280,
                                           errorWidget: (_, __, ___) =>
                                               _avatarFallback(name),
                                         )

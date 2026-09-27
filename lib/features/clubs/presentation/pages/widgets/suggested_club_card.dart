@@ -57,7 +57,6 @@ class SuggestedClubCard extends StatelessWidget {
                 imageUrl: club.coverImageUrl!,
                 fit: BoxFit.cover,
                 memCacheWidth: (width * 2).round(),
-                memCacheHeight: (height * 2).round(),
                 errorWidget: (_, _, _) => const _CoverFallback(),
                 placeholder: (_, _) => const _CoverFallback(),
               )

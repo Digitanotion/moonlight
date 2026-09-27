@@ -441,7 +441,6 @@ class _NotificationTile extends StatelessWidget {
                     imageUrl: avatarUrl,
                     fit: BoxFit.cover,
                     memCacheWidth: 92,
-                    memCacheHeight: 92,
                     placeholder: (_, __) => Container(
                       color: accentColor.withOpacity(0.15),
                       child: Icon(
@@ -586,7 +585,6 @@ class _NotificationDetailSheet extends StatelessWidget {
                                         imageUrl: avatarUrl,
                                         fit: BoxFit.cover,
                                         memCacheWidth: 100,
-                                        memCacheHeight: 100,
                                         placeholder: (_, __) => Container(
                                           color: accentColor.withOpacity(0.15),
                                           child: Icon(

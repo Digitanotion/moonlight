@@ -257,7 +257,6 @@ class _LiveParticipantsSheetState extends State<LiveParticipantsSheet> {
                         imageUrl: p.avatar,
                         fit: BoxFit.cover,
                         memCacheWidth: 88,
-                        memCacheHeight: 88,
                         errorWidget: (_, __, ___) => const Icon(
                           Icons.person,
                           color: Colors.white38,
