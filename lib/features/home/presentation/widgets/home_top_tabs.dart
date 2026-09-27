@@ -294,6 +294,10 @@ class _HomeTopTabsState extends State<HomeTopTabs>
           // Background-update heads-up — only ever visible while
           // AutoUpdateService actually has something to report.
           const UpdateStatusBanner(),
+          // Restored inline promo pill — sits at the top of the page like
+          // it originally did, independent of the flashy floating banner
+          // further down. Closing that one never affects this one.
+          const EarnCashTopBanner(),
           Expanded(
             child: Stack(
               children: [

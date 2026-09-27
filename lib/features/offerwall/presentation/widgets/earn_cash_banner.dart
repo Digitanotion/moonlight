@@ -25,6 +25,94 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/offerwall/data/datasources/offerwall_remote_data_source.dart';
 
+/// The original, permanent slim promo pill that used to sit inline at the
+/// top of the home screen, before the flashy floating [EarnCashBanner]
+/// (below) replaced it. Restored alongside it, not instead of it — this one
+/// has no dismiss, so closing the flashy banner never takes this one with
+/// it. Same "hide only once actually activated" rule as the flashy banner,
+/// checked independently since the two are unrelated widget instances.
+class EarnCashTopBanner extends StatefulWidget {
+  const EarnCashTopBanner({super.key});
+
+  @override
+  State<EarnCashTopBanner> createState() => _EarnCashTopBannerState();
+}
+
+class _EarnCashTopBannerState extends State<EarnCashTopBanner> {
+  bool _hidden = true; // hidden until we've checked, avoids a flash
+
+  @override
+  void initState() {
+    super.initState();
+    _checkVisibility();
+  }
+
+  Future<void> _checkVisibility() async {
+    try {
+      final status = await sl<OfferwallRemoteDataSource>().getStatus();
+      if (mounted) setState(() => _hidden = status['activated'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _hidden = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hidden) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Material(
+            color: const Color(0xFF1FBF75).withValues(alpha: 0.16),
+            child: InkWell(
+              onTap: () => Navigator.pushNamed(context, RouteNames.dailyTasks),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: const Color(0xFF1FBF75).withValues(alpha: 0.35),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                child: Row(
+                  children: [
+                    const Text('💰', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Earn free cash daily — tap to start',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 16,
+                      color: Color(0xFF6CE8A8),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class EarnCashBanner extends StatefulWidget {
   const EarnCashBanner({super.key});
 
