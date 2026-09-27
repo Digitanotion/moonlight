@@ -103,6 +103,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                   CachedNetworkImage(
                     imageUrl: avatarUrl,
                     fit: BoxFit.cover,
+                    // Heavily blurred right after — no point decoding at full res.
+                    memCacheWidth: 300,
                     errorWidget: (_, __, ___) =>
                         Container(color: AppColors.dark),
                   ),
@@ -205,6 +207,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                                       ? CachedNetworkImage(
                                           imageUrl: avatarUrl,
                                           fit: BoxFit.cover,
+                                          memCacheWidth: 280,
+                                          memCacheHeight: 280,
                                           errorWidget: (_, __, ___) =>
                                               _avatarFallback(name),
                                         )

@@ -100,6 +100,8 @@ class _TopStatusBarState extends State<TopStatusBar> {
                           ? CachedNetworkImage(
                               imageUrl: host.avatarUrl,
                               fit: BoxFit.cover,
+                              memCacheWidth: 56,
+                              memCacheHeight: 56,
                               errorWidget: (_, __, ___) => const Icon(
                                 Icons.person,
                                 color: Colors.white70,
@@ -284,6 +286,8 @@ class _StreamerInfoPopup extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: host.avatarUrl,
                           fit: BoxFit.cover,
+                          memCacheWidth: 96,
+                          memCacheHeight: 96,
                           errorWidget: (_, __, ___) => const Icon(
                             Icons.person,
                             color: Colors.white54,

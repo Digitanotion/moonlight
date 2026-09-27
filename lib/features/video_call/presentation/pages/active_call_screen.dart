@@ -366,7 +366,12 @@ class _HeroBackdrop extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         if (hasAvatar)
-          CachedNetworkImage(imageUrl: avatarUrl!, fit: BoxFit.cover)
+          CachedNetworkImage(
+            imageUrl: avatarUrl!,
+            fit: BoxFit.cover,
+            // Heavily blurred right after — no point decoding at full res.
+            memCacheWidth: 300,
+          )
         else
           Container(color: AppColors.navy),
         BackdropFilter(

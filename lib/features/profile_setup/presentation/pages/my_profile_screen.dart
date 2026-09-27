@@ -589,6 +589,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                         return CachedNetworkImage(
                           imageUrl: fallback,
                           fit: BoxFit.cover,
+                          memCacheWidth: 400,
+                          memCacheHeight: 400,
                           placeholder: (c, _) =>
                               Container(color: Colors.white12),
                           errorWidget: (c, _, __) =>
@@ -599,6 +601,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                   : CachedNetworkImage(
                       imageUrl: p.mediaUrl,
                       fit: BoxFit.cover,
+                      memCacheWidth: 400,
+                      memCacheHeight: 400,
                       placeholder: (c, _) => Container(color: Colors.white12),
                       errorWidget: (c, _, __) =>
                           Container(color: Colors.white12),

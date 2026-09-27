@@ -895,6 +895,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
                 fit: BoxFit.cover,
                 width: screenW,
                 height: mediaHeight,
+                memCacheWidth: (screenW * 2).round(),
                 fadeInDuration: const Duration(milliseconds: 250),
                 placeholder: (_, __) => ShimmerScope(
                   child: ShimmerBlock(width: screenW, height: mediaHeight),
@@ -920,6 +921,7 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
                       fit: BoxFit.cover,
                       width: screenW,
                       height: mediaHeight,
+                      memCacheWidth: (screenW * 2).round(),
                       placeholder: (_, __) => ShimmerScope(
                         child: ShimmerBlock(
                           width: screenW,
@@ -1322,6 +1324,8 @@ class _MiniAvatar extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
+                memCacheWidth: (radius * 4).round(),
+                memCacheHeight: (radius * 4).round(),
                 errorWidget: (_, __, ___) => Container(
                   color: _C.accent.withOpacity(0.16),
                   child: Icon(
@@ -2750,6 +2754,8 @@ class SafeCircleAvatar extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
+                memCacheWidth: (radius * 4).round(),
+                memCacheHeight: (radius * 4).round(),
                 placeholder: (_, __) => Container(
                   color: _C.accent.withOpacity(0.12),
                   child: Icon(

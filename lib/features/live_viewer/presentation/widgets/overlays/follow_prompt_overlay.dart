@@ -147,6 +147,8 @@ class _FollowPromptOverlayState extends State<FollowPromptOverlay> {
                           ? CachedNetworkImage(
                               imageUrl: host.avatarUrl,
                               fit: BoxFit.cover,
+                              memCacheWidth: 56,
+                              memCacheHeight: 56,
                               errorWidget: (_, __, ___) => const Icon(
                                 Icons.person,
                                 color: Colors.white70,

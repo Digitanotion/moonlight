@@ -502,6 +502,8 @@ class _Avatar extends StatelessWidget {
                   fit: BoxFit.cover,
                   width: 48,
                   height: 48,
+                  memCacheWidth: 96,
+                  memCacheHeight: 96,
                   placeholder: (_, __) => Container(
                     color: Colors.white10,
                     child: const Icon(

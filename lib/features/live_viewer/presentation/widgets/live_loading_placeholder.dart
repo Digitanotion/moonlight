@@ -188,6 +188,8 @@ class _BlurredBackground extends StatelessWidget {
           CachedNetworkImage(
             imageUrl: url!,
             fit: BoxFit.cover,
+            // Heavily blurred right after — no point decoding at full res.
+            memCacheWidth: 300,
             fadeInDuration: Duration.zero,
             placeholder: (_, __) => const SizedBox.shrink(),
             errorWidget: (_, __, ___) => const SizedBox.shrink(),
@@ -221,6 +223,8 @@ class _HostAvatar extends StatelessWidget {
           ? CachedNetworkImage(
               imageUrl: url!,
               fit: BoxFit.cover,
+              memCacheWidth: (size * 2).round(),
+              memCacheHeight: (size * 2).round(),
               fadeInDuration: Duration.zero,
               placeholder: (_, __) => _fallback(),
               errorWidget: (_, __, ___) => _fallback(),

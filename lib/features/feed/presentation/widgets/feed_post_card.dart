@@ -94,6 +94,8 @@ class FeedPostCard extends StatelessWidget {
         child: CachedNetworkImage(
           imageUrl: avatar,
           fit: BoxFit.cover,
+          memCacheWidth: 76,
+          memCacheHeight: 76,
           errorWidget: (_, __, ___) =>
               const Icon(Icons.person_rounded, color: Colors.white38),
         ),
@@ -942,6 +944,7 @@ class _ImageWidget extends StatelessWidget {
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
+      memCacheWidth: 1080,
       fadeInDuration: const Duration(milliseconds: 180),
       placeholder: (_, __) => Container(color: _C.border),
       errorWidget: (_, __, ___) => Container(
@@ -1033,6 +1036,7 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget>
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
+            memCacheWidth: 1080,
             fadeInDuration: const Duration(milliseconds: 180),
             placeholder: (_, __) => _buildPlaceholder(loading: true),
             errorWidget: (_, __, ___) => _buildPlaceholder(loading: false),

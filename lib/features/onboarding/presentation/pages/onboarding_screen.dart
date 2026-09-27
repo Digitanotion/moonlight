@@ -12,7 +12,6 @@ import 'package:moonlight/features/onboarding/presentation/widgets/onboarding_pa
 import 'package:moonlight/features/onboarding/presentation/widgets/secondary_button.dart';
 import 'package:moonlight/features/onboarding/presentation/widgets/skip_button.dart';
 
-
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({Key? key}) : super(key: key);
 

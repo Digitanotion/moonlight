@@ -504,6 +504,8 @@ class _UserCard extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: user.avatarUrl!,
                 fit: BoxFit.cover,
+                memCacheWidth: 400,
+                memCacheHeight: 400,
                 errorWidget: (_, __, ___) => Container(color: AppColors.card),
               )
             else

@@ -208,6 +208,8 @@ class MessageBubble extends StatelessWidget {
                   fit: BoxFit.cover,
                   width: 200,
                   height: 150,
+                  memCacheWidth: 400,
+                  memCacheHeight: 300,
                   placeholder: (context, url) => Container(
                     color: AppColors.card,
                     child: Center(child: AppLogoLoader()),
@@ -571,6 +573,7 @@ class MessageBubble extends StatelessWidget {
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
                               fit: BoxFit.contain,
+                              memCacheWidth: 1080,
                               errorWidget: (context, url, error) => Center(
                                 child: Icon(
                                   Icons.broken_image,

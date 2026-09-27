@@ -171,6 +171,8 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                   CachedNetworkImage(
                     imageUrl: widget.calleeAvatarUrl!,
                     fit: BoxFit.cover,
+                    // Heavily blurred right after — no point decoding at full res.
+                    memCacheWidth: 300,
                   ),
                 ClipRect(
                   child: BackdropFilter(
@@ -232,6 +234,8 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                                 ? CachedNetworkImage(
                                     imageUrl: widget.calleeAvatarUrl!,
                                     fit: BoxFit.cover,
+                                    memCacheWidth: 280,
+                                    memCacheHeight: 280,
                                     errorWidget: (_, __, ___) =>
                                         _avatarFallback(),
                                   )

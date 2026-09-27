@@ -208,6 +208,8 @@ class _ClubCard extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: club.avatarUrl!,
                           fit: BoxFit.cover,
+                          memCacheWidth: 112,
+                          memCacheHeight: 112,
                           placeholder: (_, __) => const _ClubPlaceholder(),
                           errorWidget: (_, __, ___) => const _ClubPlaceholder(),
                         )

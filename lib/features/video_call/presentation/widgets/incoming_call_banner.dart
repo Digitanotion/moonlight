@@ -195,6 +195,8 @@ class _BannerCard extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: avatarUrl!,
                           fit: BoxFit.cover,
+                          memCacheWidth: 96,
+                          memCacheHeight: 96,
                           errorWidget: (_, __, ___) => _fallbackAvatar(name),
                         )
                       : _fallbackAvatar(name),

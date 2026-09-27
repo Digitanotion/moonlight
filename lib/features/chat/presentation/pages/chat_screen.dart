@@ -2890,6 +2890,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         fit: BoxFit.cover,
                         width: 40,
                         height: 40,
+                        memCacheWidth: 80,
+                        memCacheHeight: 80,
                         placeholder: (context, url) =>
                             Center(child: AppLogoLoader()),
                         errorWidget: (context, url, error) => Icon(

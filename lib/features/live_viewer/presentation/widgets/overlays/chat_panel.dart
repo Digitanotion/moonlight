@@ -162,6 +162,8 @@ class _GiftChatLine extends StatelessWidget {
                 ? CachedNetworkImage(
                     imageUrl: message.avatarUrl!,
                     fit: BoxFit.cover,
+                    memCacheWidth: 48,
+                    memCacheHeight: 48,
                     errorWidget: (_, __, ___) => const Icon(
                       Icons.person,
                       size: 16,

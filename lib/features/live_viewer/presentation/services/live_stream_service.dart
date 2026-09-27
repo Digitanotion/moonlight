@@ -8,7 +8,6 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/domain/video_surface_provider.dart';
 
-
 /// Handles ALL video/audio operations, extracted from repository
 class LiveStreamService with ChangeNotifier implements VideoSurfaceProvider {
   final AgoraViewerService _agoraService;

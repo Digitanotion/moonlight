@@ -120,6 +120,7 @@ class _Thumbnail extends StatelessWidget {
       return CachedNetworkImage(
         imageUrl: url,
         fit: BoxFit.cover,
+        memCacheWidth: 480,
         errorWidget: (_, _, _) => _generated(),
         placeholder: (_, _) => const _ShimmerBox(),
       );
@@ -165,6 +166,8 @@ class _MiniAvatar extends StatelessWidget {
             : CachedNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
+                memCacheWidth: 36,
+                memCacheHeight: 36,
                 errorWidget: (_, _, _) =>
                     Container(color: const Color(0xFF2A2A3A)),
               ),
