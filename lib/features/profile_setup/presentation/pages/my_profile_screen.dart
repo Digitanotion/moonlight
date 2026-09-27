@@ -17,7 +17,6 @@ import 'package:moonlight/features/clubs/presentation/pages/my_clubs_tab.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/domain/entities/user.dart';
 import 'package:moonlight/features/profile_setup/presentation/cubit/profile_page_cubit.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/follow_list_screen.dart';
 import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
@@ -611,28 +610,17 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
   }
 
+  // Only ever reached when the post has no server-generated thumbUrl. Used
+  // to fall back to decoding a frame from the *remote* mediaUrl on-device
+  // via MediaMetadataRetriever, but that native call can hang indefinitely
+  // on a slow/interrupted connection — Android then kills the process when
+  // its finalizer later times out cleaning up the stuck retriever
+  // (android.media.MediaMetadataRetriever.native_finalize / TimeoutException
+  // — a real, recurring crash in production). Not worth it for a "nicer
+  // placeholder"; the grid just falls back to a plain tile instead.
   Future<Uint8List?> _getVideoThumbnailForPost(int idx, Post p) async {
-    final key = idx;
-    if (_videoThumbCache.containsKey(key)) return _videoThumbCache[key];
-
-    if (p.thumbUrl != null && p.thumbUrl!.isNotEmpty) {
-      _videoThumbCache[key] = null;
-      return null;
-    }
-
-    try {
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: p.mediaUrl,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 1024,
-        quality: 75,
-      );
-      _videoThumbCache[key] = bytes;
-      return bytes;
-    } catch (_) {
-      _videoThumbCache[key] = null;
-      return null;
-    }
+    _videoThumbCache[idx] = null;
+    return null;
   }
 
   void _openDashboardSheet() {

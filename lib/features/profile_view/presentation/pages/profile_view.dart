@@ -25,7 +25,6 @@ import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_s
 import 'package:moonlight/features/video_call/presentation/utils/video_call_guard.dart';
 import 'package:moonlight/features/video_call/presentation/widgets/duration_picker_sheet.dart';
 import 'package:moonlight/widgets/top_snack.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
 
@@ -1209,9 +1208,6 @@ class _PostTileState extends State<PostTile> {
               p.uuid?.toString() ??
               p.mediaUrl.hashCode.toString())
         : p.toString();
-    final mediaUrl = (p is dynamic)
-        ? (p.mediaUrl?.toString() ?? '')
-        : p.toString();
     final thumbUrl = (p is dynamic) ? (p.thumbUrl?.toString() ?? '') : '';
 
     final isVideo = (p is dynamic) ? (p.isVideo == true) : false;
@@ -1226,25 +1222,15 @@ class _PostTileState extends State<PostTile> {
       return;
     }
 
-    setState(() => _loading = true);
-    try {
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: mediaUrl,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 1024,
-        quality: 75,
-      );
-      _thumbCache[id] = bytes;
-      if (mounted) {
-        setState(() {
-          _thumb = bytes;
-        });
-      }
-    } catch (_) {
-      _thumbCache[id] = null;
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    // No server-generated thumbUrl for this post — used to fall back to
+    // decoding a frame from the *remote* mediaUrl on-device via
+    // MediaMetadataRetriever, but that native call can hang indefinitely on
+    // a slow/interrupted connection, and Android then kills the process
+    // when its finalizer later times out cleaning up the stuck retriever
+    // (android.media.MediaMetadataRetriever.native_finalize /
+    // TimeoutException — a real, recurring crash in production). Not worth
+    // it for a "nicer placeholder"; falls back to a plain tile instead.
+    _thumbCache[id] = null;
   }
 
   @override

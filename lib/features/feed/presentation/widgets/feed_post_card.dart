@@ -11,9 +11,7 @@ import 'package:moonlight/core/utils/time_ago.dart';
 import 'package:moonlight/core/widgets/expandable_text.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/post_view/presentation/widgets/comment_bottom_sheet.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
@@ -1011,40 +1009,17 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget>
     super.dispose();
   }
 
+  // Only ever called when serverThumbUrl is missing/invalid — the backend
+  // now generates real thumbnails for every post, so this used to be a
+  // "just in case" fallback that decoded a frame from the *remote* video
+  // URL on-device via MediaMetadataRetriever. That native call can hang
+  // indefinitely on a slow/interrupted connection, and Android then kills
+  // the process when its finalizer later times out trying to clean up the
+  // stuck retriever (android.media.MediaMetadataRetriever.native_finalize /
+  // TimeoutException — a real, recurring crash in production). Not worth
+  // it for a "nicer placeholder" — show the plain fallback instead.
   Future<void> _generateThumbnail() async {
-    if (_generating || widget.videoUrl.isEmpty) return;
-    _generating = true;
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final cacheKey = widget.videoUrl.hashCode.abs();
-      final cachePath = '${tempDir.path}/feed_thumb_$cacheKey.jpg';
-      final cacheFile = File(cachePath);
-
-      if (await cacheFile.exists()) {
-        if (mounted) setState(() => _localThumb = cacheFile);
-        return;
-      }
-
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: widget.videoUrl,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 480,
-        quality: 75,
-        timeMs: 1000,
-      );
-
-      if (bytes != null && bytes.isNotEmpty) {
-        await cacheFile.writeAsBytes(bytes);
-        if (mounted) setState(() => _localThumb = cacheFile);
-      } else {
-        if (mounted) setState(() => _failed = true);
-      }
-    } catch (e) {
-      debugPrint('FeedPostCard thumb gen failed: $e');
-      if (mounted) setState(() => _failed = true);
-    } finally {
-      _generating = false;
-    }
+    if (mounted) setState(() => _failed = true);
   }
 
   @override
