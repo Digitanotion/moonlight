@@ -51,6 +51,19 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
   }
 
   Future<File?> _generateThumbnail() async {
+    // Only ever decode a frame from a *local* file (freshly recorded/picked,
+    // not yet uploaded) — that's fast and on-device. Never hand a remote
+    // URL to VideoThumbnail: MediaMetadataRetriever.setDataSource() on an
+    // http(s) URI can hang indefinitely on a slow/interrupted connection,
+    // and when its finalizer later times out cleaning up the stuck native
+    // retriever, Android kills the process
+    // (android.media.MediaMetadataRetriever.native_finalize /
+    // TimeoutException — a real, recurring crash in production). The
+    // backend now generates thumbnail_url server-side for every video post
+    // (including a one-time backfill for everything uploaded before that
+    // existed), so remote video no longer needs this fallback.
+    if (widget.localFile == null) return null;
+
     final cacheKey = widget.videoUrl;
 
     // Check cache first
@@ -72,7 +85,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
 
       // Generate new thumbnail
       final thumbnailData = await VideoThumbnail.thumbnailData(
-        video: widget.localFile?.path ?? widget.videoUrl,
+        video: widget.localFile!.path,
         imageFormat: ImageFormat.JPEG,
         maxWidth:
             widget.width.toInt() *
