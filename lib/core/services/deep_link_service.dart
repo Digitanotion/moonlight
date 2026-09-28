@@ -13,9 +13,9 @@ import 'package:moonlight/main.dart' show MyApp;
 
 /// Handles inbound links:
 ///
-///   https://moonlightstream.app/live/<uuid>   (verified App Link)
-///   moonlight://live/<uuid>                    (custom scheme fallback)
-///   https://moonlightstream.app/post/<id>
+///   https://svc.moonlightstream.app/live/<uuid>   (verified App Link)
+///   moonlight://live/<uuid>                        (custom scheme fallback)
+///   https://svc.moonlightstream.app/post/<id>
 ///   moonlight://post/<id>
 ///
 /// Flutter's own deep-link routing is disabled (see

@@ -73,7 +73,14 @@ import 'package:moonlight/features/post_view/domain/entities/post.dart';
 class ShareService {
   ShareService._();
 
-  static const String _baseUrl = 'https://moonlightstream.app';
+  // NOT moonlightstream.app — that's a separate static marketing SPA with
+  // no /post or /live route at all (every path serves the same empty
+  // shell), which is exactly why shared links used to open to a blank
+  // white page. svc.moonlightstream.app is the API domain, which now
+  // renders a real landing page per post/stream (see
+  // ShareLandingController on the backend) with Open Graph tags, an
+  // attempt to hand off to the app, and a Play Store fallback.
+  static const String _baseUrl = 'https://svc.moonlightstream.app';
 
   static Future<void> sharePost(Post post) async {
     final link = '$_baseUrl/post/${post.id}';

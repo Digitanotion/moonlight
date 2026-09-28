@@ -115,16 +115,22 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
-            <!-- Verified App Links: https://moonlightstream.app/live/... and /post/...
-                 Requires /.well-known/assetlinks.json on the domain (see deploy/). -->
+            <!-- Verified App Links: https://svc.moonlightstream.app/live/... and /post/...
+                 Requires /.well-known/assetlinks.json on the domain — served
+                 by ShareLandingController's route on the API itself now
+                 (routes/web.php), not the moonlightstream.app marketing site.
+                 That apex domain is a separate static SPA with no /post or
+                 /live route at all (every path served the same empty shell —
+                 the "share opens a blank white page" bug) and no working
+                 assetlinks.json (it 200'd with the SPA's HTML instead of
+                 JSON, so verification against it could never succeed
+                 either), so it's deliberately not listed here anymore. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="moonlightstream.app" android:pathPrefix="/live/" />
-                <data android:scheme="https" android:host="moonlightstream.app" android:pathPrefix="/post/" />
-                <data android:scheme="https" android:host="www.moonlightstream.app" android:pathPrefix="/live/" />
-                <data android:scheme="https" android:host="www.moonlightstream.app" android:pathPrefix="/post/" />
+                <data android:scheme="https" android:host="svc.moonlightstream.app" android:pathPrefix="/live/" />
+                <data android:scheme="https" android:host="svc.moonlightstream.app" android:pathPrefix="/post/" />
             </intent-filter>
 
             <!-- Custom-scheme fallback (no domain verification needed) -->
