@@ -2,6 +2,7 @@ import 'package:bloc/bloc.dart';
 import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 import 'package:moonlight/core/network/error_parser.dart';
+import 'package:moonlight/core/services/follow_state_service.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
 import 'package:moonlight/features/profile_view/domain/repositories/profile_repository.dart';
@@ -152,6 +153,11 @@ class ProfileCubit extends Cubit<ProfileState> {
       } else {
         await repo.followUser(user.uuid);
       }
+      // Broadcast on success only (not the optimistic flip above) — every
+      // feed that has this author's posts loaded (Watch tab, Discover tab,
+      // a hashtag feed, etc. each own an independent FeedCubit) patches
+      // its own follow badges in response. See FollowStateService.
+      FollowStateService.instance.notify(user.uuid, !user.isFollowing);
     } catch (_) {
       // rollback on error
       emit(state.copyWith(user: user));

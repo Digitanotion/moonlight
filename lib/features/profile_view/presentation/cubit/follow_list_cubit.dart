@@ -1,6 +1,7 @@
 // lib/features/profile_view/presentation/cubit/follow_list_cubit.dart
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:moonlight/core/services/follow_state_service.dart';
 import 'package:moonlight/features/profile_view/data/datasources/follow_list_remote_datasource.dart';
 
 class FollowTabState extends Equatable {
@@ -210,7 +211,11 @@ class FollowListCubit extends Cubit<FollowListState> {
       } else {
         await _ds.followUser(targetUuid);
       }
-      // Success - no need to revert
+      // Success - no need to revert. Broadcast so every feed that has this
+      // author's posts loaded (Watch tab, Discover tab, a hashtag feed,
+      // etc. each own an independent FeedCubit) patches its own follow
+      // badges in response. See FollowStateService.
+      FollowStateService.instance.notify(targetUuid, !wasFollowing);
     } catch (e) {
       // Revert on error
       _flipInTab(targetUuid, isFollowers: true);

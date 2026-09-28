@@ -20,8 +20,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
+import 'package:moonlight/core/services/follow_state_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
+import 'package:moonlight/core/services/wakelock_coordinator.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/expandable_text.dart';
 import 'package:moonlight/features/feed/presentation/cubit/feed_cubit.dart';
@@ -90,6 +92,9 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   @override
   void initState() {
     super.initState();
+    // Full-screen video-only feed — every page is a video, so hold the
+    // wakelock for as long as this screen is open, same as the live viewer.
+    WakelockCoordinator.instance.acquire();
     _currentIndex = widget.initialIndex;
     _videoPosts = List.of(widget.videoPosts);
     _originalIndices = List.of(widget.originalIndices);
@@ -169,6 +174,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
 
   @override
   void dispose() {
+    WakelockCoordinator.instance.release();
     _pageController.dispose();
     super.dispose();
   }
@@ -652,9 +658,11 @@ class _FollowAvatarButtonState extends State<_FollowAvatarButton> {
     try {
       await sl<ProfileRepository>().followUser(widget.author.id);
       if (!mounted) return;
-      // Flip the shared feed state now so every card by this author (and
-      // this widget if it gets rebuilt/remounted) reflects it permanently.
+      // Flip THIS cubit's items immediately (no stream round trip needed
+      // since we're already inside it), then broadcast so every other
+      // feed instance (Discover tab, a hashtag feed, etc.) picks it up too.
       context.read<FeedCubit>().markAuthorFollowed(widget.author.id);
+      FollowStateService.instance.notify(widget.author.id, true);
       // Hold the check mark briefly so the animation reads clearly before
       // the badge fades away.
       await Future.delayed(const Duration(milliseconds: 650));

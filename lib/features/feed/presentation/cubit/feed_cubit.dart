@@ -1,11 +1,13 @@
 // lib/features/feed/presentation/cubit/feed_cubit.dart
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/network/error_parser.dart';
+import 'package:moonlight/core/services/follow_state_service.dart';
 import 'package:moonlight/core/services/like_memory.dart';
 import 'package:moonlight/features/feed/domain/repositories/feed_repository.dart';
 import 'package:moonlight/features/post_view/domain/entities/post.dart';
@@ -85,8 +87,25 @@ class FeedCubit extends Cubit<FeedState> {
   int? _seed;
   final Random _random = Random();
 
+  StreamSubscription<FollowChange>? _followSub;
+
   FeedCubit(this.repo, {this.type, this.sort, this.country})
-    : super(const FeedState());
+    : super(const FeedState()) {
+    // A follow/unfollow made from ANY screen — this feed's own cards, a
+    // different feed instance entirely, or the profile page's Follow
+    // button — patches this cubit's items too, so every card by that
+    // author reflects it, not just the ones in the feed the action
+    // happened in. See FollowStateService for why this exists.
+    _followSub = FollowStateService.instance.changes.listen((change) {
+      _applyFollowChange(change.authorId, change.isFollowing);
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _followSub?.cancel();
+    return super.close();
+  }
 
   /// Updates the country filter and reloads from page 1 if it actually
   /// changed. No-op on a redundant call with the same value.
@@ -281,18 +300,22 @@ class FeedCubit extends Cubit<FeedState> {
     emit(state.copyWith(items: [...state.items]..[index] = merged));
   }
 
-  /// Marks every loaded post authored by [authorId] as followed, so the
-  /// avatar/follow badge stays hidden for that author everywhere in the
-  /// feed — including on a video page that gets disposed and recreated
-  /// (e.g. swiped past and back) — rather than only in one widget's own
-  /// local state, which would forget the follow the moment it remounts.
-  void markAuthorFollowed(String authorId) {
+  /// Marks every loaded post authored by [authorId] as followed in THIS
+  /// cubit's own items, immediately (no round trip through the broadcast
+  /// stream) — call this from the widget that actually performed the
+  /// follow, for instant feedback, then ALSO call
+  /// `FollowStateService.instance.notify(...)` so every other feed
+  /// instance updates too. See _applyFollowChange for the shared logic.
+  void markAuthorFollowed(String authorId) =>
+      _applyFollowChange(authorId, true);
+
+  void _applyFollowChange(String authorId, bool isFollowing) {
     if (authorId.isEmpty) return;
     var changed = false;
     final updated = state.items.map((p) {
-      if (p.author.id == authorId && !p.author.isFollowing) {
+      if (p.author.id == authorId && p.author.isFollowing != isFollowing) {
         changed = true;
-        return p.copyWith(author: p.author.copyWith(isFollowing: true));
+        return p.copyWith(author: p.author.copyWith(isFollowing: isFollowing));
       }
       return p;
     }).toList();
