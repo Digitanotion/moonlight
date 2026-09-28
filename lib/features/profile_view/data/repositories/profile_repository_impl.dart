@@ -88,6 +88,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
         id: '${m['uuid'] ?? m['id']}',
         author: user,
         mediaUrl: '${m['mediaUrl']}',
+        thumbUrl: '${m['thumbUrl'] ?? m['mediaUrl']}',
         caption: '${m['caption']}',
         tags: (m['tags'] as List).map((e) => '$e').toList(),
         createdAt: DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),

@@ -55,6 +55,7 @@ class FeedRepositoryImpl implements FeedRepository {
         id: '${m['uuid'] ?? m['id']}',
         author: user,
         mediaUrl: '${m['mediaUrl'] ?? ''}',
+        thumbUrl: '${m['thumbUrl'] ?? m['mediaUrl'] ?? ''}',
         caption: '${m['caption'] ?? ''}',
         tags:
             (m['tags'] as List?)?.cast<dynamic>().map((e) => '$e').toList() ??
