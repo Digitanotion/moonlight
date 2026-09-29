@@ -264,7 +264,7 @@ class _AboutMoonlightSheetState extends State<_AboutMoonlightSheet> {
                     children: [
                       _LinkRow(
                         icon: Icons.headset_mic_outlined,
-                        label: 'Live Support',
+                        label: 'Chat with us',
                         onTap: () => _launch(MoonlightLinks.liveSupportUrl()),
                       ),
                       _LinkRow(

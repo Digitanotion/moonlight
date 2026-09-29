@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
+import 'package:moonlight/core/constants/flutterwave_countries.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/utils/formatting.dart';
 import 'package:moonlight/widgets/top_snack.dart';
@@ -20,80 +21,6 @@ import 'package:moonlight/core/widgets/app_logo_loader.dart';
 const int _kNubanLength = 10;
 
 enum _PaymentMethod { flutterwave, paypal }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// All Flutterwave-supported countries with their currency codes.
-// Kept here so no API call is needed to populate the dropdown.
-// Source: Flutterwave payout documentation (April 2026).
-// ─────────────────────────────────────────────────────────────────────────────
-class _CountryInfo {
-  final String name;
-  final String currency;
-  const _CountryInfo(this.name, this.currency);
-}
-
-const List<_CountryInfo> _kSupportedCountries = [
-  // Africa
-  _CountryInfo('Nigeria', 'NGN'),
-  _CountryInfo('Ghana', 'GHS'),
-  _CountryInfo('Kenya', 'KES'),
-  _CountryInfo('South Africa', 'ZAR'),
-  _CountryInfo('Uganda', 'UGX'),
-  _CountryInfo('Tanzania', 'TZS'),
-  _CountryInfo('Rwanda', 'RWF'),
-  _CountryInfo('Zambia', 'ZMW'),
-  _CountryInfo('Cameroon', 'XAF'),
-  _CountryInfo('Chad', 'XAF'),
-  _CountryInfo('Congo', 'XAF'),
-  _CountryInfo('Gabon', 'XAF'),
-  _CountryInfo('Senegal', 'XOF'),
-  _CountryInfo('Ivory Coast', 'XOF'),
-  _CountryInfo('Malawi', 'MWK'),
-  _CountryInfo('Sierra Leone', 'SLL'),
-  _CountryInfo('Ethiopia', 'ETB'),
-  // Europe — EUR bloc
-  _CountryInfo('Austria', 'EUR'),
-  _CountryInfo('Belgium', 'EUR'),
-  _CountryInfo('Bulgaria', 'EUR'),
-  _CountryInfo('Croatia', 'EUR'),
-  _CountryInfo('Cyprus', 'EUR'),
-  _CountryInfo('Czech Republic', 'EUR'),
-  _CountryInfo('Denmark', 'EUR'),
-  _CountryInfo('Estonia', 'EUR'),
-  _CountryInfo('Finland', 'EUR'),
-  _CountryInfo('Germany', 'EUR'),
-  _CountryInfo('Greece', 'EUR'),
-  _CountryInfo('Hungary', 'EUR'),
-  _CountryInfo('Ireland', 'EUR'),
-  _CountryInfo('Italy', 'EUR'),
-  _CountryInfo('Latvia', 'EUR'),
-  _CountryInfo('Lithuania', 'EUR'),
-  _CountryInfo('Luxembourg', 'EUR'),
-  _CountryInfo('Malta', 'EUR'),
-  _CountryInfo('Netherlands', 'EUR'),
-  _CountryInfo('Poland', 'EUR'),
-  _CountryInfo('Slovakia', 'EUR'),
-  _CountryInfo('Slovenia', 'EUR'),
-  _CountryInfo('Spain', 'EUR'),
-  _CountryInfo('Sweden', 'EUR'),
-  // Europe — non-EUR
-  _CountryInfo('UK', 'GBP'),
-  // Americas
-  _CountryInfo('US', 'USD'),
-  // Asia-Pacific
-  _CountryInfo('Australia', 'AUD'),
-  _CountryInfo('India', 'INR'),
-  // Middle East
-  _CountryInfo('UAE', 'AED'),
-];
-
-// Quick lookup: country name → currency code
-String _currencyFor(String country) => _kSupportedCountries
-    .firstWhere(
-      (c) => c.name == country,
-      orElse: () => const _CountryInfo('', 'USD'),
-    )
-    .currency;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -850,7 +777,7 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           child: DropdownButtonFormField<String>(
             value: _selectedCountry,
             isExpanded: true,
-            items: _kSupportedCountries
+            items: kFlutterwaveCountries
                 .map(
                   (c) => DropdownMenuItem(
                     value: c.name,

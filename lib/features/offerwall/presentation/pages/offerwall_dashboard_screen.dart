@@ -3,7 +3,7 @@
 // The "Earn Cash" dashboard — separate from the main wallet, per spec
 // ("a separate dashboard like we have in club where earned coins go to and
 // from where they can make withdrawals"). Balance, earnings history,
-// withdrawal history, and the withdraw flow (min $15 / max $100 / once a
+// withdrawal history, and the withdraw flow (min $5 / max $100 / once a
 // week, admin-approved — never automatic) all live here.
 
 import 'dart:async';
@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/constants/flutterwave_countries.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/offerwall/presentation/cubit/offerwall_cubit.dart';
@@ -22,7 +23,6 @@ import 'package:moonlight/core/widgets/app_logo_loader.dart';
 // Nigeria NUBAN is always exactly 10 digits — resolve immediately on hit,
 // same threshold the main wallet withdrawal screen uses.
 const int _kNubanLength = 10;
-const String _kOfferwallBankCountry = 'Nigeria';
 
 class OfferwallDashboardScreen extends StatelessWidget {
   const OfferwallDashboardScreen({super.key});
@@ -419,6 +419,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
   final String _method = 'flutterwave'; // PayPal is disabled — see chips below.
   bool _submitting = false;
 
+  String _selectedCountry = 'Nigeria';
   List<Map<String, dynamic>> _banks = [];
   Map<String, dynamic>? _selectedBank;
   bool _loadingBanks = false;
@@ -455,7 +456,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
     });
     try {
       final banks = await sl<WithdrawalRepository>().fetchBanks(
-        _kOfferwallBankCountry,
+        _selectedCountry,
       );
       if (mounted) setState(() => _banks = banks);
     } catch (e) {
@@ -588,7 +589,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
         bankAccountNumber: _accountNumberCtrl.text.trim(),
         bankName: _selectedBank?['name']?.toString() ?? '',
         bankCode: _selectedBank?['code']?.toString() ?? '',
-        bankCountry: _kOfferwallBankCountry,
+        bankCountry: _selectedCountry,
       );
 
       if (!mounted) return;
@@ -699,6 +700,8 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                 ],
               ),
               const SizedBox(height: 16),
+              _countryDropdown(),
+              const SizedBox(height: 10),
               _bankSelector(),
               const SizedBox(height: 10),
               _accountNumberField(),
@@ -731,6 +734,45 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Country dropdown ───────────────────────────────────────────────────────
+
+  Widget _countryDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: DropdownButtonFormField<String>(
+        value: _selectedCountry,
+        isExpanded: true,
+        items: kFlutterwaveCountries
+            .map(
+              (c) => DropdownMenuItem(
+                value: c.name,
+                child: Text(
+                  '${c.name}  (${c.currency})',
+                  style: const TextStyle(color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: (val) {
+          if (val == null || val == _selectedCountry) return;
+          setState(() => _selectedCountry = val);
+          _loadBanks();
+        },
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 12),
+        ),
+        dropdownColor: const Color(0xFF1C1533),
+        style: const TextStyle(color: Colors.white),
       ),
     );
   }

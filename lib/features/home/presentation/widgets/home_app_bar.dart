@@ -105,7 +105,7 @@ class AccountButton extends StatelessWidget {
                     ),
                     _MenuRow(
                       icon: Icons.headset_mic_outlined,
-                      label: 'Live Support',
+                      label: 'Chat with us',
                       isLast: true,
                       onTap: () async {
                         Navigator.pop(sheetContext);

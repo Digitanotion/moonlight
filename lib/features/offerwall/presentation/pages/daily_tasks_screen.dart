@@ -127,11 +127,18 @@ class _DailyTasksViewState extends State<_DailyTasksView>
             buildWhen: (p, n) => p.activated != n.activated,
             builder: (context, state) {
               if (!state.activated) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'My Earnings',
-                icon: const Icon(Icons.account_balance_wallet_rounded),
+              return TextButton.icon(
                 onPressed: () =>
                     Navigator.pushNamed(context, RouteNames.offerwallDashboard),
+                icon: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 20,
+                ),
+                label: const Text('Earnings'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
               );
             },
           ),
