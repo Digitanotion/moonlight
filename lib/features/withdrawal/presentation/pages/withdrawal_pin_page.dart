@@ -1,7 +1,10 @@
 // lib/features/withdrawal/presentation/pages/withdrawal_pin_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/wallet/domain/repositories/pin_repository.dart';
+import 'package:moonlight/features/wallet/presentation/pages/forgot_pin_flow_page.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
 
@@ -181,6 +184,31 @@ class _WithdrawalPinPageState extends State<WithdrawalPinPage> {
     );
   }
 
+  // ── Forgot PIN ─────────────────────────────────────────────────────────
+
+  Future<void> _openForgotPin() async {
+    final repo = sl<PinRepository>();
+    final reset = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ForgotPinFlowPage(
+          title: 'Reset Wallet PIN',
+          pinLength: 4,
+          onRequestCode: repo.requestForgotPinCode,
+          onVerifyCode: repo.verifyForgotPinCode,
+          onResetPin: (token, newPin) =>
+              repo.resetForgotPin(resetToken: token, newPin: newPin),
+        ),
+      ),
+    );
+    if (reset == true && mounted) {
+      // Clear whatever the user had typed so far — the old PIN is gone.
+      setState(() {
+        _enteredPin.clear();
+        _errorText = null;
+      });
+    }
+  }
+
   // ── Widgets ────────────────────────────────────────────────────────────
 
   Widget _buildPinDots() {
@@ -316,6 +344,13 @@ class _WithdrawalPinPageState extends State<WithdrawalPinPage> {
                         ),
                       )
                     : const SizedBox(key: ValueKey('none'), height: 14),
+              ),
+              TextButton(
+                onPressed: _openForgotPin,
+                child: const Text(
+                  'Forgot PIN?',
+                  style: TextStyle(color: Colors.deepOrangeAccent),
+                ),
               ),
             ],
           ),

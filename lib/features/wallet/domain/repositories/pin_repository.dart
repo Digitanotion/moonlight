@@ -24,4 +24,15 @@ abstract class PinRepository {
     int perPage = 10,
     String? action,
   });
+
+  // ── Forgot PIN (email OTP) ─────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> requestForgotPinCode();
+
+  Future<String> verifyForgotPinCode(String code);
+
+  Future<Map<String, dynamic>> resetForgotPin({
+    required String resetToken,
+    required String newPin,
+  });
 }

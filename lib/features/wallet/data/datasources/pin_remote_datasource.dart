@@ -61,6 +61,47 @@ class PinRemoteDataSource {
     }
   }
 
+  // ── Forgot PIN (email OTP) ─────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> requestForgotPinCode() async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/v1/settings/wallet-pin/forgot/request',
+      );
+      return _parseResponse(response);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to send code');
+    }
+  }
+
+  Future<String> verifyForgotPinCode(String code) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/v1/settings/wallet-pin/forgot/verify',
+        data: {'code': code},
+      );
+      final data = _parseResponse(response);
+      return data['reset_token'] as String;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to verify code');
+    }
+  }
+
+  Future<Map<String, dynamic>> resetForgotPin({
+    required String resetToken,
+    required String newPin,
+  }) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/v1/settings/wallet-pin/forgot/reset',
+        data: {'reset_token': resetToken, 'new_pin': newPin},
+      );
+      return _parseResponse(response);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to reset PIN');
+    }
+  }
+
   Future<Map<String, dynamic>> getPinStatus() async {
     try {
       final response = await _dioClient.dio.get(

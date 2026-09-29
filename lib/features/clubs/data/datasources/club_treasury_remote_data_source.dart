@@ -37,6 +37,31 @@ class ClubTreasuryRemoteDataSource {
     }
   }
 
+  // ── Forgot treasury PIN (email OTP) ───────────────────────────────────────
+
+  Future<void> requestPinResetCode(String clubUuid) async {
+    await dio.post('/api/v1/clubs/$clubUuid/treasury/pin/forgot/request');
+  }
+
+  Future<String> verifyPinResetCode(String clubUuid, String code) async {
+    final res = await dio.post(
+      '/api/v1/clubs/$clubUuid/treasury/pin/forgot/verify',
+      data: {'code': code},
+    );
+    return res.data['reset_token'] as String;
+  }
+
+  Future<void> resetPinWithCode(
+    String clubUuid,
+    String resetToken,
+    String newPin,
+  ) async {
+    await dio.post(
+      '/api/v1/clubs/$clubUuid/treasury/pin/forgot/reset',
+      data: {'reset_token': resetToken, 'new_pin': newPin},
+    );
+  }
+
   Future<void> updatePolicy(
     String clubUuid,
     Map<String, dynamic> policy,

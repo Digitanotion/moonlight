@@ -2,6 +2,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/features/wallet/domain/repositories/pin_repository.dart';
+import 'package:moonlight/features/wallet/presentation/pages/forgot_pin_flow_page.dart';
 import '../cubit/transfer_cubit.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
@@ -78,13 +81,27 @@ class _PinEntryPageState extends State<PinEntryPage> {
     }
   }
 
-  void _onForgotPin() {
-    // Navigator.of(context).push(
-    //   MaterialPageRoute(
-    //     builder: (_) => const ResetPinStartPage(),
-    //     fullscreenDialog: true,
-    //   ),
-    // );
+  Future<void> _onForgotPin() async {
+    final repo = sl<PinRepository>();
+    final reset = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ForgotPinFlowPage(
+          title: 'Reset Wallet PIN',
+          pinLength: pinLength,
+          onRequestCode: repo.requestForgotPinCode,
+          onVerifyCode: repo.verifyForgotPinCode,
+          onResetPin: (token, newPin) =>
+              repo.resetForgotPin(resetToken: token, newPin: newPin),
+        ),
+      ),
+    );
+    if (reset == true && mounted) {
+      setState(() {
+        _entered.clear();
+        _errorMessage = null;
+        _randomizeKeys();
+      });
+    }
   }
 
   @override

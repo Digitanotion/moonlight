@@ -123,6 +123,49 @@ class PinRepositoryImpl implements PinRepository {
     }
   }
 
+  // ── Forgot PIN (email OTP) ─────────────────────────────────────────────────
+
+  @override
+  Future<Map<String, dynamic>> requestForgotPinCode() async {
+    try {
+      final response = await _remoteDataSource.requestForgotPinCode();
+      return _ensureResponseFormat(response);
+    } on DioException catch (e) {
+      throw _extractErrorMessage(e, 'Failed to send code');
+    } catch (e) {
+      throw Exception('Failed to send code: $e');
+    }
+  }
+
+  @override
+  Future<String> verifyForgotPinCode(String code) async {
+    try {
+      return await _remoteDataSource.verifyForgotPinCode(code);
+    } on DioException catch (e) {
+      throw _extractErrorMessage(e, 'Failed to verify code');
+    } catch (e) {
+      throw Exception('Failed to verify code: $e');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> resetForgotPin({
+    required String resetToken,
+    required String newPin,
+  }) async {
+    try {
+      final response = await _remoteDataSource.resetForgotPin(
+        resetToken: resetToken,
+        newPin: newPin,
+      );
+      return _ensureResponseFormat(response);
+    } on DioException catch (e) {
+      throw _extractErrorMessage(e, 'Failed to reset PIN');
+    } catch (e) {
+      throw Exception('Failed to reset PIN: $e');
+    }
+  }
+
   Map<String, dynamic> _ensureResponseFormat(Map<String, dynamic> response) {
     // Ensure response has expected structure
     if (!response.containsKey('status')) {

@@ -6,6 +6,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/domain/entities/club_treasury.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_treasury_cubit.dart';
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
+import 'package:moonlight/features/wallet/presentation/pages/forgot_pin_flow_page.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:uuid/uuid.dart';
 
@@ -306,6 +307,25 @@ class _ClubWithdrawalRequestScreenState
                             _SectionLabel('Club Treasury PIN'),
                             const SizedBox(height: 8),
                             _buildPinField(),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                onPressed: _openForgotPin,
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text(
+                                  'Forgot PIN?',
+                                  style: TextStyle(
+                                    color: Colors.deepOrangeAccent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 6),
                             Container(
                               padding: const EdgeInsets.all(12),
@@ -640,6 +660,25 @@ class _ClubWithdrawalRequestScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _openForgotPin() async {
+    final ds = context.read<ClubTreasuryRemoteDataSource>();
+    final reset = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ForgotPinFlowPage(
+          title: 'Reset Treasury PIN',
+          pinLength: 6,
+          onRequestCode: () => ds.requestPinResetCode(widget.clubUuid),
+          onVerifyCode: (code) => ds.verifyPinResetCode(widget.clubUuid, code),
+          onResetPin: (token, newPin) =>
+              ds.resetPinWithCode(widget.clubUuid, token, newPin),
+        ),
+      ),
+    );
+    if (reset == true && mounted) {
+      _pinCtrl.clear();
+    }
   }
 
   Widget _buildPinField() {
