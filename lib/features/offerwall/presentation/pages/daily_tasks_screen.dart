@@ -5,9 +5,14 @@
 // requirement to start earning cash daily for life. You will be able to
 // withdraw your earnings every week."
 //
-// Migrated from Adjoe/Torox to Tapjoy/Timewall/CPX Research, all live now:
-//  - Tapjoy: a WebView pointed at Tapjoy's hosted offerwall URL, keyed to
-//    the signed-in user (see OfferwallController::postbackTapjoy).
+// Migrated from Adjoe/Torox to CPAGrip/Timewall/CPX Research, all live now:
+//  - CPAGrip: NOT an embedded widget — their "Offer Walls" tool is a
+//    JS/DOM-injection widget that doesn't translate to a Flutter WebView.
+//    Instead this fetches their JSON Offer Feed server-to-server (see
+//    OfferwallService::fetchCpagripOffers) and renders a plain native
+//    list; tapping an offer opens it in the external browser, same
+//    reasoning as Timewall below (third-party survey/signup pages, not
+//    ours to guarantee work inside a WebView).
 //  - Timewall: NOT a WebView — their own docs say file uploads and other
 //    features break in one, and recommend an external browser for more
 //    revenue — so this tab is just a launch button (url_launcher) that
@@ -19,6 +24,7 @@
 //    one that verifies postbacks, so it can never ship inside the app
 //    (see OfferwallService::buildCpxLaunchUrl on the API side).
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show Factory;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -169,7 +175,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                   unselectedLabelColor: Colors.white38,
                   labelStyle: const TextStyle(fontWeight: FontWeight.w700),
                   tabs: const [
-                    Tab(text: 'Tapjoy'),
+                    Tab(text: 'CPAGrip'),
                     Tab(text: 'Timewall'),
                     Tab(text: 'CPX'),
                   ],
@@ -179,7 +185,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                 child: TabBarView(
                   controller: _tabs,
                   children: const [
-                    _TapjoyOfferwallView(),
+                    _CpagripOfferwallView(),
                     _TimewallOfferwallView(),
                     _CpxOfferwallView(),
                   ],
@@ -292,106 +298,197 @@ class _ActivationGate extends StatelessWidget {
   }
 }
 
-/// Tapjoy's "Web Offerwall" — no native SDK, just their hosted offerwall
-/// page loaded in a WebView and keyed to this user's id, exactly the same
-/// integration shape as Adjoe/Torox before it. The SDK key here is the
-/// public app identifier Tapjoy's own docs embed directly in client URLs —
-/// not a secret (the actual secret, used to verify their reward callback,
-/// lives only in the API's config/offerwall.php, never shipped client-side).
-class _TapjoyOfferwallView extends StatefulWidget {
-  const _TapjoyOfferwallView();
+/// CPAGrip's offer list, fetched server-to-server (see
+/// OfferwallService::fetchCpagripOffers) and rendered as a plain native
+/// list — not an embedded widget, since CPAGrip's own "Offer Walls" tool
+/// is a JS/DOM-injection script, not something that translates to a
+/// Flutter WebView. Tapping an offer opens it in the external browser
+/// (not a WebView) — these are third-party survey/signup/install pages,
+/// same reasoning as the Timewall tab below.
+class _CpagripOfferwallView extends StatefulWidget {
+  const _CpagripOfferwallView();
 
   @override
-  State<_TapjoyOfferwallView> createState() => _TapjoyOfferwallViewState();
+  State<_CpagripOfferwallView> createState() => _CpagripOfferwallViewState();
 }
 
-class _TapjoyOfferwallViewState extends State<_TapjoyOfferwallView> {
-  static const _sdkKey =
-      'uTb0F02XRG-oTHvyG8qcOAECwSM7fI4LAVJIA1iVA8wHSKARWEeBzcm817rH';
-
-  WebViewController? _controller;
+class _CpagripOfferwallViewState extends State<_CpagripOfferwallView> {
+  List<Map<String, dynamic>> _offers = [];
   bool _loading = true;
   bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    final userId = UserHelper.getCurrentUser(context)?.id ?? '';
-    if (userId.isEmpty) {
-      // Shouldn't happen — this screen already requires being signed in —
-      // but never point Tapjoy at an empty/unidentifiable user.
-      _hasError = true;
-      return;
-    }
-
-    final url =
-        'https://rewards.unity.com/owp/web/link/$_sdkKey/u/${Uri.encodeComponent(userId)}';
-
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppColors.dark)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (_) => setState(() {
-            _loading = true;
-            _hasError = false;
-          }),
-          onPageFinished: (_) => setState(() => _loading = false),
-          onWebResourceError: (err) {
-            if (err.isForMainFrame ?? true) {
-              setState(() {
-                _loading = false;
-                _hasError = true;
-              });
-            }
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(url));
+    _load();
   }
 
-  void _retry() {
-    final userId = UserHelper.getCurrentUser(context)?.id ?? '';
-    if (userId.isEmpty || _controller == null) return;
-    setState(() => _hasError = false);
-    _controller!.reload();
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final offers = await sl<OfferwallRemoteDataSource>().getCpagripOffers();
+      if (!mounted) return;
+      setState(() {
+        _offers = offers;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openOffer(String link) async {
+    final uri = Uri.tryParse(link);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_hasError && _controller == null) {
-      // Couldn't even build a URL (no signed-in user id) — nothing to retry.
-      return const _OfferwallErrorView(
-        message: "Couldn't load Tapjoy tasks. Please try again shortly.",
-        onRetry: null,
+    if (_loading) return const Center(child: AppLogoLoader());
+
+    if (_hasError) {
+      return _OfferwallErrorView(
+        message: 'Could not load CPAGrip offers.',
+        onRetry: _load,
       );
     }
 
-    return Stack(
-      children: [
-        if (!_hasError && _controller != null)
-          Positioned.fill(
-            child: WebViewWidget(
-              controller: _controller!,
-              // Without this, vertical scrolling inside the page can get
-              // lost to ancestor gesture handling (this WebView sits
-              // inside a TabBarView) — explicitly claiming vertical drag
-              // is the standard fix for "can't scroll inside the
-              // WebView" in this exact setup.
-              gestureRecognizers: {
-                Factory<VerticalDragGestureRecognizer>(
-                  () => VerticalDragGestureRecognizer(),
+    if (_offers.isEmpty) {
+      return _OfferwallErrorView(
+        message: 'No offers available for your region right now.',
+        onRetry: _load,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _offers.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, i) => _CpagripOfferCard(
+          offer: _offers[i],
+          onTap: () => _openOffer(_offers[i]['offerlink']?.toString() ?? ''),
+        ),
+      ),
+    );
+  }
+}
+
+class _CpagripOfferCard extends StatelessWidget {
+  final Map<String, dynamic> offer;
+  final VoidCallback onTap;
+
+  const _CpagripOfferCard({required this.offer, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = offer['title']?.toString() ?? 'Offer';
+    final description = offer['description']?.toString() ?? '';
+    final photo = offer['offerphoto']?.toString();
+    final payout = double.tryParse(offer['payout']?.toString() ?? '') ?? 0;
+
+    return Material(
+      color: const Color(0xFF141433),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: photo != null && photo.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: photo,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 112,
+                          errorWidget: (_, _, _) => Container(
+                            color: Colors.white12,
+                            child: const Icon(
+                              Icons.card_giftcard_rounded,
+                              color: Colors.white38,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          color: Colors.white12,
+                          child: const Icon(
+                            Icons.card_giftcard_rounded,
+                            color: Colors.white38,
+                          ),
+                        ),
                 ),
-              },
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1FBF75).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '\$${payout.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Color(0xFF1FBF75),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
           ),
-        if (_hasError)
-          _OfferwallErrorView(
-            message: 'Could not load Tapjoy tasks.',
-            onRetry: _retry,
-          ),
-        if (_loading && !_hasError) const Center(child: AppLogoLoader()),
-      ],
+        ),
+      ),
     );
   }
 }

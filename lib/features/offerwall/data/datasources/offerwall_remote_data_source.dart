@@ -48,4 +48,15 @@ class OfferwallRemoteDataSource {
     final res = await dio.get('/api/v1/offerwall/cpx/launch-url');
     return (res.data as Map)['url'] as String;
   }
+
+  /// CPAGrip's actual offer list for the signed-in user — fetched
+  /// server-to-server (see OfferwallService::fetchCpagripOffers), not an
+  /// embedded widget. Each offer already carries this user's id baked
+  /// into its `offerlink`, so completing one fires CPAGrip's Global
+  /// Postback with the right tracking_id automatically.
+  Future<List<Map<String, dynamic>>> getCpagripOffers() async {
+    final res = await dio.get('/api/v1/offerwall/cpagrip/offers');
+    final offers = (res.data as Map)['offers'] as List? ?? [];
+    return List<Map<String, dynamic>>.from(offers);
+  }
 }
