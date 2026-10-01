@@ -9,6 +9,7 @@ import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/share_service.dart';
+import 'package:moonlight/core/services/wakelock_coordinator.dart';
 import 'package:moonlight/core/services/video_preload_service.dart'; // ← NEW
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/core/utils/time_ago.dart';
@@ -560,7 +561,10 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _isVideo = _detectVideo(widget.post);
-    if (_isVideo) PipService.instance.acquire(); // arm PiP for this video
+    if (_isVideo) {
+      PipService.instance.acquire(); // arm PiP for this video
+      WakelockCoordinator.instance.acquire(); // keep screen awake
+    }
     _initVideo();
     _startFreezeWatchdog();
   }
@@ -572,8 +576,14 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
       _disposeVc();
       final wasVideo = _isVideo;
       _isVideo = _detectVideo(widget.post);
-      if (wasVideo && !_isVideo) PipService.instance.release();
-      if (!wasVideo && _isVideo) PipService.instance.acquire();
+      if (wasVideo && !_isVideo) {
+        PipService.instance.release();
+        WakelockCoordinator.instance.release();
+      }
+      if (!wasVideo && _isVideo) {
+        PipService.instance.acquire();
+        WakelockCoordinator.instance.acquire();
+      }
       _initVideo();
     }
   }
@@ -659,7 +669,10 @@ class _PostMediaState extends State<_PostMedia> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    if (_isVideo) PipService.instance.release();
+    if (_isVideo) {
+      PipService.instance.release();
+      WakelockCoordinator.instance.release();
+    }
     WidgetsBinding.instance.removeObserver(this);
     _freezeWatchdog?.cancel();
     _controlsTimer?.cancel();

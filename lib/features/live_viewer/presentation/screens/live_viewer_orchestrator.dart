@@ -16,6 +16,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
+import 'package:moonlight/core/services/wakelock_coordinator.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
@@ -49,6 +50,10 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
   @override
   void initState() {
     super.initState();
+    // Held for the whole viewing session (viewer <-> guest/cohost mode
+    // switches never tear this widget down, only the child it builds), so
+    // the screen doesn't sleep mid-stream regardless of which mode is active.
+    WakelockCoordinator.instance.acquire();
     if (widget.pool != null) {
       // Pool mode: listen to the pool's events stream for videoReady.
       // The old hostHasVideo listener on the AgoraViewerService singleton
@@ -105,6 +110,7 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
 
   @override
   void dispose() {
+    WakelockCoordinator.instance.release();
     if (widget.pool == null) {
       try {
         sl<AgoraViewerService>().hostHasVideo.removeListener(

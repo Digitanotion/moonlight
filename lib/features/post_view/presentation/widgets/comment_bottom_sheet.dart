@@ -188,7 +188,20 @@ class _CommentSheetBodyState extends State<_CommentSheetBody> {
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                // DraggableScrollableSheet's size is a fraction of the
+                // screen computed independently of the keyboard — unlike a
+                // plain Scaffold, it does NOT auto-resize for
+                // MediaQuery.viewInsets, so without this the input row sits
+                // wherever that fraction landed and the keyboard just
+                // covers it. Pushing this bottom padding up by the keyboard
+                // height moves the input above it; the comments list above
+                // (an Expanded) simply shrinks to make room.
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  12 + MediaQuery.of(context).viewInsets.bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
