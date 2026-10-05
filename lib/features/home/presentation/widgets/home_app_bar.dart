@@ -96,6 +96,14 @@ class AccountButton extends StatelessWidget {
                       },
                     ),
                     _MenuRow(
+                      icon: Icons.groups_rounded,
+                      label: 'Agency',
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        Navigator.pushNamed(context, RouteNames.agentHub);
+                      },
+                    ),
+                    _MenuRow(
                       icon: Icons.person_outline,
                       label: 'My Profile',
                       onTap: () {

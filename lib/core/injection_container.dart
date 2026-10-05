@@ -20,6 +20,7 @@
 
 import 'dart:async';
 
+import 'package:moonlight/features/agents/data/agent_remote_data_source.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -571,6 +572,9 @@ Future<void> _initFullGraph() async {
   _initSettingsModule();
   _initClubsModule();
   _initOfferwallModule();
+  sl.registerLazySingleton<AgentRemoteDataSource>(
+    () => AgentRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
+  );
   _initLiveModule(); // registers AgoraService, ParticipantsRepository
   _initVideoCallModule(); // registers VideoCallAgoraService, VideoCallRepository, VideoCallBloc
   _initWalletModule();

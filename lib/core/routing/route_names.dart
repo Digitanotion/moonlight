@@ -65,5 +65,7 @@ class RouteNames {
   static const String videoCallSettings = '/video-call/settings';
   static const String dailyTasks = '/offerwall/daily-tasks';
   static const String offerwallDashboard = '/offerwall/dashboard';
+  static const String agentHub = '/agents/hub';
+  static const String agentsDirectory = '/agents/directory';
   // static const transactionReceipt = '/transactionReceipt';
 }
