@@ -6,9 +6,9 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:moonlight/core/constants/flutterwave_countries.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/agents/data/agent_remote_data_source.dart';
+import 'package:moonlight/features/profile_setup/data/datasources/country_local_data_source.dart';
 import 'package:moonlight/features/agents/presentation/pages/agent_ui.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
@@ -29,6 +29,8 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
   final _desc = TextEditingController();
   final _phone = TextEditingController();
   String? _country;
+  String? _profileCountry;
+  List<String> _countries = const [];
   String _gender = 'male';
   String _visibility = 'public';
   File? _photo;
@@ -44,6 +46,7 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCountries();
     final e = widget.existing;
     if (e != null) {
       _name.text = (e['name'] ?? '').toString();
@@ -58,14 +61,36 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
         _name.text = (p['name'] ?? '').toString();
         _desc.text = (p['description'] ?? '').toString();
         _phone.text = (p['phone'] ?? '').toString();
-        final c = (p['country'] ?? '').toString();
-        _country = kFlutterwaveCountries.any((x) => x.name == c) ? c : null;
+        _profileCountry = (p['country'] ?? '').toString();
         final g = (p['gender'] ?? '').toString();
         if (const ['male', 'female', 'other'].contains(g)) _gender = g;
       }
       // The programme message is shown first, before the form.
       WidgetsBinding.instance.addPostFrameCallback((_) => _showIntro());
     }
+  }
+
+  /// Same full world list the profile screen uses (assets/countries.json) —
+  /// NOT the shorter payout list — so a profile country always matches.
+  Future<void> _loadCountries() async {
+    List<String> list = const [];
+    try {
+      list = await CountryLocalDataSourceImpl().loadCountries();
+    } catch (_) {}
+    if (!mounted) return;
+    String? match(String? v) {
+      final t = (v ?? '').trim().toLowerCase();
+      if (t.isEmpty) return null;
+      for (final c in list) {
+        if (c.toLowerCase() == t) return c;
+      }
+      return null;
+    }
+
+    setState(() {
+      _countries = list;
+      _country = match(_country) ?? match(_profileCountry) ?? _country;
+    });
   }
 
   @override
@@ -231,11 +256,13 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
             dropdownColor: const Color(0xFF1C1533),
             style: const TextStyle(color: Colors.white),
             decoration: agentInput('Country'),
-            items: kFlutterwaveCountries
-                .map(
-                  (c) => DropdownMenuItem(value: c.name, child: Text(c.name)),
-                )
-                .toList(),
+            items: [
+              if (_country != null && !_countries.contains(_country))
+                DropdownMenuItem(value: _country, child: Text(_country!)),
+              ..._countries.map(
+                (c) => DropdownMenuItem(value: c, child: Text(c)),
+              ),
+            ],
             onChanged: (v) => setState(() => _country = v),
           ),
           const SizedBox(height: 14),
