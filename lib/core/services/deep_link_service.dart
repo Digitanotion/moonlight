@@ -94,7 +94,26 @@ class DeepLinkService {
       // Invite link: remember the code; it's attached once the user is
       // signed in (immediately, if they already are).
       await PendingAgentCodeService.save(value);
-      PendingAgentCodeService.applyIfPending();
+      try {
+        await _appReady.future.timeout(const Duration(seconds: 12));
+      } catch (_) {}
+      final (result, message) = await PendingAgentCodeService.applyIfPending();
+      switch (result) {
+        case PendingAgentResult.needsSignIn:
+          // Not signed in: send them to sign-up with the code pre-filled
+          // (the register screen reads it from PendingAgentCodeService).
+          _push(RouteNames.register, const {});
+          _toast('Create your account to join this agent.');
+          break;
+        case PendingAgentResult.joined:
+          _toast('You joined the agent!');
+          break;
+        case PendingAgentResult.refused:
+          _toast(message ?? 'Could not apply the agent code.');
+          break;
+        case PendingAgentResult.none:
+          break;
+      }
       return;
     }
     if (kind != 'live' && kind != 'post') return;

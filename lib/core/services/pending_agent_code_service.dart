@@ -38,22 +38,32 @@ class PendingAgentCodeService {
   }
 
   /// Call once the user is authenticated (AppShell start, after a link).
-  static Future<void> applyIfPending() async {
-    if (_applying) return;
+  ///
+  /// Returns what happened so a caller that just opened an invite link can
+  /// react: [PendingAgentResult.needsSignIn] means nobody is signed in yet.
+  static Future<(PendingAgentResult, String?)> applyIfPending() async {
+    if (_applying) return (PendingAgentResult.none, null);
     _applying = true;
     try {
       final prefs = await SharedPreferences.getInstance();
       final code = prefs.getString(_key);
-      if (code == null) return;
+      if (code == null) return (PendingAgentResult.none, null);
       final result = await sl<AgentRemoteDataSource>().join(code);
       // Keep it only if we weren't signed in / the network failed.
-      if (result != AgentRemoteDataSource.retryLater) {
-        await prefs.remove(_key);
+      if (result == AgentRemoteDataSource.retryLater) {
+        return (PendingAgentResult.needsSignIn, null);
       }
+      await prefs.remove(_key);
+      return result == null
+          ? (PendingAgentResult.joined, null)
+          : (PendingAgentResult.refused, result);
     } catch (e) {
       debugPrint('PendingAgentCode.apply: $e');
+      return (PendingAgentResult.none, null);
     } finally {
       _applying = false;
     }
   }
 }
+
+enum PendingAgentResult { none, joined, refused, needsSignIn }
