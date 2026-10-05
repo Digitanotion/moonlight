@@ -15,7 +15,10 @@ import 'package:moonlight/widgets/top_snack.dart';
 class AgentFormScreen extends StatefulWidget {
   /// Existing agent map (from /agents/me) when editing; null to create.
   final Map<String, dynamic>? existing;
-  const AgentFormScreen({super.key, this.existing});
+
+  /// The user's profile data (from /agents/me) used to pre-fill a NEW agency.
+  final Map<String, dynamic>? prefill;
+  const AgentFormScreen({super.key, this.existing, this.prefill});
 
   @override
   State<AgentFormScreen> createState() => _AgentFormScreenState();
@@ -33,6 +36,11 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
 
   bool get _editing => widget.existing != null;
 
+  String? get _profilePhoto {
+    final u = (widget.prefill?['photo_url'] ?? '').toString();
+    return u.isEmpty ? null : u;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +53,16 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
       _gender = (e['gender'] ?? 'male').toString();
       _visibility = (e['members_visibility'] ?? 'public').toString();
     } else {
+      final p = widget.prefill;
+      if (p != null) {
+        _name.text = (p['name'] ?? '').toString();
+        _desc.text = (p['description'] ?? '').toString();
+        _phone.text = (p['phone'] ?? '').toString();
+        final c = (p['country'] ?? '').toString();
+        _country = kFlutterwaveCountries.any((x) => x.name == c) ? c : null;
+        final g = (p['gender'] ?? '').toString();
+        if (const ['male', 'female', 'other'].contains(g)) _gender = g;
+      }
       // The programme message is shown first, before the form.
       WidgetsBinding.instance.addPostFrameCallback((_) => _showIntro());
     }
@@ -100,7 +118,7 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_editing && _photo == null) {
+    if (!_editing && _photo == null && _profilePhoto == null) {
       TopSnack.error(context, 'A profile photo is required.');
       return;
     }
@@ -120,7 +138,10 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
         'phone': _phone.text.trim(),
         'gender': _gender,
         if (_editing) 'members_visibility': _visibility,
-        if (_photo != null) 'photo': await MultipartFile.fromFile(_photo!.path),
+        if (_photo != null)
+          'photo': await MultipartFile.fromFile(_photo!.path)
+        else if (!_editing)
+          'use_profile_photo': 1,
       });
       final ds = sl<AgentRemoteDataSource>();
       if (_editing) {
@@ -164,7 +185,9 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
                           ),
                         )
                       : AgentAvatar(
-                          url: widget.existing?['photo_url']?.toString(),
+                          url:
+                              widget.existing?['photo_url']?.toString() ??
+                              _profilePhoto,
                           size: 96,
                         ),
                   const CircleAvatar(
@@ -181,7 +204,7 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
               padding: EdgeInsets.only(top: 8),
               child: Center(
                 child: Text(
-                  'Photo (required)',
+                  'Photo (from your profile — tap to change)',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),

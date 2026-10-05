@@ -149,7 +149,13 @@ class _AgentHubScreenState extends State<AgentHubScreen> {
         else
           AgentPrimaryButton(
             label: 'Create my agency',
-            onTap: () => _open(const AgentFormScreen()),
+            onTap: () => _open(
+              AgentFormScreen(
+                prefill: _me?['profile'] == null
+                    ? null
+                    : Map<String, dynamic>.from(_me!['profile'] as Map),
+              ),
+            ),
           ),
         const SizedBox(height: 10),
         TextButton(
