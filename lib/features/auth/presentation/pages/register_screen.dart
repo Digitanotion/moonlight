@@ -138,7 +138,10 @@ class _RegisterScreenState extends State<RegisterScreen>
           Navigator.pushReplacementNamed(
             context,
             RouteNames.email_verify,
-            arguments: _email.text.trim(),
+            arguments: {
+              'email': _email.text.trim(),
+              'password': _password.text.trim(),
+            },
           );
         } else if (state is AuthAuthenticated) {
           _resolvePostLoginRoute(context);

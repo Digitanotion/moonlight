@@ -172,11 +172,18 @@ class AppRouter {
       case RouteNames.email_verify:
         // The address to verify is passed as the route argument (from
         // sign-up, or from login when the account is unverified).
-        final verifyEmail = settings.arguments is String
-            ? settings.arguments as String
-            : '';
+        final vArgs = settings.arguments;
+        final verifyEmail = vArgs is String
+            ? vArgs
+            : (vArgs is Map ? (vArgs['email'] ?? '').toString() : '');
+        final verifyPassword = vArgs is Map
+            ? vArgs['password']?.toString()
+            : null;
         return MaterialPageRoute(
-          builder: (context) => EmailVerificationScreen(email: verifyEmail),
+          builder: (context) => EmailVerificationScreen(
+            email: verifyEmail,
+            password: verifyPassword,
+          ),
           settings: settings,
         );
 

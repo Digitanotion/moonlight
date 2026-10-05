@@ -150,7 +150,10 @@ class _LoginScreenState extends State<LoginScreen>
                     Navigator.pushNamed(
                       context,
                       RouteNames.email_verify,
-                      arguments: emailController.text.trim(),
+                      arguments: {
+                        'email': emailController.text.trim(),
+                        'password': passwordController.text.trim(),
+                      },
                     );
                   } else {
                     MoonSnack.error(context, state.message);

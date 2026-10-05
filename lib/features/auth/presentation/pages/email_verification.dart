@@ -7,6 +7,10 @@
 
 import 'dart:async';
 
+import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.dart';
+import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:moonlight/core/services/pending_agent_code_service.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,7 +21,15 @@ import 'package:moonlight/widgets/moon_snack.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
-  const EmailVerificationScreen({super.key, required this.email});
+
+  /// Held in memory only (never stored) so the user can be signed in
+  /// automatically right after verifying. Null → fall back to Sign In.
+  final String? password;
+  const EmailVerificationScreen({
+    super.key,
+    required this.email,
+    this.password,
+  });
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -34,6 +46,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   bool _verifying = false;
   bool _resending = false;
   bool _verified = false;
+  bool _signingIn = false;
+  bool _routing = false;
   String? _error;
 
   Dio get _dio => sl<Dio>(instanceName: 'mainDio');
@@ -103,14 +117,18 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       setState(() => _verified = true);
-      await Future.delayed(const Duration(milliseconds: 1300));
+      await Future.delayed(const Duration(milliseconds: 900));
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        RouteNames.login,
-        (_) => false,
+      final pw = widget.password;
+      if (pw == null || pw.isEmpty) {
+        _toLogin();
+        return;
+      }
+      // Sign in straight away so they continue into profile setup.
+      setState(() => _signingIn = true);
+      context.read<AuthBloc>().add(
+        LoginWithEmailRequested(email: widget.email, password: pw),
       );
-      MoonSnack.success(context, 'Email verified! Sign in to continue.');
     } catch (e) {
       HapticFeedback.heavyImpact();
       if (!mounted) return;
@@ -122,6 +140,31 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
+  }
+
+  void _toLogin() {
+    Navigator.pushNamedAndRemoveUntil(context, RouteNames.login, (_) => false);
+    MoonSnack.success(context, 'Email verified! Sign in to continue.');
+  }
+
+  /// Same live profile-completion check the login screen runs.
+  Future<void> _continueAfterSignIn() async {
+    if (_routing) return;
+    _routing = true;
+    PendingAgentCodeService.applyIfPending();
+    final onboarding = context.read<OnboardingBloc>();
+    final next = onboarding.stream.first;
+    onboarding.add(const CheckFirstLaunchStatus());
+    final updated = await next.timeout(
+      const Duration(seconds: 4),
+      onTimeout: () => onboarding.state,
+    );
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      updated.hasCompletedProfile ? RouteNames.home : RouteNames.profile_setup,
+      (_) => false,
+    );
   }
 
   Future<void> _resend() async {
@@ -154,6 +197,22 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (!_signingIn) return;
+        if (state is AuthAuthenticated) {
+          _continueAfterSignIn();
+        } else if (state is AuthFailure) {
+          // Verified, but the automatic sign-in didn't go through.
+          _signingIn = false;
+          _toLogin();
+        }
+      },
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: kAuthBgBottom,
       resizeToAvoidBottomInset: true,
@@ -247,7 +306,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                         const SizedBox(height: 22),
                         AuthPrimaryButton(
                           label: _verified ? 'Verified ✓' : 'Verify email',
-                          loading: _verifying,
+                          loading: _verifying || _signingIn,
                           onTap:
                               (_verifying ||
                                   _verified ||
