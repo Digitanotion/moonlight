@@ -6,6 +6,7 @@
 
 import 'dart:async';
 
+import 'package:moonlight/core/services/pending_agent_code_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -91,6 +92,9 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _resolvePostLoginRoute(BuildContext context) async {
     if (_resolvingPostLogin) return;
     _resolvingPostLogin = true;
+    // Attach to an inviting agent now (the account is authenticated), not
+    // later at Home — new users go through profile setup first.
+    PendingAgentCodeService.applyIfPending();
     final onboarding = context.read<OnboardingBloc>();
     try {
       final next = onboarding.stream.first;

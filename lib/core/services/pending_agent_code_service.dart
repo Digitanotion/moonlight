@@ -1,3 +1,4 @@
+import 'package:play_install_referrer/play_install_referrer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/agents/data/agent_remote_data_source.dart';
@@ -25,6 +26,29 @@ class PendingAgentCodeService {
       (await SharedPreferences.getInstance()).setString(_key, c);
     } catch (e) {
       debugPrint('PendingAgentCode.save: $e');
+    }
+  }
+
+  static const _referrerDoneKey = 'agent_referrer_checked';
+
+  /// People who open an invite link without the app land on the web page,
+  /// whose Play Store button carries `referrer=agent=CODE`. On the first
+  /// launch after install we read it back and remember the code. Android
+  /// only, once per install, and never allowed to fail the app.
+  static Future<void> captureInstallReferrer() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_referrerDoneKey) == true) return;
+      await prefs.setBool(_referrerDoneKey, true);
+      final details = await PlayInstallReferrer.installReferrer.timeout(
+        const Duration(seconds: 5),
+      );
+      final raw = details.installReferrer ?? '';
+      final code = Uri.splitQueryString(raw)['agent'];
+      await save(code);
+    } catch (e) {
+      debugPrint('PendingAgentCode.captureInstallReferrer: $e');
     }
   }
 

@@ -50,6 +50,8 @@ class DeepLinkService {
     if (_started) return;
     _started = true;
 
+    PendingAgentCodeService.captureInstallReferrer();
+
     try {
       final initial = await _appLinks.getInitialLink();
       if (initial != null) _handle(initial);

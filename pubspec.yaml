@@ -81,6 +81,7 @@ dependencies:
   # all (a MethodChannel scoped to MainActivity only, not a real plugin).
   ringtone_native:
     path: packages/ringtone_native
+  play_install_referrer: ^0.5.0
 
 dev_dependencies:
   flutter_test:
