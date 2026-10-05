@@ -28,7 +28,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
-  final _name = TextEditingController();
 
   late final AnimationController _anim;
   bool _resolvingPostLogin = false;
@@ -49,7 +48,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     _email.dispose();
     _password.dispose();
     _confirm.dispose();
-    _name.dispose();
     super.dispose();
   }
 
@@ -62,8 +60,17 @@ class _RegisterScreenState extends State<RegisterScreen>
       MoonSnack.error(context, 'Enter a valid email address.');
       return;
     }
-    if (pass.length < 8) {
-      MoonSnack.error(context, 'Password must be at least 8 characters.');
+    // Mirrors the server's rules (8+ chars, upper + lower case, a number
+    // and a symbol) so people get a clear message instead of a server error.
+    if (pass.length < 8 ||
+        !RegExp(r'[A-Z]').hasMatch(pass) ||
+        !RegExp(r'[a-z]').hasMatch(pass) ||
+        !RegExp(r'\d').hasMatch(pass) ||
+        !RegExp(r'[^A-Za-z0-9]').hasMatch(pass)) {
+      MoonSnack.error(
+        context,
+        'Password needs 8+ characters with upper and lower case letters, a number and a symbol.',
+      );
       return;
     }
     if (pass != _confirm.text.trim()) {
@@ -71,13 +78,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       return;
     }
     HapticFeedback.lightImpact();
-    context.read<AuthBloc>().add(
-      SignUpRequested(
-        email: email,
-        password: pass,
-        agent_name: _name.text.trim(),
-      ),
-    );
+    context.read<AuthBloc>().add(SignUpRequested(email: email, password: pass));
   }
 
   void _google() {
@@ -214,14 +215,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 label: 'Email',
                                 icon: Icons.mail_outline_rounded,
                                 keyboard: TextInputType.emailAddress,
-                              ),
-                              const SizedBox(height: 14),
-                              AuthField(
-                                controller: _name,
-                                label: 'Agent name (optional)',
-                                icon: Icons.person_outline_rounded,
-                                keyboard: TextInputType.name,
-                                capitalize: TextCapitalization.words,
                               ),
                               const SizedBox(height: 14),
                               AuthField(
