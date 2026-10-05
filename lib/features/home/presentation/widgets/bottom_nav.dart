@@ -17,6 +17,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 class HomeBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
+  final ValueChanged<int>? onTabReselected;
   final VoidCallback onGoLive;
   final VoidCallback onCreatePost;
   final VoidCallback onSearch;
@@ -25,6 +26,7 @@ class HomeBottomNav extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onTabSelected,
+    this.onTabReselected,
     required this.onGoLive,
     required this.onCreatePost,
     required this.onSearch,
@@ -34,6 +36,7 @@ class HomeBottomNav extends StatelessWidget {
     if (currentIndex == index) {
       // Subtle haptic = "you are already here"
       HapticFeedback.selectionClick();
+      onTabReselected?.call(index);
       return;
     }
 

@@ -1,5 +1,8 @@
 // lib/features/feed/presentation/pages/feed_screen.dart
 
+import 'dart:async';
+
+import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -68,6 +71,7 @@ class _FeedBodyState extends State<FeedBody>
   bool get wantKeepAlive => true;
 
   final _scroll = ScrollController();
+  StreamSubscription<ScrollTarget>? _topSub;
 
   // How many items ahead of the current scroll position to keep
   // preloaded. Widened slightly from 3→4 so fast scrolling/flinging
@@ -105,6 +109,9 @@ class _FeedBodyState extends State<FeedBody>
       cubit.loadFirstPage();
     }
     _scroll.addListener(_onScroll);
+    _topSub = ScrollToTopService.stream.listen((t) {
+      if (t == ScrollTarget.discover) ScrollToTopService.animateToTop(_scroll);
+    });
   }
 
   void _onScroll() {
@@ -145,6 +152,7 @@ class _FeedBodyState extends State<FeedBody>
 
   @override
   void dispose() {
+    _topSub?.cancel();
     _scroll.dispose();
     super.dispose();
   }

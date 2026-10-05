@@ -16,6 +16,7 @@
 
 import 'dart:async';
 
+import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -141,12 +142,14 @@ class _HomeTopTabsState extends State<HomeTopTabs>
   Future<void> _onTabTap(int index) async {
     if (index != _tabs.index) return;
     if (index == 0) {
+      ScrollToTopService.request(ScrollTarget.watch);
       if (_watchRefreshing) return;
       setState(() => _watchRefreshing = true);
       context.read<LiveFeedBloc>().add(LiveFeedRefresh());
       await _watchVideoCubit.refresh();
       if (mounted) setState(() => _watchRefreshing = false);
     } else if (index == 1) {
+      ScrollToTopService.request(ScrollTarget.discover);
       if (_discoverRefreshing) return;
       setState(() => _discoverRefreshing = true);
       await _discoverCubit.refresh();

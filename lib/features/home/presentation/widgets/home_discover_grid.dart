@@ -13,6 +13,9 @@
 
 import 'dart:async';
 
+import 'dart:async';
+
+import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/services/video_preload_service.dart';
@@ -51,6 +54,7 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
   bool get wantKeepAlive => true;
 
   final _ctrl = ScrollController();
+  StreamSubscription<ScrollTarget>? _topSub;
   FeedCubit get _videoCubit => widget.videoCubit;
 
   @override
@@ -60,6 +64,9 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
     // that bloc itself is untouched, just driven from here now instead.
     context.read<LiveFeedBloc>().add(LiveFeedStarted(order: 'trending'));
     _ctrl.addListener(_onScroll);
+    _topSub = ScrollToTopService.stream.listen((t) {
+      if (t == ScrollTarget.watch) ScrollToTopService.animateToTop(_ctrl);
+    });
   }
 
   void _onScroll() {
@@ -71,6 +78,7 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
 
   @override
   void dispose() {
+    _topSub?.cancel();
     _ctrl.dispose();
     super.dispose();
   }

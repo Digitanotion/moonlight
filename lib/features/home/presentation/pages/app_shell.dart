@@ -1,3 +1,4 @@
+import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -85,6 +86,14 @@ class _AppShellState extends State<AppShell> {
         bottomNavigationBar: HomeBottomNav(
           currentIndex: _index,
           onTabSelected: _onTabSelected,
+          onTabReselected: (i) {
+            // Tapping Home while already on Home scrolls the current
+            // Watch/Discover list back to the top.
+            if (i == 0) {
+              ScrollToTopService.request(ScrollTarget.watch);
+              ScrollToTopService.request(ScrollTarget.discover);
+            }
+          },
           onGoLive: () {
             Navigator.pushNamed(context, RouteNames.goLive);
           },

@@ -116,7 +116,9 @@ class _Thumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = post.thumbUrl;
-    debugPrint('⚠️ VideoTileGrid: using thumbUrl="$url" for video post=${post.id}');
+    debugPrint(
+      '⚠️ VideoTileGrid: using thumbUrl="$url" for video post=${post.id}',
+    );
     if (url != null && url.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: url,

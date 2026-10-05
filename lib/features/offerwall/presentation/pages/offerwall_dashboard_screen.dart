@@ -343,6 +343,18 @@ class _WithdrawalsList extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
+                    if ((w['bank_country'] ?? '').toString().isNotEmpty)
+                      Text(
+                        [
+                          (w['bank_country']).toString(),
+                          if ((w['bank_name'] ?? '').toString().isNotEmpty)
+                            (w['bank_name']).toString(),
+                        ].join(' · '),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
                     Text(
                       (w['created_at'] ?? '').toString(),
                       style: const TextStyle(
