@@ -129,35 +129,6 @@ class AuthRoundIcon extends StatelessWidget {
   }
 }
 
-class AuthInviteBadge extends StatelessWidget {
-  const AuthInviteBadge({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: kAuthAccent.withValues(alpha: 0.14),
-        border: Border.all(color: kAuthAccent.withValues(alpha: 0.4)),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.verified_rounded, color: kAuthAccentSoft, size: 20),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              "You've been invited by a Moonlight agent. Your code is applied "
-              'automatically once you sign up.',
-              style: TextStyle(color: Colors.white, fontSize: 13, height: 1.35),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class AuthGlass extends StatelessWidget {
   final Widget child;
   const AuthGlass({super.key, required this.child});

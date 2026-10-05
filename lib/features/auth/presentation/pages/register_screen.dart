@@ -1,7 +1,7 @@
 // lib/features/auth/presentation/pages/register_screen.dart
 //
-// Sign-up: Google or email. A pending agent invite code (from an invite
-// link, or typed here) is saved before either path so the account is
+// Sign-up: Google or email. A pending agent invite code (saved when an invite
+// link is opened) stays stored, so the account is
 // attached to that agent on first login — see PendingAgentCodeService.
 
 import 'dart:async';
@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
-import 'package:moonlight/core/services/pending_agent_code_service.dart';
 import 'package:moonlight/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:moonlight/features/auth/presentation/widgets/auth_ui.dart';
 import 'package:moonlight/features/auth/presentation/widgets/terms_and_policy.dart';
@@ -30,11 +29,8 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   final _name = TextEditingController();
-  final _agentCode = TextEditingController();
 
   late final AnimationController _anim;
-  bool _showCodeField = false;
-  bool _invitedByLink = false;
   bool _resolvingPostLogin = false;
 
   @override
@@ -45,15 +41,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       duration: const Duration(milliseconds: 900),
     )..forward();
     _password.addListener(() => setState(() {}));
-    PendingAgentCodeService.peek().then((c) {
-      if (c != null && mounted) {
-        setState(() {
-          _agentCode.text = c;
-          _showCodeField = true;
-          _invitedByLink = true;
-        });
-      }
-    });
   }
 
   @override
@@ -63,7 +50,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     _password.dispose();
     _confirm.dispose();
     _name.dispose();
-    _agentCode.dispose();
     super.dispose();
   }
 
@@ -85,7 +71,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       return;
     }
     HapticFeedback.lightImpact();
-    PendingAgentCodeService.save(_agentCode.text);
     context.read<AuthBloc>().add(
       SignUpRequested(
         email: email,
@@ -97,7 +82,6 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   void _google() {
     HapticFeedback.lightImpact();
-    PendingAgentCodeService.save(_agentCode.text);
     context.read<AuthBloc>().add(const GoogleSignInRequested());
   }
 
@@ -211,10 +195,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                             height: 1.4,
                           ),
                         ),
-                        if (_invitedByLink) ...[
-                          const SizedBox(height: 20),
-                          const AuthInviteBadge(),
-                        ],
                         const SizedBox(height: 26),
 
                         // Google first — the fastest path.
@@ -257,45 +237,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 label: 'Confirm password',
                                 icon: Icons.lock_reset_rounded,
                                 password: true,
-                                last: !_showCodeField,
-                              ),
-                              const SizedBox(height: 6),
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 250),
-                                curve: Curves.easeOut,
-                                alignment: Alignment.topCenter,
-                                child: _showCodeField
-                                    ? Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: AuthField(
-                                          controller: _agentCode,
-                                          label: 'Agent code',
-                                          icon: Icons.groups_2_outlined,
-                                          capitalize:
-                                              TextCapitalization.characters,
-                                          last: true,
-                                        ),
-                                      )
-                                    : Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: TextButton.icon(
-                                          onPressed: () => setState(
-                                            () => _showCodeField = true,
-                                          ),
-                                          icon: const Icon(
-                                            Icons.add_rounded,
-                                            size: 18,
-                                            color: kAuthAccentSoft,
-                                          ),
-                                          label: const Text(
-                                            'Have an agent code?',
-                                            style: TextStyle(
-                                              color: kAuthAccentSoft,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                last: true,
                               ),
                               const SizedBox(height: 18),
                               AuthPrimaryButton(
