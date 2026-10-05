@@ -8,7 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/agents/data/agent_remote_data_source.dart';
-import 'package:moonlight/features/profile_setup/data/datasources/country_local_data_source.dart';
+import 'package:moonlight/core/utils/countries.dart';
+import 'package:moonlight/core/widgets/country_picker_field.dart';
 import 'package:moonlight/features/agents/presentation/pages/agent_ui.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 
@@ -28,9 +29,8 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
   final _name = TextEditingController();
   final _desc = TextEditingController();
   final _phone = TextEditingController();
-  String? _country;
-  String? _profileCountry;
-  List<String> _countries = const [];
+  // ISO2 code, same representation as the profile / edit-profile screens.
+  String? _iso;
   String _gender = 'male';
   String _visibility = 'public';
   File? _photo;
@@ -46,13 +46,12 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCountries();
     final e = widget.existing;
     if (e != null) {
       _name.text = (e['name'] ?? '').toString();
       _desc.text = (e['description'] ?? '').toString();
       _phone.text = (e['phone'] ?? '').toString();
-      _country = e['country']?.toString();
+      _iso = normalizeCountryToIso2(e['country']?.toString());
       _gender = (e['gender'] ?? 'male').toString();
       _visibility = (e['members_visibility'] ?? 'public').toString();
     } else {
@@ -61,36 +60,13 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
         _name.text = (p['name'] ?? '').toString();
         _desc.text = (p['description'] ?? '').toString();
         _phone.text = (p['phone'] ?? '').toString();
-        _profileCountry = (p['country'] ?? '').toString();
+        _iso = normalizeCountryToIso2(p['country']?.toString());
         final g = (p['gender'] ?? '').toString();
         if (const ['male', 'female', 'other'].contains(g)) _gender = g;
       }
       // The programme message is shown first, before the form.
       WidgetsBinding.instance.addPostFrameCallback((_) => _showIntro());
     }
-  }
-
-  /// Same full world list the profile screen uses (assets/countries.json) —
-  /// NOT the shorter payout list — so a profile country always matches.
-  Future<void> _loadCountries() async {
-    List<String> list = const [];
-    try {
-      list = await CountryLocalDataSourceImpl().loadCountries();
-    } catch (_) {}
-    if (!mounted) return;
-    String? match(String? v) {
-      final t = (v ?? '').trim().toLowerCase();
-      if (t.isEmpty) return null;
-      for (final c in list) {
-        if (c.toLowerCase() == t) return c;
-      }
-      return null;
-    }
-
-    setState(() {
-      _countries = list;
-      _country = match(_country) ?? match(_profileCountry) ?? _country;
-    });
   }
 
   @override
@@ -149,7 +125,7 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
     }
     if (_name.text.trim().length < 2 ||
         _phone.text.trim().length < 6 ||
-        _country == null) {
+        _iso == null) {
       TopSnack.error(context, 'Fill in the agent name, country and phone.');
       return;
     }
@@ -159,7 +135,7 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
       final form = FormData.fromMap({
         'name': _name.text.trim(),
         'description': _desc.text.trim(),
-        'country': _country,
+        'country': countryDisplayName(_iso),
         'phone': _phone.text.trim(),
         'gender': _gender,
         if (_editing) 'members_visibility': _visibility,
@@ -250,20 +226,23 @@ class _AgentFormScreenState extends State<AgentFormScreen> {
             decoration: agentInput('Description'),
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _country,
-            isExpanded: true,
-            dropdownColor: const Color(0xFF1C1533),
-            style: const TextStyle(color: Colors.white),
-            decoration: agentInput('Country'),
-            items: [
-              if (_country != null && !_countries.contains(_country))
-                DropdownMenuItem(value: _country, child: Text(_country!)),
-              ..._countries.map(
-                (c) => DropdownMenuItem(value: c, child: Text(c)),
-              ),
-            ],
-            onChanged: (v) => setState(() => _country = v),
+          CountrySelectField(
+            iso2: _iso,
+            placeholder: 'Country',
+            background: Colors.white.withValues(alpha: 0.06),
+            border: const Color(0x29FFFFFF),
+            textSecondary: Colors.white54,
+            onTap: () async {
+              final iso = await showCountryPickerSheet(
+                context,
+                bg: const Color(0xFF0A0A0F),
+                surface: const Color(0xFF151626),
+                border: const Color(0x29FFFFFF),
+                accent: const Color(0xFFFF7A00),
+                textSecondary: Colors.white70,
+              );
+              if (iso != null && mounted) setState(() => _iso = iso);
+            },
           ),
           const SizedBox(height: 14),
           TextField(
