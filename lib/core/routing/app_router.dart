@@ -170,9 +170,14 @@ class AppRouter {
         return MaterialPageRoute(builder: (context) => const DebugScreen());
 
       case RouteNames.email_verify:
+        // The address to verify is passed as the route argument (from
+        // sign-up, or from login when the account is unverified).
+        final verifyEmail = settings.arguments is String
+            ? settings.arguments as String
+            : '';
         return MaterialPageRoute(
-          builder: (context) =>
-              const EmailVerificationScreen(email: "digitanotion@gmail.com"),
+          builder: (context) => EmailVerificationScreen(email: verifyEmail),
+          settings: settings,
         );
 
       case RouteNames.forget_password:

@@ -143,7 +143,18 @@ class _LoginScreenState extends State<LoginScreen>
                   _resolvePostLoginRoute(context);
                 } else if (state is AuthFailure) {
                   debugPrint(state.message);
-                  MoonSnack.error(context, state.message);
+                  // An unverified account: the server just emailed a new
+                  // code, so go straight to code entry.
+                  if (state.message.toLowerCase().contains('not verified') &&
+                      emailController.text.trim().isNotEmpty) {
+                    Navigator.pushNamed(
+                      context,
+                      RouteNames.email_verify,
+                      arguments: emailController.text.trim(),
+                    );
+                  } else {
+                    MoonSnack.error(context, state.message);
+                  }
                 }
               },
               builder: (context, state) {

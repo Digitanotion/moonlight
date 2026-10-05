@@ -135,7 +135,11 @@ class _RegisterScreenState extends State<RegisterScreen>
     return BlocConsumer<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is RegistrationSuccess) {
-          Navigator.pushReplacementNamed(context, RouteNames.email_verify);
+          Navigator.pushReplacementNamed(
+            context,
+            RouteNames.email_verify,
+            arguments: _email.text.trim(),
+          );
         } else if (state is AuthAuthenticated) {
           _resolvePostLoginRoute(context);
         } else if (state is AuthFailure) {
