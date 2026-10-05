@@ -1,3 +1,4 @@
+import 'package:moonlight/core/services/pending_agent_code_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -23,6 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   late final TextEditingController _passwordController;
   late final TextEditingController _confirmPasswordController;
   late final TextEditingController _nameController;
+  late final TextEditingController _agentCodeController;
 
   @override
   void initState() {
@@ -31,6 +33,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController = TextEditingController();
     _nameController = TextEditingController();
     _confirmPasswordController = TextEditingController();
+    _agentCodeController = TextEditingController();
+    PendingAgentCodeService.peek().then((c) {
+      if (c != null && mounted) _agentCodeController.text = c;
+    });
   }
 
   @override
@@ -38,6 +44,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
+    _agentCodeController.dispose();
     super.dispose();
   }
 
@@ -122,6 +129,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       hint: 'Enter agent name (optional)',
                       icon: Icons.person_outline,
                     ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      controller: _agentCodeController,
+                      label: 'Agent Code',
+                      hint: 'Invited by an agent? Enter their code (optional)',
+                      icon: Icons.groups_outlined,
+                    ),
                     const SizedBox(height: 32),
                     // Remove the inner BlocBuilder since we're already in BlocConsumer's builder
                     _buildAuthButtons(context, state),
@@ -172,6 +186,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         AuthButton(
           text: 'Create Account',
           onPressed: () {
+            PendingAgentCodeService.save(_agentCodeController.text);
             context.read<AuthBloc>().add(
               SignUpRequested(
                 email: _emailController.text.trim(),

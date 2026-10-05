@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:moonlight/core/services/pending_agent_code_service.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -89,6 +90,13 @@ class DeepLinkService {
 
     final kind = parts[0];
     final value = parts[1];
+    if (kind == 'agent') {
+      // Invite link: remember the code; it's attached once the user is
+      // signed in (immediately, if they already are).
+      await PendingAgentCodeService.save(value);
+      PendingAgentCodeService.applyIfPending();
+      return;
+    }
     if (kind != 'live' && kind != 'post') return;
 
     // Wait for the app to finish booting (bounded, so a stuck splash can't

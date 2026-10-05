@@ -42,12 +42,17 @@ class AgentRemoteDataSource {
   Future<Map<String, dynamic>> update(FormData form) async =>
       _data(await dio.post('/api/v1/agents/me', data: form));
 
+  /// Sentinel from [join]: not signed in yet / no connection — try again later.
+  static const retryLater = '__retry__';
+
   /// Returns null on success, otherwise the server's reason.
   Future<String?> join(String code) async {
     try {
       await dio.post('/api/v1/agents/join', data: {'code': code});
       return null;
     } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == null || status == 401) return retryLater;
       final d = e.response?.data;
       return (d is Map ? d['message'] : null)?.toString() ??
           'Could not apply the agent code.';

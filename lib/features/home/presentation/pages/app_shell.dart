@@ -1,3 +1,4 @@
+import 'package:moonlight/core/services/pending_agent_code_service.dart';
 import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    PendingAgentCodeService.applyIfPending();
     _tabs = const [
       HomeScreen(), // 0
       EmptyTab(), // 1 (Go Live modal)

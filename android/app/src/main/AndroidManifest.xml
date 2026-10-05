@@ -131,6 +131,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="svc.moonlightstream.app" android:pathPrefix="/live/" />
                 <data android:scheme="https" android:host="svc.moonlightstream.app" android:pathPrefix="/post/" />
+                <data android:scheme="https" android:host="svc.moonlightstream.app" android:pathPrefix="/agent/" />
             </intent-filter>
 
             <!-- Custom-scheme fallback (no domain verification needed) -->
