@@ -145,6 +145,35 @@ class AdService {
     ad.show();
   }
 
+  // ── Short-video pager ───────────────────────────────────────────────────
+  // One interstitial after every [videosPerInterstitial] short videos the
+  // user swipes through, with a minimum gap between any two interstitials so
+  // a fast scroller is never hit with back-to-back ads.
+  static const int videosPerInterstitial = 4;
+  static const Duration _minGapBetweenAds = Duration(seconds: 40);
+
+  int _videosSinceAd = 0;
+  DateTime _lastAdShownAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Call when the user swipes to a new short video. Never blocks.
+  void onShortVideoSwiped() {
+    _videosSinceAd++;
+    if (_videosSinceAd < videosPerInterstitial) return;
+
+    final ad = _cachedInterstitial;
+    if (ad == null) {
+      _preloadInterstitial();
+      return; // try again on the next swipe once one is cached
+    }
+    if (DateTime.now().difference(_lastAdShownAt) < _minGapBetweenAds) return;
+
+    _videosSinceAd = 0;
+    _postsSinceLastAd = 0;
+    _lastAdShownAt = DateTime.now();
+    _cachedInterstitial = null;
+    ad.show();
+  }
+
   void resetCounter() => _postsSinceLastAd = 0;
 
   // ── Banner ───────────────────────────────────────────────────────────────

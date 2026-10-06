@@ -303,6 +303,8 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               _preloadAround(i);
               _maybePaginate();
               _bumpView(i);
+              // Interstitial after every 4th short video (frequency-capped).
+              AdService.instance.onShortVideoSwiped();
             },
             itemBuilder: (context, i) {
               final post = _videoPosts[i];
