@@ -16,6 +16,7 @@
 
 import 'dart:async';
 
+import 'package:moonlight/features/offerwall/presentation/widgets/earnings_ticker.dart';
 import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -300,6 +301,8 @@ class _HomeTopTabsState extends State<HomeTopTabs>
           // Restored inline promo pill — sits at the top of the page like
           // it originally did, independent of the flashy floating banner
           // further down. Closing that one never affects this one.
+          // Sliding "X just earned coins" strip (real Daily Tasks earnings).
+          const EarningsTicker(),
           const EarnCashTopBanner(),
           Expanded(
             child: Stack(

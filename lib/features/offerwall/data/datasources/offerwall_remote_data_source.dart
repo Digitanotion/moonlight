@@ -16,6 +16,13 @@ class OfferwallRemoteDataSource {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// Recent real Daily Tasks credits (first name + coins) for the Home ticker.
+  Future<List<Map<String, dynamic>>> getRecentEarnings() async {
+    final res = await dio.get('/api/v1/offerwall/recent-earnings');
+    final data = (res.data as Map)['data'] as List? ?? const [];
+    return List<Map<String, dynamic>>.from(data);
+  }
+
   Future<Map<String, dynamic>> activate() async {
     final res = await dio.post('/api/v1/offerwall/activate');
     return Map<String, dynamic>.from(res.data as Map);
