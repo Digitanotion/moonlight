@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:moonlight/core/services/video_ad_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -157,6 +158,9 @@ class AdService {
 
   /// Call when the user swipes to a new short video. Never blocks.
   void onShortVideoSwiped() {
+    // Google IMA video ads own this slot when configured on the server.
+    if (VideoAdService.instance.handleSwipe()) return;
+
     _videosSinceAd++;
     if (_videosSinceAd < videosPerInterstitial) return;
 

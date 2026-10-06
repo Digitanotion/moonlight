@@ -1031,6 +1031,14 @@ packages:
       relative: true
     source: path
     version: "4.2.5"
+  interactive_media_ads:
+    dependency: "direct main"
+    description:
+      name: interactive_media_ads
+      sha256: "9eb0094cdc2fc89848fda779e2b8b65f050e8050cf204404ac0e193e8bd1b127"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0+18"
   intl:
     dependency: "direct main"
     description:
