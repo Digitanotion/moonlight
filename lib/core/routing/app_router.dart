@@ -1,6 +1,7 @@
 // lib/core/routing/app_router.dart
 // ── PATCHED: Added 7 Club Treasury routes ────────────────────────────────────
 
+import 'package:moonlight/features/monetization/presentation/pages/monetization_screen.dart';
 import 'package:moonlight/features/agents/presentation/pages/agent_hub_screen.dart';
 import 'package:moonlight/features/agents/presentation/pages/agents_directory_screen.dart';
 import 'package:flutter/material.dart';
@@ -898,6 +899,12 @@ class AppRouter {
       case RouteNames.dailyTasks:
         return MaterialPageRoute(
           builder: (context) => AuthGuard(child: const DailyTasksScreen()),
+          settings: settings,
+        );
+
+      case RouteNames.monetization:
+        return MaterialPageRoute(
+          builder: (context) => AuthGuard(child: const MonetizationScreen()),
           settings: settings,
         );
 

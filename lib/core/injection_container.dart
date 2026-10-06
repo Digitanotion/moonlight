@@ -20,6 +20,7 @@
 
 import 'dart:async';
 
+import 'package:moonlight/features/monetization/data/monetization_remote_data_source.dart';
 import 'package:moonlight/features/agents/data/agent_remote_data_source.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
@@ -572,6 +573,9 @@ Future<void> _initFullGraph() async {
   _initSettingsModule();
   _initClubsModule();
   _initOfferwallModule();
+  sl.registerLazySingleton<MonetizationRemoteDataSource>(
+    () => MonetizationRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
+  );
   sl.registerLazySingleton<AgentRemoteDataSource>(
     () => AgentRemoteDataSource(sl<Dio>(instanceName: 'mainDio')),
   );

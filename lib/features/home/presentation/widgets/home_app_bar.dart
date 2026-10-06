@@ -96,6 +96,14 @@ class AccountButton extends StatelessWidget {
                       },
                     ),
                     _MenuRow(
+                      icon: Icons.paid_rounded,
+                      label: 'Monetization',
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        Navigator.pushNamed(context, RouteNames.monetization);
+                      },
+                    ),
+                    _MenuRow(
                       icon: Icons.groups_rounded,
                       label: 'Agency',
                       onTap: () {
