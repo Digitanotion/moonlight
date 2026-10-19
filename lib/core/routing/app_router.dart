@@ -27,6 +27,8 @@ import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart
 import 'package:moonlight/features/clubs/data/datasources/club_treasury_remote_data_source.dart';
 import 'package:moonlight/features/clubs/domain/entities/club_treasury.dart';
 import 'package:moonlight/features/clubs/presentation/club_treasury_screen.dart';
+import 'package:moonlight/features/clubs/presentation/pages/all_clubs_screen.dart';
+import 'package:moonlight/features/clubs/rooms/club_room_screen.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_members_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/club_profile_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
@@ -731,6 +733,23 @@ class AppRouter {
           ),
           settings: settings,
         );
+
+      case RouteNames.allClubs:
+        return MaterialPageRoute(
+          builder: (_) => const AuthGuard(child: AllClubsScreen()),
+          settings: settings,
+        );
+
+      case RouteNames.clubRoom:
+        {
+          final args = (settings.arguments as Map?) ?? {};
+          return MaterialPageRoute(
+            builder: (_) => AuthGuard(
+              child: ClubRoomScreen(roomUuid: args['roomUuid'] as String),
+            ),
+            settings: settings,
+          );
+        }
 
       case RouteNames.createClub:
         return MaterialPageRoute(

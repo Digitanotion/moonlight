@@ -300,6 +300,15 @@ class FeedCubit extends Cubit<FeedState> {
     emit(state.copyWith(items: [...state.items]..[index] = merged));
   }
 
+  /// Drops a post the user just deleted so every view of this feed
+  /// (grid + video pager) stops showing it without a refetch.
+  void removePostById(String postId) {
+    final items = state.items.where((p) => p.id != postId).toList();
+    if (items.length != state.items.length) {
+      emit(state.copyWith(items: items));
+    }
+  }
+
   /// Marks every loaded post authored by [authorId] as followed in THIS
   /// cubit's own items, immediately (no round trip through the broadcast
   /// stream) — call this from the widget that actually performed the

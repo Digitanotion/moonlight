@@ -12,6 +12,8 @@ import 'package:moonlight/features/clubs/presentation/cubit/club_profile_cubit.d
 import 'package:moonlight/features/clubs/presentation/cubit/club_profile_state.dart';
 import 'package:moonlight/features/clubs/presentation/pages/support_club_page.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
+import 'package:moonlight/features/clubs/rooms/club_rooms_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
@@ -128,6 +130,14 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                               club: club,
                               messageButtonKey: _messageButtonKey,
                             ),
+                            // Club revamp: audio / video rooms (members only).
+                            if (club.isMember) ...[
+                              const SizedBox(height: 20),
+                              ClubRoomsBar(
+                                clubUuid: club.uuid,
+                                canOpenAudio: club.isCreator || club.isAdmin,
+                              ),
+                            ],
                             const SizedBox(height: 30),
                             _DescriptionCard(club.description),
                             const SizedBox(height: 25),
@@ -994,7 +1004,20 @@ class _JoinButton extends StatelessWidget {
         return GestureDetector(
           onTap: isJoining
               ? null
-              : (onJoin ?? () => context.read<ClubProfileCubit>().joinClub()),
+              : (onJoin ??
+                    () async {
+                      final cubit = context.read<ClubProfileCubit>();
+                      final fee = state.profile?.joinFeeCoins ?? 0;
+                      final ok = await confirmCoinSpend(
+                        context,
+                        title: 'Join ${state.profile?.name ?? 'club'}?',
+                        coins: fee,
+                        detail:
+                            'A one-time subscription that goes to the club owner.',
+                        confirmLabel: 'Join',
+                      );
+                      if (ok) cubit.joinClub();
+                    }),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(

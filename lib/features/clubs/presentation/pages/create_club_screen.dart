@@ -12,6 +12,7 @@ import 'package:moonlight/features/clubs/presentation/cubit/create_club_cubit.da
 import 'package:moonlight/features/clubs/presentation/cubit/create_club_state.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 
 class CreateClubScreen extends StatelessWidget {
   const CreateClubScreen({super.key});
@@ -128,10 +129,21 @@ class _CreateClubViewState extends State<_CreateClubView> {
                         child: ElevatedButton(
                           onPressed: state.loading
                               ? null
-                              : () {
+                              : () async {
                                   if (_formKey.currentState!.validate()) {
                                     final cubit = context
                                         .read<CreateClubCubit>();
+                                    final ok = await confirmCoinSpend(
+                                      context,
+                                      title: 'Create your club',
+                                      coins: kClubOpeningFeeCoins,
+                                      detail:
+                                          'One-time club opening fee. Members '
+                                          'then pay $kClubJoinFeeCoins coins '
+                                          'to join — that goes to you.',
+                                      confirmLabel: 'Pay & create',
+                                    );
+                                    if (!ok) return;
 
                                     // 🔥 FORCE SYNC CONTROLLERS → CUBIT
                                     cubit.setName(_name.text.trim());
@@ -154,7 +166,7 @@ class _CreateClubViewState extends State<_CreateClubView> {
                           child: state.loading
                               ? const AppLogoLoader()
                               : const Text(
-                                  'Create Club',
+                                  'Create Club · $kClubOpeningFeeCoins coins',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,

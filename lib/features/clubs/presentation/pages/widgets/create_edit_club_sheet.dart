@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 
 Future<void> showCreateEditClubSheet(BuildContext context, {Club? club}) {
   return showModalBottomSheet(
@@ -76,6 +77,16 @@ class _CreateEditClubFormState extends State<_CreateEditClubForm> {
             onPressed: saving
                 ? null
                 : () async {
+                    if (widget.club == null) {
+                      final ok = await confirmCoinSpend(
+                        context,
+                        title: 'Create your club',
+                        coins: kClubOpeningFeeCoins,
+                        detail: 'One-time club opening fee.',
+                        confirmLabel: 'Pay & create',
+                      );
+                      if (!ok || !mounted) return;
+                    }
                     setState(() => saving = true);
                     try {
                       if (widget.club == null) {
@@ -92,9 +103,11 @@ class _CreateEditClubFormState extends State<_CreateEditClubForm> {
                           isPrivate: isPrivate,
                         );
                       }
-                      Navigator.pop(context);
+                      if (mounted) Navigator.pop(context);
+                    } catch (e) {
+                      if (mounted) await showCoinError(context, e);
                     } finally {
-                      setState(() => saving = false);
+                      if (mounted) setState(() => saving = false);
                     }
                   },
             child: Text(widget.club == null ? 'Create' : 'Save'),

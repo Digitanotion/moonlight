@@ -20,7 +20,7 @@ import 'package:moonlight/core/widgets/app_logo_loader.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 const int _kNubanLength = 10;
 
-enum _PaymentMethod { flutterwave, paypal }
+enum _PaymentMethod { flutterwave, paypal, crypto }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -51,6 +51,30 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   // ── PayPal controllers ─────────────────────────────────────────────────────
   final _paypalEmailController = TextEditingController();
   final _paypalEmailConfirmController = TextEditingController();
+
+  // ── Crypto controllers / options ───────────────────────────────────────────
+  final _walletAddressController = TextEditingController();
+  final _walletAddressConfirmController = TextEditingController();
+
+  /// From GET /wallet/crypto-options — null until loaded (or on failure).
+  Map<String, dynamic>? _cryptoOptions;
+  String? _cryptoNetwork; // e.g. POLYGON
+  String? _cryptoCoin; // USDT | USDC
+
+  bool get _cryptoEnabled => _cryptoOptions?['enabled'] == true;
+  double get _cryptoMinUsd =>
+      (_cryptoOptions?['min_usd'] as num?)?.toDouble() ?? 5;
+  List<Map<String, dynamic>> get _cryptoNetworks =>
+      ((_cryptoOptions?['networks'] as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+  Map<String, dynamic>? get _selectedNetwork => _cryptoNetworks
+      .where((n) => n['code'] == _cryptoNetwork)
+      .firstOrNull;
+  List<String> get _coinsForNetwork =>
+      ((_selectedNetwork?['coins'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList();
 
   // ── State flags ────────────────────────────────────────────────────────────
   bool _isSubmitting = false;
@@ -86,7 +110,25 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<WithdrawalCubit>().loadBalance();
       _fetchBanks(_selectedCountry);
+      _loadCryptoOptions();
     });
+  }
+
+  Future<void> _loadCryptoOptions() async {
+    try {
+      final opts = await context.read<WithdrawalCubit>().fetchCryptoOptions();
+      if (!mounted) return;
+      setState(() {
+        _cryptoOptions = opts;
+        final networks = _cryptoNetworks;
+        if (networks.isNotEmpty) {
+          _cryptoNetwork = networks.first['code']?.toString();
+          _cryptoCoin = _coinsForNetwork.firstOrNull;
+        }
+      });
+    } catch (_) {
+      // Older API or offline — the Crypto card just shows as unavailable.
+    }
   }
 
   @override
@@ -101,6 +143,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     _phoneController.dispose();
     _paypalEmailController.dispose();
     _paypalEmailConfirmController.dispose();
+    _walletAddressController.dispose();
+    _walletAddressConfirmController.dispose();
     super.dispose();
   }
 
@@ -339,13 +383,20 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
   }
 
   void _showPendingDialog() {
-    final method = _selectedMethod == _PaymentMethod.paypal
-        ? 'PayPal'
-        : 'bank transfer';
-    final recipientLabel = _selectedMethod == _PaymentMethod.paypal
-        ? _paypalEmailController.text.trim()
-        : '${_accountNameController.text.trim()}'
-              '${_selectedBank != null ? " — ${_selectedBank!['name']}" : ""}';
+    final method = switch (_selectedMethod) {
+      _PaymentMethod.paypal => 'PayPal',
+      _PaymentMethod.crypto => '$_cryptoCoin (${_selectedNetwork?['label']})',
+      _PaymentMethod.flutterwave => 'bank transfer',
+    };
+    final recipientLabel = switch (_selectedMethod) {
+      _PaymentMethod.paypal => _paypalEmailController.text.trim(),
+      _PaymentMethod.crypto => _shortAddress(
+        _walletAddressController.text.trim(),
+      ),
+      _PaymentMethod.flutterwave =>
+        '${_accountNameController.text.trim()}'
+            '${_selectedBank != null ? " — ${_selectedBank!['name']}" : ""}',
+    };
 
     showDialog(
       context: context,
@@ -465,6 +516,23 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
+  Future<void> _submitCrypto(String pin) async {
+    await context.read<WithdrawalCubit>().submitCryptoWithdrawal(
+      amountUsd: _enteredCents,
+      coin: _cryptoCoin ?? '',
+      network: _cryptoNetwork ?? '',
+      walletAddress: _walletAddressController.text.trim(),
+      walletAddressConfirm: _walletAddressConfirmController.text.trim(),
+      reason: _reasonController.text.isNotEmpty
+          ? _reasonController.text.trim()
+          : null,
+      pin: pin,
+    );
+  }
+
+  static String _shortAddress(String a) =>
+      a.length <= 14 ? a : '${a.substring(0, 6)}…${a.substring(a.length - 6)}';
+
   Future<void> _submitPayPal(String pin) async {
     await context.read<WithdrawalCubit>().submitPayPalWithdrawal(
       amountUsd: _enteredCents,
@@ -498,9 +566,18 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
       }
     }
 
-    final displayName = _selectedMethod == _PaymentMethod.paypal
-        ? _paypalEmailController.text.trim()
-        : _accountNameController.text.trim();
+    if (_selectedMethod == _PaymentMethod.crypto &&
+        (_cryptoNetwork == null || _cryptoCoin == null)) {
+      _showErrorDialog('Please choose a coin and network.');
+      return;
+    }
+
+    final displayName = switch (_selectedMethod) {
+      _PaymentMethod.paypal => _paypalEmailController.text.trim(),
+      _PaymentMethod.crypto =>
+        '$_cryptoCoin · ${_shortAddress(_walletAddressController.text.trim())}',
+      _PaymentMethod.flutterwave => _accountNameController.text.trim(),
+    };
 
     Navigator.push(
       context,
@@ -512,6 +589,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             Navigator.pop(context); // dismiss PIN page
             if (_selectedMethod == _PaymentMethod.paypal) {
               await _submitPayPal(pin);
+            } else if (_selectedMethod == _PaymentMethod.crypto) {
+              await _submitCrypto(pin);
             } else {
               await _submitFlutterwave(pin);
             }
@@ -617,6 +696,25 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                   },
                 ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _MethodCard(
+                  label: 'Crypto',
+                  sublabel: 'USDT / USDC',
+                  icon: Icons.currency_bitcoin_rounded,
+                  accentColor: const Color(0xFF26A17B),
+                  selected: _selectedMethod == _PaymentMethod.crypto,
+                  disabled: !_cryptoEnabled,
+                  disabledMessage:
+                      'Crypto withdrawals are not available at the moment.',
+                  onTap: () {
+                    if (_selectedMethod != _PaymentMethod.crypto) {
+                      setState(() => _selectedMethod = _PaymentMethod.crypto);
+                      _formKey.currentState?.validate();
+                    }
+                  },
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -696,6 +794,11 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                     final cents = (dollars * 100).round();
                     if (cents < 100) {
                       return 'Minimum withdrawal is \$1.00';
+                    }
+                    if (_selectedMethod == _PaymentMethod.crypto &&
+                        dollars < _cryptoMinUsd) {
+                      return 'Minimum crypto withdrawal is '
+                          '\$${_cryptoMinUsd.toStringAsFixed(2)}';
                     }
                     if (cents > _withdrawableCents) {
                       return 'Exceeds your available balance of '
@@ -1155,6 +1258,148 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     );
   }
 
+  // ── Crypto form ────────────────────────────────────────────────────────────
+
+  Widget _buildCryptoForm() {
+    final address = _walletAddressController.text.trim();
+    final networkLabel = _selectedNetwork?['label']?.toString() ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Network'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final n in _cryptoNetworks)
+              _CryptoChip(
+                label: n['label'].toString(),
+                selected: n['code'] == _cryptoNetwork,
+                onTap: () => setState(() {
+                  _cryptoNetwork = n['code'].toString();
+                  if (!_coinsForNetwork.contains(_cryptoCoin)) {
+                    _cryptoCoin = _coinsForNetwork.firstOrNull;
+                  }
+                }),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _sectionLabel('Coin'),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final c in _coinsForNetwork)
+              _CryptoChip(
+                label: c,
+                selected: c == _cryptoCoin,
+                onTap: () => setState(() => _cryptoCoin = c),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildInputField(
+          label: '$networkLabel wallet address',
+          hint: _cryptoNetwork == 'SOLANA' ? 'e.g. 7EcDhS…' : 'e.g. 0x5290…',
+          controller: _walletAddressController,
+          keyboardType: TextInputType.visiblePassword, // no autocorrect
+          suffix: IconButton(
+            tooltip: 'Paste',
+            icon: const Icon(Icons.content_paste_rounded, color: Colors.white54),
+            onPressed: () async {
+              final data = await Clipboard.getData(Clipboard.kTextPlain);
+              final text = data?.text?.trim();
+              if (text != null && text.isNotEmpty) {
+                setState(() => _walletAddressController.text = text);
+              }
+            },
+          ),
+          onChanged: (_) => setState(() {}),
+          validator: (v) {
+            final a = (v ?? '').trim();
+            if (a.isEmpty) return 'Enter your wallet address';
+            if (!_isValidWalletAddress(_cryptoNetwork, a)) {
+              return 'Not a valid $networkLabel address';
+            }
+            return null;
+          },
+        ),
+        _buildInputField(
+          label: 'Confirm wallet address',
+          hint: 'Paste the same address again',
+          controller: _walletAddressConfirmController,
+          keyboardType: TextInputType.visiblePassword,
+          validator: (v) {
+            if ((v ?? '').trim().isEmpty) return 'Please confirm the address';
+            if (v!.trim() != address) return 'Addresses do not match';
+            return null;
+          },
+        ),
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange.withOpacity(0.35)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orangeAccent,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Send only to a ${_cryptoCoin ?? ''} address on the '
+                  '$networkLabel network. Crypto transfers cannot be reversed '
+                  '— funds sent to a wrong address or network are lost.\n'
+                  'You receive ${_cryptoCoin ?? ''} 1:1 with the USD amount. '
+                  'Minimum \$${_cryptoMinUsd.toStringAsFixed(2)}.',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Mirrors the API's check: EVM chains use 0x + 40 hex, Solana base58.
+  static bool _isValidWalletAddress(String? network, String a) {
+    switch (network) {
+      case 'ETHEREUM':
+      case 'POLYGON':
+      case 'BASE':
+        return RegExp(r'^0x[a-fA-F0-9]{40}$').hasMatch(a);
+      case 'SOLANA':
+        return RegExp(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$').hasMatch(a);
+      default:
+        return false;
+    }
+  }
+
+  Widget _sectionLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white70,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+
   // ── Generic input field ────────────────────────────────────────────────────
 
   Widget _buildInputField({
@@ -1165,6 +1410,8 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
     List<TextInputFormatter>? inputFormatters,
     int? maxLines = 1,
     String? hint,
+    Widget? suffix,
+    ValueChanged<String>? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1188,9 +1435,12 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
             maxLines: maxLines,
+            onChanged: onChanged,
+            autocorrect: false,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               border: InputBorder.none,
+              suffixIcon: suffix,
               hintText: hint,
               hintStyle: const TextStyle(color: Colors.white30),
               contentPadding: const EdgeInsets.symmetric(
@@ -1220,9 +1470,11 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
           const SizedBox(width: 16, height: 16, child: AppLogoLoader()),
           const SizedBox(width: 12),
           Text(
-            _selectedMethod == _PaymentMethod.paypal
-                ? 'Sending to PayPal…'
-                : 'Processing bank transfer…',
+            switch (_selectedMethod) {
+              _PaymentMethod.paypal => 'Sending to PayPal…',
+              _PaymentMethod.crypto => 'Sending $_cryptoCoin…',
+              _PaymentMethod.flutterwave => 'Processing bank transfer…',
+            },
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ],
@@ -1319,10 +1571,11 @@ class _WithdrawalPageState extends State<WithdrawalPage> {
                   child: Column(
                     children: [
                       _buildAmountField(),
-                      if (_selectedMethod == _PaymentMethod.flutterwave)
-                        _buildFlutterwaveForm()
-                      else
-                        _buildPayPalForm(),
+                      switch (_selectedMethod) {
+                        _PaymentMethod.flutterwave => _buildFlutterwaveForm(),
+                        _PaymentMethod.crypto => _buildCryptoForm(),
+                        _PaymentMethod.paypal => _buildPayPalForm(),
+                      },
                       _buildInputField(
                         label: 'Reason (Optional)',
                         controller: _reasonController,
@@ -1559,6 +1812,46 @@ class _BankSearchSheetState extends State<_BankSearchSheet> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Payment method selector card
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _CryptoChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CryptoChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF26A17B);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? accent.withOpacity(0.18) : const Color(0xFF141433),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? accent : Colors.white12,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.white60,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _MethodCard extends StatelessWidget {
   final String label;

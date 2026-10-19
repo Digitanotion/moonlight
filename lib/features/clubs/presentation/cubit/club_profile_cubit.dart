@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/clubs/domain/entities/club_profile.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 import 'club_profile_state.dart';
 
 class ClubProfileCubit extends Cubit<ClubProfileState> {
@@ -47,7 +48,8 @@ class ClubProfileCubit extends Cubit<ClubProfileState> {
       } else if (e.response?.statusCode == 409) {
         emit(_idle(profile: p.copyWith(isMember: true)));
       } else {
-        emit(_idle(error: 'Failed to join club'));
+        // e.g. 402 "Joining this club costs 10 coins. Top up your wallet…"
+        emit(_idle(error: clubApiMessage(e, 'Failed to join club')));
       }
     } catch (_) {
       emit(_idle(error: 'Failed to join club'));

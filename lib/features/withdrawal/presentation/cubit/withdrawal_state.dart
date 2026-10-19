@@ -39,7 +39,7 @@ final class WithdrawalBalanceLoaded extends WithdrawalState {
 final class WithdrawalPending extends WithdrawalState {
   final String reference;
   final double amountUsd;
-  final String method; // 'flutterwave' | 'paypal'
+  final String method; // 'flutterwave' | 'paypal' | 'crypto'
   final Map<String, dynamic> transactionData;
 
   const WithdrawalPending({

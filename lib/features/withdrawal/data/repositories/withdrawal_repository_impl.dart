@@ -78,6 +78,33 @@ class WithdrawalRepositoryImpl implements WithdrawalRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> fetchCryptoOptions() =>
+      remote.fetchCryptoOptions();
+
+  @override
+  Future<Map<String, dynamic>> createCryptoWithdrawal({
+    required double amountUsd,
+    required String coin,
+    required String network,
+    required String walletAddress,
+    required String walletAddressConfirm,
+    String? reason,
+    required String pin,
+    String? idempotencyKey,
+  }) {
+    return remote.createCryptoWithdrawal(
+      amountUsd: amountUsd,
+      coin: coin,
+      network: network,
+      walletAddress: walletAddress,
+      walletAddressConfirm: walletAddressConfirm,
+      reason: reason,
+      pin: pin,
+      idempotencyKey: idempotencyKey ?? const Uuid().v4(),
+    );
+  }
+
+  @override
   Future<Map<String, dynamic>> getFxPreview({
     required double amountUsd,
     required String country,

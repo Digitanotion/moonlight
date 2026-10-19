@@ -57,6 +57,19 @@ abstract class WithdrawalRepository {
   });
 
   /// Get FX rate preview for USD to local currency
+  Future<Map<String, dynamic>> fetchCryptoOptions();
+
+  Future<Map<String, dynamic>> createCryptoWithdrawal({
+    required double amountUsd,
+    required String coin,
+    required String network,
+    required String walletAddress,
+    required String walletAddressConfirm,
+    String? reason,
+    required String pin,
+    String? idempotencyKey,
+  });
+
   Future<Map<String, dynamic>> getFxPreview({
     required double amountUsd,
     required String country,

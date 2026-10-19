@@ -46,6 +46,7 @@ class NotificationHandlerService {
       case 'club.ownership_transferred':
       case 'club.donation.received':
       case 'club.donation.confirmed':
+      case 'club.room_started': // audio / video room live → club page shows it
         _handleClubNotification(payload);
         break;
 

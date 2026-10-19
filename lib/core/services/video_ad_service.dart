@@ -32,6 +32,11 @@ class VideoAdService {
   bool _showing = false;
   DateTime _lastShown = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// After an ad break with no ad (no fill / error) don't open another
+  /// empty break for a while — the AdMob interstitial covers the slot.
+  static const _noFillBackoff = Duration(minutes: 5);
+  DateTime _noFillUntil = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// True when video ads are configured and active.
   bool get active => _loaded && _enabled && _tag.isNotEmpty;
 
@@ -69,6 +74,7 @@ class VideoAdService {
       return false;
     }
     if (!active) return false;
+    if (DateTime.now().isBefore(_noFillUntil)) return false;
 
     _since++;
     if (_since < _everyN || _showing) return true;
@@ -85,7 +91,14 @@ class VideoAdService {
           PageRouteBuilder<void>(
             opaque: true,
             transitionDuration: const Duration(milliseconds: 180),
-            pageBuilder: (_, _, _) => VideoAdBreakPage(adTagUrl: _tag),
+            pageBuilder: (_, _, _) => VideoAdBreakPage(
+              adTagUrl: _tag,
+              onClosed: (played) {
+                if (!played) {
+                  _noFillUntil = DateTime.now().add(_noFillBackoff);
+                }
+              },
+            ),
             transitionsBuilder: (_, a, _, child) =>
                 FadeTransition(opacity: a, child: child),
           ),

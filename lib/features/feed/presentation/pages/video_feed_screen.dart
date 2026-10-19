@@ -272,6 +272,105 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     }
   }
 
+  Future<void> _deleteVideo(BuildContext context, Post post) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: const Color(0xFF0E1024),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.redAccent,
+                size: 40,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Delete this video?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'It will be removed from your profile and the feed. '
+                'This cannot be undone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(false),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: const BorderSide(color: Colors.white24),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final feed = context.read<FeedCubit>();
+    try {
+      await sl<PostRepository>().deletePost(post.id);
+    } catch (_) {
+      if (context.mounted) TopSnack.error(context, 'Could not delete video');
+      return;
+    }
+    if (!mounted) return;
+
+    final wasLast = _videoPosts.length <= 1;
+    feed.removePostById(post.id);
+    if (wasLast) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (_currentIndex >= _videoPosts.length - 1) {
+      _currentIndex = _videoPosts.length - 2;
+    }
+    TopSnack.success(context, 'Video deleted');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -446,6 +545,13 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                                 color: Colors.white,
                                 label: 'Edit',
                                 onTap: () => _editCaption(context, current),
+                              ),
+                              const SizedBox(height: 18),
+                              _VideoActionButton(
+                                icon: Icons.delete_outline_rounded,
+                                color: Colors.white,
+                                label: 'Delete',
+                                onTap: () => _deleteVideo(context, current),
                               ),
                             ],
                           ],

@@ -16,6 +16,8 @@ import 'package:moonlight/features/clubs/presentation/pages/widgets/suggested_cl
 import 'package:moonlight/widgets/top_snack.dart';
 
 import '../cubit/discover_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
+import 'package:moonlight/features/clubs/presentation/pages/all_clubs_screen.dart' show kClubsCaption;
 import '../cubit/discover_clubs_state.dart';
 import '../cubit/search_clubs_cubit.dart';
 import '../cubit/search_clubs_state.dart';
@@ -186,7 +188,7 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
                       club: club,
                       joined: joined,
                       joining: disc.joining.contains(club.uuid),
-                      onJoin: () => _joinSuggested(club.uuid),
+                      onJoin: () => _joinSuggested(club.uuid, clubName: club.name),
                     ),
                   );
                 },
@@ -246,8 +248,17 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
     ];
   }
 
-  Future<void> _joinSuggested(String clubUuid) async {
-    await context.read<DiscoverClubsCubit>().join(clubUuid);
+  Future<void> _joinSuggested(String clubUuid, {String clubName = 'club'}) async {
+    var confirmed = false;
+    await confirmAndJoinClub(
+      context,
+      clubName: clubName,
+      join: () async {
+        confirmed = true;
+        await context.read<DiscoverClubsCubit>().join(clubUuid);
+      },
+    );
+    if (!confirmed) return;
     if (!mounted) return;
     context.read<SuggestedClubsCubit>().markJoined(clubUuid);
     context.read<MyClubsCubit>().load();
@@ -318,10 +329,52 @@ class _Hero extends StatelessWidget {
           ),
           SizedBox(height: 4),
           Text(
-            'Communities to belong to on Moonlight',
-            style: TextStyle(color: AppColors.secondaryText, fontSize: 13.5),
+            kClubsCaption,
+            style: TextStyle(
+              color: AppColors.secondaryText,
+              fontSize: 13.5,
+              height: 1.4,
+            ),
           ),
+          SizedBox(height: 10),
+          _ViewAllClubsButton(),
         ],
+      ),
+    );
+  }
+}
+
+class _ViewAllClubsButton extends StatelessWidget {
+  const _ViewAllClubsButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, RouteNames.allClubs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.grid_view_rounded, color: Colors.white, size: 16),
+            SizedBox(width: 6),
+            Text(
+              'View all clubs',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            SizedBox(width: 2),
+            Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 18),
+          ],
+        ),
       ),
     );
   }
@@ -468,7 +521,11 @@ class _SearchResults extends StatelessWidget {
             builder: (context, disc) => DiscoverClubCard(
               club: club,
               joining: disc.joining.contains(club.uuid),
-              onJoin: () => context.read<DiscoverClubsCubit>().join(club.uuid),
+              onJoin: () => confirmAndJoinClub(
+                context,
+                clubName: club.name,
+                join: () => context.read<DiscoverClubsCubit>().join(club.uuid),
+              ),
             ),
           );
         },

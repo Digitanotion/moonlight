@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 import 'create_club_state.dart';
 
 class CreateClubCubit extends Cubit<CreateClubState> {
@@ -42,7 +43,11 @@ class CreateClubCubit extends Cubit<CreateClubState> {
       emit(
         state.copyWith(
           loading: false,
-          errorMessage: 'Failed to create club. Please try again. ${e}',
+          // e.g. 402 "Creating a club costs 100 coins. Top up your wallet…"
+          errorMessage: clubApiMessage(
+            e,
+            'Failed to create club. Please try again.',
+          ),
         ),
       );
     }

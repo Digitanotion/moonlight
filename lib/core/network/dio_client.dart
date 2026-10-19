@@ -1,6 +1,7 @@
 // lib/core/network/dio_client.dart
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:moonlight/core/services/account_blocked_service.dart';
 
 abstract class AuthTokenProvider {
   Future<String?> readToken();
@@ -69,6 +70,9 @@ class DioClient {
           // );
           // print('❌ Error type: ${e.type}');
           // print('❌ Message: ${e.message}');
+
+          // Banned / suspended account → sign out with an explanation.
+          AccountBlockedService.handleDioError(e);
 
           // ✅ Handle timeout errors gracefully
           if (e.type == DioExceptionType.sendTimeout) {

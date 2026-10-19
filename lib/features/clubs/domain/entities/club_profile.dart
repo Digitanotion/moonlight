@@ -14,6 +14,9 @@ class ClubProfile extends Equatable {
   final bool isAdmin;
   final bool isPrivate;
 
+  /// One-time coins a new member pays the owner to join (club revamp).
+  final int joinFeeCoins;
+
   // income / stats
   final int totalIncomeCoins;
   final double basicStats; // ← double, API sends 42.86
@@ -35,6 +38,7 @@ class ClubProfile extends Equatable {
     required this.isCreator,
     required this.isAdmin,
     required this.isPrivate,
+    this.joinFeeCoins = 10,
     required this.totalIncomeCoins,
     required this.basicStats,
     required this.membersYouKnow,
@@ -51,6 +55,7 @@ class ClubProfile extends Equatable {
       location: json['location'] as String?,
       membersCount: (json['membersCount'] as num?)?.toInt() ?? 0,
       coverImageUrl: json['coverImageUrl'] as String?,
+      joinFeeCoins: (json['joinFeeCoins'] as num?)?.toInt() ?? 10,
       isMember: json['isMember'] as bool? ?? false,
       isCreator: json['isCreator'] as bool? ?? false,
       isAdmin: json['isAdmin'] as bool? ?? false,
@@ -95,6 +100,7 @@ class ClubProfile extends Equatable {
       membersCount: membersCount ?? this.membersCount,
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       isPrivate: isPrivate ?? this.isPrivate,
+      joinFeeCoins: joinFeeCoins,
       isMember: isMember ?? this.isMember,
       isCreator: isCreator ?? this.isCreator,
       isAdmin: isAdmin ?? this.isAdmin,

@@ -220,6 +220,59 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
 
   // ── Retry ──────────────────────────────────────────────────────────────────
 
+  Future<Map<String, dynamic>> fetchCryptoOptions() =>
+      repository.fetchCryptoOptions();
+
+  Future<void> submitCryptoWithdrawal({
+    required double amountUsd,
+    required String coin,
+    required String network,
+    required String walletAddress,
+    required String walletAddressConfirm,
+    String? reason,
+    required String pin,
+  }) async {
+    _lastWithdrawalData = {
+      'type': 'crypto',
+      'amountUsd': amountUsd,
+      'coin': coin,
+      'network': network,
+      'walletAddress': walletAddress,
+      'walletAddressConfirm': walletAddressConfirm,
+      'reason': reason,
+    };
+    _lastPin = pin;
+
+    emit(WithdrawalSubmitting());
+
+    try {
+      final result = await repository.createCryptoWithdrawal(
+        amountUsd: amountUsd,
+        coin: coin,
+        network: network,
+        walletAddress: walletAddress,
+        walletAddressConfirm: walletAddressConfirm,
+        reason: reason,
+        pin: pin,
+      );
+
+      _clearRetryCache();
+
+      final reference = (result['reference'] as String?) ?? '';
+      emit(
+        WithdrawalPending(
+          reference: reference,
+          amountUsd: amountUsd,
+          method: 'crypto',
+          transactionData: result,
+        ),
+      );
+    } catch (e) {
+      _lastPin = null;
+      emit(WithdrawalError(message: _clean(e.toString())));
+    }
+  }
+
   Future<void> retryWithdrawal() async {
     final data = _lastWithdrawalData;
     final pin = _lastPin;
@@ -231,7 +284,17 @@ class WithdrawalCubit extends Cubit<WithdrawalState> {
       return;
     }
 
-    if (data['type'] == 'paypal') {
+    if (data['type'] == 'crypto') {
+      await submitCryptoWithdrawal(
+        amountUsd: data['amountUsd'] as double,
+        coin: data['coin'] as String,
+        network: data['network'] as String,
+        walletAddress: data['walletAddress'] as String,
+        walletAddressConfirm: data['walletAddressConfirm'] as String,
+        reason: data['reason'] as String?,
+        pin: pin,
+      );
+    } else if (data['type'] == 'paypal') {
       await submitPayPalWithdrawal(
         amountUsd: data['amountUsd'] as double,
         paypalEmail: data['paypalEmail'] as String,

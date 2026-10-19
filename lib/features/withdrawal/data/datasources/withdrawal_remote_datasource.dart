@@ -191,6 +191,40 @@ class WithdrawalRemoteDataSource {
     return _postWithdrawRequest(body);
   }
 
+  // ── Crypto (Flutterwave stablecoin) withdrawal ──────────────────────────────
+
+  /// `{enabled, min_usd, networks: [{code, label, coins: [..]}]}`
+  Future<Map<String, dynamic>> fetchCryptoOptions() async {
+    final res = await http.dio.get('/api/v1/wallet/crypto-options');
+    final data = _extract(res);
+    return Map<String, dynamic>.from(data['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> createCryptoWithdrawal({
+    required double amountUsd,
+    required String coin,
+    required String network,
+    required String walletAddress,
+    required String walletAddressConfirm,
+    String? reason,
+    required String pin,
+    String? idempotencyKey,
+  }) async {
+    final body = <String, dynamic>{
+      'payment_method': 'crypto',
+      'amount_usd_cents': amountUsd,
+      'crypto_coin': coin,
+      'crypto_network': network,
+      'wallet_address': walletAddress,
+      'wallet_address_confirm': walletAddressConfirm,
+      'pin': pin,
+      if (reason != null) 'reason': reason,
+      if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
+    };
+
+    return _postWithdrawRequest(body);
+  }
+
   // ── Shared POST helper ─────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> _postWithdrawRequest(

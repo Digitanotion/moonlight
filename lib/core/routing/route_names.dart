@@ -43,6 +43,8 @@ class RouteNames {
   static const suggestedClubs = '/suggested-clubs';
   static const myClubs = '/my-clubs';
   static const discoverClubs = '/discover-clubs';
+  static const allClubs = '/all-clubs';
+  static const clubRoom = '/club-room';
   static const editClub = '/edit-club';
   static const supportClub = '/support-club';
   static const String blockedUsers = '/blocked-users';

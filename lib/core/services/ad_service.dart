@@ -68,7 +68,13 @@ class AdService {
       RequestConfiguration(testDeviceIds: const <String>[]),
     );
 
-    await MobileAds.instance.initialize();
+    final status = await MobileAds.instance.initialize();
+    if (kDebugMode) {
+      // Mediation adapters (none yet — AppLovin was deferred) report here.
+      status.adapterStatuses.forEach((name, s) {
+        debugPrint('[Ads] adapter $name: ${s.state.name} ${s.description}');
+      });
+    }
     _initialized = true;
     if (!_ready.isCompleted) _ready.complete();
     _preloadInterstitial();

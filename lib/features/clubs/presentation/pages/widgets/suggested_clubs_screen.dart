@@ -4,6 +4,7 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_cubit.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/discover_clubs_state.dart';
 import 'package:moonlight/features/clubs/presentation/pages/widgets/discover_club_card.dart';
 import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart';
@@ -214,7 +215,11 @@ class SuggestedClubsScreen extends StatelessWidget {
             child: DiscoverClubCard(
               club: club,
               joining: state.joining.contains(club.uuid),
-              onJoin: () => context.read<DiscoverClubsCubit>().join(club.uuid),
+              onJoin: () => confirmAndJoinClub(
+                context,
+                clubName: club.name,
+                join: () => context.read<DiscoverClubsCubit>().join(club.uuid),
+              ),
               compact: true,
             ),
           );

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/features/clubs/domain/repositories/clubs_repository.dart';
+import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 import 'discover_clubs_state.dart';
 
 class DiscoverClubsCubit extends Cubit<DiscoverClubsState> {
@@ -49,6 +50,9 @@ class DiscoverClubsCubit extends Cubit<DiscoverClubsState> {
       if (code == 409) {
         // Already a member — that's a success from the user's point of view.
         _markJoined(clubUuid, null);
+      } else if (code == 402) {
+        // "Joining this club costs 10 coins. Top up your wallet…"
+        emit(state.copyWith(errorMessage: clubApiMessage(e)));
       } else if (code == 403) {
         emit(
           state.copyWith(errorMessage: 'You are not allowed to join this club'),
