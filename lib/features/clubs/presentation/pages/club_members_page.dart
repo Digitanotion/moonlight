@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:moonlight/features/clubs/presentation/pages/widgets/add_member_sheet.dart';
 import '../cubit/club_members_cubit.dart';
 import '../cubit/club_members_state.dart';
 import 'widgets/club_member_card.dart';
@@ -43,7 +42,6 @@ class _ClubMembersPageState extends State<ClubMembersPage> {
         ),
       ),
 
-      floatingActionButton: const _FloatingInviteButton(),
       body: SafeArea(
         child: Column(children: const [_SearchBar(), _Tabs(), _MembersList()]),
       ),
@@ -178,28 +176,6 @@ class _TabItem extends StatelessWidget {
         ),
         child: Text(text, style: const TextStyle(color: Colors.white)),
       ),
-    );
-  }
-}
-
-class _FloatingInviteButton extends StatelessWidget {
-  const _FloatingInviteButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final club = context.read<ClubMembersCubit>().club;
-
-    return FloatingActionButton(
-      backgroundColor: const Color(0xFFFF7A00),
-      elevation: 10,
-      onPressed: () async {
-        final added = await showAddMemberSheet(context, club);
-
-        if (added == true && context.mounted) {
-          context.read<ClubMembersCubit>().load(refresh: true);
-        }
-      },
-      child: const Icon(Icons.person_add, color: Colors.white),
     );
   }
 }

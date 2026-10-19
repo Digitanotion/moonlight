@@ -17,6 +17,7 @@ import 'package:uuid/uuid.dart';
 import 'club_room_api.dart';
 import 'club_room_models.dart';
 import 'club_room_rtc.dart';
+import 'room_background.dart';
 
 class GiftNotice {
   final String from;
@@ -26,6 +27,9 @@ class GiftNotice {
   final String? imageUrl;
   final int quantity;
   final DateTime at = DateTime.now();
+
+  /// Arrival order in the room chat (shared with comments).
+  int seq = 0;
   GiftNotice(
     this.from,
     this.to,
@@ -47,6 +51,22 @@ class ClubRoomController with ChangeNotifier {
   RoomState? state;
   final List<RoomComment> comments = [];
   final List<GiftNotice> gifts = [];
+
+  // Comments and gift notices share one chat, in the order they arrived —
+  // gifts stay in the chat like on the main livestream screen.
+  int _seq = 0;
+  final Map<String, int> _commentSeq = {};
+
+  /// Comments and gifts, oldest first. Items are [RoomComment] or
+  /// [GiftNotice].
+  List<Object> get chat {
+    final items = <(int, Object)>[
+      for (final c in comments) (_commentSeq[c.uuid] ?? 0, c),
+      for (final g in gifts) (g.seq, g),
+    ]..sort((a, b) => a.$1.compareTo(b.$1));
+    return [for (final i in items) i.$2];
+  }
+
   List<GiftItem>? giftCatalog;
 
   bool ended = false;
@@ -75,6 +95,15 @@ class ClubRoomController with ChangeNotifier {
 
   /// Join (pays any audio entry fee server-side), then connect media,
   /// realtime and comments. Throws the API error (e.g. 402) to the caller.
+  /// True once [enter] has connected — the room is running (even while
+  /// its screen is closed / minimised).
+  bool entered = false;
+
+  /// Still in the call (not left, ended or removed).
+  bool get active => entered && !ended && !removed && !_left;
+  bool _left = false;
+  bool get hasLeft => _left;
+
   Future<void> enter() async {
     final s = state?.me.inRoom == true ? state! : await api.join(roomUuid);
     state = s;
@@ -83,9 +112,19 @@ class ClubRoomController with ChangeNotifier {
     await _connectRtc();
     unawaited(_loadComments());
     _applyPremium();
+    // Backup for missed realtime messages: re-sync the room every 15s so
+    // mic states, seats and people never stay stale for long.
+    entered = true;
+    _poll?.cancel();
+    _poll = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!ended && !removed) refresh();
+    });
   }
 
+  Timer? _poll;
+
   Future<void> leave() async {
+    _left = true;
     try {
       await api.leave(roomUuid);
     } catch (_) {}
@@ -100,6 +139,8 @@ class ClubRoomController with ChangeNotifier {
 
   Future<void> _teardown() async {
     _refreshDebounce?.cancel();
+    _poll?.cancel();
+    unawaited(RoomBackground.stop());
     await rtc.leave();
     _unsubscribe();
     _notify();
@@ -194,6 +235,7 @@ class ClubRoomController with ChangeNotifier {
   void _applyPremium() {
     final s = state;
     if (s == null || s.isAudio) return;
+    rtc.setWatchVideo(s.canWatchVideo);
     final hidden = s.participants
         .where((p) => !p.videoVisible && p.user.uuid != myUuid)
         .map((p) => p.user.uid)
@@ -212,6 +254,16 @@ class ClubRoomController with ChangeNotifier {
       final creds = await api.token(roomUuid);
       await rtc.join(creds, video: !s.isAudio, startMuted: s.me.micMuted);
       _applyPremium();
+      // Keep the room going while the user is in other apps.
+      unawaited(
+        RoomBackground.start(
+          title: (s.title ?? '').trim().isNotEmpty
+              ? s.title!.trim()
+              : s.clubName,
+          video: !s.isAudio,
+          mic: s.me.onStage,
+        ),
+      );
     } catch (e) {
       error = 'Could not connect audio/video. Pull to retry.';
       if (kDebugMode) debugPrint('[ClubRoom] rtc connect failed: $e');
@@ -227,9 +279,18 @@ class ClubRoomController with ChangeNotifier {
   Future<void> _loadComments() async {
     try {
       final list = await api.comments(roomUuid);
+      // History sorts before anything that arrived live while loading.
+      final liveOnly = comments
+          .where((c) => !list.any((x) => x.uuid == c.uuid))
+          .toList();
       comments
         ..clear()
-        ..addAll(list);
+        ..addAll(list)
+        ..addAll(liveOnly);
+      var i = -list.length - 1;
+      for (final c in list) {
+        _commentSeq.putIfAbsent(c.uuid, () => i++);
+      }
       _notify();
     } catch (_) {}
   }
@@ -240,6 +301,7 @@ class ClubRoomController with ChangeNotifier {
       comments[i] = c;
     } else {
       comments.add(c);
+      _commentSeq[c.uuid] = ++_seq;
     }
     _notify();
   }
@@ -299,12 +361,10 @@ class ClubRoomController with ChangeNotifier {
           gift['title']?.toString() ?? 'a gift',
           gift['image_url']?.toString(),
           (p['quantity'] as num?)?.toInt() ?? 1,
-        ),
+        )..seq = ++_seq,
       );
-      if (gifts.length > 20) gifts.removeAt(0);
+      if (gifts.length > 200) gifts.removeAt(0);
       _notify();
-      // The ticker shows a notice for 6s; redraw once it has expired.
-      Timer(const Duration(milliseconds: 6100), _notify);
     });
 
     try {
@@ -331,6 +391,8 @@ class ClubRoomController with ChangeNotifier {
   void dispose() {
     _disposed = true;
     _refreshDebounce?.cancel();
+    _poll?.cancel();
+    unawaited(RoomBackground.stop());
     _unsubscribe();
     rtc.dispose();
     super.dispose();

@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:moonlight/features/clubs/rooms/live_room_badge.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'dart:io';
@@ -2714,6 +2715,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               children: [
                 // Custom App Bar
                 _buildAppBar(context),
+
+                // Club live audio / video room → join straight from chat.
+                if (widget.isClub &&
+                    (widget.conversation.clubUuid ?? '').isNotEmpty)
+                  ClubLiveBanner(clubUuid: widget.conversation.clubUuid!),
 
                 // Messages Area
                 Expanded(

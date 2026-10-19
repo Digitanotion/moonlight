@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:moonlight/features/clubs/rooms/active_room_bar.dart';
 import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/app_router.dart';
@@ -278,8 +279,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           AppRouter.generateRoute(const RouteSettings(name: RouteNames.splash)),
         ],
         navigatorKey: MyApp.navigatorKey,
-        builder: (context, child) =>
-            IncomingCallBanner(child: SimpleConnectionToast(child: child!)),
+        builder: (context, child) => IncomingCallBanner(
+          child: SimpleConnectionToast(
+            // "You're in a room" bar while a club call runs in the background.
+            child: ActiveRoomBar(child: child!),
+          ),
+        ),
       ),
     );
   }

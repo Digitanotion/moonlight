@@ -13,13 +13,24 @@
 // cost of a full video caching layer.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:video_player/video_player.dart';
 
 import 'video_cache_manager.dart';
 
-class VideoPreloadService {
-  VideoPreloadService._();
+class VideoPreloadService with WidgetsBindingObserver {
+  VideoPreloadService._() {
+    WidgetsBinding.instance.addObserver(this);
+  }
   static final VideoPreloadService instance = VideoPreloadService._();
+
+  /// Android is about to kill us for memory — drop every parked player
+  /// (each holds a decoder and its buffered video) before it does.
+  @override
+  void didHaveMemoryPressure() {
+    debugPrint('🎬 [Preload] memory pressure — releasing parked players');
+    clear();
+  }
 
   /// Max number of initialized controllers kept alive at once. Each one
   /// holds a HARDWARE video decoder (OMX/c2 codec instance), and phones
@@ -29,8 +40,10 @@ class VideoPreloadService {
   ///
   /// Preloading now only warms the on-disk byte cache (no decoder); the
   /// only entries here are LIVE controllers handed over via [donate]
-  /// during a feed <-> post-view transition. Keep this tiny.
-  static const int maxCached = 3;
+  /// during a feed <-> post-view transition, plus the next video in the
+  /// pager. Each parked player keeps buffering video into memory, so
+  /// more than two of them is what ran phones out of memory.
+  static const int maxCached = 2;
 
   /// Cap on simultaneous background downloads so N preloads don't split
   /// the connection N ways and make every one of them slow.

@@ -8,6 +8,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/reel_ad_service.dart';
 import 'package:moonlight/features/feed/presentation/pages/video_ad_break_page.dart';
 import 'package:moonlight/main.dart' show MyApp;
 import 'package:dio/dio.dart';
@@ -15,11 +16,6 @@ import 'package:dio/dio.dart';
 class VideoAdService {
   VideoAdService._();
   static final VideoAdService instance = VideoAdService._();
-
-  /// Google's public skippable sample tag — used ONLY in debug builds when
-  /// the server has no tag yet, so the feature can be tried end to end.
-  static const _sampleSkippableTag =
-      'https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dskippablelinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&correlator=';
 
   bool _loaded = false;
   bool _loading = false;
@@ -54,17 +50,25 @@ class VideoAdService {
       _minGap = Duration(
         seconds: ((v['min_gap_seconds'] ?? 40) as num).toInt(),
       );
+      final n = ((res.data as Map)['feed_native'] as Map?) ?? const {};
+      ReelAdService.instance.configure(
+        androidUnitId: (n['android_unit_id'] ?? '').toString(),
+        iosUnitId: (n['ios_unit_id'] ?? '').toString(),
+        everyN: ((n['every_n_videos'] ?? 4) as num).toInt(),
+      );
     } catch (e) {
       debugPrint('[VideoAd] config fetch failed: $e');
     } finally {
-      if (!_enabled && kDebugMode) {
-        _enabled = true;
-        _tag = _sampleSkippableTag;
-      }
+      // Debug builds try the in-feed native ad (Google test unit) rather
+      // than the full-screen IMA sample, matching what release will show.
+      if (kDebugMode) ReelAdService.instance.configure();
       _loaded = true;
       _loading = false;
     }
   }
+
+  /// Fetches the ad settings once (safe to call repeatedly).
+  Future<void> ensureConfig() => _loadConfig();
 
   /// Call on every short-video swipe. Returns true when video ads own the
   /// ad slot (so the caller must not also show another ad type).

@@ -522,12 +522,29 @@ class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
         }
         try {
           await c.initialize();
-          _vc = c;
         } catch (_) {
           _loading = false;
+          unawaited(c.dispose());
           return;
         }
+        // Swiped past (or the page was torn down) while this was loading:
+        // free the player now. Keeping it would leak a decoder plus its
+        // video buffer — enough of those and the app runs out of memory.
+        if (!mounted || !_currentlyVisible) {
+          _loading = false;
+          unawaited(c.dispose());
+          return;
+        }
+        _vc = c;
       }
+    }
+
+    if (!mounted) {
+      _loading = false;
+      final orphan = _vc;
+      _vc = null;
+      unawaited(orphan?.dispose());
+      return;
     }
 
     _vc!.setLooping(true);
@@ -556,14 +573,18 @@ class _FeedVideoPlayerState extends State<FeedVideoPlayer> {
       _currentlyVisible = true;
       if (mounted) setState(() {}); // reflect "now visible" for the loader
       await _ensureController();
-      if (mounted && _vc != null) _vc!.play();
+      // Only play if it's still the one on screen — a fast swipe can move
+      // on while the player was loading.
+      if (mounted && _vc != null && _currentlyVisible) _vc!.play();
     } else if (fraction <= _visibleThreshold && _currentlyVisible) {
       _currentlyVisible = false;
       _vc?.pause();
-      // Fully scrolled away — release the controller to keep memory
-      // bounded. Coming back into view later just re-fetches/re-preloads.
       if (fraction == 0) _releaseController();
       if (mounted) setState(() {}); // hide loader if it was mid-attach
+    } else if (fraction == 0 && _vc != null) {
+      // Already paused, now fully off screen — release the player so its
+      // decoder and buffered video don't pile up while scrolling.
+      _releaseController();
     }
   }
 

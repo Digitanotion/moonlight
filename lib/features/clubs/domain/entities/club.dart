@@ -1,6 +1,31 @@
 // In club.dart
 import 'package:equatable/equatable.dart';
 
+/// A live audio / video room in a club (from the club list API).
+class ClubLiveRoom extends Equatable {
+  final String uuid;
+  final bool isVideo;
+  final String? title;
+  final int presentCount;
+
+  const ClubLiveRoom({
+    required this.uuid,
+    required this.isVideo,
+    this.title,
+    this.presentCount = 0,
+  });
+
+  factory ClubLiveRoom.fromJson(Map<String, dynamic> j) => ClubLiveRoom(
+    uuid: j['uuid']?.toString() ?? '',
+    isVideo: j['type']?.toString() == 'video',
+    title: j['title']?.toString(),
+    presentCount: (j['present_count'] as num?)?.toInt() ?? 0,
+  );
+
+  @override
+  List<Object?> get props => [uuid, isVideo, title, presentCount];
+}
+
 class Club extends Equatable {
   final String uuid;
   final String slug;
@@ -13,6 +38,9 @@ class Club extends Equatable {
   final bool isPrivate;
   final bool isMember;
 
+  /// Rooms live right now (audio and/or video).
+  final List<ClubLiveRoom> liveRooms;
+
   Club({
     required this.uuid,
     required this.slug,
@@ -24,6 +52,7 @@ class Club extends Equatable {
     required this.isAdmin,
     required this.isPrivate,
     required this.isMember,
+    this.liveRooms = const [],
   });
 
   factory Club.fromJson(Map<String, dynamic> json) {
@@ -48,6 +77,11 @@ class Club extends Equatable {
       isPrivate: json['isPrivate'] ?? false,
 
       isMember: json['isMember'] ?? false,
+
+      liveRooms: ((json['liveRooms'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => ClubLiveRoom.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
     );
   }
 
@@ -63,6 +97,7 @@ class Club extends Equatable {
     bool? isAdmin,
     bool? isPrivate,
     bool? isMember,
+    List<ClubLiveRoom>? liveRooms,
   }) {
     return Club(
       uuid: uuid ?? this.uuid,
@@ -76,6 +111,7 @@ class Club extends Equatable {
 
       isPrivate: isPrivate ?? this.isPrivate,
       isMember: isMember ?? this.isMember,
+      liveRooms: liveRooms ?? this.liveRooms,
     );
   }
 
@@ -91,5 +127,6 @@ class Club extends Equatable {
     isAdmin,
     isPrivate,
     isMember,
+    liveRooms,
   ];
 }

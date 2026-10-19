@@ -5,7 +5,6 @@ import 'package:moonlight/features/clubs/presentation/cubit/my_clubs_cubit.dart'
 
 import 'members_bottom_sheet.dart';
 import 'create_edit_club_sheet.dart';
-import 'add_member_sheet.dart';
 import 'delete_club_dialog.dart';
 
 class ClubContextMenu extends StatelessWidget {
@@ -27,9 +26,6 @@ class ClubContextMenu extends StatelessWidget {
             await showCreateEditClubSheet(context, club: club);
             context.read<MyClubsCubit>().refresh();
             break;
-          case 3:
-            showAddMemberSheet(context, club.slug);
-            break;
           case 4:
             await showDeleteClubDialog(context, club.slug);
             context.read<MyClubsCubit>().refresh();
@@ -45,10 +41,6 @@ class ClubContextMenu extends StatelessWidget {
           const PopupMenuItem(
             value: 2,
             child: Text('Edit Club', style: TextStyle(color: Colors.white)),
-          ),
-          const PopupMenuItem(
-            value: 3,
-            child: Text('Add Member', style: TextStyle(color: Colors.white)),
           ),
           const PopupMenuItem(
             value: 4,

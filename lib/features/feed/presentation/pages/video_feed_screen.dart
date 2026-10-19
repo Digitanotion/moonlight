@@ -14,6 +14,9 @@
 import 'dart:async';
 
 import 'package:moonlight/core/services/ad_service.dart';
+import 'package:moonlight/core/services/reel_ad_service.dart';
+import 'package:moonlight/core/services/video_ad_service.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -101,6 +104,9 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     _originalIndices = List.of(widget.originalIndices);
     _pageController = PageController(initialPage: widget.initialIndex);
     _preloadAround(widget.initialIndex);
+    VideoAdService.instance.ensureConfig().then((_) {
+      if (mounted) ReelAdService.instance.prefetch(muted: _muted);
+    });
     // onPageChanged only fires on swipe — the first video shown needs its
     // own bump. Post-frame so context.read<FeedCubit>() is safe to call.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -173,8 +179,65 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     }
   }
 
+  // ── In-feed native ads ────────────────────────────────────────────────
+  // An ad is its own page right after a video, the same size as a video,
+  // instead of a full-screen interstitial. Ads are only ever inserted
+  // AFTER the current page, so the page the user is on never shifts.
+
+  /// Local video index → the ad shown right after it (null once released).
+  final Map<int, NativeAd?> _adAfterVideo = {};
+  List<_FeedPage> _pages = const [];
+  // The video the pager opens on counts too, so ads land every N videos.
+  int _videosSinceAd = 1;
+
+  /// Most ads kept alive at once; each one holds its own video player.
+  static const _maxLiveAds = 2;
+
+  void _buildPages() {
+    final pages = <_FeedPage>[];
+    for (var v = 0; v < _videoPosts.length; v++) {
+      pages.add(_FeedPage.video(v, _videoPosts[v].id));
+      if (_adAfterVideo.containsKey(v)) pages.add(_FeedPage.ad(v));
+    }
+    _pages = pages;
+  }
+
+  void _scheduleReelAd(int videoIndex) {
+    final ads = ReelAdService.instance;
+    if (!ads.available) return;
+    _videosSinceAd++;
+    if (_videosSinceAd >= ads.everyN - 2) ads.prefetch(muted: _muted);
+    if (_videosSinceAd < ads.everyN) return;
+    if (_adAfterVideo.containsKey(videoIndex)) return;
+    final ad = ads.take(muted: _muted);
+    if (ad == null) return; // nothing loaded yet — try on the next swipe
+    _videosSinceAd = 0;
+    setState(() => _adAfterVideo[videoIndex] = ad);
+    _releaseOldAds();
+  }
+
+  /// Frees ads the user has scrolled well past. Their page stays (so page
+  /// positions don't move) and shows a "swipe to continue" placeholder.
+  void _releaseOldAds() {
+    final live =
+        _adAfterVideo.entries
+            .where((e) => e.value != null)
+            .map((e) => e.key)
+            .toList()
+          ..sort();
+    while (live.length > _maxLiveAds) {
+      final v = live.removeAt(0);
+      if (v >= _currentIndex) break;
+      _adAfterVideo[v]?.dispose();
+      _adAfterVideo[v] = null;
+    }
+  }
+
   @override
   void dispose() {
+    for (final ad in _adAfterVideo.values) {
+      ad?.dispose();
+    }
     WakelockCoordinator.instance.release();
     _pageController.dispose();
     super.dispose();
@@ -360,6 +423,22 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     if (!mounted) return;
 
     final wasLast = _videoPosts.length <= 1;
+    // Ads are keyed by the video they follow — shift the ones after the
+    // deleted video down so they stay in place.
+    final removed = _videoPosts.indexWhere((p) => p.id == post.id);
+    if (removed >= 0) {
+      final shifted = <int, NativeAd?>{};
+      _adAfterVideo.forEach((v, ad) {
+        if (v == removed) {
+          shifted[v > 0 ? v - 1 : 0] = ad;
+        } else {
+          shifted[v > removed ? v - 1 : v] = ad;
+        }
+      });
+      _adAfterVideo
+        ..clear()
+        ..addAll(shifted);
+    }
     feed.removePostById(post.id);
     if (wasLast) {
       Navigator.of(context).pop();
@@ -394,19 +473,37 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
             return const Center(child: AppLogoLoader());
           }
 
+          _buildPages();
+
           return PageView.builder(
             controller: _pageController,
             scrollDirection: Axis.vertical,
-            itemCount: _videoPosts.length,
-            onPageChanged: (i) {
+            itemCount: _pages.length,
+            findChildIndexCallback: (key) {
+              final i = _pages.indexWhere((p) => ValueKey(p.id) == key);
+              return i < 0 ? null : i;
+            },
+            onPageChanged: (page) {
+              final i = _pages[page].video;
+              if (i == null) return; // an ad page
               _currentIndex = i;
               _preloadAround(i);
               _maybePaginate();
               _bumpView(i);
-              // Interstitial after every 4th short video (frequency-capped).
+              _scheduleReelAd(i);
+              // Interstitial fallback when in-feed ads aren't configured.
               AdService.instance.onShortVideoSwiped();
             },
-            itemBuilder: (context, i) {
+            itemBuilder: (context, page) {
+              final entry = _pages[page];
+              if (entry.video == null) {
+                return _ReelAdPage(
+                  key: ValueKey(entry.id),
+                  ad: _adAfterVideo[entry.afterVideo],
+                  onBack: () => Navigator.of(context).pop(),
+                );
+              }
+              final i = entry.video!;
               final post = _videoPosts[i];
               final originalIndex = _originalIndices[i];
               final isOwner =
@@ -418,6 +515,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               final double commentBarHeight = safeBottom + 56;
 
               return Stack(
+                key: ValueKey(entry.id),
                 fit: StackFit.expand,
                 children: [
                   FeedVideoPlayer(
@@ -985,6 +1083,64 @@ class _VideoCommentBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One page of the pager: a video, or an ad shown after a video.
+class _FeedPage {
+  final int? video;
+  final int afterVideo;
+  final String id;
+  _FeedPage.video(int v, Object postId)
+    : video = v,
+      afterVideo = v,
+      id = 'video-$postId';
+  _FeedPage.ad(int after) : video = null, afterVideo = after, id = 'ad-$after';
+}
+
+/// A native video ad laid out like a short video (see NativeReelAdFactory).
+class _ReelAdPage extends StatelessWidget {
+  final NativeAd? ad;
+  final VoidCallback onBack;
+  const _ReelAdPage({super.key, required this.ad, required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Colors.black),
+        if (ad != null)
+          AdWidget(ad: ad!)
+        else
+          const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.keyboard_arrow_up_rounded,
+                  color: Colors.white54,
+                  size: 36,
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Swipe to keep watching',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        Positioned(
+          top: top + 8,
+          left: 8,
+          child: IconButton(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          ),
+        ),
+      ],
     );
   }
 }

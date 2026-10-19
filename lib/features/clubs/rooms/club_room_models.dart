@@ -95,6 +95,10 @@ class RoomMe {
   bool get onStage => role == 'host' || role == 'guest' || role == 'speaker';
   bool get isHost => role == 'host';
 
+  /// Video rooms: a viewer only hears the room. They see everyone's video
+  /// once the host has accepted them on camera — asking isn't enough.
+  bool get canWatchVideo => onStage;
+
   factory RoomMe.fromJson(Map<String, dynamic> j) => RoomMe(
     inRoom: j['in_room'] == true,
     removed: j['removed'] == true,
@@ -162,6 +166,12 @@ class RoomState {
 
   bool get isAudio => type == RoomType.audio;
   bool get isLive => status == 'live';
+
+  /// Video rooms: you see the cameras once the host has accepted you on
+  /// camera — or, in a premium room, once you've unlocked premium (ladies
+  /// get it free). Otherwise you only hear the room.
+  bool get canWatchVideo => me.onStage || (premium.enabled && me.premiumAccess);
+
   List<RoomParticipant> get onStage =>
       participants.where((p) => p.onStage).toList();
   List<RoomParticipant> get viewers =>

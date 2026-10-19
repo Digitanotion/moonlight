@@ -100,7 +100,12 @@ void main() {
       'edited': true,
       'created_at': '2026-10-18T10:00:00Z',
       'user': {'uuid': 'u1', 'uid': 1, 'display': 'Ada'},
-      'reply_to': {'uuid': 'cm1', 'body': null, 'deleted': true, 'user': 'Bola'},
+      'reply_to': {
+        'uuid': 'cm1',
+        'body': null,
+        'deleted': true,
+        'user': 'Bola',
+      },
     });
 
     expect(c.mediaType, 'video');
@@ -125,4 +130,34 @@ void main() {
       isFalse,
     );
   });
+
+  test('video viewers only see video once the host accepts them', () {
+    RoomMe me(String role, [String? req]) =>
+        RoomMe.fromJson({'role': role, 'seat_request': req});
+    expect(me('viewer').canWatchVideo, isFalse);
+    expect(me('viewer', 'declined').canWatchVideo, isFalse);
+    expect(me('viewer', 'pending').canWatchVideo, isFalse);
+    expect(me('guest').canWatchVideo, isTrue);
+    expect(me('host').canWatchVideo, isTrue);
+  });
+
+  test(
+    'premium lets a viewer watch without joining; otherwise listen only',
+    () {
+      RoomState room({required bool premium, required bool access}) =>
+          RoomState.fromJson({
+            ..._state,
+            'premium': {'enabled': premium, 'price_coins': 50},
+            'me': {
+              ...(_state['me'] as Map),
+              'role': 'viewer',
+              'premium_access': access,
+            },
+          });
+      expect(room(premium: true, access: true).canWatchVideo, isTrue);
+      expect(room(premium: true, access: false).canWatchVideo, isFalse);
+      // Not a premium room: viewers wait for the host to accept them.
+      expect(room(premium: false, access: true).canWatchVideo, isFalse);
+    },
+  );
 }

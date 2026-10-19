@@ -7,6 +7,7 @@ import android.util.Rational
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 
 class MainActivity : FlutterActivity() {
 
@@ -22,6 +23,33 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Club rooms: keep audio / video going while the user is in other apps.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, "com.app.moonlightstream/room"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "start" -> {
+                    RoomForegroundService.start(
+                        applicationContext,
+                        call.argument<String>("title") ?: "Club room",
+                        call.argument<String>("text") ?: "You're in a live room · tap to return",
+                        call.argument<Boolean>("mic") ?: false
+                    )
+                    result.success(null)
+                }
+                "stop" -> {
+                    RoomForegroundService.stop(applicationContext)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Full-page native video ads in the short-video feed.
+        GoogleMobileAdsPlugin.registerNativeAdFactory(
+            flutterEngine, "moonlightReel", NativeReelAdFactory(layoutInflater)
+        )
 
         // Pre-configure PiP params immediately so Android knows this
         // activity supports PiP before the user even opens a video.
@@ -49,6 +77,11 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        GoogleMobileAdsPlugin.unregisterNativeAdFactory(flutterEngine, "moonlightReel")
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private fun buildPipParams(videoPlaying: Boolean): PictureInPictureParams? {

@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
@@ -27,6 +29,7 @@
     <application
         android:label="Moonlight Stream"
         android:name="${applicationName}"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher">
 
         <meta-data
@@ -45,6 +48,12 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Keeps a club audio / video room going while the user is in other apps. -->
+        <service
+            android:name=".RoomForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback" />
 
         <service
             android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingBackgroundService"

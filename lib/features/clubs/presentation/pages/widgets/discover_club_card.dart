@@ -4,6 +4,7 @@ import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
 import 'package:moonlight/features/clubs/presentation/pages/widgets/delete_club_dialog.dart';
+import 'package:moonlight/features/clubs/rooms/live_room_badge.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
 
@@ -64,7 +65,14 @@ class DiscoverClubCard extends StatelessWidget {
           padding: EdgeInsets.all(pad),
           child: Row(
             children: [
-              _Thumb(url: club.coverImageUrl, size: thumb),
+              club.liveRooms.isEmpty
+                  ? _Thumb(url: club.coverImageUrl, size: thumb)
+                  : LiveRing(
+                      // Video wins the colour when both kinds are live.
+                      isVideo: club.liveRooms.any((r) => r.isVideo),
+                      radius: 16,
+                      child: _Thumb(url: club.coverImageUrl, size: thumb - 5),
+                    ),
               const SizedBox(width: 13),
               Expanded(
                 child: Column(
@@ -115,6 +123,28 @@ class DiscoverClubCard extends StatelessWidget {
                         if (_role != null) ...[_dot(), _RoleChip(role: _role!)],
                       ],
                     ),
+                    if (club.liveRooms.isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final r in club.liveRooms)
+                            GestureDetector(
+                              // Straight into the live room.
+                              onTap: () => Navigator.pushNamed(
+                                context,
+                                RouteNames.clubRoom,
+                                arguments: {'roomUuid': r.uuid},
+                              ),
+                              child: LiveRoomBadge(
+                                isVideo: r.isVideo,
+                                count: r.presentCount,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                     if (!compact &&
                         (club.description ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 6),

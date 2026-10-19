@@ -40,6 +40,33 @@ class _AllClubsScreenState extends State<AllClubsScreen> {
   String? _error;
   int _generation = 0; // drops responses for an older search
 
+  /// The clubs I'm in (owner / admin / member), so this list never offers
+  /// "Join" for a club I already belong to.
+  Map<String, Club>? _mine;
+
+  Future<void> _loadMine() async {
+    try {
+      final mine = await sl<ClubsRepository>().getMyClubs();
+      if (!mounted) return;
+      setState(() {
+        _mine = {for (final c in mine) c.uuid: c};
+        for (var i = 0; i < _clubs.length; i++) {
+          _clubs[i] = _withMembership(_clubs[i]);
+        }
+      });
+    } catch (_) {}
+  }
+
+  Club _withMembership(Club c) {
+    final m = _mine?[c.uuid];
+    if (m == null) return c;
+    return c.copyWith(
+      isMember: true,
+      isCreator: c.isCreator || m.isCreator,
+      isAdmin: c.isAdmin || m.isAdmin,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +76,7 @@ class _AllClubsScreenState extends State<AllClubsScreen> {
       }
     });
     _reload();
+    _loadMine();
   }
 
   @override
@@ -88,6 +116,7 @@ class _AllClubsScreenState extends State<AllClubsScreen> {
       final body = res.data as Map;
       final items = ((body['data'] as List?) ?? const [])
           .map((e) => Club.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(_withMembership)
           .toList();
       final meta = (body['meta'] as Map?) ?? const {};
       setState(() {

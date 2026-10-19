@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:moonlight/core/services/reel_ad_service.dart';
 import 'package:moonlight/core/services/video_ad_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -166,6 +167,9 @@ class AdService {
   void onShortVideoSwiped() {
     // Google IMA video ads own this slot when configured on the server.
     if (VideoAdService.instance.handleSwipe()) return;
+    // In-feed native ads (a page between videos) replace the full-screen
+    // interstitial whenever an ad unit is configured.
+    if (ReelAdService.instance.available) return;
 
     _videosSinceAd++;
     if (_videosSinceAd < videosPerInterstitial) return;

@@ -17,7 +17,9 @@ import 'dart:io';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:moonlight/core/services/wakelock_coordinator.dart';
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
@@ -28,6 +30,7 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart'
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_player/video_player.dart';
 
+import 'active_room.dart';
 import 'club_room_controller.dart';
 import 'club_room_models.dart';
 import 'room_stage.dart';
@@ -45,7 +48,9 @@ class ClubRoomScreen extends StatefulWidget {
 }
 
 class _ClubRoomScreenState extends State<ClubRoomScreen> {
-  late final ClubRoomController c = ClubRoomController(widget.roomUuid);
+  // The room lives in ActiveRoom, not in this screen: closing the screen
+  // (minimise / back) keeps the call going while the user does other things.
+  late final ClubRoomController c = ActiveRoom.instance.obtain(widget.roomUuid);
   bool _opening = true;
   bool _closedDialogShown = false;
 
@@ -53,30 +58,141 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
   void initState() {
     super.initState();
     WakelockCoordinator.instance.acquire();
+    ActiveRoom.instance.screenOpen.value = true;
     c.addListener(_onChange);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+    if (c.active) {
+      _opening = false; // coming back to a room that's already running
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+    }
   }
 
   @override
   void dispose() {
     WakelockCoordinator.instance.release();
+    ActiveRoom.instance.screenOpen.value = false;
     c.removeListener(_onChange);
-    if (c.state?.me.inRoom == true && !c.ended && !c.removed) {
-      c.leave();
-    }
-    c.dispose();
+    ActiveRoom.instance.detach(c);
     super.dispose();
   }
+
+  /// Close the room screen but stay in the call.
+  void _minimise() => Navigator.of(context).maybePop();
+
+  // Seat requests the host has already been told about.
+  final Set<String> _seenRequests = {};
+  bool _requestPopupOpen = false;
 
   void _onChange() {
     if (!mounted) return;
     setState(() {});
+    _maybeShowSeatRequest();
     if ((c.ended || c.removed) && !_closedDialogShown && !_opening) {
       _closedDialogShown = true;
       _showClosed(
         c.removed ? 'You were removed from this room.' : 'This room has ended.',
       );
     }
+  }
+
+  /// Host / moderators: pop up as soon as someone asks to join the video.
+  void _maybeShowSeatRequest() {
+    final s = c.state;
+    if (s == null || s.isAudio || !s.me.canModerate || c.ended) return;
+    final pending = s.seatRequests;
+    _seenRequests.retainAll(pending.map((u) => u.uuid));
+    if (_requestPopupOpen) return;
+    final fresh = pending.where((u) => !_seenRequests.contains(u.uuid));
+    if (fresh.isEmpty) return;
+    final u = fresh.first;
+    _seenRequests.add(u.uuid);
+    _requestPopupOpen = true;
+    HapticFeedback.mediumImpact();
+    showDialog<void>(
+      context: context,
+      builder: (d) => AnimatedBuilder(
+        animation: c,
+        builder: (d, _) {
+          final st = c.state;
+          final still = st?.seatRequests.any((x) => x.uuid == u.uuid) ?? false;
+          if (!still) {
+            // Cancelled, or handled from the requests list.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.of(d).canPop()) Navigator.of(d).pop();
+            });
+          }
+          final others = (st?.seatRequests.length ?? 1) - 1;
+          final seatsLeft = st == null ? 0 : st.capacity - st.onStage.length;
+          return AlertDialog(
+            backgroundColor: _panel,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            contentPadding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Avatar(u, size: 64),
+                const SizedBox(height: 12),
+                Text(
+                  '${u.display} wants to join the video',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  seatsLeft <= 0
+                      ? 'All camera seats are taken.'
+                      : '$seatsLeft seat${seatsLeft == 1 ? '' : 's'} left'
+                            '${others > 0 ? ' · $others more waiting' : ''}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white60, fontSize: 13),
+                ),
+              ],
+            ),
+            actionsAlignment: MainAxisAlignment.spaceEvenly,
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(d).pop();
+                  _run(() => c.decideSeat(u.uuid, false));
+                },
+                child: const Text(
+                  'Decline',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+              if (others > 0)
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(d).pop();
+                    _openSeatRequests();
+                  },
+                  child: const Text('See all'),
+                ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: _accent),
+                onPressed: seatsLeft <= 0
+                    ? null
+                    : () {
+                        Navigator.of(d).pop();
+                        _run(() => c.decideSeat(u.uuid, true));
+                      },
+                child: const Text('Approve'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).whenComplete(() {
+      _requestPopupOpen = false;
+      // Someone else may have asked while this was open.
+      if (mounted) _maybeShowSeatRequest();
+    });
   }
 
   Future<void> _open() async {
@@ -408,26 +524,16 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
   @override
   Widget build(BuildContext context) {
     final s = c.state;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        if (c.ended || c.removed || s == null || !s.me.inRoom) {
-          Navigator.of(context).pop();
-        } else {
-          _confirmLeave();
-        }
-      },
-      child: Scaffold(
-        backgroundColor: MoonColors.night,
-        body: s == null || _opening
-            ? const Center(child: AppLogoLoader())
-            : AnimatedBuilder(
-                animation: c.rtc,
-                builder: (context, _) =>
-                    s.isAudio ? _audio(context, s) : _video(context, s),
-              ),
-      ),
+    // Back just minimises — the call keeps going; Leave / End leaves.
+    return Scaffold(
+      backgroundColor: MoonColors.night,
+      body: s == null || _opening
+          ? const Center(child: AppLogoLoader())
+          : AnimatedBuilder(
+              animation: c.rtc,
+              builder: (context, _) =>
+                  s.isAudio ? _audio(context, s) : _video(context, s),
+            ),
     );
   }
 
@@ -437,11 +543,21 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
 
   bool _isSpeaking(RoomParticipant p) {
     final rtc = c.rtc;
-    final muted = _isMuted(p);
-    return !muted && rtc.speaking[_isMe(p) ? 0 : p.user.uid] == true;
+    if (_isMe(p)) return !rtc.micMuted && rtc.speaking[0] == true;
+    // If the call hears them, they're talking — whatever the (possibly
+    // stale) participant list says about their mic.
+    return rtc.speaking[p.user.uid] == true;
   }
 
-  bool _isMuted(RoomParticipant p) => _isMe(p) ? c.rtc.micMuted : p.micMuted;
+  ValueListenable<double> _levelOf(RoomParticipant p) =>
+      c.rtc.levelOf(_isMe(p) ? 0 : p.user.uid);
+
+  bool _isMuted(RoomParticipant p) {
+    if (_isMe(p)) return c.rtc.micMuted;
+    final live = c.rtc.remoteMuted[p.user.uid];
+    if (c.rtc.speaking[p.user.uid] == true) return false;
+    return live ?? p.micMuted;
+  }
 
   Widget? _videoFor(RoomParticipant p) {
     final rtc = c.rtc;
@@ -461,6 +577,8 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
       );
     }
     if (!rtc.remoteUids.contains(p.user.uid)) return null;
+    // Listening only until they raise a hand.
+    if (c.state?.canWatchVideo != true) return null;
     return AgoraVideoView(
       controller: VideoViewController.remote(
         rtcEngine: engine,
@@ -477,7 +595,34 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
     final items = <Widget>[
       if (c.error != null)
         _Banner(text: c.error!, action: 'Retry', onTap: c.reconnect),
-      if (!s.isAudio && s.premium.enabled && !s.me.premiumAccess)
+      if (!s.isAudio && !s.canWatchVideo && s.me.seatRequest == 'pending')
+        _Banner(
+          text:
+              'Request sent ✋ You\'ll see everyone as soon as the host accepts you.',
+          action: 'Cancel',
+          onTap: () => _run(c.cancelSeat),
+        )
+      else if (!s.isAudio && !s.canWatchVideo && s.premium.enabled)
+        _Banner(
+          text:
+              'Premium room 👑 Unlock to watch everyone on camera. You can still hear everyone.',
+          action: 'Unlock · ${s.premium.priceCoins}',
+          onTap: _unlockPremium,
+          color: _gold,
+        )
+      else if (!s.isAudio && !s.canWatchVideo)
+        _Banner(
+          text:
+              'You\'re listening in. Raise your hand — once the host accepts you, you\'ll see everyone.',
+          action: s.me.seatFeeCoins > 0
+              ? '✋ Join · ${s.me.seatFeeCoins}'
+              : '✋ Join',
+          onTap: _requestSeat,
+        ),
+      if (!s.isAudio &&
+          s.me.onStage &&
+          s.premium.enabled &&
+          !s.me.premiumAccess)
         _Banner(
           text:
               'Premium room — some cameras are hidden. You can still hear everyone.',
@@ -492,21 +637,18 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
   Widget _overlay() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
-    children: [
-      _GiftTicker(controller: c),
-      const SizedBox(height: 6),
-      _CommentPreview(controller: c, onTap: _openComments),
-    ],
+    children: [_CommentPreview(controller: c, onTap: _openComments)],
   );
 
   Widget _audio(BuildContext context, RoomState s) => AudioRoomView(
     state: s,
     myUuid: c.myUuid,
     isSpeaking: _isSpeaking,
+    levelOf: _levelOf,
     isMuted: _isMuted,
     micMuted: c.rtc.micMuted,
     speakerOn: c.rtc.speakerOn,
-    onCollapse: () => Navigator.of(context).maybePop(),
+    onCollapse: _minimise,
     onParticipants: _openParticipants,
     onTapParticipant: _participantActions,
     onChat: _openComments,
@@ -525,11 +667,12 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
       state: s,
       myUuid: c.myUuid,
       isSpeaking: _isSpeaking,
+      levelOf: _levelOf,
       isMuted: _isMuted,
       videoFor: _videoFor,
       speakerOn: rtc.speakerOn,
       canFlipCamera: me.onStage && !rtc.cameraOff,
-      onBack: () => Navigator.of(context).maybePop(),
+      onBack: _minimise,
       onFlipCamera: rtc.switchCamera,
       onToggleSpeaker: () => rtc.setSpeakerOn(!rtc.speakerOn),
       onTitle: _openParticipants,
@@ -569,6 +712,27 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
             highlighted: true,
             onTap: _requestSeat,
           ),
+        // Host tools up front so they're never scrolled off the bar.
+        if (me.canModerate) ...[
+          VideoToolItem(
+            icon: Icons.workspace_premium_rounded,
+            label: s.premium.enabled ? 'Premium on' : 'Premium',
+            highlighted: s.premium.enabled,
+            onTap: _openPremium,
+          ),
+          VideoToolItem(
+            icon: Icons.front_hand_outlined,
+            label: 'Requests',
+            badge: s.seatRequests.length,
+            onTap: _openSeatRequests,
+          ),
+        ] else if (s.premium.enabled && !me.premiumAccess)
+          VideoToolItem(
+            icon: Icons.workspace_premium_rounded,
+            label: 'Unlock · ${s.premium.priceCoins}',
+            highlighted: true,
+            onTap: _unlockPremium,
+          ),
         VideoToolItem(
           icon: Icons.chat_bubble_outline_rounded,
           label: 'Chat',
@@ -585,20 +749,6 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
           badge: s.participants.length,
           onTap: _openParticipants,
         ),
-        if (me.canModerate) ...[
-          VideoToolItem(
-            icon: Icons.front_hand_outlined,
-            label: 'Requests',
-            badge: s.seatRequests.length,
-            onTap: _openSeatRequests,
-          ),
-          VideoToolItem(
-            icon: Icons.workspace_premium_rounded,
-            label: s.premium.enabled ? 'Premium on' : 'Premium',
-            highlighted: s.premium.enabled,
-            onTap: _openPremium,
-          ),
-        ],
       ],
     );
   }
@@ -660,7 +810,10 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
                                     Icons.mic_off_rounded,
                                     color: Colors.white38,
                                   )
-                                : SoundWave(active: _isSpeaking(p)),
+                                : SoundWave(
+                                    active: _isSpeaking(p),
+                                    level: _levelOf(p),
+                                  ),
                             onTap: s.me.canModerate && !p.user.isHost
                                 ? () {
                                     Navigator.pop(b);
@@ -759,20 +912,20 @@ class _Avatar extends StatelessWidget {
 
 // ── gifts ─────────────────────────────────────────────────────────────
 
-class _GiftTicker extends StatelessWidget {
-  final ClubRoomController controller;
-  const _GiftTicker({required this.controller});
+/// A gift notice as a line in the room chat (stays there, like gifts on
+/// the main livestream screen).
+class _GiftChatLine extends StatelessWidget {
+  final GiftNotice gift;
+  final bool inSheet;
+  const _GiftChatLine({required this.gift, this.inSheet = false});
 
   @override
   Widget build(BuildContext context) {
-    final recent = controller.gifts
-        .where((g) => DateTime.now().difference(g.at).inSeconds < 6)
-        .toList();
-    if (recent.isEmpty) return const SizedBox.shrink();
-    final g = recent.last;
+    final g = gift;
     return Align(
       alignment: Alignment.topLeft,
       child: Container(
+        margin: EdgeInsets.only(top: 4, bottom: inSheet ? 4 : 0),
         padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
         decoration: BoxDecoration(
           gradient: const LinearGradient(colors: [Color(0xFFB620E0), _accent]),
@@ -791,7 +944,7 @@ class _GiftTicker extends StatelessWidget {
             Flexible(
               child: Text(
                 '${g.from} sent ${g.quantity > 1 ? '${g.quantity}× ' : ''}${g.giftTitle} to ${g.to}',
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
@@ -1315,47 +1468,46 @@ class _CommentPreview extends StatelessWidget {
   final VoidCallback onTap;
   const _CommentPreview({required this.controller, required this.onTap});
 
+  Widget _previewLine(RoomComment c) => Container(
+    margin: const EdgeInsets.only(top: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '${c.user?.display ?? 'Member'}  ',
+            style: const TextStyle(color: _accent, fontWeight: FontWeight.w700),
+          ),
+          TextSpan(
+            text: c.body ?? (c.mediaType == 'video' ? '🎬 video' : '📷 photo'),
+          ),
+        ],
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(color: Colors.white, fontSize: 12.5),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final last = controller.comments.length > 4
-        ? controller.comments.sublist(controller.comments.length - 4)
-        : controller.comments;
+    final chat = controller.chat;
+    final last = chat.length > 4 ? chat.sublist(chat.length - 4) : chat;
     return GestureDetector(
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final c in last)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '${c.user?.display ?? 'Member'}  ',
-                      style: const TextStyle(
-                        color: _accent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    TextSpan(
-                      text:
-                          c.body ??
-                          (c.mediaType == 'video' ? '🎬 video' : '📷 photo'),
-                    ),
-                  ],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 12.5),
-              ),
-            ),
+          for (final item in last)
+            if (item is GiftNotice)
+              _GiftChatLine(gift: item)
+            else if (item is RoomComment)
+              _previewLine(item),
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -1552,7 +1704,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final comments = widget.controller.comments;
+    final comments = widget.controller.chat;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -1584,10 +1736,17 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       controller: _scroll,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemCount: comments.length,
-                      itemBuilder: (_, i) => _CommentTile(
-                        comment: comments[i],
-                        onLongPress: () => _actions(comments[i]),
-                      ),
+                      itemBuilder: (_, i) {
+                        final item = comments[i];
+                        if (item is GiftNotice) {
+                          return _GiftChatLine(gift: item, inSheet: true);
+                        }
+                        final cm = item as RoomComment;
+                        return _CommentTile(
+                          comment: cm,
+                          onLongPress: () => _actions(cm),
+                        );
+                      },
                     ),
             ),
             if (_replyTo != null || _editing != null || _media != null)

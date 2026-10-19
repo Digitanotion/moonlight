@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/clubs/domain/entities/club.dart';
+import 'package:moonlight/features/clubs/rooms/live_room_badge.dart';
 
 class ClubCard extends StatelessWidget {
   final Club club;
@@ -23,7 +24,14 @@ class ClubCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _Cover(club.coverImageUrl),
+            club.liveRooms.isEmpty
+                ? _Cover(club.coverImageUrl)
+                : LiveRing(
+                    // Video wins the colour when both kinds are live.
+                    isVideo: club.liveRooms.any((r) => r.isVideo),
+                    radius: 14,
+                    child: _Cover(club.coverImageUrl),
+                  ),
             const SizedBox(width: 12),
             Expanded(child: _Info(club)),
           ],
@@ -97,6 +105,17 @@ class _Info extends StatelessWidget {
           '${club.membersCount} members',
           style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
+        if (club.liveRooms.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final r in club.liveRooms)
+                LiveRoomBadge(isVideo: r.isVideo, count: r.presentCount),
+            ],
+          ),
+        ],
       ],
     );
   }

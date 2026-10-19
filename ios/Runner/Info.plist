@@ -75,5 +75,9 @@
 		     prompt the first time an ad attempts to use IDFA. -->
 		<key>NSUserTrackingUsageDescription</key>
 		<string>This identifier will be used to deliver personalized ads to you.</string>
-	</dict>
+		<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+</dict>
 </plist>

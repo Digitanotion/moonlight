@@ -16,6 +16,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'club_room_models.dart';
@@ -74,9 +75,14 @@ class SoundWave extends StatefulWidget {
   final int bars;
   final Gradient gradient;
 
+  /// Live loudness (0–1). When given, the bars rise and fall with the
+  /// voice instead of a fixed loop.
+  final ValueListenable<double>? level;
+
   const SoundWave({
     super.key,
     required this.active,
+    this.level,
     this.height = 14,
     this.bars = 4,
     this.gradient = const LinearGradient(
@@ -116,6 +122,17 @@ class _SoundWaveState extends State<SoundWave>
     super.dispose();
   }
 
+  /// 0–1 height for bar [i]: a ripple across the bars, scaled by how loud
+  /// the voice is right now (or a steady loop when no level is given).
+  double _barFactor(int i) {
+    final ripple = (0.5 + 0.5 * math.sin(_c.value * 2 * math.pi + i * 1.7))
+        .abs();
+    final lvl = widget.level?.value;
+    if (lvl == null) return 0.3 + 0.7 * ripple;
+    final loud = math.pow(lvl.clamp(0.0, 1.0), 0.7).toDouble();
+    return 0.18 + 0.82 * loud * (0.45 + 0.55 * ripple);
+  }
+
   @override
   Widget build(BuildContext context) {
     final barW = (widget.height / 5).clamp(2.0, 4.0);
@@ -124,7 +141,9 @@ class _SoundWaveState extends State<SoundWave>
       height: widget.height,
       width: widget.bars * barW + (widget.bars - 1) * gap,
       child: AnimatedBuilder(
-        animation: _c,
+        animation: widget.level == null
+            ? _c
+            : Listenable.merge([_c, widget.level]),
         builder: (context, _) => ShaderMask(
           shaderCallback: (r) => widget.gradient.createShader(r),
           child: Row(
@@ -135,16 +154,7 @@ class _SoundWaveState extends State<SoundWave>
                 Container(
                   width: barW,
                   height: widget.active
-                      ? widget.height *
-                            (0.3 +
-                                0.7 *
-                                    (0.5 +
-                                            0.5 *
-                                                math.sin(
-                                                  _c.value * 2 * math.pi +
-                                                      i * 1.7,
-                                                ))
-                                        .abs())
+                      ? math.max(barW, widget.height * _barFactor(i))
                       : barW,
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -304,6 +314,9 @@ class AudioRoomView extends StatelessWidget {
   final RoomState state;
   final String? myUuid;
   final bool Function(RoomParticipant p) isSpeaking;
+
+  /// Live loudness per person, for the sound wave.
+  final ValueListenable<double> Function(RoomParticipant p)? levelOf;
   final bool Function(RoomParticipant p) isMuted;
 
   final bool micMuted;
@@ -326,6 +339,7 @@ class AudioRoomView extends StatelessWidget {
     required this.state,
     required this.myUuid,
     required this.isSpeaking,
+    this.levelOf,
     required this.isMuted,
     required this.micMuted,
     required this.speakerOn,
@@ -467,6 +481,7 @@ class AudioRoomView extends StatelessWidget {
                             label: _youOr(p.user, myUuid),
                             size: avatar,
                             speaking: isSpeaking(p),
+                            level: levelOf?.call(p),
                             muted: isMuted(p),
                             onTap: () => onTapParticipant(p),
                           );
@@ -512,6 +527,7 @@ class _AudioSeat extends StatelessWidget {
   final String label;
   final double size;
   final bool speaking;
+  final ValueListenable<double>? level;
   final bool muted;
   final VoidCallback onTap;
 
@@ -520,6 +536,7 @@ class _AudioSeat extends StatelessWidget {
     required this.label,
     required this.size,
     required this.speaking,
+    this.level,
     required this.muted,
     required this.onTap,
   });
@@ -583,8 +600,9 @@ class _AudioSeat extends StatelessWidget {
                           color: MoonColors.magenta.withValues(alpha: 0.7),
                         ),
                       ),
-                      child: const SoundWave(
+                      child: SoundWave(
                         active: true,
+                        level: level,
                         height: 11,
                         bars: 5,
                         gradient: MoonColors.dusk,
@@ -755,6 +773,9 @@ class VideoRoomView extends StatelessWidget {
   final RoomState state;
   final String? myUuid;
   final bool Function(RoomParticipant p) isSpeaking;
+
+  /// Live loudness per person, for the sound wave.
+  final ValueListenable<double> Function(RoomParticipant p)? levelOf;
   final bool Function(RoomParticipant p) isMuted;
 
   /// Live camera for a person, or null to show their avatar.
@@ -784,6 +805,7 @@ class VideoRoomView extends StatelessWidget {
     required this.state,
     required this.myUuid,
     required this.isSpeaking,
+    this.levelOf,
     required this.isMuted,
     required this.videoFor,
     required this.speakerOn,
@@ -859,6 +881,7 @@ class VideoRoomView extends StatelessWidget {
       p: p,
       label: _youOr(p.user, myUuid),
       speaking: isSpeaking(p),
+      level: levelOf?.call(p),
       muted: isMuted(p),
       locked: !p.videoVisible && p.user.uuid != myUuid,
       video: videoFor(p),
@@ -940,7 +963,8 @@ class _VideoTopBar extends StatelessWidget {
         children: [
           IconButton(
             onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            tooltip: 'Minimise',
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 28),
             color: Colors.white,
           ),
           if (canFlipCamera)
@@ -1026,6 +1050,7 @@ class VideoTileView extends StatelessWidget {
   final RoomParticipant p;
   final String label;
   final bool speaking;
+  final ValueListenable<double>? level;
   final bool muted;
   final bool locked;
   final Widget? video;
@@ -1038,6 +1063,7 @@ class VideoTileView extends StatelessWidget {
     required this.p,
     required this.label,
     required this.speaking,
+    this.level,
     required this.muted,
     required this.locked,
     required this.video,
@@ -1091,6 +1117,7 @@ class VideoTileView extends StatelessWidget {
                 child: _NameChip(
                   label: label,
                   speaking: speaking,
+                  level: level,
                   muted: muted,
                   compact: compact,
                 ),
@@ -1151,12 +1178,14 @@ class VideoTileView extends StatelessWidget {
 class _NameChip extends StatelessWidget {
   final String label;
   final bool speaking;
+  final ValueListenable<double>? level;
   final bool muted;
   final bool compact;
 
   const _NameChip({
     required this.label,
     required this.speaking,
+    this.level,
     required this.muted,
     required this.compact,
   });
@@ -1182,7 +1211,11 @@ class _NameChip extends StatelessWidget {
               size: compact ? 13 : 15,
             )
           else
-            SoundWave(active: speaking, height: compact ? 11 : 13),
+            SoundWave(
+              active: speaking,
+              level: level,
+              height: compact ? 11 : 13,
+            ),
           SizedBox(width: compact ? 5 : 7),
           Flexible(
             child: Text(
@@ -1378,9 +1411,10 @@ class _VideoToolbar extends StatelessWidget {
           height: 68,
           child: LayoutBuilder(
             builder: (context, box) {
+              // Fit up to 7 buttons on a normal phone before scrolling.
               final w = math.max(
-                64.0,
-                box.maxWidth / math.min(tools.length, 6),
+                54.0,
+                box.maxWidth / math.min(tools.length, 7),
               );
               return ListView(
                 scrollDirection: Axis.horizontal,
