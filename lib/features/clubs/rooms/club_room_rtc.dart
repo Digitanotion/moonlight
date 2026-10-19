@@ -29,6 +29,7 @@ class ClubRoomRtc with ChangeNotifier {
   bool joined = false;
   bool micMuted = false;
   bool cameraOff = false;
+  bool speakerOn = true;
   String? lastError;
 
   /// Remote uids currently in the channel.
@@ -174,6 +175,13 @@ class ClubRoomRtc with ChangeNotifier {
   }
 
   Future<void> switchCamera() async => _engine?.switchCamera();
+
+  /// Loudspeaker vs earpiece.
+  Future<void> setSpeakerOn(bool on) async {
+    speakerOn = on;
+    await _engine?.setEnableSpeakerphone(on);
+    _notify();
+  }
 
   /// Premium gating: hide these remote cameras (audio still plays).
   Future<void> setHiddenVideo(Set<int> uids) async {

@@ -108,15 +108,23 @@ Future<void> maybePromptForUpdate(
 /// if this finds something to start.
 Future<void> retryAutoUpdateCheckSilently() async {
   if (!Platform.isAndroid) return;
-  if (AutoUpdateService.instance.stage.value != AutoUpdateStage.idle) {
-    return; // already tracking one — nothing to retry
+  final svc = AutoUpdateService.instance;
+  if (svc.stage.value == AutoUpdateStage.downloading) {
+    // Re-sync with Play — catches a download that finished (or died)
+    // while we were in the background.
+    await svc.checkProgress();
+    return;
   }
+  if (svc.stage.value != AutoUpdateStage.idle) return;
   try {
     final result = await play.InAppUpdate.checkForUpdate().timeout(
       const Duration(seconds: 6),
     );
-    if (result.updateAvailability == play.UpdateAvailability.updateAvailable) {
-      await AutoUpdateService.instance.tryStart(result);
+    // Also pick up a download that already finished in an earlier session
+    // (Play can report that without "update available").
+    if (result.updateAvailability == play.UpdateAvailability.updateAvailable ||
+        result.installStatus == play.InstallStatus.downloaded) {
+      await svc.tryStart(result);
     }
   } catch (_) {
     // No Play install / no Play Services / debug build — nothing to do.
@@ -131,7 +139,16 @@ Future<bool> _tryPlayInAppUpdate(BuildContext context) async {
       const Duration(seconds: 6),
     );
 
-    if (result.updateAvailability != play.UpdateAvailability.updateAvailable) {
+    // An immediate update that was interrupted (app killed mid-install) —
+    // Play wants us to resume it.
+    if (result.updateAvailability ==
+        play.UpdateAvailability.developerTriggeredUpdateInProgress) {
+      await play.InAppUpdate.performImmediateUpdate();
+      return true;
+    }
+
+    if (result.updateAvailability != play.UpdateAvailability.updateAvailable &&
+        result.installStatus != play.InstallStatus.downloaded) {
       return false;
     }
 

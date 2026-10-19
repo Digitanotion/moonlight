@@ -136,6 +136,7 @@ class RoomState {
   final int freeSlotsLeft;
   final int entryFeeCoins;
   final RoomPremium premium;
+  final DateTime? startedAt;
   final List<RoomParticipant> participants;
   final List<RoomUser> seatRequests;
   final RoomMe me;
@@ -153,6 +154,7 @@ class RoomState {
     required this.freeSlotsLeft,
     required this.entryFeeCoins,
     required this.premium,
+    this.startedAt,
     required this.participants,
     required this.seatRequests,
     required this.me,
@@ -184,6 +186,7 @@ class RoomState {
       premium: RoomPremium.fromJson(
         (j['premium'] as Map?)?.cast<String, dynamic>(),
       ),
+      startedAt: DateTime.tryParse(j['started_at']?.toString() ?? ''),
       participants: ((j['participants'] as List?) ?? const [])
           .map((e) => RoomParticipant.fromJson(Map<String, dynamic>.from(e)))
           .toList(),

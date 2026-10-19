@@ -17,7 +17,8 @@ import 'package:moonlight/widgets/top_snack.dart';
 
 import '../cubit/discover_clubs_cubit.dart';
 import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
-import 'package:moonlight/features/clubs/presentation/pages/all_clubs_screen.dart' show kClubsCaption;
+import 'package:moonlight/features/clubs/presentation/pages/all_clubs_screen.dart'
+    show kClubsCaption;
 import '../cubit/discover_clubs_state.dart';
 import '../cubit/search_clubs_cubit.dart';
 import '../cubit/search_clubs_state.dart';
@@ -188,7 +189,8 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
                       club: club,
                       joined: joined,
                       joining: disc.joining.contains(club.uuid),
-                      onJoin: () => _joinSuggested(club.uuid, clubName: club.name),
+                      onJoin: () =>
+                          _joinSuggested(club.uuid, clubName: club.name),
                     ),
                   );
                 },
@@ -248,7 +250,10 @@ class _DiscoverClubsScreenState extends State<DiscoverClubsScreen> {
     ];
   }
 
-  Future<void> _joinSuggested(String clubUuid, {String clubName = 'club'}) async {
+  Future<void> _joinSuggested(
+    String clubUuid, {
+    String clubName = 'club',
+  }) async {
     var confirmed = false;
     await confirmAndJoinClub(
       context,

@@ -3,60 +3,78 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:moonlight/features/clubs/rooms/meet_layout.dart';
 
-const phonePortrait = Size(382, 640); // video area on a ~390pt-wide phone
-const phoneLandscape = Size(836, 300);
+const phone = Size(382, 600); // video stage on a ~390pt-wide phone
+const smallPhone = Size(312, 480);
+const landscape = Size(836, 300);
 const tablet = Size(1016, 640);
 
-String shape(int n, Size box) {
-  final g = meetGrid(n, box);
-  return '${g.columns}x${g.rows}';
-}
-
 void main() {
-  test('two people stack on an upright phone, sit side by side when wide', () {
-    expect(shape(2, phonePortrait), '1x2');
-    expect(shape(2, phoneLandscape), '2x1');
-    expect(shape(2, tablet), '2x1');
+  test('rows grow like a multi-guest live room', () {
+    expect(stageRows(1), [1]);
+    expect(stageRows(2), [2]);
+    expect(stageRows(3), [1, 2]);
+    expect(stageRows(4), [2, 2]);
+    expect(stageRows(5), [2, 3]);
+    expect(stageRows(6), [2, 2, 2]);
+    expect(stageRows(7), [2, 3, 2]);
+    expect(stageRows(8), [2, 3, 3]);
+    expect(stageRows(10), [2, 4, 4]); // the reference screenshot
   });
 
-  test('grows like Google Meet on an upright phone', () {
-    expect(shape(1, phonePortrait), '1x1');
-    expect(shape(3, phonePortrait), '2x2');
-    expect(shape(4, phonePortrait), '2x2');
-    expect(shape(6, phonePortrait), '2x3');
-    expect(shape(8, phonePortrait), '2x4');
-    expect(shape(9, phonePortrait), '3x3');
-    expect(shape(10, phonePortrait), '3x4');
+  test('narrow phones get rows of 3, normal phones rows of 4', () {
+    expect(maxPerRowFor(smallPhone.width), 3);
+    expect(maxPerRowFor(phone.width), 4);
+    expect(stageRows(10, maxPerRow: 3), [2, 3, 3, 2]);
+    // Small tiles stay at least ~84pt wide (unless squeezed to fit height).
+    final l = stageLayout(10, const Size(312, 900));
+    expect(l.tiles[2].width, greaterThanOrEqualTo(minSmallTileWidth));
   });
 
-  test('every layout stays inside the box with sensibly shaped tiles', () {
-    for (final box in [phonePortrait, phoneLandscape, tablet]) {
+  test('featured tiles are bigger than the rest', () {
+    final l = stageLayout(10, phone);
+    expect(l.featuredCount, 2);
+    final big = l.tiles[0];
+    final small = l.tiles[2];
+    expect(big.width, greaterThan(small.width * 1.8));
+    expect(big.width, closeTo(big.height, 0.01)); // square featured tiles
+  });
+
+  test('every layout fits, centres, and keeps tiles near square', () {
+    for (final box in [phone, smallPhone, landscape, tablet]) {
       for (var n = 1; n <= 10; n++) {
-        final g = meetGrid(n, box);
-        expect(g.origins, hasLength(n));
-        expect(g.columns * g.rows, greaterThanOrEqualTo(n));
-        // No empty full row (would waste a whole band of the screen).
-        expect(g.columns * (g.rows - 1), lessThan(n), reason: '$n in $box');
-        for (final o in g.origins) {
-          expect(o.dx, greaterThanOrEqualTo(-0.01));
-          expect(o.dy, greaterThanOrEqualTo(-0.01));
-          expect(o.dx + g.cell.width, lessThanOrEqualTo(box.width + 0.01));
-          expect(o.dy + g.cell.height, lessThanOrEqualTo(box.height + 0.01));
+        final l = stageLayout(n, box);
+        expect(l.tiles, hasLength(n));
+        for (final r in l.tiles) {
+          expect(r.left, greaterThanOrEqualTo(-0.01), reason: '$n in $box');
+          expect(r.top, greaterThanOrEqualTo(-0.01), reason: '$n in $box');
+          expect(r.right, lessThanOrEqualTo(box.width + 0.01));
+          expect(r.bottom, lessThanOrEqualTo(box.height + 0.01));
+          if (n > 1) {
+            final ratio = r.width / r.height;
+            expect(ratio, inInclusiveRange(0.7, 1.4), reason: '$n in $box');
+          }
         }
-        // Never the old "tall sliver" look once more than one person is on.
-        if (n > 1) {
-          final ratio = g.cell.width / g.cell.height;
-          expect(ratio, inInclusiveRange(0.5, 1.5), reason: '$n in $box');
+        // Tiles never overlap.
+        for (var i = 0; i < n; i++) {
+          for (var j = i + 1; j < n; j++) {
+            final o = l.tiles[i].intersect(l.tiles[j]);
+            expect(o.width <= 0.01 || o.height <= 0.01, isTrue);
+          }
         }
+        // Block is vertically centred.
+        final top = l.tiles.map((r) => r.top).reduce((a, b) => a < b ? a : b);
+        final bottom = l.tiles
+            .map((r) => r.bottom)
+            .reduce((a, b) => a > b ? a : b);
+        expect(top, closeTo(box.height - bottom, 0.5), reason: '$n in $box');
       }
     }
   });
 
-  test('a short last row is centred', () {
-    final g = meetGrid(3, const Size(800, 600)); // 2x2 with one left over
-    expect(g.columns, 2);
-    final last = g.origins[2];
-    final centredLeft = (800 - g.cell.width) / 2;
-    expect(last.dx, closeTo(centredLeft, 0.01));
+  test('a short row is centred', () {
+    final l = stageLayout(5, phone); // [2, 3]
+    final third = l.tiles[2];
+    final last = l.tiles[4];
+    expect(third.left, closeTo(phone.width - last.right, 0.5));
   });
 }

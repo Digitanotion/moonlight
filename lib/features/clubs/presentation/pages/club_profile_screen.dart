@@ -135,7 +135,7 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                               const SizedBox(height: 20),
                               ClubRoomsBar(
                                 clubUuid: club.uuid,
-                                canOpenAudio: club.isCreator || club.isAdmin,
+                                canOpenAudio: true, // any member can start one
                               ),
                             ],
                             const SizedBox(height: 30),

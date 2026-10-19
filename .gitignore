@@ -113,3 +113,6 @@ coverage/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Generated design previews (MOONLIGHT_PREVIEW=1 flutter test test/preview --update-goldens)
+test/preview/goldens/

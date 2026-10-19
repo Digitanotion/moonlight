@@ -15,6 +15,13 @@
 //
 // Android-only: iOS has no equivalent API (Apple doesn't allow apps to
 // silently self-update), so every method here is a no-op off Android.
+//
+// Note: a flexible update is NOT silent at the start — Play first shows its
+// own "Update available · Update / No thanks" consent dialog. Only after the
+// user accepts does the download run in the background. [tryStart] checks
+// that answer: "No thanks" or a failure returns to idle (the next launch
+// asks again) instead of pretending to download forever, and a watchdog
+// re-asks Play while downloading so the ring can never get stuck.
 
 import 'dart:async';
 import 'dart:io';
@@ -41,9 +48,40 @@ enum AutoUpdateStage {
   failed,
 }
 
+/// The bits of Google Play's in-app update API this service uses —
+/// swappable so the update flow can be tested without a Play install.
+class PlayUpdateApi {
+  const PlayUpdateApi();
+  Future<play.AppUpdateInfo> checkForUpdate() =>
+      play.InAppUpdate.checkForUpdate();
+  Future<play.AppUpdateResult> startFlexibleUpdate() =>
+      play.InAppUpdate.startFlexibleUpdate();
+  Future<void> completeFlexibleUpdate() =>
+      play.InAppUpdate.completeFlexibleUpdate();
+  Stream<play.InstallProgress> get installUpdates =>
+      play.InAppUpdate.installUpdateListener;
+}
+
 class AutoUpdateService {
   AutoUpdateService._();
   static final AutoUpdateService instance = AutoUpdateService._();
+
+  @visibleForTesting
+  AutoUpdateService.forTesting(this._api, {bool android = true})
+    : _isAndroid = android;
+
+  PlayUpdateApi _api = const PlayUpdateApi();
+  bool? _isAndroid;
+  bool get _android => _isAndroid ?? Platform.isAndroid;
+
+  /// While "downloading", re-ask Play this often in case progress events
+  /// stop arriving (e.g. the app was backgrounded mid-download).
+  static const Duration _watchdogEvery = Duration(seconds: 20);
+  Timer? _watchdog;
+
+  /// Set when the user tapped "No thanks" on Play's dialog — don't show it
+  /// again this session (it comes back on the next cold start).
+  bool deniedThisSession = false;
 
   /// How long the "update ready — restarting shortly" banner stays up
   /// before the app actually restarts. Long enough to read, short enough
@@ -70,7 +108,7 @@ class AutoUpdateService {
   /// to do (not Android, no flexible update, or already tracking one),
   /// so the caller can fall through to its existing logic unchanged.
   Future<bool> tryStart(play.AppUpdateInfo result) async {
-    if (!Platform.isAndroid) return false;
+    if (!_android) return false;
 
     // Already tracking one (e.g. resume re-check while still downloading
     // from launch) — nothing new to do, but this IS a flexible update we
@@ -86,7 +124,18 @@ class AutoUpdateService {
       return true;
     }
 
+    // A flexible download already under way (e.g. started before the app
+    // was killed) — just follow it.
+    if (result.installStatus == play.InstallStatus.downloading ||
+        result.installStatus == play.InstallStatus.pending) {
+      _listen();
+      stage.value = AutoUpdateStage.downloading;
+      _startWatchdog();
+      return true;
+    }
+
     if (!result.flexibleUpdateAllowed) return false;
+    if (deniedThisSession) return true; // asked already; don't nag
     _listen();
 
     if (_starting) return true;
@@ -94,24 +143,77 @@ class AutoUpdateService {
     stage.value = AutoUpdateStage.downloading;
     progress.value = null;
 
+    play.AppUpdateResult outcome;
     try {
-      await play.InAppUpdate.startFlexibleUpdate();
+      // Shows Play's consent dialog; resolves with the user's answer.
+      outcome = await _api.startFlexibleUpdate();
     } catch (e) {
       debugPrint('AutoUpdateService.tryStart: $e');
-      _starting = false;
-      stage.value = AutoUpdateStage.failed;
-      // Brief flash of "failed" on the ring, then quietly back to idle —
-      // next launch/resume check will just try again.
-      Future.delayed(const Duration(seconds: 3), _reset);
-      return true; // we did own this attempt, even though it failed
+      outcome = play.AppUpdateResult.inAppUpdateFailed;
     }
     _starting = false;
+
+    switch (outcome) {
+      case play.AppUpdateResult.success:
+        // Accepted — Play downloads in the background; progress arrives via
+        // the listener, and the watchdog covers missed events.
+        _startWatchdog();
+      case play.AppUpdateResult.userDeniedUpdate:
+        // "No thanks" — nothing is downloading. Back to idle (was: stuck
+        // on "downloading" for the rest of the session).
+        deniedThisSession = true;
+        _reset();
+      case play.AppUpdateResult.inAppUpdateFailed:
+        // Brief flash of "failed" on the ring, then quietly back to idle —
+        // next launch/resume check will just try again.
+        stage.value = AutoUpdateStage.failed;
+        Future.delayed(const Duration(seconds: 3), _reset);
+    }
     return true;
+  }
+
+  void _startWatchdog() {
+    _watchdog?.cancel();
+    _watchdog = Timer.periodic(_watchdogEvery, (_) => checkProgress());
+  }
+
+  /// Ask Play where the download really is. Used by the watchdog and on
+  /// resume, so a missed listener event can't leave the ring spinning.
+  Future<void> checkProgress() async {
+    if (stage.value != AutoUpdateStage.downloading) {
+      _watchdog?.cancel();
+      return;
+    }
+    try {
+      final info = await _api.checkForUpdate().timeout(
+        const Duration(seconds: 6),
+      );
+      switch (info.installStatus) {
+        case play.InstallStatus.downloaded:
+          _onDownloaded();
+        case play.InstallStatus.failed:
+        case play.InstallStatus.canceled:
+          stage.value = AutoUpdateStage.failed;
+          Future.delayed(const Duration(seconds: 3), _reset);
+        case play.InstallStatus.downloading:
+        case play.InstallStatus.pending:
+        case play.InstallStatus.installing:
+          break; // still going
+        default:
+          // Nothing in flight and no update offered any more → idle.
+          if (info.updateAvailability !=
+              play.UpdateAvailability.updateAvailable) {
+            _reset();
+          }
+      }
+    } catch (_) {
+      // Transient — try again on the next tick.
+    }
   }
 
   void _listen() {
     if (_sub != null) return;
-    _sub = play.InAppUpdate.installUpdateListener.listen((p) {
+    _sub = _api.installUpdates.listen((p) {
       switch (p.status) {
         case play.InstallStatus.downloading:
         case play.InstallStatus.pending:
@@ -135,6 +237,7 @@ class AutoUpdateService {
   void _onDownloaded() {
     if (_restartScheduled) return;
     _restartScheduled = true;
+    _watchdog?.cancel();
     progress.value = 1.0;
     stage.value = AutoUpdateStage.downloaded;
 
@@ -144,7 +247,7 @@ class AutoUpdateService {
       try {
         // The process is killed and relaunched by Play once this resolves
         // successfully — nothing after this line is expected to run.
-        await play.InAppUpdate.completeFlexibleUpdate();
+        await _api.completeFlexibleUpdate();
       } catch (e) {
         debugPrint('AutoUpdateService.completeFlexibleUpdate: $e');
         _reset();
@@ -155,6 +258,7 @@ class AutoUpdateService {
   void _reset() {
     _starting = false;
     _restartScheduled = false;
+    _watchdog?.cancel();
     _restartTimer?.cancel();
     _restartTimer = null;
     progress.value = null;
@@ -165,5 +269,6 @@ class AutoUpdateService {
     _sub?.cancel();
     _sub = null;
     _restartTimer?.cancel();
+    _watchdog?.cancel();
   }
 }

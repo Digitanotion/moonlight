@@ -30,9 +30,8 @@ import 'package:video_player/video_player.dart';
 
 import 'club_room_controller.dart';
 import 'club_room_models.dart';
-import 'meet_layout.dart';
+import 'room_stage.dart';
 
-const _bg = Color(0xFF0B0A1F);
 const _panel = Color(0xFF17142E);
 const _accent = Color(0xFFFF7A00);
 const _gold = Color(0xFFFFC107);
@@ -420,186 +419,269 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: _bg,
+        backgroundColor: MoonColors.night,
         body: s == null || _opening
             ? const Center(child: AppLogoLoader())
-            : SafeArea(
-                child: Column(
-                  children: [
-                    _TopBar(
-                      state: s,
-                      onClose: () => Navigator.of(context).maybePop(),
-                      onRequests: s.me.canModerate && !s.isAudio
-                          ? _openSeatRequests
-                          : null,
-                      onPremium: s.me.canModerate && !s.isAudio
-                          ? _openPremium
-                          : null,
-                    ),
-                    if (c.error != null)
-                      _Banner(
-                        text: c.error!,
-                        action: 'Retry',
-                        onTap: c.reconnect,
-                      ),
-                    if (!s.isAudio && s.premium.enabled && !s.me.premiumAccess)
-                      _Banner(
-                        text:
-                            'Premium room — some cameras are hidden. You can still hear everyone.',
-                        action: 'Unlock · ${s.premium.priceCoins}',
-                        onTap: _unlockPremium,
-                        color: _gold,
-                      ),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: s.isAudio
-                                ? _AudioStage(
-                                    controller: c,
-                                    onTapParticipant: _participantActions,
-                                  )
-                                : _VideoGrid(
-                                    controller: c,
-                                    onTapParticipant: _participantActions,
-                                    onUnlock: _unlockPremium,
-                                  ),
-                          ),
-                          Positioned(
-                            left: 12,
-                            right: 12,
-                            bottom: 8,
-                            child: _CommentPreview(
-                              controller: c,
-                              onTap: _openComments,
-                            ),
-                          ),
-                          Positioned(
-                            top: 8,
-                            left: 12,
-                            right: 12,
-                            child: _GiftTicker(controller: c),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _Controls(
-                      controller: c,
-                      onLeave: _confirmLeave,
-                      onComments: _openComments,
-                      onGift: _openGifts,
-                      onRequestSeat: _requestSeat,
-                      onCancelSeat: () => _run(c.cancelSeat),
-                      run: _run,
-                    ),
-                  ],
-                ),
+            : AnimatedBuilder(
+                animation: c.rtc,
+                builder: (context, _) =>
+                    s.isAudio ? _audio(context, s) : _video(context, s),
               ),
+      ),
+    );
+  }
+
+  // ── view wiring ─────────────────────────────────────────────────────
+
+  bool _isMe(RoomParticipant p) => p.user.uuid == c.myUuid;
+
+  bool _isSpeaking(RoomParticipant p) {
+    final rtc = c.rtc;
+    final muted = _isMuted(p);
+    return !muted && rtc.speaking[_isMe(p) ? 0 : p.user.uid] == true;
+  }
+
+  bool _isMuted(RoomParticipant p) => _isMe(p) ? c.rtc.micMuted : p.micMuted;
+
+  Widget? _videoFor(RoomParticipant p) {
+    final rtc = c.rtc;
+    final engine = rtc.engine;
+    if (engine == null || !rtc.joined) return null;
+    if (_isMe(p)) {
+      if (rtc.cameraOff) return null;
+      return AgoraVideoView(
+        controller: VideoViewController(
+          rtcEngine: engine,
+          // Cover: fill the tile and crop, never letterbox.
+          canvas: const VideoCanvas(
+            uid: 0,
+            renderMode: RenderModeType.renderModeHidden,
+          ),
+        ),
+      );
+    }
+    if (!rtc.remoteUids.contains(p.user.uid)) return null;
+    return AgoraVideoView(
+      controller: VideoViewController.remote(
+        rtcEngine: engine,
+        canvas: VideoCanvas(
+          uid: p.user.uid,
+          renderMode: RenderModeType.renderModeHidden,
+        ),
+        connection: RtcConnection(channelId: rtc.channel),
+      ),
+    );
+  }
+
+  Widget? _notices(RoomState s) {
+    final items = <Widget>[
+      if (c.error != null)
+        _Banner(text: c.error!, action: 'Retry', onTap: c.reconnect),
+      if (!s.isAudio && s.premium.enabled && !s.me.premiumAccess)
+        _Banner(
+          text:
+              'Premium room — some cameras are hidden. You can still hear everyone.',
+          action: 'Unlock · ${s.premium.priceCoins}',
+          onTap: _unlockPremium,
+          color: _gold,
+        ),
+    ];
+    return items.isEmpty ? null : Column(children: items);
+  }
+
+  Widget _overlay() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _GiftTicker(controller: c),
+      const SizedBox(height: 6),
+      _CommentPreview(controller: c, onTap: _openComments),
+    ],
+  );
+
+  Widget _audio(BuildContext context, RoomState s) => AudioRoomView(
+    state: s,
+    myUuid: c.myUuid,
+    isSpeaking: _isSpeaking,
+    isMuted: _isMuted,
+    micMuted: c.rtc.micMuted,
+    speakerOn: c.rtc.speakerOn,
+    onCollapse: () => Navigator.of(context).maybePop(),
+    onParticipants: _openParticipants,
+    onTapParticipant: _participantActions,
+    onChat: _openComments,
+    onGift: _openGifts,
+    onToggleSpeaker: () => c.rtc.setSpeakerOn(!c.rtc.speakerOn),
+    onToggleMic: () => _run(c.toggleMic),
+    onEnd: _confirmLeave,
+    topOverlay: _notices(s),
+    bottomOverlay: _overlay(),
+  );
+
+  Widget _video(BuildContext context, RoomState s) {
+    final rtc = c.rtc;
+    final me = s.me;
+    return VideoRoomView(
+      state: s,
+      myUuid: c.myUuid,
+      isSpeaking: _isSpeaking,
+      isMuted: _isMuted,
+      videoFor: _videoFor,
+      speakerOn: rtc.speakerOn,
+      canFlipCamera: me.onStage && !rtc.cameraOff,
+      onBack: () => Navigator.of(context).maybePop(),
+      onFlipCamera: rtc.switchCamera,
+      onToggleSpeaker: () => rtc.setSpeakerOn(!rtc.speakerOn),
+      onTitle: _openParticipants,
+      onLeave: _confirmLeave,
+      leaveLabel: me.isHost ? 'End' : 'Leave',
+      onTapParticipant: _participantActions,
+      onUnlock: _unlockPremium,
+      onOverflow: _openParticipants,
+      topOverlay: _notices(s),
+      bottomOverlay: _overlay(),
+      tools: [
+        if (me.onStage) ...[
+          VideoToolItem(
+            icon: rtc.micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+            label: rtc.micMuted ? 'Unmute' : 'Mute',
+            onTap: () => _run(c.toggleMic),
+          ),
+          VideoToolItem(
+            icon: rtc.cameraOff
+                ? Icons.videocam_off_rounded
+                : Icons.videocam_rounded,
+            label: rtc.cameraOff ? 'Start video' : 'Stop video',
+            onTap: () => rtc.setCameraOff(!rtc.cameraOff),
+          ),
+        ] else if (me.seatRequest == 'pending')
+          VideoToolItem(
+            icon: Icons.hourglass_top_rounded,
+            label: 'Requested',
+            onTap: () => _run(c.cancelSeat),
+          )
+        else
+          VideoToolItem(
+            icon: Icons.front_hand_rounded,
+            label: me.seatFeeCoins > 0
+                ? 'Join · ${me.seatFeeCoins}'
+                : 'Join camera',
+            highlighted: true,
+            onTap: _requestSeat,
+          ),
+        VideoToolItem(
+          icon: Icons.chat_bubble_outline_rounded,
+          label: 'Chat',
+          onTap: _openComments,
+        ),
+        VideoToolItem(
+          icon: Icons.card_giftcard_rounded,
+          label: 'Gift',
+          onTap: _openGifts,
+        ),
+        VideoToolItem(
+          icon: Icons.groups_rounded,
+          label: 'People',
+          badge: s.participants.length,
+          onTap: _openParticipants,
+        ),
+        if (me.canModerate) ...[
+          VideoToolItem(
+            icon: Icons.front_hand_outlined,
+            label: 'Requests',
+            badge: s.seatRequests.length,
+            onTap: _openSeatRequests,
+          ),
+          VideoToolItem(
+            icon: Icons.workspace_premium_rounded,
+            label: s.premium.enabled ? 'Premium on' : 'Premium',
+            highlighted: s.premium.enabled,
+            onTap: _openPremium,
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _openParticipants() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => AnimatedBuilder(
+        animation: c,
+        builder: (b, _) {
+          final s = c.state;
+          if (s == null) return const SizedBox.shrink();
+          String role(RoomParticipant p) => switch (p.role) {
+            'host' => 'Host',
+            'guest' => 'On camera',
+            'speaker' => p.user.isOwner ? 'Owner' : 'In the room',
+            _ => p.user.isOwner ? 'Owner · watching' : 'Watching',
+          };
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(b).size.height * 0.6,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(
+                      '${s.participants.length} in the room',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        for (final p in s.participants)
+                          ListTile(
+                            leading: MoonAvatar(p.user, size: 40),
+                            title: Text(
+                              _isMe(p) ? 'You' : p.user.display,
+                              style: TextStyle(
+                                color: MoonColors.nameColor(p.user.uuid),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              role(p),
+                              style: const TextStyle(color: Colors.white54),
+                            ),
+                            trailing: _isMuted(p)
+                                ? const Icon(
+                                    Icons.mic_off_rounded,
+                                    color: Colors.white38,
+                                  )
+                                : SoundWave(active: _isSpeaking(p)),
+                            onTap: s.me.canModerate && !p.user.isHost
+                                ? () {
+                                    Navigator.pop(b);
+                                    _participantActions(p);
+                                  }
+                                : null,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
 // ── top bar / banners ─────────────────────────────────────────────────
-
-class _TopBar extends StatelessWidget {
-  final RoomState state;
-  final VoidCallback onClose;
-  final VoidCallback? onRequests;
-  final VoidCallback? onPremium;
-
-  const _TopBar({
-    required this.state,
-    required this.onClose,
-    this.onRequests,
-    this.onPremium,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final s = state;
-    final count = s.participants.length;
-    final subtitle = s.isAudio
-        ? '$count / ${s.capacity} in the room'
-              '${s.freeSlotsLeft > 0 ? ' · ${s.freeSlotsLeft} free places left' : ' · entry ${s.entryFeeCoins} coins'}'
-        : '${s.onStage.length} / ${s.capacity} on camera · $count watching';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
-            onPressed: onClose,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      s.isAudio ? Icons.graphic_eq : Icons.videocam,
-                      color: _accent,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        s.title?.isNotEmpty == true
-                            ? s.title!
-                            : '${s.clubName} · ${s.isAudio ? 'Audio' : 'Video'} room',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                    if (s.premium.enabled) ...[
-                      const SizedBox(width: 6),
-                      const Icon(
-                        Icons.workspace_premium,
-                        color: _gold,
-                        size: 16,
-                      ),
-                    ],
-                  ],
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          if (onPremium != null)
-            IconButton(
-              tooltip: 'Premium',
-              icon: Icon(
-                Icons.workspace_premium,
-                color: s.premium.enabled ? _gold : Colors.white70,
-              ),
-              onPressed: onPremium,
-            ),
-          if (onRequests != null)
-            IconButton(
-              tooltip: 'Camera requests',
-              onPressed: onRequests,
-              icon: Badge(
-                isLabelVisible: s.seatRequests.isNotEmpty,
-                label: Text('${s.seatRequests.length}'),
-                child: const Icon(Icons.front_hand, color: Colors.white),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 class _Banner extends StatelessWidget {
   final String text;
@@ -647,455 +729,7 @@ class _Banner extends StatelessWidget {
 
 // ── audio stage ───────────────────────────────────────────────────────
 
-class _AudioStage extends StatelessWidget {
-  final ClubRoomController controller;
-  final void Function(RoomParticipant) onTapParticipant;
-
-  const _AudioStage({required this.controller, required this.onTapParticipant});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller.rtc,
-      builder: (context, _) {
-        final s = controller.state!;
-        final me = controller.myUuid;
-        return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 56, 16, 140),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            mainAxisSpacing: 18,
-            crossAxisSpacing: 8,
-            childAspectRatio: 0.72,
-          ),
-          itemCount: s.participants.length,
-          itemBuilder: (context, i) {
-            final p = s.participants[i];
-            final isMe = p.user.uuid == me;
-            final speaking =
-                controller.rtc.speaking[isMe ? 0 : p.user.uid] == true &&
-                !(isMe ? controller.rtc.micMuted : p.micMuted);
-            return GestureDetector(
-              onTap: () => onTapParticipant(p),
-              child: Column(
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: speaking
-                                ? Colors.greenAccent
-                                : Colors.transparent,
-                            width: 2.5,
-                          ),
-                        ),
-                        child: _Avatar(p.user, size: 60),
-                      ),
-                      if (isMe ? controller.rtc.micMuted : p.micMuted)
-                        const Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: CircleAvatar(
-                            radius: 11,
-                            backgroundColor: Colors.redAccent,
-                            child: Icon(
-                              Icons.mic_off,
-                              size: 13,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    isMe ? 'You' : p.user.display,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                  if (p.user.isHost || p.user.isOwner)
-                    Text(
-                      p.user.isHost ? 'Host' : 'Owner',
-                      style: const TextStyle(color: _accent, fontSize: 10.5),
-                    ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
 // ── video grid ────────────────────────────────────────────────────────
-
-class _VideoGrid extends StatelessWidget {
-  final ClubRoomController controller;
-  final void Function(RoomParticipant) onTapParticipant;
-  final VoidCallback onUnlock;
-
-  const _VideoGrid({
-    required this.controller,
-    required this.onTapParticipant,
-    required this.onUnlock,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller.rtc,
-      builder: (context, _) {
-        final s = controller.state!;
-        final tiles = s.onStage;
-        final me = controller.myUuid;
-        final mine = tiles.where((p) => p.user.uuid == me).firstOrNull;
-
-        Widget tile(RoomParticipant p, {bool compact = false}) => _VideoTile(
-          key: ValueKey(p.user.uuid),
-          controller: controller,
-          p: p,
-          compact: compact,
-          onTap: () => onTapParticipant(p),
-          onUnlock: onUnlock,
-        );
-
-        return LayoutBuilder(
-          builder: (context, box) {
-            final full = Size(box.maxWidth, box.maxHeight);
-
-            // Meet 1:1 — the other person fills the screen, you float in
-            // a small corner preview.
-            if (tiles.length == 2 && mine != null) {
-              final other = tiles.firstWhere((p) => p != mine);
-              return Stack(
-                children: [
-                  Positioned.fill(child: tile(other)),
-                  _FloatingSelfView(
-                    area: full,
-                    child: tile(mine, compact: true),
-                  ),
-                ],
-              );
-            }
-
-            // Leave the comment preview room once the screen is shared.
-            final bottom = tiles.length > 2 ? 96.0 : 0.0;
-            final area = Size(full.width - 8, full.height - bottom - 8);
-            final grid = meetGrid(tiles.length, area);
-            return Padding(
-              padding: EdgeInsets.fromLTRB(4, 4, 4, bottom + 4),
-              child: Stack(
-                children: [
-                  for (var i = 0; i < tiles.length; i++)
-                    AnimatedPositioned(
-                      key: ValueKey('pos-${tiles[i].user.uuid}'),
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOut,
-                      left: grid.origins[i].dx,
-                      top: grid.origins[i].dy,
-                      width: grid.cell.width,
-                      height: grid.cell.height,
-                      child: tile(tiles[i], compact: tiles.length > 4),
-                    ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-/// Draggable self-preview for 1:1 video (snaps to the nearest corner).
-class _FloatingSelfView extends StatefulWidget {
-  final Size area;
-  final Widget child;
-  const _FloatingSelfView({required this.area, required this.child});
-
-  @override
-  State<_FloatingSelfView> createState() => _FloatingSelfViewState();
-}
-
-class _FloatingSelfViewState extends State<_FloatingSelfView> {
-  static const _margin = 12.0;
-  Alignment _corner = Alignment.topRight;
-  Offset? _drag;
-
-  Size get _size {
-    final w = (widget.area.shortestSide * 0.3).clamp(96.0, 180.0);
-    return Size(w, w * 4 / 3);
-  }
-
-  Offset _cornerOffset(Alignment a) {
-    final s = _size;
-    final x = a.x < 0 ? _margin : widget.area.width - s.width - _margin;
-    final y = a.y < 0 ? _margin : widget.area.height - s.height - 110;
-    return Offset(x, y);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = _size;
-    final pos = _drag ?? _cornerOffset(_corner);
-    return AnimatedPositioned(
-      duration: _drag == null
-          ? const Duration(milliseconds: 200)
-          : Duration.zero,
-      curve: Curves.easeOut,
-      left: pos.dx,
-      top: pos.dy,
-      width: s.width,
-      height: s.height,
-      child: GestureDetector(
-        onPanUpdate: (d) => setState(() => _drag = (_drag ?? pos) + d.delta),
-        onPanEnd: (_) {
-          final p = _drag ?? pos;
-          final cx = p.dx + s.width / 2;
-          final cy = p.dy + s.height / 2;
-          setState(() {
-            _corner = Alignment(
-              cx < widget.area.width / 2 ? -1 : 1,
-              cy < widget.area.height / 2 ? -1 : 1,
-            );
-            _drag = null;
-          });
-        },
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black54,
-                blurRadius: 12,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: widget.child,
-        ),
-      ),
-    );
-  }
-}
-
-class _VideoTile extends StatelessWidget {
-  final ClubRoomController controller;
-  final RoomParticipant p;
-  final VoidCallback onTap;
-  final VoidCallback onUnlock;
-
-  /// Small tile (floating self-view, or a busy grid): smaller labels.
-  final bool compact;
-
-  const _VideoTile({
-    super.key,
-    required this.controller,
-    required this.p,
-    required this.onTap,
-    required this.onUnlock,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final rtc = controller.rtc;
-    final engine = rtc.engine;
-    final isMe = p.user.uuid == controller.myUuid;
-    final locked = !p.videoVisible && !isMe;
-
-    Widget video;
-    if (locked) {
-      video = _LockedTile(user: p.user, onUnlock: onUnlock);
-    } else if (engine == null || !rtc.joined) {
-      video = _AvatarTile(user: p.user);
-    } else if (isMe) {
-      video = rtc.cameraOff
-          ? _AvatarTile(user: p.user)
-          : AgoraVideoView(
-              controller: VideoViewController(
-                rtcEngine: engine,
-                // Cover: fill the tile and crop, never letterbox.
-                canvas: const VideoCanvas(
-                  uid: 0,
-                  renderMode: RenderModeType.renderModeHidden,
-                ),
-              ),
-            );
-    } else if (rtc.remoteUids.contains(p.user.uid)) {
-      video = AgoraVideoView(
-        controller: VideoViewController.remote(
-          rtcEngine: engine,
-          canvas: VideoCanvas(
-            uid: p.user.uid,
-            renderMode: RenderModeType.renderModeHidden,
-          ),
-          connection: RtcConnection(channelId: rtc.channel),
-        ),
-      );
-    } else {
-      video = _AvatarTile(user: p.user);
-    }
-
-    final speaking = rtc.speaking[isMe ? 0 : p.user.uid] == true;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: _panel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: speaking ? Colors.greenAccent : Colors.white10,
-            width: speaking ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            video,
-            Positioned(
-              left: 6,
-              bottom: 6,
-              right: 6,
-              child: Row(
-                children: [
-                  if (p.micMuted)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 4),
-                      child: Icon(
-                        Icons.mic_off,
-                        size: 14,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                  Flexible(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isMe ? 'You' : p.user.display,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: compact ? 10 : 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (p.videoPremium) ...[
-                    const SizedBox(width: 4),
-                    const Icon(Icons.workspace_premium, color: _gold, size: 14),
-                  ],
-                ],
-              ),
-            ),
-            if (p.user.isHost && !compact)
-              const Positioned(top: 6, left: 6, child: _Chip('HOST', _accent)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LockedTile extends StatelessWidget {
-  final RoomUser user;
-  final VoidCallback onUnlock;
-  const _LockedTile({required this.user, required this.onUnlock});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (user.avatarUrl != null)
-          ImageFiltered(
-            imageFilter: ColorFilter.mode(
-              Colors.black.withValues(alpha: 0.6),
-              BlendMode.darken,
-            ),
-            child: CachedNetworkImage(
-              imageUrl: user.avatarUrl!,
-              fit: BoxFit.cover,
-            ),
-          ),
-        Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock, color: _gold, size: 28),
-                const SizedBox(height: 6),
-                TextButton(
-                  onPressed: onUnlock,
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.black45,
-                    foregroundColor: _gold,
-                  ),
-                  child: const Text('Unlock premium'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AvatarTile extends StatelessWidget {
-  final RoomUser user;
-  const _AvatarTile({required this.user});
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) => Center(
-      child: _Avatar(
-        user,
-        size: (box.biggest.shortestSide * 0.42).clamp(28.0, 96.0),
-      ),
-    ),
-  );
-}
-
-class _Chip extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _Chip(this.text, this.color);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 9.5,
-        fontWeight: FontWeight.w800,
-      ),
-    ),
-  );
-}
 
 class _Avatar extends StatelessWidget {
   final RoomUser user;
@@ -1122,139 +756,6 @@ class _Avatar extends StatelessWidget {
 }
 
 // ── bottom controls ───────────────────────────────────────────────────
-
-class _Controls extends StatelessWidget {
-  final ClubRoomController controller;
-  final VoidCallback onLeave;
-  final VoidCallback onComments;
-  final VoidCallback onGift;
-  final VoidCallback onRequestSeat;
-  final VoidCallback onCancelSeat;
-  final Future<void> Function(Future<void> Function()) run;
-
-  const _Controls({
-    required this.controller,
-    required this.onLeave,
-    required this.onComments,
-    required this.onGift,
-    required this.onRequestSeat,
-    required this.onCancelSeat,
-    required this.run,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller.rtc,
-      builder: (context, _) {
-        final s = controller.state!;
-        final rtc = controller.rtc;
-        final onStage = s.me.onStage;
-        return Container(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-          color: _panel,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              if (onStage)
-                _RoundBtn(
-                  icon: rtc.micMuted ? Icons.mic_off : Icons.mic,
-                  label: rtc.micMuted ? 'Unmute' : 'Mute',
-                  active: !rtc.micMuted,
-                  onTap: () => run(controller.toggleMic),
-                ),
-              if (onStage && !s.isAudio) ...[
-                _RoundBtn(
-                  icon: rtc.cameraOff ? Icons.videocam_off : Icons.videocam,
-                  label: 'Camera',
-                  active: !rtc.cameraOff,
-                  onTap: () => rtc.setCameraOff(!rtc.cameraOff),
-                ),
-                _RoundBtn(
-                  icon: Icons.cameraswitch,
-                  label: 'Flip',
-                  onTap: rtc.switchCamera,
-                ),
-              ],
-              if (!onStage && !s.isAudio)
-                s.me.seatRequest == 'pending'
-                    ? _RoundBtn(
-                        icon: Icons.hourglass_top,
-                        label: 'Requested',
-                        onTap: onCancelSeat,
-                      )
-                    : _RoundBtn(
-                        icon: Icons.front_hand,
-                        label: s.me.seatFeeCoins > 0
-                            ? 'Join · ${s.me.seatFeeCoins}'
-                            : 'Join camera',
-                        active: true,
-                        onTap: onRequestSeat,
-                      ),
-              _RoundBtn(
-                icon: Icons.chat_bubble_outline,
-                label: 'Comments',
-                onTap: onComments,
-              ),
-              _RoundBtn(
-                icon: Icons.card_giftcard,
-                label: 'Gift',
-                onTap: onGift,
-              ),
-              _RoundBtn(
-                icon: Icons.call_end,
-                label: s.me.isHost ? 'End' : 'Leave',
-                danger: true,
-                onTap: onLeave,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _RoundBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool active;
-  final bool danger;
-
-  const _RoundBtn({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.active = false,
-    this.danger = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = danger
-        ? Colors.redAccent
-        : (active ? _accent : Colors.white.withValues(alpha: 0.1));
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: bg,
-            child: Icon(icon, color: Colors.white, size: 21),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 10.5),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── gifts ─────────────────────────────────────────────────────────────
 
@@ -1399,7 +900,15 @@ class _GiftSheetState extends State<_GiftSheet> {
         .where((p) => p.user.uuid != c.myUuid)
         .toList();
     final hostIsMe = s.host.uuid == c.myUuid;
-    if (hostIsMe && _to == 'host') _to = 'all';
+    final hostHere = others.any((p) => p.user.isHost);
+    // Default: the host (for everyone else), or everyone for the host.
+    if (_to == 'host' && (hostIsMe || !hostHere)) _to = 'all';
+    // The person picked has left → back to everyone.
+    if (_to != 'all' &&
+        _to != 'host' &&
+        !others.any((p) => p.user.uuid == _to)) {
+      _to = 'all';
+    }
     final recipients = others.length;
     final cost =
         (_selected?.coins ?? 0) * _qty * (_to == 'all' ? recipients : 1);
@@ -1419,19 +928,63 @@ class _GiftSheetState extends State<_GiftSheet> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  if (!hostIsMe) _choice('Host (${s.host.display})', 'host'),
-                  _choice('Everyone ($recipients)', 'all'),
-                  for (final p in others)
-                    if (!p.user.isHost) _choice(p.user.display, p.user.uuid),
-                ],
-              ),
+            const SizedBox(height: 12),
+            const Text(
+              'Send to',
+              style: TextStyle(color: Colors.white54, fontSize: 12.5),
             ),
+            const SizedBox(height: 8),
+            if (recipients == 0)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  'No one else is in the room yet.',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              )
+            else
+              SizedBox(
+                height: 86,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _recipient(
+                      value: 'all',
+                      label: 'Everyone',
+                      sub: '$recipients',
+                      avatar: Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: MoonColors.dusk,
+                        ),
+                        child: const Icon(
+                          Icons.groups_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    if (!hostIsMe && hostHere)
+                      _recipient(
+                        value: 'host',
+                        label: 'Host',
+                        sub: s.host.display,
+                        avatar: MoonAvatar(s.host, size: 52),
+                        badge: Icons.nightlight_round,
+                      ),
+                    for (final p in others)
+                      if (!p.user.isHost)
+                        _recipient(
+                          value: p.user.uuid,
+                          label: p.user.display,
+                          avatar: MoonAvatar(p.user, size: 52),
+                          badge: p.user.isOwner
+                              ? Icons.workspace_premium_rounded
+                              : null,
+                        ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 12),
             SizedBox(
               height: 220,
@@ -1527,10 +1080,7 @@ class _GiftSheetState extends State<_GiftSheet> {
                 ),
                 const Spacer(),
                 ElevatedButton(
-                  onPressed:
-                      _selected == null ||
-                          _sending ||
-                          (_to == 'all' && recipients == 0)
+                  onPressed: _selected == null || _sending || recipients == 0
                       ? null
                       : _send,
                   style: ElevatedButton.styleFrom(
@@ -1547,19 +1097,81 @@ class _GiftSheetState extends State<_GiftSheet> {
     );
   }
 
-  Widget _choice(String label, String value) => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: ChoiceChip(
-      label: Text(label),
-      selected: _to == value,
-      onSelected: (_) => setState(() => _to = value),
-      selectedColor: _accent,
-      labelStyle: TextStyle(
-        color: _to == value ? Colors.white : Colors.white70,
+  Widget _recipient({
+    required String value,
+    required String label,
+    required Widget avatar,
+    String? sub,
+    IconData? badge,
+  }) {
+    final selected = _to == value;
+    return GestureDetector(
+      onTap: () => setState(() => _to = value),
+      child: SizedBox(
+        width: 70,
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 58,
+                  height: 58,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: selected ? MoonColors.dusk : null,
+                    color: selected ? null : Colors.white12,
+                  ),
+                  child: ClipOval(child: avatar),
+                ),
+                if (badge != null)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: MoonColors.gold,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _panel, width: 2),
+                      ),
+                      child: Icon(badge, size: 11, color: MoonColors.night),
+                    ),
+                  ),
+                if (selected)
+                  const Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: CircleAvatar(
+                      radius: 9,
+                      backgroundColor: Colors.white,
+                      child: Icon(
+                        Icons.check,
+                        size: 13,
+                        color: MoonColors.night,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              sub != null && value == 'all' ? '$label ($sub)' : label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontSize: 11.5,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
-      backgroundColor: Colors.white10,
-    ),
-  );
+    );
+  }
 
   Future<void> _send() async {
     setState(() => _sending = true);
