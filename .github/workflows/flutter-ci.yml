@@ -209,7 +209,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           packageName: "com.app.moonlightstream"
           releaseFiles: app-release.aab
-          track: ${{ steps.track.outputs.track }}
+          tracks: ${{ steps.track.outputs.track }}
           status: draft
 
       - name: Create Deployment Summary
