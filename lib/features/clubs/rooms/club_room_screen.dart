@@ -31,6 +31,7 @@ import 'package:moonlight/widgets/top_snack.dart';
 import 'package:video_player/video_player.dart';
 
 import 'active_room.dart';
+import 'room_connecting_view.dart';
 import 'club_room_controller.dart';
 import 'club_room_models.dart';
 import 'room_stage.dart';
@@ -52,6 +53,14 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
   // (minimise / back) keeps the call going while the user does other things.
   late final ClubRoomController c = ActiveRoom.instance.obtain(widget.roomUuid);
   bool _opening = true;
+
+  /// What the connecting screen says right now.
+  String _stage = 'Opening the room…';
+
+  void _setStage(String v) {
+    if (mounted) setState(() => _stage = v);
+  }
+
   bool _closedDialogShown = false;
 
   @override
@@ -198,6 +207,11 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
   Future<void> _open() async {
     try {
       final s = await c.load();
+      _setStage(
+        s.title?.trim().isNotEmpty == true
+            ? 'Joining "${s.title!.trim()}"…'
+            : 'Joining the ${s.isAudio ? 'audio' : 'video'} room…',
+      );
       if (!s.isLive) {
         _opening = false;
         _showClosed('This room has ended.');
@@ -224,6 +238,16 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
           return;
         }
       }
+      final st = c.state;
+      _setStage(
+        st == null
+            ? 'Connecting…'
+            : (st.isAudio
+                  ? 'Connecting your mic…'
+                  : (st.me.onStage
+                        ? 'Turning on your camera…'
+                        : 'Connecting to the video…')),
+      );
       await c.enter();
     } catch (e) {
       if (!mounted) return;
@@ -528,7 +552,11 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
     return Scaffold(
       backgroundColor: MoonColors.night,
       body: s == null || _opening
-          ? const Center(child: AppLogoLoader())
+          ? RoomConnectingView(
+              stage: _stage,
+              state: s,
+              onCancel: () => Navigator.of(context).maybePop(),
+            )
           : AnimatedBuilder(
               animation: c.rtc,
               builder: (context, _) =>

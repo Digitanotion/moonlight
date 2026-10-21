@@ -351,8 +351,13 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     final joinChannel = 'live.$livestreamId.join';
     final giftsChannel = 'live.$livestreamId.gifts';
 
-    // Viewer count updates
+    // Viewer count updates. The server announces them on the meta
+    // channel (what viewers listen to); the old `.viewer` binding never
+    // received anything, so the host's count froze. Keep both.
     _bindPusherEvent(viewerChannel, 'viewer.count', (data) {
+      _handleViewerCount(data);
+    });
+    _bindPusherEvent(metaChannel, 'viewer.count', (data) {
       debugPrint('🎯 [VIEWER COUNT] Event received: $data');
       _handleViewerCount(data);
     });

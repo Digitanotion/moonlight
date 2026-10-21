@@ -260,6 +260,8 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       http: implRepo.http,
       livestreamUuid: implRepo.livestreamParam,
       pollInterval: const Duration(seconds: 12),
+      isMediaFlowing: () =>
+          agoraViewerService?.isReceivingHostVideo ?? false,
     );
 
     _healthSub = _streamHealthService!.stream.listen((result) {
@@ -576,14 +578,8 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       _ => ViewMode.viewer,
     };
 
-    if (roleChangeService != null) {
-      try {
-        await roleChangeService!.safeRoleChange(event.role);
-      } catch (e) {
-        _logEvent('ROLE_CHANGE_SERVICE_ERROR', 'Error: $e');
-      }
-    }
-
+    // Switch the screen first so the change feels instant; the role
+    // service only tracks state (the call itself is switched by the repo).
     _safeEmit(
       emit,
       state.copyWith(
@@ -596,6 +592,16 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
             : state.activeGuestUuid,
       ),
     );
+
+    if (roleChangeService != null) {
+      try {
+        // The server says "viewer"; the service calls it "audience".
+        final r = event.role == 'viewer' ? 'audience' : event.role;
+        await roleChangeService!.safeRoleChange(r);
+      } catch (e) {
+        _logEvent('ROLE_CHANGE_SERVICE_ERROR', 'Error: $e');
+      }
+    }
 
     Future.delayed(const Duration(seconds: 3), () {
       if (!_isClosing && !isClosed) add(const RoleChangeToastDismissed());

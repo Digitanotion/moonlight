@@ -1235,24 +1235,28 @@ class _LiveHostPageState extends State<LiveHostPage>
           builder: (context, remoteUid, _) {
             return Stack(
               children: [
-                // Host camera ALWAYS full-screen, ALWAYS in the tree.
-                // GlobalKey ensures the widget element/state is preserved
-                // when Flutter rebuilds the parent (no surface teardown).
-                Positioned.fill(child: hostCamera),
-
-                // Everyone in the box, down the right side.
-                if (_guests != null)
-                  LiveGuestStrip(
-                    controller: _guests!,
-                    top: 120,
-                    videoFor: (g) => agora.remoteView(g.uid),
-                    onTap: (g) => showHostGuestActions(
-                      context,
-                      livestreamId: _guests!.numericId,
-                      guest: g,
-                      onChanged: _guests!.refresh,
-                    ),
-                  ),
+                // Host camera ALWAYS in the tree (GlobalKey keeps its
+                // surface alive). With guests in the box it sits inside the
+                // spotlight stage: tap a guest to make them big — your
+                // camera shrinks into the column, tap it to swap back.
+                // Long-press a guest for remove options.
+                Positioned.fill(
+                  child: _guests == null
+                      ? hostCamera
+                      : LiveSpotlightStage(
+                          main: hostCamera,
+                          mainLabel: 'You',
+                          guests: _guests!,
+                          top: 120,
+                          videoFor: (g) => agora.remoteView(g.uid),
+                          onLongPressGuest: (g) => showHostGuestActions(
+                            context,
+                            livestreamId: _guests!.numericId,
+                            guest: g,
+                            onChanged: _guests!.refresh,
+                          ),
+                        ),
+                ),
 
                 // Tap-to-recover button — appears when _cameraBlack is true.
                 if (_cameraBlack)

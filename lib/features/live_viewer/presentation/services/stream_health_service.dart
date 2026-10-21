@@ -43,7 +43,13 @@ class StreamHealthService {
     required this.http,
     required this.livestreamUuid,
     this.pollInterval = const Duration(seconds: 20),
+    this.isMediaFlowing,
   });
+
+  /// Is the host's video actually arriving right now? When it is, the
+  /// stream is fine whatever the server heartbeat says — so no
+  /// "unstable / reconnecting" warnings while the viewer can see the host.
+  final bool Function()? isMediaFlowing;
 
   final _rng = Random();
 
@@ -126,8 +132,25 @@ class StreamHealthService {
     if (_disposed || _controller.isClosed) return;
 
     try {
-      final statusResult = await _fetchStreamStatus();
+      var statusResult = await _fetchStreamStatus();
       if (_disposed || _controller.isClosed) return;
+
+      // Trust the media over the heartbeat: if the host's video is
+      // arriving, a missed heartbeat or a slow /status call isn't a real
+      // problem. (A real end still arrives via live.ended, and once the
+      // video actually stops the next poll reports it.)
+      final flowing = isMediaFlowing?.call() ?? false;
+      if (flowing &&
+          (statusResult.status == StreamHealthStatus.unstable ||
+              statusResult.status == StreamHealthStatus.offline)) {
+        _consecutiveFailures = 0;
+        _consecutiveOfflineReadings = 0;
+        statusResult = StreamHealthResult(
+          status: StreamHealthStatus.online,
+          isPremium: statusResult.isPremium,
+          entryFeeCoins: statusResult.entryFeeCoins,
+        );
+      }
 
       // ── Stream ended ──────────────────────────────────────────────────────
       if (statusResult.status == StreamHealthStatus.offline) {

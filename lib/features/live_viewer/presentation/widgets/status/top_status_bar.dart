@@ -82,84 +82,105 @@ class _TopStatusBarState extends State<TopStatusBar> {
       builder: (context, state) {
         final host = state.host;
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
           child: Row(
             children: [
-              if (host != null)
-                GestureDetector(
-                  onTap: () => _handleAvatarTap(context),
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white70, width: 1.5),
-                    ),
-                    child: ClipOval(
-                      child: host.avatarUrl.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: host.avatarUrl,
-                              fit: BoxFit.cover,
-                              memCacheWidth: 56,
-                              errorWidget: (_, __, ___) => const Icon(
-                                Icons.person,
-                                color: Colors.white70,
-                                size: 18,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.person,
-                              color: Colors.white70,
-                              size: 18,
-                            ),
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              _glass(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.circle, color: Colors.redAccent, size: 10),
-                      SizedBox(width: 6),
-                      Text(
-                        'LIVE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () => _openParticipants(context),
+              // ── Host card: avatar + name + LIVE + viewers ────────────
+              Flexible(
                 child: _glass(
+                  radius: 26,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(3, 3, 10, 3),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.remove_red_eye_rounded,
-                          color: Colors.white,
-                          size: 15,
+                        GestureDetector(
+                          onTap: () => _handleAvatarTap(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [Color(0xFFFF2D55), Color(0xFFFF7A00)],
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: (host?.avatarUrl ?? '').isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: host!.avatarUrl,
+                                        fit: BoxFit.cover,
+                                        memCacheWidth: 64,
+                                        errorWidget: (_, _, _) =>
+                                            const _AvatarFallback(),
+                                      )
+                                    : const _AvatarFallback(),
+                              ),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          _compact(state.viewers),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12.5,
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: GestureDetector(
+                            onTap: () => _openParticipants(context),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  host?.name ?? 'Live',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 1),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF2D55),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: const Text(
+                                        'LIVE',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 9,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Icon(
+                                      Icons.remove_red_eye_rounded,
+                                      color: Colors.white70,
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      _compact(state.viewers),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -167,27 +188,10 @@ class _TopStatusBarState extends State<TopStatusBar> {
                   ),
                 ),
               ),
-              const Spacer(),
-              // Elapsed-time display hidden per client request. Restore this
-              // block (and remove `_fmt`'s `// ignore: unused_element` if
-              // added) if they ask for the stream timer back.
-              // _glass(
-              //   child: Padding(
-              //     padding: const EdgeInsets.symmetric(
-              //       horizontal: 12,
-              //       vertical: 6,
-              //     ),
-              //     child: Text(
-              //       _fmt(state.elapsed),
-              //       style: const TextStyle(
-              //         color: Colors.white,
-              //         fontWeight: FontWeight.w600,
-              //       ),
-              //     ),
-              //   ),
-              // ),
-              // const SizedBox(width: 8),
-              GestureDetector(
+              const SizedBox(width: 10),
+              // ── Round actions ─────────────────────────────────────────
+              _RoundGlassButton(
+                icon: Icons.picture_in_picture_alt_rounded,
                 onTap: () {
                   // In-app minimise (draggable mini player) when we're in the
                   // pager; fall back to OS PiP for the standalone route.
@@ -197,30 +201,11 @@ class _TopStatusBarState extends State<TopStatusBar> {
                     PipService.instance.enterPip();
                   }
                 },
-                child: _glass(
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.picture_in_picture_alt_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(width: 8),
-              GestureDetector(
+              _RoundGlassButton(
+                icon: Icons.ios_share_rounded,
                 onTap: () => _shareStream(context),
-                child: _glass(
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.ios_share_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
@@ -345,6 +330,44 @@ class _StreamerInfoPopup extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvatarFallback extends StatelessWidget {
+  const _AvatarFallback();
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(
+    color: Color(0xFF221D44),
+    child: Icon(Icons.person, color: Colors.white70, size: 18),
+  );
+}
+
+class _RoundGlassButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _RoundGlassButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: 0.32),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            ),
+            child: Icon(icon, color: Colors.white, size: 18),
+          ),
         ),
       ),
     );

@@ -12,6 +12,9 @@ import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 
 import 'club_room_api.dart';
 import 'club_room_models.dart';
+import 'live_room_badge.dart';
+import 'room_connecting_view.dart';
+import 'room_stage.dart' show MoonColors;
 
 class ClubRoomsBar extends StatefulWidget {
   final String clubUuid;
@@ -74,11 +77,15 @@ class _ClubRoomsBarState extends State<ClubRoomsBar> {
     if (setup == null) return;
     setState(() => _starting = true);
     try {
-      final room = await _api.start(
-        widget.clubUuid,
-        type: type,
-        capacity: setup.$1,
-        title: setup.$2,
+      final room = await showRoomStarting(
+        context,
+        video: type == RoomType.video,
+        task: () => _api.start(
+          widget.clubUuid,
+          type: type,
+          capacity: setup.$1,
+          title: setup.$2,
+        ),
       );
       if (mounted) await _openRoom(room.uuid);
     } on DioException catch (e) {
@@ -142,105 +149,106 @@ class _LiveRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final audio = room.type == RoomType.audio;
+    final video = room.type == RoomType.video;
+    final title = (room.title ?? '').trim();
+    final n = room.presentCount;
     return GestureDetector(
       onTap: onJoin,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: audio
-                ? const [Color(0xFF1E3C72), Color(0xFF2A5298)]
-                : const [Color(0xFF8E2DE2), Color(0xFFFF7A00)],
+      child: LiveRing(
+        isVideo: video,
+        radius: 18,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+          decoration: BoxDecoration(
+            color: MoonColors.surface,
+            borderRadius: BorderRadius.circular(16),
           ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: Colors.white24,
-              child: Icon(
-                audio ? Icons.graphic_eq : Icons.videocam,
-                color: Colors.white,
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: video
+                        ? const [MoonColors.danger, MoonColors.ember]
+                        : const [MoonColors.violet, MoonColors.magenta],
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: video
+                    ? const Icon(Icons.videocam_rounded, color: Colors.white)
+                    : const LiveBars(height: 18),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'LIVE',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        LiveRoomBadge(isVideo: video),
+                        if (room.isPremium) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.workspace_premium,
+                            color: MoonColors.gold,
+                            size: 16,
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          room.title?.isNotEmpty == true
-                              ? room.title!
-                              : (audio ? 'Audio room' : 'Video room'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      if (room.isPremium) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.workspace_premium,
-                          color: Color(0xFFFFC107),
-                          size: 16,
-                        ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Hosted by ${room.host.display} · ${room.presentCount} in the room',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Join',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w700,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      liveRoomHeadline(room.host.display, isVideo: video),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Join them'
+                      '${n > 0 ? ' · $n ${video ? 'watching' : 'listening'}' : ''}'
+                      '${title.isNotEmpty ? ' · $title' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: video
+                        ? const [MoonColors.danger, MoonColors.ember]
+                        : const [MoonColors.violet, MoonColors.magenta],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Join',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

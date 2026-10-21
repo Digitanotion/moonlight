@@ -15,6 +15,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
@@ -102,7 +103,22 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
       context,
       agoraService: sl<AgoraViewerService>(),
       onEndCall: () => _performCleanupAndExit(context),
+      onLeaveBox: _leaveBox,
     );
+  }
+
+  /// Step out of the box but keep watching. The server flips our role to
+  /// viewer and broadcasts it; the normal role-change path then switches
+  /// the call back to audience and this screen back to viewer mode.
+  Future<void> _leaveBox() async {
+    try {
+      await sl<DioClient>().dio.post(
+        '/api/v1/live/${widget.repository.livestreamParam}/leave-box',
+      );
+      if (mounted) TopSnack.info(context, 'You left the box — still watching.');
+    } catch (_) {
+      if (mounted) TopSnack.error(context, 'Couldn\'t leave the box. Try again.');
+    }
   }
 
   @override

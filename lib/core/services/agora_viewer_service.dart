@@ -47,6 +47,12 @@ class AgoraViewerService with ChangeNotifier {
   final ValueNotifier<int?> guestUid = ValueNotifier<int?>(null);
   final ValueNotifier<bool> _hasVideo = ValueNotifier<bool>(false);
   ValueListenable<bool> get hostHasVideo => _hasVideo;
+
+  /// True while the host's video is actually arriving (pool or standalone).
+  /// The truth for "is the stream working" — the server heartbeat can lag.
+  bool get isReceivingHostVideo =>
+      _hasVideo.value ||
+      (_pool.slotFor(SlotPosition.current)?.hasVideo.value ?? false);
   final ValueNotifier<bool> _guestHasVideo = ValueNotifier<bool>(false);
   ValueListenable<bool> get guestHasVideo => _guestHasVideo;
 
@@ -491,6 +497,11 @@ class AgoraViewerService with ChangeNotifier {
     }
   }
 
+  /// Set by the live pager: rejoins the stream being watched as audience
+  /// straight away. Without it, a guest who left the box (or was removed)
+  /// sat on a black host video until the next swipe rejoined the slot.
+  Future<void> Function()? rejoinCurrentAsAudience;
+
   Future<void> demoteToAudience() async {
     try {
       debugPrint('🔄 [Viewer] Starting demotion to audience...');
@@ -517,6 +528,15 @@ class AgoraViewerService with ChangeNotifier {
       // For immediate rejoin, reset the slot so PoolVideoView triggers
       // a fresh joinChannelEx on the next token fetch.
       _pool.slotFor(SlotPosition.current)?.resetForNewJoin();
+      final rejoin = rejoinCurrentAsAudience;
+      if (rejoin != null) {
+        // Fire now — the viewer should see the host again immediately.
+        unawaited(
+          rejoin().catchError((Object e) {
+            debugPrint('⚠️ [Viewer] audience rejoin failed: $e');
+          }),
+        );
+      }
 
       debugPrint('✅ [Viewer] Successfully demoted to audience');
       _connectionState.value = ConnectionState.connected;

@@ -252,3 +252,196 @@ class _GuestTile extends StatelessWidget {
     );
   }
 }
+
+/// Zoom-style stage: the main video (host for viewers, your own camera for
+/// the host) fills the screen with guests in a column on the right. Tap a
+/// guest → they fill the screen and the main video shrinks into the
+/// column; tap the small main tile (or the same guest) → back to normal.
+///
+/// The main video widget is never rebuilt or re-parented — it only
+/// animates between full screen and the tile — so the camera / stream
+/// keeps running without a black flash.
+class LiveSpotlightStage extends StatefulWidget {
+  final Widget main;
+  final String mainLabel;
+  final LiveGuestsController guests;
+  final Widget Function(LiveGuest g) videoFor;
+  final String? hideUuid;
+  final double top;
+
+  /// Long-press on a guest (e.g. host actions: remove from box).
+  final void Function(LiveGuest g)? onLongPressGuest;
+
+  /// False hides the guests (PiP window, paywall) while keeping the main
+  /// video mounted.
+  final bool showGuests;
+
+  const LiveSpotlightStage({
+    this.showGuests = true,
+    super.key,
+    required this.main,
+    required this.mainLabel,
+    required this.guests,
+    required this.videoFor,
+    this.hideUuid,
+    this.top = 110,
+    this.onLongPressGuest,
+  });
+
+  @override
+  State<LiveSpotlightStage> createState() => _LiveSpotlightStageState();
+}
+
+class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
+  String? _spotUuid;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.guests,
+      builder: (context, _) {
+        final all = widget.showGuests
+            ? widget.guests.guests
+                  .where((g) => g.uuid != widget.hideUuid)
+                  .toList()
+            : const <LiveGuest>[];
+        // Spotlighted guest left the box → back to normal.
+        LiveGuest? spot;
+        for (final g in all) {
+          if (g.uuid == _spotUuid) spot = g;
+        }
+        if (spot == null && _spotUuid != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _spotUuid = null);
+          });
+        }
+
+        return LayoutBuilder(
+          builder: (context, box) => _stage(context, all, spot, box.biggest),
+        );
+      },
+    );
+  }
+
+  Widget _stage(
+    BuildContext context,
+    List<LiveGuest> all,
+    LiveGuest? spot,
+    Size size,
+  ) {
+    final w = (size.width * 0.26).clamp(86.0, 128.0);
+    final h = w * 4 / 3;
+    final mainRect = spot == null
+        ? Rect.fromLTWH(0, 0, size.width, size.height)
+        : Rect.fromLTWH(size.width - w - 8, widget.top, w, h);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // The spotlighted guest, full screen.
+        if (spot != null)
+          Positioned.fill(
+            key: ValueKey('spot_${spot.uid}'),
+            child: GestureDetector(
+              onTap: () => setState(() => _spotUuid = null),
+              child: ColoredBox(
+                color: Colors.black,
+                child: widget.videoFor(spot),
+              ),
+            ),
+          ),
+
+        // Main video: same widget always, only its frame animates.
+        AnimatedPositioned(
+          key: const ValueKey('main_video'),
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+          left: mainRect.left,
+          top: mainRect.top,
+          width: mainRect.width,
+          height: mainRect.height,
+          child: GestureDetector(
+            onTap: spot == null ? null : () => setState(() => _spotUuid = null),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 320),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(spot == null ? 0 : 14),
+                border: spot == null
+                    ? null
+                    : Border.all(color: Colors.white.withValues(alpha: 0.85)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  widget.main,
+                  if (spot != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Colors.black87],
+                          ),
+                        ),
+                        child: Text(
+                          widget.mainLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // The rest of the box (minus the spotlighted guest), shifted
+        // below the shrunken main tile while spotlighting.
+        if (all.where((g) => g.uuid != spot?.uuid).isNotEmpty)
+          Positioned(
+            top: spot == null ? widget.top : widget.top + h + 8,
+            right: 8,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: size.height * 0.5),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: [
+                    for (final g in all.where((g) => g.uuid != spot?.uuid))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: GestureDetector(
+                          onLongPress: widget.onLongPressGuest == null
+                              ? null
+                              : () => widget.onLongPressGuest!(g),
+                          child: _GuestTile(
+                            key: ValueKey('guest_${g.uid}'),
+                            guest: g,
+                            width: w,
+                            height: h,
+                            video: widget.videoFor(g),
+                            onTap: () => setState(() => _spotUuid = g.uuid),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}

@@ -14,6 +14,11 @@ import 'club_room_api.dart';
 import 'club_room_models.dart';
 import 'room_stage.dart' show MoonColors;
 
+/// The club's live-room line, e.g. "Okwy is live now in this club's audio
+/// room". Used on the club page and in club chat (and the push matches it).
+String liveRoomHeadline(String host, {required bool isVideo}) =>
+    '$host is live now in this club\'s ${isVideo ? 'video' : 'audio'} room';
+
 const _audioGradient = LinearGradient(
   colors: [MoonColors.violet, MoonColors.magenta],
 );
@@ -329,21 +334,21 @@ class _LiveRoomStrip extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    title.isNotEmpty
-                        ? title
-                        : '${video ? 'Video' : 'Audio'} room is live',
-                    maxLines: 1,
+                    liveRoomHeadline(who, isVideo: video),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 14,
+                      fontSize: 13.5,
+                      height: 1.25,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$who is hosting'
-                    '${n > 0 ? ' · $n ${video ? 'watching' : 'listening'}' : ''}',
+                    'Join them'
+                    '${n > 0 ? ' · $n ${video ? 'watching' : 'listening'}' : ''}'
+                    '${title.isNotEmpty ? ' · $title' : ''}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white60, fontSize: 12),

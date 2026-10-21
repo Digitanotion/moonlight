@@ -226,21 +226,23 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                     // PoolVideoView is visible, it seeds from the pool's
                     // current slot (which the pager ensures matches this
                     // page's channel via rotation).
-                    if (widget.pool != null)
-                      PoolVideoView(
-                        key: ValueKey('pv_${widget.channelId}'),
-                        pool: widget.pool!,
-                      )
-                    else
-                      HostVideoContainer(repository: widget.repository),
-
-                    // ── Guests in the box (several at once) ─────────────
-                    if (!_pip && !state.requiresPremiumPayment)
-                      LiveGuestStrip(
-                        controller: _guests,
+                    // Host full screen, guests down the right; tap a guest
+                    // to spotlight them (Zoom-style).
+                    Positioned.fill(
+                      child: LiveSpotlightStage(
+                        main: widget.pool != null
+                            ? PoolVideoView(
+                                key: ValueKey('pv_${widget.channelId}'),
+                                pool: widget.pool!,
+                              )
+                            : HostVideoContainer(repository: widget.repository),
+                        mainLabel: state.host?.name ?? 'Host',
+                        guests: _guests,
+                        showGuests: !_pip && !state.requiresPremiumPayment,
                         videoFor: (g) =>
                             sl<AgoraViewerService>().remoteVideoFor(g.uid),
                       ),
+                    ),
 
                     // ── Normal viewer UI ────────────────────────────────
                     if (showOverlays && !state.requiresPremiumPayment) ...[

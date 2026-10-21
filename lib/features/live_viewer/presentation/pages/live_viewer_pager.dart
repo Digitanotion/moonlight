@@ -132,6 +132,17 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     _currentPage = widget.initialIndex;
     _controller = PageController(initialPage: widget.initialIndex);
 
+    // A guest leaving the box rejoins the current stream as audience at
+    // once (instead of waiting for the next swipe to rejoin the slot).
+    sl<AgoraViewerService>().rejoinCurrentAsAudience = () =>
+        _pool.refreshCurrentSlot(
+          () => _resolver.resolve(
+            widget.items,
+            _currentPage,
+            forceRefresh: true,
+          ),
+        );
+
     // Build repos (still needed for all non-Agora concerns).
     _repos = widget.items.asMap().entries.map((e) {
       return _makeRepoForItem(e.value);
@@ -219,6 +230,7 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   @override
   void dispose() {
     if (identical(_active, this)) _active = null;
+    sl<AgoraViewerService>().rejoinCurrentAsAudience = null;
     MiniPlayerController.instance.removeListener(_onMiniChanged);
     MiniPlayerController.instance.unbindActivePager(_minimizeToMini);
     ScreenGuard.release();
