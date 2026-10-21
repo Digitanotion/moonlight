@@ -84,6 +84,7 @@ class PoolRtcResolver {
         channel: (data['channel'] ?? item.channel).toString(),
         rtcUid: (data['rtc_uid'] ?? '0').toString(),
         rtcToken: (data['rtc_token'] ?? '').toString(),
+        hostUid: int.tryParse('${data['host_uid'] ?? ''}'),
       );
 
       _cache[index] = req;

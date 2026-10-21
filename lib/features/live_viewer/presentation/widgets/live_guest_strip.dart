@@ -10,7 +10,133 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/services/live_audio_meter.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
+import 'package:moonlight/features/clubs/rooms/room_stage.dart' show SoundWave;
+
+/// Wave while [uid] talks (moving with their voice), red mic-off when
+/// muted — like club rooms. [muted] overrides (for "me", uid 0).
+class LiveTalkIndicator extends StatelessWidget {
+  final int uid;
+  final bool? muted;
+  final double size;
+  const LiveTalkIndicator({
+    super.key,
+    required this.uid,
+    this.muted,
+    this.size = 11,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final meter = LiveAudioMeter.instance;
+    return ListenableBuilder(
+      listenable: meter,
+      builder: (_, _) {
+        final isMuted = muted ?? meter.isMuted(uid) ?? false;
+        if (isMuted) {
+          return Icon(
+            Icons.mic_off_rounded,
+            size: size + 2,
+            color: const Color(0xFFFF6B81),
+          );
+        }
+        return SoundWave(
+          active: meter.isSpeaking(uid),
+          level: meter.levelOf(uid),
+          height: size,
+          bars: 4,
+        );
+      },
+    );
+  }
+}
+
+/// Bottom name chip for a tile: [indicator] + name.
+class LiveNameChip extends StatelessWidget {
+  final String name;
+  final Widget indicator;
+  const LiveNameChip({super.key, required this.name, required this.indicator});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black87],
+        ),
+      ),
+      child: Row(
+        children: [
+          indicator,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tile frame that glows green while [uid] is talking.
+class LiveSpeakingBorder extends StatelessWidget {
+  final int uid;
+  final bool? muted;
+  final Widget child;
+  final Color idle;
+  const LiveSpeakingBorder({
+    super.key,
+    required this.uid,
+    required this.child,
+    this.muted,
+    this.idle = const Color(0xD9FFFFFF),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final meter = LiveAudioMeter.instance;
+    return ListenableBuilder(
+      listenable: meter,
+      builder: (_, child) {
+        final isMuted = muted ?? meter.isMuted(uid) ?? false;
+        final talking = meter.isSpeaking(uid) && !isMuted;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: talking ? const Color(0xFF39D98A) : idle,
+              width: talking ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: talking
+                    ? const Color(0xFF39D98A).withValues(alpha: 0.55)
+                    : Colors.black54,
+                blurRadius: talking ? 14 : 12,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: child,
+    );
+  }
+}
 
 class LiveGuest {
   final String uuid;
@@ -183,69 +309,51 @@ class _GuestTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: SizedBox(
         width: width,
         height: height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
-          boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 12)],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Avatar underneath until (or if) the camera shows.
-              Container(
-                color: const Color(0xFF1B1446),
-                alignment: Alignment.center,
-                child: CircleAvatar(
-                  radius: width * 0.2,
-                  backgroundColor: Colors.white12,
-                  backgroundImage: (guest.avatar ?? '').startsWith('http')
-                      ? NetworkImage(guest.avatar!)
-                      : null,
-                  child: (guest.avatar ?? '').startsWith('http')
-                      ? null
-                      : Text(
-                          guest.name.isNotEmpty
-                              ? guest.name[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
+        child: LiveSpeakingBorder(
+          uid: guest.uid,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Avatar underneath until (or if) the camera shows.
+                Container(
+                  color: const Color(0xFF1B1446),
+                  alignment: Alignment.center,
+                  child: CircleAvatar(
+                    radius: width * 0.2,
+                    backgroundColor: Colors.white12,
+                    backgroundImage: (guest.avatar ?? '').startsWith('http')
+                        ? NetworkImage(guest.avatar!)
+                        : null,
+                    child: (guest.avatar ?? '').startsWith('http')
+                        ? null
+                        : Text(
+                            guest.name.isNotEmpty
+                                ? guest.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                ),
-              ),
-              video,
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black87],
-                    ),
-                  ),
-                  child: Text(
-                    guest.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
                   ),
                 ),
-              ),
-            ],
+                video,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: LiveNameChip(
+                    name: guest.name,
+                    indicator: LiveTalkIndicator(uid: guest.uid),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -264,6 +372,10 @@ class _GuestTile extends StatelessWidget {
 class LiveSpotlightStage extends StatefulWidget {
   final Widget main;
   final String mainLabel;
+
+  /// Agora uid of the main video (0 = me), for its wave / mute icon.
+  final int? mainUid;
+  final bool? mainMuted;
   final LiveGuestsController guests;
   final Widget Function(LiveGuest g) videoFor;
   final String? hideUuid;
@@ -276,11 +388,18 @@ class LiveSpotlightStage extends StatefulWidget {
   /// video mounted.
   final bool showGuests;
 
+  /// A fixed tile at the top of the column (a guest's own camera, "You").
+  /// Given the tile size so it matches the guest tiles.
+  final Widget Function(double width, double height)? leadingTile;
+
   const LiveSpotlightStage({
     this.showGuests = true,
+    this.leadingTile,
     super.key,
     required this.main,
     required this.mainLabel,
+    this.mainUid,
+    this.mainMuted,
     required this.guests,
     required this.videoFor,
     this.hideUuid,
@@ -346,7 +465,40 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
               onTap: () => setState(() => _spotUuid = null),
               child: ColoredBox(
                 color: Colors.black,
-                child: widget.videoFor(spot),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    widget.videoFor(spot),
+                    Positioned(
+                      left: 12,
+                      bottom: 150,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            LiveTalkIndicator(uid: spot.uid, size: 13),
+                            const SizedBox(width: 6),
+                            Text(
+                              spot.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -380,25 +532,14 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
                       left: 0,
                       right: 0,
                       bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black87],
-                          ),
-                        ),
-                        child: Text(
-                          widget.mainLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      child: LiveNameChip(
+                        name: widget.mainLabel,
+                        indicator: widget.mainUid == null
+                            ? const SizedBox.shrink()
+                            : LiveTalkIndicator(
+                                uid: widget.mainUid!,
+                                muted: widget.mainMuted,
+                              ),
                       ),
                     ),
                 ],
@@ -409,7 +550,8 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
 
         // The rest of the box (minus the spotlighted guest), shifted
         // below the shrunken main tile while spotlighting.
-        if (all.where((g) => g.uuid != spot?.uuid).isNotEmpty)
+        if (widget.leadingTile != null ||
+            all.where((g) => g.uuid != spot?.uuid).isNotEmpty)
           Positioned(
             top: spot == null ? widget.top : widget.top + h + 8,
             right: 8,
@@ -419,6 +561,15 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   children: [
+                    if (widget.leadingTile != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SizedBox(
+                          width: w,
+                          height: h,
+                          child: widget.leadingTile!(w, h),
+                        ),
+                      ),
                     for (final g in all.where((g) => g.uuid != spot?.uuid))
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),

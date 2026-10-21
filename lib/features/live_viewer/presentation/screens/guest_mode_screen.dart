@@ -12,6 +12,8 @@
 //      pool mode. See inline note below for why this one is different
 //      from ViewerModeScreen's guard.
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -38,7 +40,7 @@ import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/rol
 import 'package:moonlight/features/live_viewer/presentation/widgets/status/top_status_bar.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/controls/comment_input_bar.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/controls/guest_control_panel.dart';
-import 'package:moonlight/features/live_viewer/presentation/widgets/video_layouts/dynamic_split_screen.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/pool_video_view.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:uuid/uuid.dart';
@@ -117,7 +119,8 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
       );
       if (mounted) TopSnack.info(context, 'You left the box — still watching.');
     } catch (_) {
-      if (mounted) TopSnack.error(context, 'Couldn\'t leave the box. Try again.');
+      if (mounted)
+        TopSnack.error(context, 'Couldn\'t leave the box. Try again.');
     }
   }
 
@@ -247,24 +250,26 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                 bottom: false,
                 child: Stack(
                   children: [
-                    // ── Split screen video layout — pool-aware ──────────────
-                    DynamicSplitScreen(
-                      repository: widget.repository,
-                      isCurrentUserGuest: isCurrentUserGuest,
-                      pool: widget.pool,
-                      channelId: widget.channelId,
-                    ),
-
-                    // The other guests in the box (your own camera is in the
-                    // split view above).
-                    if (!state.requiresPremiumPayment)
-                      LiveGuestStrip(
-                        controller: _guests,
+                    // Host full screen; you're the first tile in the box
+                    // column, other guests below (tap one to spotlight).
+                    Positioned.fill(
+                      child: LiveSpotlightStage(
+                        main: (widget.pool != null && widget.channelId != null)
+                            ? PoolVideoView(pool: widget.pool!)
+                            : sl<AgoraViewerService>().buildHostVideo(),
+                        mainLabel: state.host?.name ?? 'Host',
+                        mainUid: sl<AgoraViewerService>().currentHostUid,
+                        guests: _guests,
                         hideUuid: sl<CurrentUserService>().getCurrentUserId(),
-                        top: 150,
+                        showGuests: !state.requiresPremiumPayment,
+                        top: MediaQuery.of(context).padding.top + 64,
+                        leadingTile: isCurrentUserGuest
+                            ? (w, h) => const _SelfTile()
+                            : null,
                         videoFor: (g) =>
                             sl<AgoraViewerService>().remoteVideoFor(g.uid),
                       ),
+                    ),
 
                     if (!_immersive && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
@@ -280,9 +285,10 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                       Align(
                         alignment: Alignment.bottomLeft,
                         child: Padding(
-                          padding: const EdgeInsets.only(
+                          padding: EdgeInsets.only(
                             left: 12,
-                            right: 12,
+                            // Leave room for the controls pill on the right.
+                            right: isCurrentUserGuest ? 72 : 12,
                             bottom: 80,
                           ),
                           child: BlocBuilder<ViewerBloc, ViewerState>(
@@ -316,6 +322,18 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                         ),
                       ),
                     ],
+
+                    // Controls sit ABOVE the chat (drawn after it) while you're in the box.
+                    if (isCurrentUserGuest &&
+                        !_immersive &&
+                        !state.requiresPremiumPayment)
+                      Positioned(
+                        right: 12,
+                        bottom: 84,
+                        child: _BoxControls(
+                          onMore: () => _openControlSheet(context),
+                        ),
+                      ),
 
                     if (state.requiresPremiumPayment)
                       Positioned.fill(
@@ -546,6 +564,186 @@ class _GiftToast extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Your own camera as a tile in the box: live preview, "You", mic state.
+class _SelfTile extends StatefulWidget {
+  const _SelfTile();
+
+  @override
+  State<_SelfTile> createState() => _SelfTileState();
+}
+
+class _SelfTileState extends State<_SelfTile> {
+  final _agora = sl<AgoraViewerService>();
+
+  /// Your camera view. The screen switches to guest mode the moment the
+  /// role changes, a beat BEFORE the camera connection is ready — so keep
+  /// asking until it exists, then keep that one widget (never rebuilt).
+  Widget? _preview;
+
+  @override
+  void initState() {
+    super.initState();
+    _agora.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _agora.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _preview ??= _agora.buildLocalPreview();
+    final camOff = _agora.isCamMuted;
+    final micOff = _agora.isMicMuted;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFF2D55), width: 1.5),
+        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 12)],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const ColoredBox(color: Color(0xFF1B1446)),
+            // Preview stays in the tree; muting just covers it.
+            if (_preview case final p?) p,
+            if (camOff)
+              const ColoredBox(
+                color: Color(0xE61B1446),
+                child: Center(
+                  child: Icon(
+                    Icons.videocam_off_rounded,
+                    color: Colors.white54,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black87],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    LiveTalkIndicator(uid: 0, muted: micOff),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'You',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating glass pill: mic, camera, more (leave box / leave live).
+class _BoxControls extends StatefulWidget {
+  final VoidCallback onMore;
+  const _BoxControls({required this.onMore});
+
+  @override
+  State<_BoxControls> createState() => _BoxControlsState();
+}
+
+class _BoxControlsState extends State<_BoxControls> {
+  final _agora = sl<AgoraViewerService>();
+
+  @override
+  void initState() {
+    super.initState();
+    _agora.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _agora.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  Widget _btn(IconData icon, VoidCallback onTap, {bool warn = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 42,
+        height: 42,
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: warn
+              ? const Color(0xFFFF2D55).withValues(alpha: 0.85)
+              : Colors.white.withValues(alpha: 0.12),
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final micOff = _agora.isMicMuted;
+    final camOff = _agora.isCamMuted;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _btn(
+                micOff ? Icons.mic_off_rounded : Icons.mic_rounded,
+                () => _agora.setMicEnabled(micOff),
+                warn: micOff,
+              ),
+              _btn(
+                camOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+                () => _agora.setCamEnabled(camOff),
+                warn: camOff,
+              ),
+              _btn(Icons.more_horiz_rounded, widget.onMore),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

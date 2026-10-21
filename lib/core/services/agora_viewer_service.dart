@@ -48,6 +48,10 @@ class AgoraViewerService with ChangeNotifier {
   final ValueNotifier<bool> _hasVideo = ValueNotifier<bool>(false);
   ValueListenable<bool> get hostHasVideo => _hasVideo;
 
+  /// The host's Agora uid in the stream being watched (pool or standalone).
+  int? get currentHostUid =>
+      _pool.slotFor(SlotPosition.current)?.hostUid.value ?? hostUid.value;
+
   /// True while the host's video is actually arriving (pool or standalone).
   /// The truth for "is the stream working" — the server heartbeat can lag.
   bool get isReceivingHostVideo =>

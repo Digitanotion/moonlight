@@ -237,6 +237,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                               )
                             : HostVideoContainer(repository: widget.repository),
                         mainLabel: state.host?.name ?? 'Host',
+                        mainUid: sl<AgoraViewerService>().currentHostUid,
                         guests: _guests,
                         showGuests: !_pip && !state.requiresPremiumPayment,
                         videoFor: (g) =>
@@ -255,23 +256,14 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       const ReconnectionOverlay(),
                       if (state.isStreamUnstable) const _UnstableBanner(),
 
-                      // Big red "Join" on the side: ask the host to bring
-                      // you into the box.
-                      Align(
-                        alignment: const Alignment(1, 0.62),
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: LiveJoinButton(repository: widget.repository),
-                        ),
-                      ),
-
                       // Chat
                       Align(
                         alignment: Alignment.bottomLeft,
                         child: Padding(
                           padding: const EdgeInsets.only(
                             left: 12,
-                            right: 12,
+                            // Leave room for the Join button on the right.
+                            right: 84,
                             bottom: 80,
                           ),
                           child: BlocBuilder<ViewerBloc, ViewerState>(
@@ -309,6 +301,16 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                           showVideoCall: state.host?.callable == true,
                           onVideoCallTap: () =>
                               _openVideoCall(context, widget.repository),
+                        ),
+                      ),
+
+                      // Big red "Join" — drawn last so it sits above the chat. Asks the host to bring
+                      // you into the box.
+                      Align(
+                        alignment: const Alignment(1, 0.62),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: LiveJoinButton(repository: widget.repository),
                         ),
                       ),
                     ],

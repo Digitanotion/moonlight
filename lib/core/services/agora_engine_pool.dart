@@ -36,6 +36,7 @@
 
 import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:moonlight/core/services/live_audio_meter.dart';
 import 'package:flutter/foundation.dart';
 
 enum SlotPosition { previous, current, next }
@@ -73,6 +74,7 @@ class StreamJoinRequest {
     required this.channel,
     required this.rtcUid,
     required this.rtcToken,
+    this.hostUid,
   });
 
   final String livestreamParam;
@@ -80,6 +82,10 @@ class StreamJoinRequest {
   final String channel;
   final String rtcUid; // backend-issued uid — informational only here
   final String rtcToken;
+
+  /// The host's Agora uid (from the server). With guests in the box the
+  /// first remote user is not necessarily the host.
+  final int? hostUid;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,6 +122,10 @@ class EngineSlot {
   int? activeLocalUid; // the actual uid used in the current joinChannelEx call
 
   final ValueNotifier<int?> hostUid = ValueNotifier<int?>(null);
+
+  /// The real host uid when the server told us; null = unknown (fall back
+  /// to "first remote user").
+  int? expectedHostUid;
   final ValueNotifier<bool> hasVideo = ValueNotifier<bool>(false);
 
   void resetForNewJoin() {
@@ -265,6 +275,8 @@ class AgoraEnginePool {
     await _engine.enableVideo();
 
     _engine.registerEventHandler(_buildEventHandler());
+    // Who's talking / muted, for the wave + mute icons on the box tiles.
+    unawaited(LiveAudioMeter.instance.attach(_engine));
 
     _engineContextReady = true;
     debugPrint('🔧 [Pool] Engine context initialized, handler registered');
@@ -295,7 +307,9 @@ class AgoraEnginePool {
         // Accept the first remote uid as the host regardless of whether
         // this is a fresh join or the host was already in the channel.
         // Agora fires onUserJoined for pre-existing participants too.
-        if (slot.hostUid.value == null) {
+        final expected = slot.expectedHostUid;
+        if (slot.hostUid.value == null &&
+            (expected == null || expected == remoteUid)) {
           slot.hostUid.value = remoteUid;
           debugPrint(
             '👤 [Pool/${slot.currentPosition.name}] hostUid=$remoteUid',
@@ -332,7 +346,10 @@ class AgoraEnginePool {
             // If hostUid was never set (host was already in channel when
             // we joined — onUserJoined won't fire in that case), set it
             // now from the first remote video state change we receive.
-            if (slot.hostUid.value == null && videoOn) {
+            final expected = slot.expectedHostUid;
+            if (slot.hostUid.value == null &&
+                videoOn &&
+                (expected == null || expected == uid)) {
               slot.hostUid.value = uid;
               debugPrint(
                 '👤 [Pool/${slot.currentPosition.name}] hostUid=$uid (from videoState — joined after host)',
@@ -441,6 +458,7 @@ class AgoraEnginePool {
     final myEpoch = slot.epoch;
     slot.state = SlotJoinState.joining;
     slot.channelId = req.channel;
+    slot.expectedHostUid = req.hostUid;
     slot.livestreamParam = req.livestreamParam;
 
     _emit(slot, SlotEventKind.joining);

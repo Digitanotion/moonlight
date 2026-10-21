@@ -12,6 +12,7 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/agora_service.dart';
+import 'package:moonlight/core/services/live_audio_meter.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -320,6 +321,7 @@ class _LiveHostPageState extends State<LiveHostPage>
 
   void dispose() {
     _guests?.dispose();
+    LiveAudioMeter.instance.reset();
     ScreenGuard.release();
     _beautyAppliedOnJoin = false;
     agora.removeListener(_onAgoraStateChanged);
@@ -719,44 +721,6 @@ class _LiveHostPageState extends State<LiveHostPage>
                       ),
                     ),
 
-                    // Premium badge
-                    BlocBuilder<LiveHostBloc, LiveHostState>(
-                      buildWhen: (p, c) => p.isPremium != c.isPremium,
-                      builder: (context, state) {
-                        if (!state.isPremium) return const SizedBox.shrink();
-                        return Positioned(
-                          top: MediaQuery.of(context).padding.top + 100,
-                          right: 20,
-                          child: GestureDetector(
-                            onTap: _showCancelPremiumBottomSheet,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.25),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.redAccent,
-                                  width: 1.25,
-                                ),
-                              ),
-                              child: const Text(
-                                'PREMIUM',
-                                style: TextStyle(
-                                  color: Colors.redAccent,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.6,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
                     // Dim layer when paused
                     BlocBuilder<LiveHostBloc, LiveHostState>(
                       buildWhen: (p, c) => p.isPaused != c.isPaused,
@@ -770,26 +734,91 @@ class _LiveHostPageState extends State<LiveHostPage>
                       },
                     ),
 
-                    // Topic chip
+                    // Topic + Premium tag: one slim row under the header,
+                    // clear of the guest column on the right.
                     BlocBuilder<LiveHostBloc, LiveHostState>(
-                      buildWhen: (p, c) => false, // static, never changes
+                      buildWhen: (p, c) => p.isPremium != c.isPremium,
                       builder: (context, state) => Positioned(
-                        top: 92,
+                        top: MediaQuery.of(context).padding.top + 64,
                         left: 12,
-                        right: 12,
-                        child: _Glass(
-                          radius: 18,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          child: Text(
-                            widget.topic,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13.5,
-                            ),
-                          ),
+                        right: 150,
+                        child: Row(
+                          children: [
+                            if (widget.topic.trim().isNotEmpty)
+                              Flexible(
+                                child: _Glass(
+                                  radius: 14,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.tag_rounded,
+                                        color: Colors.white70,
+                                        size: 13,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          widget.topic,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            if (state.isPremium) ...[
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: _showCancelPremiumBottomSheet,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 9,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFFFC107),
+                                        Color(0xFFFF9800),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.workspace_premium_rounded,
+                                        color: Colors.black,
+                                        size: 14,
+                                      ),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'PREMIUM',
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
@@ -957,6 +986,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                     // guests can be in the box).
                     if (sl<LiveSessionTracker>().current != null)
                       LiveJoinRequestsHost(
+                        top: 104,
                         livestreamId:
                             sl<LiveSessionTracker>().current!.livestreamId,
                       ),
@@ -974,7 +1004,7 @@ class _LiveHostPageState extends State<LiveHostPage>
                         return Positioned(
                           left: 7,
                           right: 7,
-                          bottom: 100,
+                          bottom: MediaQuery.of(context).padding.bottom + 96,
                           child: _HostChatWidget(
                             messages: state.messages,
                             onSendMessage: (text) {
@@ -1246,8 +1276,9 @@ class _LiveHostPageState extends State<LiveHostPage>
                       : LiveSpotlightStage(
                           main: hostCamera,
                           mainLabel: 'You',
+                          mainUid: 0,
                           guests: _guests!,
-                          top: 120,
+                          top: MediaQuery.of(context).padding.top + 64,
                           videoFor: (g) => agora.remoteView(g.uid),
                           onLongPressGuest: (g) => showHostGuestActions(
                             context,
@@ -1434,64 +1465,50 @@ class _BottomActions extends StatelessWidget {
     required this.agora,
   });
 
-  Widget _item(
+  Widget _dockItem(
     IconData icon,
     String label,
     VoidCallback onTap, {
-    bool isActive = false,
-    bool showBadge = false,
+    bool active = false,
+    bool badge = false,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? const Color(0xFFFF6A00).withOpacity(0.3)
-                      : Colors.white.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isActive
-                        ? const Color(0xFFFF6A00).withOpacity(0.6)
-                        : Colors.white.withOpacity(0.12),
-                  ),
-                ),
-                child: Icon(
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
                   icon,
-                  color: isActive ? const Color(0xFFFF6A00) : Colors.white,
-                  size: 24,
+                  color: active ? const Color(0xFFFF7A00) : Colors.white,
+                  size: 23,
                 ),
-              ),
-              if (showBadge)
-                Positioned(
-                  top: 2,
-                  right: 2,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFF6A00),
-                      shape: BoxShape.circle,
+                if (badge)
+                  const Positioned(
+                    top: -1,
+                    right: -2,
+                    child: CircleAvatar(
+                      radius: 3.5,
+                      backgroundColor: Color(0xFFFF7A00),
                     ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? const Color(0xFFFF6A00) : Colors.white,
-              fontSize: 12,
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? const Color(0xFFFF7A00) : Colors.white70,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1501,64 +1518,69 @@ class _BottomActions extends StatelessWidget {
     return BlocBuilder<LiveHostBloc, LiveHostState>(
       buildWhen: (p, c) => p.chatVisible != c.chatVisible,
       builder: (context, state) {
-        // Use AnimatedBuilder for mic/cam icons so they update on mute without
-        // rebuilding the whole page.
-        return AnimatedBuilder(
-          animation: agora,
-          builder: (context, _) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+        // A frosted floating dock; the glowing Pause/Resume sits in the
+        // middle. Same actions as before.
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _Glass(
+            radius: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _item(
+                _dockItem(
                   state.chatVisible
                       ? Icons.chat_bubble_rounded
                       : Icons.chat_bubble_outline_rounded,
                   'Chat',
                   onChatToggle,
-                  isActive: state.chatVisible,
+                  active: state.chatVisible,
                 ),
-                _item(Icons.card_giftcard_rounded, 'Gifts', onGifts),
-                _item(Icons.visibility_rounded, 'Viewers', onViewers),
-                InkWell(
+                _dockItem(Icons.card_giftcard_rounded, 'Gifts', onGifts),
+                _dockItem(Icons.groups_rounded, 'Viewers', onViewers),
+                GestureDetector(
                   onTap: onPause,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: const BoxDecoration(
-                          color: Colors.white24,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isPaused
-                              ? Icons.play_arrow_rounded
-                              : Icons.pause_rounded,
-                          color: Colors.white,
-                          size: 36,
-                        ),
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: isPaused
+                            ? const [Color(0xFF39D98A), Color(0xFF1FAF6B)]
+                            : const [Color(0xFFFF2D55), Color(0xFFFF7A00)],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        isPaused ? 'Resume' : 'Pause',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              (isPaused
+                                      ? const Color(0xFF39D98A)
+                                      : const Color(0xFFFF2D55))
+                                  .withValues(alpha: 0.5),
+                          blurRadius: 16,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Icon(
+                      isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                      color: Colors.white,
+                      size: 30,
+                    ),
                   ),
                 ),
-                _item(Icons.star_rounded, 'Premiums', onPremium),
+                _dockItem(
+                  Icons.workspace_premium_rounded,
+                  'Premium',
+                  onPremium,
+                ),
                 // Settings with beauty badge — only watches beautyActive
                 ValueListenableBuilder<bool>(
                   valueListenable: agora.beautyActive,
-                  builder: (_, isBeautyOn, __) => _item(
-                    Icons.settings_rounded,
+                  builder: (_, isBeautyOn, _) => _dockItem(
+                    Icons.tune_rounded,
                     'Settings',
                     onSettings,
-                    showBadge: isBeautyOn,
+                    badge: isBeautyOn,
                   ),
                 ),
               ],
@@ -1759,184 +1781,136 @@ class _HeaderBar extends StatelessWidget {
         ? NetworkImage(avatarUrl!)
         : const AssetImage('assets/images/logo.png') as ImageProvider;
 
-    return _Glass(
-      radius: 18,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: CircleAvatar(radius: 14, backgroundImage: img),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'You are the',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12.5,
+    return Row(
+      children: [
+        // Host card: ring avatar · name · LIVE timer · viewers
+        Flexible(
+          child: _Glass(
+            radius: 26,
+            padding: const EdgeInsets.fromLTRB(3, 3, 12, 3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFFF2D55), Color(0xFFFF7A00)],
+                    ),
+                  ),
+                  child: CircleAvatar(radius: 16, backgroundImage: img),
                 ),
-              ),
-              const SizedBox(height: 2),
-              _Badge(text: hostBadge),
-            ],
-          ),
-          const SizedBox(width: 10),
-          const Padding(padding: EdgeInsets.only(top: 2), child: _LiveDot()),
-          const SizedBox(width: 6),
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              timeText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        hostName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const _LiveDot(),
+                          const SizedBox(width: 5),
+                          Text(
+                            timeText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.remove_red_eye_rounded,
+                            color: Colors.white70,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            viewersText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
+        ),
+        const SizedBox(width: 10),
+        if (onShare != null) ...[
           GestureDetector(
-            onTap: () {
-              _registerParticipantsForCurrentSession();
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => const ViewersListSheet(),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.only(top: 2, left: 3, right: 2),
+            onTap: onShare,
+            child: const _Glass(
+              radius: 20,
+              padding: EdgeInsets.all(9),
               child: Icon(
-                Icons.remove_red_eye_rounded,
+                Icons.ios_share_rounded,
                 color: Colors.white,
                 size: 18,
               ),
             ),
           ),
-          const SizedBox(width: 4),
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              viewersText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const Spacer(),
-          if (onShare != null) ...[
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onShare,
-              child: const Padding(
-                padding: EdgeInsets.only(top: 2, right: 10, left: 2),
-                child: Icon(
-                  Icons.ios_share_rounded,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-            ),
-          ],
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _showEndStreamConfirmation(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFFF3D00).withOpacity(0.8),
-                    const Color(0xFFFF6A00).withOpacity(0.8),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.power_settings_new_rounded,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                  SizedBox(width: 6),
-                  Text(
-                    'End',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          const SizedBox(width: 8),
         ],
-      ),
-    );
-  }
-
-  static void _registerParticipantsForCurrentSession() {
-    try {
-      final tracker = GetIt.I<LiveSessionTracker>();
-      final current = tracker.current;
-      if (current == null) return;
-      final numericId = current.livestreamId;
-      if (GetIt.I.isRegistered<ParticipantsRepository>()) {
-        try {
-          final r = GetIt.I<ParticipantsRepository>();
-          if (r is ParticipantsRepositoryImpl &&
-              r.livestreamIdNumeric == numericId)
-            return;
-          GetIt.I<ParticipantsRepository>().dispose();
-        } catch (_) {}
-        GetIt.I.unregister<ParticipantsRepository>();
-      }
-      GetIt.I.registerLazySingleton<ParticipantsRepository>(
-        () => ParticipantsRepositoryImpl(
-          GetIt.I<DioClient>(),
-          GetIt.I<PusherService>(),
-          livestreamIdNumeric: numericId,
-          livestreamParam: numericId.toString(),
+        // End: a clear red pill.
+        GestureDetector(
+          onTap: onEnd,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF2D55), Color(0xFFE0115F)],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF2D55).withValues(alpha: 0.45),
+                  blurRadius: 12,
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.stop_rounded, color: Colors.white, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  'End',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      );
-      if (GetIt.I.isRegistered<ParticipantsBloc>())
-        GetIt.I.unregister<ParticipantsBloc>();
-      GetIt.I.registerFactory<ParticipantsBloc>(
-        () => ParticipantsBloc(GetIt.I<ParticipantsRepository>()),
-      );
-    } catch (e) {
-      debugPrint('❌ Failed to register participants: $e');
-    }
-  }
-
-  void _showEndStreamConfirmation(BuildContext context) {
-    final liveHostBloc = context.read<LiveHostBloc>();
-    final state = liveHostBloc.state;
-    showDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      builder: (_) => EndStreamConfirmationDialog(
-        onConfirm: onEnd,
-        onCancel: () => Navigator.of(context).pop(),
-        viewerCount: state.viewers,
-        elapsedSeconds: state.elapsedSeconds,
-        messageCount: state.messages.length,
-      ),
+      ],
     );
   }
 }
 
-/// Modern TikTok-style Host Chat Widget with Emoji Picker
-/// Ultra-modern TikTok-style Host Chat Widget
 class _HostChatWidget extends StatefulWidget {
   final List<LiveChatMessage> messages;
   final Function(String) onSendMessage;

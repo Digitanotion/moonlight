@@ -28,6 +28,7 @@
 // exactly as they were.
 
 import 'package:flutter/material.dart';
+import 'package:moonlight/core/services/live_audio_meter.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -231,6 +232,7 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
   void dispose() {
     if (identical(_active, this)) _active = null;
     sl<AgoraViewerService>().rejoinCurrentAsAudience = null;
+    LiveAudioMeter.instance.reset();
     MiniPlayerController.instance.removeListener(_onMiniChanged);
     MiniPlayerController.instance.unbindActivePager(_minimizeToMini);
     ScreenGuard.release();
