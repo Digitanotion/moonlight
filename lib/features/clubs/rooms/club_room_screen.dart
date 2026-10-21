@@ -577,8 +577,6 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
       );
     }
     if (!rtc.remoteUids.contains(p.user.uid)) return null;
-    // Listening only until they raise a hand.
-    if (c.state?.canWatchVideo != true) return null;
     return AgoraVideoView(
       controller: VideoViewController.remote(
         rtcEngine: engine,
@@ -595,37 +593,28 @@ class _ClubRoomScreenState extends State<ClubRoomScreen> {
     final items = <Widget>[
       if (c.error != null)
         _Banner(text: c.error!, action: 'Retry', onTap: c.reconnect),
-      if (!s.isAudio && !s.canWatchVideo && s.me.seatRequest == 'pending')
+      // Viewers see everyone on camera and can chat; others only see them
+      // once they join on camera.
+      if (!s.isAudio && !s.me.onStage && s.me.seatRequest == 'pending')
         _Banner(
           text:
-              'Request sent ✋ You\'ll see everyone as soon as the host accepts you.',
+              'Request sent ✋ Everyone will see you once the host accepts you.',
           action: 'Cancel',
           onTap: () => _run(c.cancelSeat),
         )
-      else if (!s.isAudio && !s.canWatchVideo && s.premium.enabled)
+      else if (!s.isAudio && !s.me.onStage)
         _Banner(
           text:
-              'Premium room 👑 Unlock to watch everyone on camera. You can still hear everyone.',
-          action: 'Unlock · ${s.premium.priceCoins}',
-          onTap: _unlockPremium,
-          color: _gold,
-        )
-      else if (!s.isAudio && !s.canWatchVideo)
-        _Banner(
-          text:
-              'You\'re listening in. Raise your hand — once the host accepts you, you\'ll see everyone.',
+              'You\'re watching — no one can see you. Raise your hand to join on camera.',
           action: s.me.seatFeeCoins > 0
               ? '✋ Join · ${s.me.seatFeeCoins}'
               : '✋ Join',
           onTap: _requestSeat,
         ),
-      if (!s.isAudio &&
-          s.me.onStage &&
-          s.premium.enabled &&
-          !s.me.premiumAccess)
+      if (!s.isAudio && s.premium.enabled && !s.me.premiumAccess)
         _Banner(
           text:
-              'Premium room — some cameras are hidden. You can still hear everyone.',
+              'Premium room 👑 Some cameras are hidden. You can still hear everyone.',
           action: 'Unlock · ${s.premium.priceCoins}',
           onTap: _unlockPremium,
           color: _gold,

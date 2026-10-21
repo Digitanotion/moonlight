@@ -14,6 +14,8 @@ import 'package:moonlight/features/live_viewer/data/repositories/viewer_reposito
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_guest_strip.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_join_button.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/follow_prompt_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/gift_overlay.dart';
@@ -74,6 +76,11 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
     }
   }
 
+  late final LiveGuestsController _guests = LiveGuestsController(
+    livestreamParam: widget.repository.livestreamParam,
+    numericId: widget.repository.livestreamIdNumeric,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -99,6 +106,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
     MiniPlayerController.instance.removeListener(_onPipChanged);
     ScreenGuard.release();
     _commentCtrl.dispose();
+    _guests.dispose();
     super.dispose();
   }
 
@@ -226,6 +234,14 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                     else
                       HostVideoContainer(repository: widget.repository),
 
+                    // ── Guests in the box (several at once) ─────────────
+                    if (!_pip && !state.requiresPremiumPayment)
+                      LiveGuestStrip(
+                        controller: _guests,
+                        videoFor: (g) =>
+                            sl<AgoraViewerService>().remoteVideoFor(g.uid),
+                      ),
+
                     // ── Normal viewer UI ────────────────────────────────
                     if (showOverlays && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
@@ -236,6 +252,16 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       const RoleChangeToast(),
                       const ReconnectionOverlay(),
                       if (state.isStreamUnstable) const _UnstableBanner(),
+
+                      // Big red "Join" on the side: ask the host to bring
+                      // you into the box.
+                      Align(
+                        alignment: const Alignment(1, 0.62),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: LiveJoinButton(repository: widget.repository),
+                        ),
+                      ),
 
                       // Chat
                       Align(

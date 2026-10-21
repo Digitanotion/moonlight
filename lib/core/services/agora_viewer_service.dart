@@ -701,6 +701,23 @@ class AgoraViewerService with ChangeNotifier {
     );
   }
 
+  /// Video for any remote uid in the stream being watched — used for the
+  /// guests in the box (several at once). Works in pool and standalone mode.
+  Widget remoteVideoFor(int uid) {
+    final conn =
+        _standaloneConnection ?? _pool.slotFor(SlotPosition.current)?.connection;
+    if (conn == null) return buildBlackPlaceholder('');
+    return AgoraVideoView(
+      key: ValueKey('remote_${conn.channelId}_$uid'),
+      controller: VideoViewController.remote(
+        rtcEngine: engine,
+        useFlutterTexture: true,
+        canvas: VideoCanvas(uid: uid),
+        connection: conn,
+      ),
+    );
+  }
+
   Widget buildGuestVideo() {
     final ch = _standaloneChannel;
     final conn = _standaloneConnection;

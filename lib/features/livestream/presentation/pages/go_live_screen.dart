@@ -1,16 +1,29 @@
+// lib/features/livestream/presentation/pages/go_live_screen.dart
+//
+// Go Live — set up and start a livestream. You're "on stage" from the first
+// second: your camera fills the screen, the few things to fill in sit in one
+// frosted panel at the bottom, and Go Live counts you in (3-2-1) while the
+// stream is being created.
+
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/routing/route_names.dart';
-import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/widgets/styled_banner_ad.dart';
-import 'package:moonlight/features/home/presentation/widgets/bottom_nav.dart';
 import 'package:moonlight/features/livestream/domain/entities/live_category.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/go_live_cubit.dart';
 import 'package:moonlight/features/livestream/presentation/cubits/go_live_state.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/searchable_category_dropdown.dart';
-import '../../../../core/ui/ui_kit.dart';
+
+const _rose = Color(0xFFFF2D55);
+const _ember = Color(0xFFFF7A00);
+const _violet = Color(0xFF8E2DE2);
+const _night = Color(0xFF0A0920);
 
 class GoLiveScreen extends StatefulWidget {
   const GoLiveScreen({super.key});
@@ -21,33 +34,6 @@ class GoLiveScreen extends StatefulWidget {
 
 class _GoLiveScreenState extends State<GoLiveScreen> {
   late final GoLiveCubit cubit;
-  // int _currentIndex = 0;
-  // int get _navIndex => 1; // Go Live index (fixed)
-
-  // void _onTabSelected(int index) {
-  //   setState(() {
-  //     _currentIndex = index;
-  //   });
-
-  //   // Handle tab navigation logic here
-  //   switch (index) {
-  //     case 0:
-  //       // Navigate to Home tab content (already here)
-  //       break;
-  //     case 1:
-  //       // Navigate to Go Live page
-  //       break;
-  //     case 2:
-  //       // Navigate to Post creation page
-  //       break;
-  //     case 3:
-  //       // Navigate to Clubs page
-  //       break;
-  //     case 4:
-  //       // Navigate to Profile page
-  //       break;
-  //   }
-  // }
 
   @override
   void initState() {
@@ -59,95 +45,22 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: cubit,
-      child: Scaffold(
-        extendBody: true,
-        backgroundColor: Colors.transparent,
-
-        body: Container(
-          decoration: gradientBg(),
-          child: SafeArea(
-            child: BlocConsumer<GoLiveCubit, GoLiveState>(
-              listener: (context, state) {
-                if (state.error != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(state.error!),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-                if (!state.starting && state.canStart) {
-                  // no-op; wire navigation to preview/live room after repo.startStreaming
-                }
-              },
-              builder: (context, state) {
-                return CustomScrollView(
-                  slivers: [
-                    SliverAppBar(
-                      pinned: false,
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      leading: IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new,
-                          color: Colors.white,
-                        ),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      centerTitle: true,
-                      title: const Text(
-                        'Go Live',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _CoverPicker(),
-                            const SizedBox(height: 18),
-                            sectionTitle('Stream Title'),
-                            _TitleField(),
-                            const SizedBox(height: 14),
-                            sectionTitle('Category'),
-                            _CategoryDropdown(),
-                            const SizedBox(height: 16),
-                            _CameraCard(),
-                            const SizedBox(height: 18),
-                            // sectionTitle('Stream Settings'),
-
-                            // const SizedBox(height: 6),
-                            // _SettingTile(
-                            //   icon: Icons.workspace_premium_outlined,
-                            //   title: 'Premium Stream',
-                            //   subtitle: 'Viewers pay coins to join',
-                            //   value: state.premium,
-                            //   onChanged: context
-                            //       .read<GoLiveCubit>()
-                            //       .togglePremium,
-                            // ),
-                            const SizedBox(height: 14),
-                            if (state.eligibleBonus) _BonusCard(),
-                            const SizedBox(height: 14),
-                            _PreviewCard(),
-                            const SizedBox(height: 18),
-                            const StyledBannerAd(),
-                            const SizedBox(height: 18),
-                            _StartButton(),
-                            const SizedBox(height: 28),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          backgroundColor: _night,
+          resizeToAvoidBottomInset: true,
+          body: BlocListener<GoLiveCubit, GoLiveState>(
+            listenWhen: (p, n) => n.error != null && p.error != n.error,
+            listener: (context, state) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.error!),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const _Stage(),
           ),
         ),
       ),
@@ -155,550 +68,793 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
   }
 }
 
-class _CoverPicker extends StatelessWidget {
+class _Stage extends StatefulWidget {
+  const _Stage();
+
+  @override
+  State<_Stage> createState() => _StageState();
+}
+
+class _StageState extends State<_Stage> {
+  int? _count; // 3-2-1 countdown on screen
+
+  Future<void> _goLive() async {
+    final cubit = context.read<GoLiveCubit>();
+    final state = cubit.state;
+    if (!state.canStart || !state.devicesOk || _count != null) return;
+    HapticFeedback.mediumImpact();
+
+    // Create the stream while counting the host in.
+    final starting = cubit.start();
+    for (final n in [3, 2, 1]) {
+      if (!mounted) return;
+      setState(() => _count = n);
+      HapticFeedback.selectionClick();
+      await Future.delayed(const Duration(milliseconds: 800));
+    }
+    final dto = await starting;
+    if (!mounted) return;
+    setState(() => _count = null);
+    if (dto == null) return; // error shown by the listener
+
+    final topic = (dto.streamTitle.isNotEmpty)
+        ? dto.streamTitle
+        : (state.title.isNotEmpty ? state.title : 'Live');
+
+    Navigator.pushNamed(
+      context,
+      RouteNames.liveHost,
+      arguments: {
+        'host_name': dto.hostDisplayName,
+        'host_uuid': dto.hostUuid,
+        'host_badge': dto.hostBadge,
+        'avatar_url': dto.hostAvatarUrl,
+        'topic': topic,
+        'initial_viewers': dto.initialViewers,
+        'started_at': dto.startedAt,
+        'livestream_id': dto.livestreamId,
+        'channel': dto.channel,
+        'uid_type': dto.uidType,
+        'uid': dto.uid,
+        'app_id': dto.appId,
+        'rtc_token': dto.rtcToken,
+        'rtc_role': dto.rtcRole,
+        'mic_on': dto.micOn,
+        'cam_on': dto.camOn,
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = context.select((GoLiveCubit c) => c.state);
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: AppColors.cardDark,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => context.read<GoLiveCubit>().pickCover(),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            fit: StackFit.expand,
+    final s = context.watch<GoLiveCubit>().state;
+    final cubit = context.read<GoLiveCubit>();
+    final top = MediaQuery.of(context).padding.top;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // ── You, full screen ────────────────────────────────────────────
+        if (s.camOn && s.camReady)
+          cubit.camera.buildPreview()
+        else
+          _CameraOff(camOn: s.camOn),
+
+        // Soft shade so text always reads over any camera image.
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: [0, 0.18, 0.5, 1],
+              colors: [
+                Color(0xAA000000),
+                Colors.transparent,
+                Colors.transparent,
+                Color(0xE6000000),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Top bar ─────────────────────────────────────────────────────
+        Positioned(
+          top: top + 8,
+          left: 12,
+          right: 12,
+          child: Row(
             children: [
-              if (state.coverPath != null)
-                Image.file(File(state.coverPath!), fit: BoxFit.cover)
-              else
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(
-                        Icons.photo_camera_outlined,
-                        color: AppColors.textSecondary,
-                        size: 28,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Add Cover Photo',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: AppColors.divider,
-                      width: 1.2,
-                      style: BorderStyle.solid,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
+              _GlassIcon(
+                icon: Icons.close_rounded,
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+              const Spacer(),
+              const _PreviewPill(),
+              const Spacer(),
+              const SizedBox(width: 44),
+            ],
+          ),
+        ),
+
+        // ── Camera & mic, down the right ────────────────────────────────
+        Positioned(
+          top: top + 72,
+          right: 12,
+          child: Column(
+            children: [
+              _GlassIcon(
+                icon: s.camOn
+                    ? Icons.videocam_rounded
+                    : Icons.videocam_off_rounded,
+                label: s.camOn ? 'Camera' : 'Camera off',
+                off: !s.camOn,
+                onTap: cubit.toggleCam,
+              ),
+              const SizedBox(height: 14),
+              _GlassIcon(
+                icon: s.micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+                label: s.micOn ? 'Mic' : 'Muted',
+                off: !s.micOn,
+                level: s.micOn ? s.micLevel : null,
+                onTap: cubit.toggleMic,
               ),
             ],
           ),
         ),
+
+        // ── Details + Go Live ───────────────────────────────────────────
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              reverse: true,
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const _DetailsPanel(),
+                  const SizedBox(height: 10),
+                  const StyledBannerAd(),
+                  const SizedBox(height: 10),
+                  _GoLiveButton(onTap: _goLive),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // ── 3-2-1 ───────────────────────────────────────────────────────
+        if (_count != null) _Countdown(n: _count!),
+      ],
+    );
+  }
+}
+
+// ── pieces ───────────────────────────────────────────────────────────────
+
+class _CameraOff extends StatelessWidget {
+  final bool camOn;
+  const _CameraOff({required this.camOn});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1B1446), _night, Color(0xFF2A0F2E)],
+        ),
       ),
-    );
-  }
-}
-
-class _TitleField extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final title = context.select((GoLiveCubit c) => c.state.title);
-    return TextField(
-      controller: TextEditingController(text: title)
-        ..selection = TextSelection.collapsed(offset: title.length),
-      onChanged: context.read<GoLiveCubit>().setTitle,
-      style: const TextStyle(color: AppColors.textPrimary),
-      decoration: inputDecoration('Give your stream a title'),
-    );
-  }
-}
-
-class _CategoryDropdown extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final state = context.select((GoLiveCubit c) => c.state);
-    return SearchableCategoryDropdown(
-      value: state.category,
-      onChanged: (category) {
-        context.read<GoLiveCubit>().setCategory(category);
-      },
-      hintText: 'Select category',
-    );
-  }
-}
-
-class _CameraCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final s = context.select((GoLiveCubit c) => c.state);
-    final cubit = context.read<GoLiveCubit>();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardDark,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      padding: const EdgeInsets.all(10),
-      child: AspectRatio(
-        aspectRatio: 11 / 16,
-        child: Stack(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Camera area
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0A0F24),
-                  borderRadius: BorderRadius.circular(12),
+            Container(
+              width: 92,
+              height: 92,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.06),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Icon(
+                camOn
+                    ? Icons.hourglass_top_rounded
+                    : Icons.videocam_off_rounded,
+                color: Colors.white70,
+                size: 38,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              camOn ? 'Waking up your camera…' : 'Camera is off — audio only',
+              style: const TextStyle(color: Colors.white60),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewPill extends StatefulWidget {
+  const _PreviewPill();
+
+  @override
+  State<_PreviewPill> createState() => _PreviewPillState();
+}
+
+class _PreviewPillState extends State<_PreviewPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Glass(
+      radius: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FadeTransition(
+            opacity: Tween(begin: 0.3, end: 1.0).animate(_c),
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: _rose,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Ready when you are',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailsPanel extends StatelessWidget {
+  const _DetailsPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<GoLiveCubit>().state;
+    return _Glass(
+      radius: 24,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _CoverThumb(path: s.coverPath),
+              const SizedBox(width: 12),
+              const Expanded(child: _TitleField()),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _CategoryChips(selected: s.category, categories: s.categories),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _InfoChip(
+                icon: Icons.groups_rounded,
+                text: s.estLow > 0
+                    ? '${s.estLow}–${s.estHigh} likely viewers'
+                    : (s.previewReady ? 'Fresh audience' : 'Reading the room…'),
+              ),
+              if (s.bestTime.isNotEmpty)
+                _InfoChip(
+                  icon: Icons.schedule_rounded,
+                  text: 'Best time ${s.bestTime}',
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: s.camOn && s.camReady
-                      ? context.read<GoLiveCubit>().camera.buildPreview()
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                s.camOn
-                                    ? Icons.hourglass_empty
-                                    : Icons.videocam_off_outlined,
-                                color: AppColors.textSecondary,
-                                size: 36,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                s.camOn
-                                    ? 'Initializing camera…'
-                                    : 'Camera Preview',
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoverThumb extends StatelessWidget {
+  final String? path;
+  const _CoverThumb({this.path});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.read<GoLiveCubit>().pickCover(),
+      child: Container(
+        width: 66,
+        height: 66,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: Colors.white.withValues(alpha: 0.08),
+          border: Border.all(color: Colors.white24),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: path != null
+            ? Image.file(File(path!), fit: BoxFit.cover)
+            : const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_rounded,
+                    color: Colors.white70,
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Cover',
+                    style: TextStyle(color: Colors.white60, fontSize: 11),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _TitleField extends StatefulWidget {
+  const _TitleField();
+
+  @override
+  State<_TitleField> createState() => _TitleFieldState();
+}
+
+class _TitleFieldState extends State<_TitleField> {
+  late final TextEditingController _c = TextEditingController(
+    text: context.read<GoLiveCubit>().state.title,
+  );
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _c,
+      onChanged: context.read<GoLiveCubit>().setTitle,
+      maxLength: 80,
+      maxLines: 2,
+      minLines: 1,
+      textCapitalization: TextCapitalization.sentences,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+      ),
+      cursorColor: _rose,
+      decoration: const InputDecoration(
+        hintText: 'What\'s your live about?',
+        hintStyle: TextStyle(
+          color: Colors.white54,
+          fontWeight: FontWeight.w600,
+        ),
+        counterText: '',
+        border: InputBorder.none,
+        isDense: true,
+      ),
+    );
+  }
+}
+
+class _CategoryChips extends StatelessWidget {
+  final LiveCategory? selected;
+  final List<LiveCategory> categories;
+  const _CategoryChips({required this.selected, required this.categories});
+
+  Future<void> _more(BuildContext context) async {
+    final cubit = context.read<GoLiveCubit>();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF14101F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (c) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.of(c).viewInsets.bottom,
+        ),
+        child: SearchableCategoryDropdown(
+          value: selected,
+          hintText: 'Search categories',
+          onChanged: (cat) {
+            cubit.setCategory(cat);
+            Navigator.pop(c);
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<GoLiveCubit>();
+    // Selected first, then the rest — one swipeable row.
+    final list = [
+      if (selected != null) selected!,
+      ...categories.where((c) => c.id != selected?.id),
+    ];
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        children: [
+          for (final c in list.take(12))
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _Chip(
+                label: '${c.icon} ${c.name}',
+                selected: c.id == selected?.id,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  cubit.setCategory(c);
+                },
+              ),
+            ),
+          _Chip(label: '🔍 More', selected: false, onTap: () => _more(context)),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _Chip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: selected
+              ? const LinearGradient(colors: [_rose, _ember])
+              : null,
+          color: selected ? null : Colors.white.withValues(alpha: 0.08),
+          border: Border.all(
+            color: selected ? Colors.transparent : Colors.white24,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _InfoChip({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white60),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoLiveButton extends StatefulWidget {
+  final VoidCallback onTap;
+  const _GoLiveButton({required this.onTap});
+
+  @override
+  State<_GoLiveButton> createState() => _GoLiveButtonState();
+}
+
+class _GoLiveButtonState extends State<_GoLiveButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<GoLiveCubit>().state;
+    final ready = s.canStart && s.devicesOk && !s.starting;
+    final hint = s.title.trim().isEmpty
+        ? 'Add a title to go live'
+        : (s.category == null ? 'Pick a category to go live' : null);
+
+    return Column(
+      children: [
+        if (hint != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              hint,
+              style: const TextStyle(color: Colors.white60, fontSize: 12.5),
+            ),
+          ),
+        AnimatedBuilder(
+          animation: _glow,
+          builder: (_, child) => Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: ready
+                  ? [
+                      BoxShadow(
+                        color: _rose.withValues(
+                          alpha: 0.35 + 0.3 * _glow.value,
+                        ),
+                        blurRadius: 18 + 14 * _glow.value,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: child,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(30),
+              onTap: ready ? widget.onTap : null,
+              child: Ink(
+                height: 60,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  gradient: LinearGradient(
+                    colors: ready
+                        ? const [_rose, _ember]
+                        : [
+                            Colors.white.withValues(alpha: 0.12),
+                            Colors.white.withValues(alpha: 0.12),
+                          ],
+                  ),
+                ),
+                child: Center(
+                  child: s.starting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
                           ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.sensors_rounded,
+                              color: ready ? Colors.white : Colors.white38,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'GO LIVE',
+                              style: TextStyle(
+                                color: ready ? Colors.white : Colors.white38,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 17,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ],
                         ),
                 ),
               ),
             ),
-
-            // Right-top camera toggle
-            Positioned(
-              right: 8,
-              top: 8,
-              child: _RoundIcon(
-                icon: s.camOn
-                    ? Icons.videocam_outlined
-                    : Icons.videocam_off_outlined,
-                onTap: cubit.toggleCam,
-              ),
-            ),
-
-            // Bottom-right mic toggle
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: _RoundIcon(
-                icon: s.micOn
-                    ? Icons.mic_none_outlined
-                    : Icons.mic_off_outlined,
-                onTap: cubit.toggleMic,
-              ),
-            ),
-
-            // Bottom-left audio meter (visible only when mic is ON)
-            if (s.micOn) Text(""),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AudioLevelBar extends StatelessWidget {
-  final double level; // 0..1
-  final bool ready;
-  const _AudioLevelBar({required this.level, required this.ready});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: const Color(0x22FFFFFF),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: LayoutBuilder(
-                builder: (context, c) => Stack(
-                  children: [
-                    Container(width: 12, height: 8, color: Colors.transparent),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 100),
-                      width: c.maxWidth * level,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: ready ? Colors.white : Colors.orange,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          ready ? 'Audio level' : 'Testing microphone…',
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
         ),
       ],
     );
   }
 }
 
-class _RoundIcon extends StatelessWidget {
+class _Countdown extends StatelessWidget {
+  final int n;
+  const _Countdown({required this.n});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black54,
+      child: Center(
+        child: TweenAnimationBuilder<double>(
+          key: ValueKey(n),
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 750),
+          curve: Curves.easeOutBack,
+          builder: (_, t, _) => Opacity(
+            opacity: (1.4 - t).clamp(0.0, 1.0),
+            child: Transform.scale(
+              scale: 0.4 + t,
+              child: ShaderMask(
+                shaderCallback: (r) => const LinearGradient(
+                  colors: [_rose, _ember, _violet],
+                ).createShader(r),
+                child: Text(
+                  '$n',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 140,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassIcon extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _RoundIcon({required this.icon, required this.onTap});
+  final String? label;
+  final bool off;
+  final double? level; // mic level 0..1 → glowing ring
 
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0x1AFFFFFF),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Icon(icon, color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _SettingTile({
+  const _GlassIcon({
     required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
+    required this.onTap,
+    this.label,
+    this.off = false,
+    this.level,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.white),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        trailing: Switch.adaptive(
-          value: value,
-          onChanged: onChanged,
-          activeColor: Colors.white,
-          activeTrackColor: AppColors.primary,
-        ),
-      ),
-    );
-  }
-}
-
-class _BonusCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A7F4A), Color(0xFF123A27)], // green gradient echo
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF245B3E)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Icon(Icons.card_giftcard_outlined, color: Colors.white),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              "First Stream Bonus: \nStream for 5+ minutes and earn \$20 bonus! Perfect time to connect with your audience.",
-              style: TextStyle(color: Colors.white, height: 1.25),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final s = context.select((GoLiveCubit c) => c.state);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Row(
+    final l = (level ?? 0).clamp(0.0, 1.0);
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Column(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Stream Preview',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: level != null && l > 0.05
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF39D98A).withValues(alpha: 0.7),
+                        blurRadius: 6 + 18 * l,
+                        spreadRadius: 1 + 3 * l,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.circle,
-                      size: 10,
-                      color: s.previewReady
-                          ? AppColors.accentGreen
-                          : Colors.orange,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      s.previewReady ? 'Ready' : 'Calculating...',
-                      style: const TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _stat(
-                      'Estimated Viewers',
-                      s.estLow > 0 ? '${s.estLow}-${s.estHigh}' : '—',
-                    ),
-                    const SizedBox(width: 20),
-                    _stat('Best Time', s.bestTime),
-                  ],
-                ),
-              ],
+                    ]
+                  : const [],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StartButton extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final state = context.watch<GoLiveCubit>().state;
-    final canGo = state.canStart && state.devicesOk;
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: canGo
-            ? () async {
-                final dto = await context.read<GoLiveCubit>().start();
-                if (dto == null) return; // guard
-
-                // Prefer server title; fall back to local state
-                final topic = (dto.streamTitle.isNotEmpty)
-                    ? dto.streamTitle
-                    : (state.title.isNotEmpty ? state.title : 'Live');
-
-                Navigator.pushNamed(
-                  context,
-                  RouteNames.liveHost,
-                  arguments: {
-                    'host_name': dto.hostDisplayName,
-                    'host_uuid': dto.hostUuid,
-                    'host_badge': dto.hostBadge,
-                    'avatar_url': dto.hostAvatarUrl,
-                    'topic': topic,
-                    'initial_viewers': dto.initialViewers,
-                    'started_at': dto.startedAt,
-                    'livestream_id': dto.livestreamId,
-                    'channel': dto.channel,
-                    'uid_type': dto.uidType,
-                    'uid': dto.uid,
-                    'app_id': dto.appId,
-                    'rtc_token': dto.rtcToken,
-                    'rtc_role': dto.rtcRole,
-                    'mic_on': dto.micOn, // ← ADD
-                    'cam_on': dto.camOn, // ← ADD
-                  },
-                );
-              }
-            : null,
-
-        style:
-            ElevatedButton.styleFrom(
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              backgroundColor: Colors.transparent,
-              disabledBackgroundColor: Colors.transparent,
-            ).merge(
-              ButtonStyle(
-                overlayColor: MaterialStateProperty.all(Colors.white10),
-                shadowColor: MaterialStateProperty.all(Colors.transparent),
-                // Fancy gradient background
-                backgroundColor: MaterialStateProperty.resolveWith(
-                  (states) => Colors.transparent,
+            child: ClipOval(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: off
+                        ? _rose.withValues(alpha: 0.75)
+                        : Colors.white.withValues(alpha: 0.14),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 22),
                 ),
               ),
             ),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: canGo
-                  ? [AppColors.secondary, AppColors.primary2]
-                  : [AppColors.divider, AppColors.divider],
-            ),
-            borderRadius: BorderRadius.circular(28),
           ),
-          child: Container(
-            alignment: Alignment.center,
-            constraints: const BoxConstraints(minHeight: 56),
-            child: Text(
-              'Start Streaming',
-              style: TextStyle(
-                color: state.canStart ? Colors.white : AppColors.textSecondary,
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+          if (label != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomNav extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0F24).withOpacity(0.9),
-        border: const Border(top: BorderSide(color: AppColors.divider)),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: const [
-          _NavItem(icon: Icons.home_outlined, label: 'Home', active: false),
-          _NavItem(
-            icon: Icons.videocam_outlined,
-            label: 'Go Live',
-            active: true,
-          ),
-          _NavItem(icon: Icons.add_box_outlined, label: 'Post', active: false),
-          _NavItem(
-            icon: Icons.groups_2_outlined,
-            label: 'Clubs',
-            active: false,
-          ),
-          _NavItem(icon: Icons.person_outline, label: 'Profile', active: false),
+          ],
         ],
       ),
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.active,
+class _Glass extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  final EdgeInsets padding;
+  const _Glass({
+    required this.child,
+    required this.radius,
+    required this.padding,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? Colors.white : AppColors.textSecondary;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: color, fontSize: 12)),
-      ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.32),
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 }

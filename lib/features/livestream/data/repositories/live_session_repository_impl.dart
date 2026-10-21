@@ -531,7 +531,8 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
 
       // Make API call to make this user a guest
       await _client.dio.post(
-        '/api/v1/live/$_id/participants/$userUuid/make-guest',
+        '/api/v1/live/$_id/participants/$userUuid/role',
+        data: {'role': 'guest'},
       );
 
       debugPrint('✅ Made user $userUuid a guest');
@@ -552,8 +553,9 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
         return;
       }
 
-      await _client.dio.delete(
-        '/api/v1/live/$_id/participants/$activeGuestUuid/remove-guest',
+      await _client.dio.post(
+        '/api/v1/live/$_id/participants/$activeGuestUuid/role',
+        data: {'role': 'viewer'},
       );
 
       debugPrint('✅ Removed guest $activeGuestUuid');
@@ -577,7 +579,7 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       }
 
       await _client.dio.post(
-        '/api/v1/live/$_id/participants/$activeGuestUuid/kick',
+        '/api/v1/live/$_id/participants/$activeGuestUuid/remove',
       );
 
       debugPrint('✅ Kicked guest $activeGuestUuid');

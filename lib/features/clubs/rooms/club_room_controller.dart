@@ -235,7 +235,6 @@ class ClubRoomController with ChangeNotifier {
   void _applyPremium() {
     final s = state;
     if (s == null || s.isAudio) return;
-    rtc.setWatchVideo(s.canWatchVideo);
     final hidden = s.participants
         .where((p) => !p.videoVisible && p.user.uuid != myUuid)
         .map((p) => p.user.uid)

@@ -19,7 +19,6 @@ import 'package:moonlight/features/gifts/helpers/gift_visuals.dart';
 import 'package:moonlight/features/livestream/data/models/live_session_models.dart';
 import 'package:moonlight/features/livestream/data/repositories/live_session_repository_impl.dart';
 import 'package:moonlight/features/livestream/data/repositories/participants_repository_impl.dart';
-import 'package:moonlight/features/livestream/domain/entities/live_join_request.dart';
 import 'package:moonlight/features/livestream/domain/repositories/live_session_repository.dart';
 import 'package:moonlight/features/livestream/domain/repositories/participants_repository.dart';
 import 'package:moonlight/features/livestream/domain/session/live_session_tracker.dart';
@@ -29,7 +28,9 @@ import 'package:moonlight/features/livestream/presentation/pages/live_gifts_page
 import 'package:moonlight/features/livestream/presentation/pages/viewers_list_sheet.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/confirm_end_stream.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/gift_toast.dart';
+import 'package:moonlight/features/livestream/presentation/widgets/live_join_requests_host.dart';
 import 'package:moonlight/features/livestream/presentation/widgets/live_settings_menu.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_guest_strip.dart';
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/core/services/screen_guard.dart';
 import 'package:moonlight/core/services/share_service.dart';
@@ -189,8 +190,18 @@ class _LiveHostPageState extends State<LiveHostPage>
   DateTime? _lastEffectApplyTime;
   static const Duration _minEffectApplyInterval = Duration(milliseconds: 500);
 
+  /// Everyone in the box (guests on camera with the host).
+  LiveGuestsController? _guests;
+
   void initState() {
     super.initState();
+    final live = sl<LiveSessionTracker>().current;
+    if (live != null) {
+      _guests = LiveGuestsController(
+        livestreamParam: '${live.livestreamId}',
+        numericId: live.livestreamId,
+      );
+    }
     // Doc item 11: "Nobody will be able to screenshot or video record
     // a streamer." Applied here too (her own device), alongside the
     // viewer-side screens, for consistent protection either way.
@@ -308,6 +319,7 @@ class _LiveHostPageState extends State<LiveHostPage>
   }
 
   void dispose() {
+    _guests?.dispose();
     ScreenGuard.release();
     _beautyAppliedOnJoin = false;
     agora.removeListener(_onAgoraStateChanged);
@@ -941,31 +953,13 @@ class _LiveHostPageState extends State<LiveHostPage>
                         ),
                       ),
 
-                    // Join request card
-                    BlocBuilder<LiveHostBloc, LiveHostState>(
-                      buildWhen: (p, c) =>
-                          p.pendingRequest != c.pendingRequest ||
-                          p.isPaused != c.isPaused,
-                      builder: (context, state) {
-                        if (state.pendingRequest == null || state.isPaused) {
-                          return const SizedBox.shrink();
-                        }
-                        return Positioned(
-                          top: 120,
-                          left: 16,
-                          right: 16,
-                          child: _JoinRequestCard(
-                            req: state.pendingRequest!,
-                            onAccept: () => context.read<LiveHostBloc>().add(
-                              AcceptJoinRequest(state.pendingRequest!.id),
-                            ),
-                            onDecline: () => context.read<LiveHostBloc>().add(
-                              DeclineJoinRequest(state.pendingRequest!.id),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    // Join requests → Approve / Decline pop-ups (several
+                    // guests can be in the box).
+                    if (sl<LiveSessionTracker>().current != null)
+                      LiveJoinRequestsHost(
+                        livestreamId:
+                            sl<LiveSessionTracker>().current!.livestreamId,
+                      ),
 
                     // Chat overlay
                     BlocBuilder<LiveHostBloc, LiveHostState>(
@@ -1236,13 +1230,9 @@ class _LiveHostPageState extends State<LiveHostPage>
           p.activeGuestUuid != c.activeGuestUuid ||
           p.activeGuestName != c.activeGuestName,
       builder: (context, state) {
-        final hasGuestInBloc = state.activeGuestUuid != null;
-
         return ValueListenableBuilder<int?>(
           valueListenable: agora.primaryRemoteUid,
           builder: (context, remoteUid, _) {
-            final hasGuest = hasGuestInBloc && remoteUid != null;
-
             return Stack(
               children: [
                 // Host camera ALWAYS full-screen, ALWAYS in the tree.
@@ -1250,26 +1240,19 @@ class _LiveHostPageState extends State<LiveHostPage>
                 // when Flutter rebuilds the parent (no surface teardown).
                 Positioned.fill(child: hostCamera),
 
-                // Guest panel + gradient only when a guest is active.
-                if (hasGuest) ...[
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.2),
-                          ],
-                        ),
-                      ),
+                // Everyone in the box, down the right side.
+                if (_guests != null)
+                  LiveGuestStrip(
+                    controller: _guests!,
+                    top: 120,
+                    videoFor: (g) => agora.remoteView(g.uid),
+                    onTap: (g) => showHostGuestActions(
+                      context,
+                      livestreamId: _guests!.numericId,
+                      guest: g,
+                      onChanged: _guests!.refresh,
                     ),
                   ),
-                  _buildGuestVideoFloatingPanel(
-                    state.activeGuestName ?? 'Guest',
-                  ),
-                ],
 
                 // Tap-to-recover button — appears when _cameraBlack is true.
                 if (_cameraBlack)
@@ -1286,119 +1269,6 @@ class _LiveHostPageState extends State<LiveHostPage>
           },
         );
       },
-    );
-  }
-
-  Widget _buildGuestVideoFloatingPanel(String guestName) {
-    final double panelWidth = MediaQuery.of(context).size.width * 0.40;
-    final double panelHeight = panelWidth * 1.77;
-
-    return _DraggableGuestVideoPanel(
-      width: panelWidth,
-      height: panelHeight,
-      // Reactive to remoteUsers so panel rebuilds when guest toggles video/audio.
-      child: ValueListenableBuilder<Map<int, RemoteUserState>>(
-        valueListenable: agora.remoteUsers,
-        builder: (_, users, __) {
-          final uid = agora.primaryRemoteUid.value;
-          final guestState = uid != null ? users[uid] : null;
-          final hasVideo = guestState?.hasVideo ?? false;
-          final hasAudio = guestState?.hasAudio ?? false;
-
-          return Stack(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
-                    width: 1,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    children: [
-                      // Remote view always in tree — Agora renders as soon
-                      // as frames arrive without surface teardown on toggle.
-                      agora.primaryRemoteView(),
-                      // "Camera off" overlay on top when guest has no video.
-                      if (!hasVideo)
-                        Container(
-                          color: Colors.black,
-                          child: const Center(
-                            child: Icon(
-                              Icons.videocam_off,
-                              size: 50,
-                              color: Colors.white54,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.person_rounded,
-                        color: Colors.orangeAccent,
-                        size: 12,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        guestName.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    hasAudio ? Icons.mic_rounded : Icons.mic_off_rounded,
-                    color: hasAudio ? Colors.greenAccent : Colors.redAccent,
-                    size: 12,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
     );
   }
 }
@@ -1741,107 +1611,6 @@ class _SettingsMenuItem extends StatelessWidget {
 }
 
 /// ===== Request Card =====
-class _JoinRequestCard extends StatelessWidget {
-  final LiveJoinRequest req;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-
-  const _JoinRequestCard({
-    required this.req,
-    required this.onAccept,
-    required this.onDecline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _Glass(
-      radius: 18,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      color: const Color(0xFF070B12).withOpacity(.92),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundImage:
-                    (req.avatarUrl.isNotEmpty &&
-                        req.avatarUrl.startsWith('http'))
-                    ? NetworkImage(req.avatarUrl)
-                    : const AssetImage('assets/images/logo.png')
-                          as ImageProvider,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      req.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF2ECC71),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Ambassador',
-                          style: TextStyle(
-                            color: Color(0xFF7ED957),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'wants to join your livestream',
-            style: TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _CTAButton(
-                  label: 'Accept',
-                  bg: const Color(0xFF2ECC71),
-                  onTap: onAccept,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _CTAButton(
-                  label: 'Decline',
-                  bg: const Color(0xFFE53935),
-                  onTap: onDecline,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _CTAButton extends StatelessWidget {
   final String label;
@@ -3604,113 +3373,7 @@ class _CancelPremiumSheet extends StatelessWidget {
   }
 }
 
-class _DraggableGuestVideoPanel extends StatefulWidget {
-  final double width;
-  final double height;
-  final Widget child;
-
-  const _DraggableGuestVideoPanel({
-    required this.width,
-    required this.height,
-    required this.child,
-  });
-
-  @override
-  _DraggableGuestVideoPanelState createState() =>
-      _DraggableGuestVideoPanelState();
-}
-
 // Add this new StatefulWidget class at the end of the file (before the last closing bracket)
-class _DraggableGuestVideoPanelState extends State<_DraggableGuestVideoPanel> {
-  // Use nullable Offset — late non-nullable cannot be null-checked at build time
-  Offset? _position;
-  late Size _screenSize;
-  late double _panelWidth;
-  late double _panelHeight;
-
-  @override
-  void initState() {
-    super.initState();
-    _panelWidth = widget.width;
-    _panelHeight = widget.height;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _screenSize = MediaQuery.of(context).size;
-      _position = Offset(
-        _screenSize.width - _panelWidth - 16,
-        _screenSize.height -
-            _panelHeight -
-            100 -
-            MediaQuery.of(context).padding.bottom,
-      );
-      _position = _clampPosition(_position!);
-
-      if (mounted) setState(() {});
-    });
-  }
-
-  Offset _clampPosition(Offset position) {
-    double x = position.dx;
-    double y = position.dy;
-
-    const double padding = 8;
-    x = x.clamp(padding, _screenSize.width - _panelWidth - padding);
-
-    final double topPadding = MediaQuery.of(context).padding.top + 100;
-    final double bottomPadding = 180 + MediaQuery.of(context).padding.bottom;
-    y = y.clamp(topPadding, _screenSize.height - _panelHeight - bottomPadding);
-
-    return Offset(x, y);
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (_position == null) return;
-    setState(() {
-      _position = _clampPosition(_position! + details.delta);
-    });
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (_position == null) return;
-    final double screenCenterX = _screenSize.width / 2;
-    setState(() {
-      if (_position!.dx < screenCenterX - _panelWidth / 2) {
-        _position = Offset(8, _position!.dy);
-      } else {
-        _position = Offset(_screenSize.width - _panelWidth - 8, _position!.dy);
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Position not yet initialised — show in default corner
-    if (_position == null) {
-      return Positioned(
-        right: 16,
-        bottom: 100,
-        width: _panelWidth,
-        height: _panelHeight,
-        child: widget.child,
-      );
-    }
-
-    return Positioned(
-      left: _position!.dx,
-      top: _position!.dy,
-      width: _panelWidth,
-      height: _panelHeight,
-      child: GestureDetector(
-        onPanUpdate: _onPanUpdate,
-        onPanEnd: _onPanEnd,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.move,
-          child: widget.child,
-        ),
-      ),
-    );
-  }
-}
 
 // ═══════════════════════════════════════════════
 // CHANGED: _CameraRecoveryButton (new class)

@@ -103,7 +103,16 @@ class _CreateEditClubFormState extends State<_CreateEditClubForm> {
                           isPrivate: isPrivate,
                         );
                       }
-                      if (mounted) Navigator.pop(context);
+                      if (mounted) {
+                        if (widget.club == null) {
+                          showCoinsPaid(
+                            context,
+                            kClubOpeningFeeCoins,
+                            'your club is created',
+                          );
+                        }
+                        Navigator.pop(context);
+                      }
                     } catch (e) {
                       if (mounted) await showCoinError(context, e);
                     } finally {

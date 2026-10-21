@@ -23,6 +23,8 @@ import 'package:moonlight/features/live_viewer/data/repositories/viewer_reposito
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/glass.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_guest_strip.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/follow_prompt_overlay.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/gift_overlay.dart';
@@ -67,6 +69,11 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   bool _isProcessingPayment = false;
   String? _paymentError;
 
+  late final LiveGuestsController _guests = LiveGuestsController(
+    livestreamParam: widget.repository.livestreamParam,
+    numericId: widget.repository.livestreamIdNumeric,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -86,6 +93,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   void dispose() {
     ScreenGuard.release();
     _commentCtrl.dispose();
+    _guests.dispose();
     super.dispose();
   }
 
@@ -230,6 +238,17 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                       pool: widget.pool,
                       channelId: widget.channelId,
                     ),
+
+                    // The other guests in the box (your own camera is in the
+                    // split view above).
+                    if (!state.requiresPremiumPayment)
+                      LiveGuestStrip(
+                        controller: _guests,
+                        hideUuid: sl<CurrentUserService>().getCurrentUserId(),
+                        top: 150,
+                        videoFor: (g) =>
+                            sl<AgoraViewerService>().remoteVideoFor(g.uid),
+                      ),
 
                     if (!_immersive && !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),

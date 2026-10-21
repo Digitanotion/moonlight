@@ -193,7 +193,6 @@ class ClubRoomRtc with ChangeNotifier {
     if (_publisher && startMuted) {
       await e.muteLocalAudioStream(true);
     }
-    if (video && !_watch) await e.muteAllRemoteVideoStreams(true);
     _notify();
   }
 
@@ -250,26 +249,6 @@ class ClubRoomRtc with ChangeNotifier {
     _notify();
   }
 
-  bool _watch = true;
-
-  /// Viewers who haven't raised a hand only hear the room: stop receiving
-  /// all remote video (saves their data too). Premium-hidden cameras stay
-  /// hidden when video is turned back on.
-  Future<void> setWatchVideo(bool watch) async {
-    if (!_video || watch == _watch) return;
-    _watch = watch;
-    final e = _engine;
-    if (e != null) {
-      await e.muteAllRemoteVideoStreams(!watch);
-      if (watch) {
-        for (final uid in _hiddenVideo) {
-          await e.muteRemoteVideoStream(uid: uid, mute: true);
-        }
-      }
-    }
-    _notify();
-  }
-
   /// Premium gating: hide these remote cameras (audio still plays).
   Future<void> setHiddenVideo(Set<int> uids) async {
     if (!_video) return;
@@ -283,10 +262,8 @@ class ClubRoomRtc with ChangeNotifier {
     for (final uid in toHide) {
       await e.muteRemoteVideoStream(uid: uid, mute: true);
     }
-    if (_watch) {
-      for (final uid in toShow) {
-        await e.muteRemoteVideoStream(uid: uid, mute: false);
-      }
+    for (final uid in toShow) {
+      await e.muteRemoteVideoStream(uid: uid, mute: false);
     }
     _notify();
   }

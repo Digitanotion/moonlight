@@ -342,9 +342,15 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
     try {
       // Mute ALL incoming remote audio — stops viewer hearing host/guests.
       await agoraViewerService?.muteAllRemoteAudio(true);
-      // Also mute the viewer's own outgoing streams (they are audience).
-      await agoraViewerService?.setMicEnabled(false);
-      await agoraViewerService?.setCamEnabled(false);
+      // Viewers: also mute their own outgoing streams (they are audience).
+      // Guests stay in the box with camera and mic on — they just can't
+      // watch the premium stream until they subscribe.
+      final inBox =
+          state.currentRole == 'guest' || state.currentRole == 'cohost';
+      if (!inBox) {
+        await agoraViewerService?.setMicEnabled(false);
+        await agoraViewerService?.setCamEnabled(false);
+      }
     } catch (_) {}
     _safeEmit(
       emit,

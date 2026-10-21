@@ -70,6 +70,7 @@ class _CreateClubViewState extends State<_CreateClubView> {
         }
 
         if (state.createdClub != null) {
+          showCoinsPaid(context, kClubOpeningFeeCoins, 'your club is created');
           Navigator.pushReplacementNamed(
             context,
             RouteNames.clubProfile,
