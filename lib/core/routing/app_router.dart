@@ -65,7 +65,8 @@ import 'package:moonlight/features/live_viewer/data/repositories/viewer_reposito
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_screen.dart';
-import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_from_notification.dart';
+import 'package:moonlight/core/services/deep_link_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_pager.dart';
 import 'package:moonlight/features/live_viewer/presentation/screens/live_viewer_orchestrator.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/live_stream_service.dart';
 import 'package:moonlight/features/live_viewer/presentation/services/network_monitor_service.dart';
@@ -396,31 +397,29 @@ class AppRouter {
           final premiumFee = a['premiumFee'] as int? ?? 0;
 
           if (id == null || uuid == null || channel == null) {
+            // Only the stream's id (e.g. an in-app notification): look it
+            // up, then open it in the live pager.
+            final ref = (uuid ?? a['id'] ?? a['livestream_id'] ?? '')
+                .toString();
             return MaterialPageRoute(
-              builder: (context) => const Scaffold(
-                body: Center(
-                  child: Text('Unable to open live (missing id/uuid/channel).'),
-                ),
-              ),
+              builder: (context) => ref.isEmpty
+                  ? const Scaffold(
+                      body: Center(child: Text('Unable to open live.')),
+                    )
+                  : LiveOpener(ref: ref),
+              settings: settings,
             );
           }
 
-          final routeArgs = {
+          // Same player as the home feed (engine pool, fast join, PiP).
+          return LiveViewerPager.routeForArgs({
             ...a,
             'id': id,
             'uuid': uuid,
             'channel': channel,
             'isPremium': isPremium,
             'premiumFee': premiumFee,
-          };
-
-          // LiveViewerFromNotification builds the repo AND provides the
-          // ViewerBloc — LiveViewerScreen.create() alone does not, so opening
-          // it directly here crashed with "Could not find Provider<ViewerBloc>".
-          return MaterialPageRoute(
-            builder: (context) => LiveViewerFromNotification(args: routeArgs),
-            settings: settings,
-          );
+          });
         }
 
       case RouteNames.createPost:

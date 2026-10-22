@@ -489,6 +489,7 @@ class AgoraEnginePool {
           publishMicrophoneTrack: false,
         ),
       );
+      unawaited(LiveAudioMeter.instance.watchConnection(_engine, connection));
 
       // await _engine.setRemoteDefaultVideoStreamTypeEx(
       //   streamType: slot.currentPosition == SlotPosition.current

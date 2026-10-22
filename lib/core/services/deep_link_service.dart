@@ -128,7 +128,7 @@ class DeepLinkService {
 
     switch (kind) {
       case 'live':
-        await _openLive(value);
+        await openLive(value);
         break;
       case 'post':
         _push(RouteNames.postView, {'postId': value});
@@ -136,7 +136,10 @@ class DeepLinkService {
     }
   }
 
-  Future<void> _openLive(String ref) async {
+  /// Open a live by uuid or id in the regular live pager — the same
+  /// player as the home feed. Fetches the stream's details first, so a
+  /// notification only needs the stream's id.
+  Future<void> openLive(String ref) async {
     if (ref.isEmpty) return;
 
     Map<String, dynamic> data;
@@ -195,7 +198,7 @@ class DeepLinkService {
     final nav = MyApp.navigatorKey.currentState;
     if (nav == null) {
       // App-ready fired but the navigator isn't attached yet — retry briefly.
-      Future.delayed(const Duration(milliseconds: 400), () => _openLive(ref));
+      Future.delayed(const Duration(milliseconds: 400), () => openLive(ref));
       return;
     }
     nav.push(LiveViewerPager.route(items: [item], initialIndex: 0));
@@ -218,4 +221,30 @@ class DeepLinkService {
     if (ctx == null) return;
     ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(SnackBar(content: Text(msg)));
   }
+}
+
+/// Route target for "open this live" when we only have its uuid/id (e.g. an
+/// in-app notification): closes itself and opens the live pager.
+class LiveOpener extends StatefulWidget {
+  final String ref;
+  const LiveOpener({super.key, required this.ref});
+
+  @override
+  State<LiveOpener> createState() => _LiveOpenerState();
+}
+
+class _LiveOpenerState extends State<LiveOpener> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      DeepLinkService.instance.openLive(widget.ref);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(backgroundColor: Colors.black);
 }

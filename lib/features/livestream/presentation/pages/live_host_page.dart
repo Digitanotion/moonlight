@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/agora_service.dart';
@@ -1277,6 +1278,11 @@ class _LiveHostPageState extends State<LiveHostPage>
                           main: hostCamera,
                           mainLabel: 'You',
                           mainUid: 0,
+                          mainAvatar:
+                              sl<CurrentUserService>().currentUser?.avatarUrl,
+                          mainAvatarName:
+                              sl<CurrentUserService>().currentUser?.fullname ??
+                              sl<CurrentUserService>().currentUser?.userSlug,
                           guests: _guests!,
                           top: MediaQuery.of(context).padding.top + 64,
                           videoFor: (g) => agora.remoteView(g.uid),

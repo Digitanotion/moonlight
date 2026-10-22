@@ -82,6 +82,32 @@ class LiveViewerPager extends StatefulWidget {
     );
   }
 
+  /// The pager for one stream described by route args (id, uuid, channel,
+  /// hostName, hostAvatar, title, …) — so every way into a live uses the
+  /// same player (the old standalone screen never started the engine).
+  static Route<void> routeForArgs(Map<String, dynamic> a) {
+    final hostName = (a['hostName'] ?? '').toString().replaceFirst('@', '');
+    final avatar = (a['hostAvatar'] ?? '').toString();
+    final item = LiveItem(
+      id: a['id'] as int? ?? 0,
+      uuid: (a['uuid'] ?? '').toString(),
+      channel: (a['channel'] ?? '').toString(),
+      coverUrl: null,
+      hostAvatarUrl: avatar.isEmpty ? null : avatar,
+      handle: hostName.isNotEmpty ? '@$hostName' : '@host',
+      role: 'Host',
+      countryIso2: null,
+      countryName: null,
+      viewers: 0,
+      title: a['title']?.toString(),
+      startedAt: a['startedAt']?.toString(),
+      hostUuid: a['hostUuid']?.toString(),
+      isPremium: a['isPremium'] as int? ?? 0,
+      premiumFee: a['premiumFee'] as int? ?? 0,
+    );
+    return route(items: [item], initialIndex: 0, allArgs: [a]);
+  }
+
   @override
   State<LiveViewerPager> createState() => _LiveViewerPagerState();
 }
@@ -137,11 +163,8 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
     // once (instead of waiting for the next swipe to rejoin the slot).
     sl<AgoraViewerService>().rejoinCurrentAsAudience = () =>
         _pool.refreshCurrentSlot(
-          () => _resolver.resolve(
-            widget.items,
-            _currentPage,
-            forceRefresh: true,
-          ),
+          () =>
+              _resolver.resolve(widget.items, _currentPage, forceRefresh: true),
         );
 
     // Build repos (still needed for all non-Agora concerns).
@@ -430,6 +453,22 @@ class _LiveViewerPagerState extends State<LiveViewerPager>
               onPremiumUnlocked: () => _pool.refreshCurrentSlot(
                 () => _resolver.resolve(widget.items, i, forceRefresh: true),
               ),
+              onJoinStuck: () async {
+                // Only the page on screen may rejoin the current slot, and
+                // not when it's already connected to the host (video just
+                // slow, or the host's camera is off).
+                if (_currentPage != i) return;
+                final slot = _pool.slotFor(SlotPosition.current);
+                if (slot != null &&
+                    slot.state == SlotJoinState.joined &&
+                    slot.channelId == widget.items[i].channel &&
+                    slot.hostUid.value != null) {
+                  return;
+                }
+                await _pool.refreshCurrentSlot(
+                  () => _resolver.resolve(widget.items, i, forceRefresh: true),
+                );
+              },
             ),
           );
         },

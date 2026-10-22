@@ -13,6 +13,8 @@
 // detection, fade placeholder, error screens — is byte-for-byte identical
 // to the original. No functional changes to any of those paths.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -51,6 +53,11 @@ class LiveViewerScreen extends StatefulWidget {
   /// the backend until payment, and the video view is only mounted now.
   final Future<void> Function()? onPremiumUnlocked;
 
+  /// Called when the stream hasn't shown up after a few seconds, so the
+  /// pager can reconnect this stream (fresh token + rejoin). The pager
+  /// ignores it unless this page is the one on screen.
+  final Future<void> Function()? onJoinStuck;
+
   const LiveViewerScreen({
     super.key,
     required this.repository,
@@ -58,6 +65,7 @@ class LiveViewerScreen extends StatefulWidget {
     this.pool, // ← NEW (optional)
     this.channelId, // ← NEW (optional)
     this.onPremiumUnlocked,
+    this.onJoinStuck,
   });
 
   factory LiveViewerScreen.create({
@@ -100,6 +108,33 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
   /// opening under the chat field) snapping the full "Joining stream…"
   /// placeholder back over a video that is already playing.
   bool _firstFrameSeen = false;
+
+  /// Never leave the viewer staring at "Joining…": reconnect if the video
+  /// hasn't come, and drop the cover after a while regardless (host camera
+  /// off, slow network — the live UI and chat are still useful).
+  Timer? _joinWatchdog;
+  static const _retryAtSeconds = {6, 14};
+  static const _dropCoverAtSeconds = 10;
+
+  void _startJoinWatchdog() {
+    _joinWatchdog?.cancel();
+    var seconds = 0;
+    _joinWatchdog = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || _firstFrameSeen) {
+        t.cancel();
+        return;
+      }
+      seconds++;
+      if (_retryAtSeconds.contains(seconds)) {
+        debugPrint('⏱️ [Screen] no video after ${seconds}s — reconnecting');
+        widget.onJoinStuck?.call();
+      }
+      if (seconds == _dropCoverAtSeconds) notifyVideoReady();
+      if (seconds > _retryAtSeconds.reduce((a, b) => a > b ? a : b)) {
+        t.cancel();
+      }
+    });
+  }
 
   late PremiumVerificationState _premiumState;
   late bool _isPremiumStream;
@@ -306,6 +341,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
 
   @override
   void dispose() {
+    _joinWatchdog?.cancel();
     ScreenGuard.release();
     if (widget.pool == null) PipService.instance.release();
     _fadeController?.dispose();
@@ -368,6 +404,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen>
           _startedBloc = bloc;
           _fadeController?.reset();
           _videoReadyProgress.value = 0;
+          _startJoinWatchdog();
         }
       });
     }

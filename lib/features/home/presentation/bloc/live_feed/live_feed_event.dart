@@ -15,6 +15,11 @@ class LiveFeedLoadMore extends LiveFeedEvent {}
 
 class LiveFeedRefresh extends LiveFeedEvent {}
 
+/// Re-fetch the first page in the background — no shimmer, the grid just
+/// updates. Used for periodic refresh, app resume and retry after a failed
+/// load.
+class LiveFeedSilentRefresh extends LiveFeedEvent {}
+
 class LiveFeedCountryChanged extends LiveFeedEvent {
   final String? countryIso; // null => All Countries
   LiveFeedCountryChanged(this.countryIso);

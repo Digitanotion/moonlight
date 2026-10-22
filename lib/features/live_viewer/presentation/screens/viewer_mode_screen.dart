@@ -238,6 +238,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                             : HostVideoContainer(repository: widget.repository),
                         mainLabel: state.host?.name ?? 'Host',
                         mainUid: sl<AgoraViewerService>().currentHostUid,
+                        mainAvatar: state.host?.avatarUrl,
                         guests: _guests,
                         showGuests: !_pip && !state.requiresPremiumPayment,
                         videoFor: (g) =>

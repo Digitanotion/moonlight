@@ -1,6 +1,8 @@
 // lib/core/services/agora_viewer_service.dart
 
 import 'dart:async';
+
+import 'package:moonlight/core/services/live_audio_meter.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
@@ -446,6 +448,9 @@ class AgoraViewerService with ChangeNotifier {
         ),
       );
 
+      unawaited(
+        LiveAudioMeter.instance.watchConnection(engine, _coHostConnection!),
+      );
       debugPrint(
         '✅ [Viewer] Co-host joined as broadcaster: ch=$targetChannel uid=$publishUid',
       );
@@ -506,7 +511,14 @@ class AgoraViewerService with ChangeNotifier {
   /// sat on a black host video until the next swipe rejoined the slot.
   Future<void> Function()? rejoinCurrentAsAudience;
 
-  Future<void> demoteToAudience() async {
+  Future<void>? _demoting;
+
+  /// Back to plain watching. Single-flight: the role-change event, the
+  /// screen and error recovery can all ask at once.
+  Future<void> demoteToAudience() =>
+      _demoting ??= _demote().whenComplete(() => _demoting = null);
+
+  Future<void> _demote() async {
     try {
       debugPrint('🔄 [Viewer] Starting demotion to audience...');
       _connectionState.value = ConnectionState.connecting;
@@ -533,14 +545,7 @@ class AgoraViewerService with ChangeNotifier {
       // a fresh joinChannelEx on the next token fetch.
       _pool.slotFor(SlotPosition.current)?.resetForNewJoin();
       final rejoin = rejoinCurrentAsAudience;
-      if (rejoin != null) {
-        // Fire now — the viewer should see the host again immediately.
-        unawaited(
-          rejoin().catchError((Object e) {
-            debugPrint('⚠️ [Viewer] audience rejoin failed: $e');
-          }),
-        );
-      }
+      if (rejoin != null) unawaited(_rejoinAsAudience(rejoin));
 
       debugPrint('✅ [Viewer] Successfully demoted to audience');
       _connectionState.value = ConnectionState.connected;
@@ -550,6 +555,34 @@ class AgoraViewerService with ChangeNotifier {
       debugPrint('Stack: $stack');
       _connectionState.value = ConnectionState.failed;
       rethrow;
+    }
+  }
+
+  /// Watch the stream again after leaving the box. The box connection and
+  /// the watching connection share a uid on the same channel, so:
+  ///  • wait for the box connection to finish closing first — its late
+  ///    "left" callback used to be taken for the NEW connection leaving,
+  ///    and the video spun forever;
+  ///  • then make sure we really got the host back, and retry if not.
+  Future<void> _rejoinAsAudience(Future<void> Function() rejoin) async {
+    await Future.delayed(const Duration(milliseconds: 900));
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      if (_isCoHost) return; // promoted again meanwhile
+      try {
+        await rejoin();
+      } catch (e) {
+        debugPrint('⚠️ [Viewer] audience rejoin #$attempt failed: $e');
+      }
+      await Future.delayed(Duration(seconds: 3 + attempt * 2));
+      if (_isCoHost) return;
+      final slot = _pool.slotFor(SlotPosition.current);
+      if (slot != null &&
+          slot.state == SlotJoinState.joined &&
+          slot.hostUid.value != null) {
+        debugPrint('✅ [Viewer] watching again (attempt $attempt)');
+        return;
+      }
+      debugPrint('🔁 [Viewer] host not back after rejoin #$attempt — retrying');
     }
   }
 
@@ -729,7 +762,8 @@ class AgoraViewerService with ChangeNotifier {
   /// guests in the box (several at once). Works in pool and standalone mode.
   Widget remoteVideoFor(int uid) {
     final conn =
-        _standaloneConnection ?? _pool.slotFor(SlotPosition.current)?.connection;
+        _standaloneConnection ??
+        _pool.slotFor(SlotPosition.current)?.connection;
     if (conn == null) return buildBlackPlaceholder('');
     return AgoraVideoView(
       key: ValueKey('remote_${conn.channelId}_$uid'),

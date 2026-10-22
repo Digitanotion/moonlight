@@ -24,6 +24,14 @@ class LiveAudioMeter extends ChangeNotifier {
   final Map<int, bool> _speaking = {};
   final Map<int, bool> _remoteMuted = {};
 
+  /// Cameras switched off (uid 0 = my own, as the host). Tiles show a
+  /// "camera off" cover instead of the frozen last frame.
+  final Set<int> _camOff = {};
+
+  /// People whose call connection dropped (left the box, app died). The
+  /// box hides them at once instead of waiting for the server's list.
+  final Set<int> _gone = {};
+
   /// Keep someone "speaking" through the short gaps between words.
   static const _holdMs = 700;
 
@@ -34,8 +42,25 @@ class LiveAudioMeter extends ChangeNotifier {
       RtcEngineEventHandler(
         // Separate reports arrive for my mic (uid 0) and for everyone
         // else — each only updates the people in it.
-        onAudioVolumeIndication: (_, speakers, _, _) => _onVolumes(speakers),
+        onAudioVolumeIndication: (conn, speakers, _, _) =>
+            _onVolumes(speakers, localUid: conn.localUid),
         onUserMuteAudio: (_, uid, muted) => _setMuted(uid, muted),
+        onUserJoined: (_, uid, _) {
+          if (_gone.remove(uid)) notifyListeners();
+        },
+        onUserMuteVideo: (_, uid, muted) => setCamOff(uid, muted),
+        onRemoteVideoStateChanged: (_, uid, state, reason, _) {
+          if (reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted ||
+              reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonRemoteOffline) {
+            setCamOff(uid, true);
+          } else if (state == RemoteVideoState.remoteVideoStateDecoding ||
+              reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonRemoteUnmuted) {
+            setCamOff(uid, false);
+          }
+        },
         onRemoteAudioStateChanged: (_, uid, state, reason, _) {
           if (reason == RemoteAudioStateReason.remoteAudioReasonRemoteMuted ||
               reason == RemoteAudioStateReason.remoteAudioReasonRemoteOffline) {
@@ -50,6 +75,7 @@ class LiveAudioMeter extends ChangeNotifier {
           _speaking.remove(uid);
           _lastLoudMs.remove(uid);
           _levels[uid]?.value = 0;
+          _gone.add(uid);
           notifyListeners();
         },
       ),
@@ -63,6 +89,40 @@ class LiveAudioMeter extends ChangeNotifier {
     } catch (e) {
       debugPrint('[LiveAudioMeter] volume indication failed: $e');
     }
+  }
+
+  /// Volume reports for one joinChannelEx connection — the engine-wide
+  /// switch above doesn't cover those, so without this a guest never sees
+  /// their own wave.
+  Future<void> watchConnection(RtcEngineEx engine, RtcConnection c) async {
+    try {
+      await engine.enableAudioVolumeIndicationEx(
+        interval: 250,
+        smooth: 3,
+        reportVad: true,
+        connection: c,
+      );
+    } catch (e) {
+      debugPrint('[LiveAudioMeter] volume indication (ex) failed: $e');
+    }
+  }
+
+  /// Their camera is off right now.
+  bool isCamOff(int uid) => _camOff.contains(uid);
+
+  /// Record a camera turning off/on (also used for my own camera as host).
+  void setCamOff(int uid, bool off) {
+    final changed = off ? _camOff.add(uid) : _camOff.remove(uid);
+    if (changed) notifyListeners();
+  }
+
+  /// Their call connection dropped (and hasn't come back).
+  bool isGone(int uid) => _gone.contains(uid);
+
+  @visibleForTesting
+  void setGoneForTest(int uid, bool gone) {
+    gone ? _gone.add(uid) : _gone.remove(uid);
+    notifyListeners();
   }
 
   /// How loud [uid] is right now, 0–1.
@@ -85,11 +145,24 @@ class LiveAudioMeter extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onVolumes(List<AudioVolumeInfo> speakers) {
+  // My mic is reported once per call connection. As a guest the shared
+  // engine also holds silent watch-only connections (the streams above and
+  // below in the feed), whose "me = 0" reports would wipe out the real one.
+  int _localLoudVol = 0;
+  int _localLoudMs = 0;
+
+  void _onVolumes(List<AudioVolumeInfo> speakers, {int? localUid}) {
     final now = DateTime.now().millisecondsSinceEpoch;
     for (final sp in speakers) {
-      final uid = sp.uid ?? 0;
+      var uid = sp.uid ?? 0;
+      // Some connections label my own report with my uid instead of 0.
+      if (localUid != null && localUid != 0 && uid == localUid) uid = 0;
       final vol = sp.volume ?? 0; // 0–255
+      if (uid == 0) {
+        if (vol < _localLoudVol && now - _localLoudMs < 400) continue;
+        _localLoudVol = vol;
+        _localLoudMs = now;
+      }
       _lastHeardMs[uid] = now;
       final loud = vol > 12 || (uid == 0 && (sp.vad ?? 0) == 1 && vol > 4);
       if (loud) _lastLoudMs[uid] = now;
@@ -114,8 +187,8 @@ class LiveAudioMeter extends ChangeNotifier {
   }
 
   @visibleForTesting
-  void feedVolumesForTest(List<AudioVolumeInfo> speakers) =>
-      _onVolumes(speakers);
+  void feedVolumesForTest(List<AudioVolumeInfo> speakers, {int? localUid}) =>
+      _onVolumes(speakers, localUid: localUid);
 
   @visibleForTesting
   void setMutedForTest(int uid, bool muted) => _setMuted(uid, muted);
@@ -126,6 +199,10 @@ class LiveAudioMeter extends ChangeNotifier {
     _lastLoudMs.clear();
     _lastHeardMs.clear();
     _remoteMuted.clear();
+    _gone.clear();
+    _camOff.clear();
+    _localLoudVol = 0;
+    _localLoudMs = 0;
     for (final n in _levels.values) {
       n.value = 0;
     }

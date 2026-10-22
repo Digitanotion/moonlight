@@ -20,6 +20,8 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/agora_engine_pool.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
+import 'package:moonlight/core/services/mini_player_controller.dart';
+import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
@@ -72,6 +74,36 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   bool _isProcessingPayment = false;
   String? _paymentError;
 
+  /// In the OS PiP window (or the in-app mini window) only the stream
+  /// shows — no chat, buttons or tiles, like every major platform.
+  bool _pip =
+      PipService.instance.isInPipMode.value ||
+      MiniPlayerController.instance.minimized;
+  void _onPipChanged() {
+    final v =
+        PipService.instance.isInPipMode.value ||
+        MiniPlayerController.instance.minimized;
+    if (mounted && v != _pip) setState(() => _pip = v);
+  }
+
+  /// Where you dragged the mic/cam pill (null = default spot, bottom right).
+  Offset? _controlsPos;
+  bool _draggingControls = false;
+  static const _controlsSize = Size(52, 166);
+
+  Offset _defaultControlsPos(Size screen) => Offset(
+    screen.width - _controlsSize.width - 12,
+    screen.height - _controlsSize.height - 84,
+  );
+
+  Offset _clampControls(Offset p, Size screen, EdgeInsets pad) => Offset(
+    p.dx.clamp(8.0, screen.width - _controlsSize.width - 8),
+    p.dy.clamp(
+      pad.top + 8,
+      screen.height - _controlsSize.height - pad.bottom - 8,
+    ),
+  );
+
   late final LiveGuestsController _guests = LiveGuestsController(
     livestreamParam: widget.repository.livestreamParam,
     numericId: widget.repository.livestreamIdNumeric,
@@ -84,6 +116,8 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
     // a streamer." — same protection as ViewerModeScreen, since this
     // is also a livestream-viewing screen (just for guest/co-host role).
     ScreenGuard.acquire();
+    PipService.instance.isInPipMode.addListener(_onPipChanged);
+    MiniPlayerController.instance.addListener(_onPipChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<ViewerBloc>();
       if (bloc.state.giftCatalog.isEmpty) {
@@ -95,6 +129,8 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
   @override
   void dispose() {
     ScreenGuard.release();
+    PipService.instance.isInPipMode.removeListener(_onPipChanged);
+    MiniPlayerController.instance.removeListener(_onPipChanged);
     _commentCtrl.dispose();
     _guests.dispose();
     super.dispose();
@@ -246,7 +282,7 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                 if (v < -300) setState(() => _immersive = false);
               },
               child: SafeArea(
-                top: true,
+                top: !_pip,
                 bottom: false,
                 child: Stack(
                   children: [
@@ -259,11 +295,12 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                             : sl<AgoraViewerService>().buildHostVideo(),
                         mainLabel: state.host?.name ?? 'Host',
                         mainUid: sl<AgoraViewerService>().currentHostUid,
+                        mainAvatar: state.host?.avatarUrl,
                         guests: _guests,
                         hideUuid: sl<CurrentUserService>().getCurrentUserId(),
-                        showGuests: !state.requiresPremiumPayment,
+                        showGuests: !_pip && !state.requiresPremiumPayment,
                         top: MediaQuery.of(context).padding.top + 64,
-                        leadingTile: isCurrentUserGuest
+                        leadingTile: isCurrentUserGuest && !_pip
                             ? (w, h) => const _SelfTile()
                             : null,
                         videoFor: (g) =>
@@ -271,7 +308,9 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
                       ),
                     ),
 
-                    if (!_immersive && !state.requiresPremiumPayment) ...[
+                    if (!_pip &&
+                        !_immersive &&
+                        !state.requiresPremiumPayment) ...[
                       const TopStatusBar(),
                       const FollowPromptOverlay(),
                       if (state.isStreamUnstable) const _UnstableBanner(),
@@ -325,17 +364,66 @@ class _GuestModeScreenState extends State<GuestModeScreen> {
 
                     // Controls sit ABOVE the chat (drawn after it) while you're in the box.
                     if (isCurrentUserGuest &&
+                        !_pip &&
                         !_immersive &&
                         !state.requiresPremiumPayment)
-                      Positioned(
-                        right: 12,
-                        bottom: 84,
-                        child: _BoxControls(
-                          onMore: () => _openControlSheet(context),
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final mq = MediaQuery.of(context);
+                          final pos = _clampControls(
+                            _controlsPos ?? _defaultControlsPos(mq.size),
+                            mq.size,
+                            mq.padding,
+                          );
+                          // Drag it anywhere; on release it glides to the
+                          // nearest side so it never sits over the video.
+                          return AnimatedPositioned(
+                            duration: _draggingControls
+                                ? Duration.zero
+                                : const Duration(milliseconds: 260),
+                            curve: Curves.easeOutCubic,
+                            left: pos.dx,
+                            top: pos.dy,
+                            child: GestureDetector(
+                              onPanStart: (_) => setState(() {
+                                _draggingControls = true;
+                                _controlsPos = pos;
+                              }),
+                              onPanUpdate: (d) => setState(
+                                () => _controlsPos = _clampControls(
+                                  (_controlsPos ?? pos) + d.delta,
+                                  mq.size,
+                                  mq.padding,
+                                ),
+                              ),
+                              onPanEnd: (_) => setState(() {
+                                _draggingControls = false;
+                                final p = _controlsPos ?? pos;
+                                final toLeft =
+                                    p.dx + _controlsSize.width / 2 <
+                                    mq.size.width / 2;
+                                _controlsPos = Offset(
+                                  toLeft
+                                      ? 12
+                                      : mq.size.width -
+                                            _controlsSize.width -
+                                            12,
+                                  p.dy,
+                                );
+                              }),
+                              child: AnimatedScale(
+                                scale: _draggingControls ? 1.06 : 1,
+                                duration: const Duration(milliseconds: 150),
+                                child: _BoxControls(
+                                  onMore: () => _openControlSheet(context),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
 
-                    if (state.requiresPremiumPayment)
+                    if (state.requiresPremiumPayment && !_pip)
                       Positioned.fill(
                         child: PremiumOverlay(
                           fee: state.premiumEntryFeeCoins,
@@ -620,14 +708,28 @@ class _SelfTileState extends State<_SelfTile> {
             // Preview stays in the tree; muting just covers it.
             if (_preview case final p?) p,
             if (camOff)
-              const ColoredBox(
-                color: Color(0xE61B1446),
-                child: Center(
-                  child: Icon(
-                    Icons.videocam_off_rounded,
-                    color: Colors.white54,
-                  ),
-                ),
+              Builder(
+                builder: (context) {
+                  final me = sl<CurrentUserService>().currentUser;
+                  return DecoratedBox(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFF1B1446), Colors.black],
+                      ),
+                    ),
+                    child: LayoutBuilder(
+                      builder: (_, c) => Center(
+                        child: LiveAvatarCircle(
+                          name: me?.fullname ?? me?.userSlug ?? 'You',
+                          avatar: me?.avatarUrl,
+                          size: c.biggest.shortestSide * 0.5,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             Positioned(
               left: 0,
@@ -729,6 +831,16 @@ class _BoxControlsState extends State<_BoxControls> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Grip: hints that the pill can be dragged.
+              Container(
+                width: 16,
+                height: 3,
+                margin: const EdgeInsets.only(top: 3, bottom: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white38,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               _btn(
                 micOff ? Icons.mic_off_rounded : Icons.mic_rounded,
                 () => _agora.setMicEnabled(micOff),

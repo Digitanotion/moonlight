@@ -49,6 +49,11 @@ class PoolVideoView extends StatefulWidget {
 
 class _PoolVideoViewState extends State<PoolVideoView> {
   StreamSubscription<SlotEvent>? _sub;
+
+  /// Self-heal: while there's no picture, re-read the slot's real state
+  /// every second — a missed or out-of-order event (e.g. leaving the box)
+  /// can never leave the spinner up for good.
+  Timer? _heal;
   VideoViewController? _controller;
   bool _hasVideo = false;
   bool _disposed = false;
@@ -62,6 +67,11 @@ class _PoolVideoViewState extends State<PoolVideoView> {
     super.initState();
     _sub = widget.pool.events.listen(_onEvent);
     _seedFromCurrentSlot();
+    _heal = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_disposed || !mounted) return;
+      if (_controller != null && _hasVideo) return;
+      _seedFromCurrentSlot();
+    });
   }
 
   @override
@@ -78,6 +88,7 @@ class _PoolVideoViewState extends State<PoolVideoView> {
   void dispose() {
     _disposed = true;
     _sub?.cancel();
+    _heal?.cancel();
     _disposeController();
     super.dispose();
   }

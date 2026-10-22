@@ -11,6 +11,8 @@
 // The old AgoraViewerService.buildHostVideo() path is still used when
 // pool is null (standalone stream opens, host screen, etc.).
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -46,6 +48,8 @@ class LiveViewerOrchestrator extends StatefulWidget {
 
 class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
   bool _videoReadyFired = false;
+  StreamSubscription<SlotEvent>? _poolSub;
+  Timer? _readyTicker;
 
   @override
   void initState() {
@@ -59,15 +63,44 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
       // The old hostHasVideo listener on the AgoraViewerService singleton
       // is NOT attached — in pool mode the singleton isn't the engine
       // serving this stream.
-      widget.pool!.events.listen(_onPoolEvent);
+      //
+      // The video can be ready BEFORE this widget exists (pre-joined slot,
+      // fast connect) — then the one-off videoReady event is already gone
+      // and the "Joining…" cover used to stay forever. So also look at the
+      // slot's real state now and every half second until it's up.
+      _poolSub = widget.pool!.events.listen(_onPoolEvent);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkPoolReady());
+      _readyTicker = Timer.periodic(
+        const Duration(milliseconds: 500),
+        (_) => _checkPoolReady(),
+      );
     } else {
       // Original path: listen to the singleton AgoraViewerService.
       try {
         sl<AgoraViewerService>().hostHasVideo.addListener(_onHostVideoChanged);
+        // Already playing before we started listening?
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _onHostVideoChanged(),
+        );
       } catch (e) {
         debugPrint('⚠️ [Orchestrator] hostHasVideo listener failed: $e');
       }
     }
+  }
+
+  /// Fire once the current slot is OUR stream and the host's video is on.
+  void _checkPoolReady() {
+    if (_videoReadyFired || !mounted) {
+      _readyTicker?.cancel();
+      return;
+    }
+    final slot = widget.pool!.slotFor(SlotPosition.current);
+    if (slot == null || slot.channelId != widget.channelId) return;
+    if (!slot.hasVideo.value) return;
+    _videoReadyFired = true;
+    _readyTicker?.cancel();
+    debugPrint('🎬 [Orchestrator/pool] video on for ${widget.channelId}');
+    widget.onVideoReady?.call();
   }
 
   void _onPoolEvent(SlotEvent event) {
@@ -110,6 +143,8 @@ class _LiveViewerOrchestratorState extends State<LiveViewerOrchestrator> {
 
   @override
   void dispose() {
+    _poolSub?.cancel();
+    _readyTicker?.cancel();
     WakelockCoordinator.instance.release();
     if (widget.pool == null) {
       try {

@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
-import 'package:moonlight/features/live_viewer/presentation/pages/live_viewer_from_notification.dart';
+import 'package:moonlight/core/services/deep_link_service.dart';
 import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/profile_view.dart';
@@ -153,13 +153,13 @@ class NotificationHandlerService {
 
     print('🎥 Opening live stream from notification: ${args['id']}');
 
+    // Same player as the home feed. Looks the stream up first, so the
+    // channel/premium/host details are always current.
+    final ref = (args['uuid'] as String).isNotEmpty
+        ? args['uuid'] as String
+        : '${args['id']}';
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      main_app.MyApp.navigatorKey.currentState?.push(
-        MaterialPageRoute(
-          builder: (_) => LiveViewerFromNotification(args: args),
-          fullscreenDialog: true,
-        ),
-      );
+      DeepLinkService.instance.openLive(ref);
     });
   }
 

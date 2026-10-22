@@ -649,6 +649,7 @@ class AgoraService with ChangeNotifier {
     if (_disposed || _engine == null) return;
     try {
       _isCameraEnabled = enabled;
+      LiveAudioMeter.instance.setCamOff(0, !enabled);
       await _engine!.muteLocalVideoStream(!enabled);
       if (enabled && !_previewing) {
         await _engine!.startPreview();

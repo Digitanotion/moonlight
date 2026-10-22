@@ -202,7 +202,7 @@ class _LiveRoomCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       liveRoomHeadline(room.host.display, isVideo: video),
-                      maxLines: 2,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
@@ -210,18 +210,19 @@ class _LiveRoomCard extends StatelessWidget {
                         height: 1.25,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Join them'
-                      '${n > 0 ? ' · $n ${video ? 'watching' : 'listening'}' : ''}'
-                      '${title.isNotEmpty ? ' · $title' : ''}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
+                    if (liveRoomDetails(n, title, isVideo: video)
+                        case final details when details.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        details,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

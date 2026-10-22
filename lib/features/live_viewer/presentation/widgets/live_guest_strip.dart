@@ -52,6 +52,111 @@ class LiveTalkIndicator extends StatelessWidget {
   }
 }
 
+/// Round profile picture (or first letter) with a glowing ring — the
+/// club-room look. Used when someone's camera is off.
+class LiveAvatarCircle extends StatelessWidget {
+  final String name;
+  final String? avatar;
+  final double size;
+  const LiveAvatarCircle({
+    super.key,
+    required this.name,
+    this.avatar,
+    this.size = 88,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final url = (avatar ?? '').trim();
+    final hasImage = url.startsWith('http') && !url.contains('pravatar.cc');
+    final letter = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.04),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.45),
+            blurRadius: size * 0.25,
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color(0xFF2A2153),
+        ),
+        clipBehavior: Clip.antiAlias,
+        alignment: Alignment.center,
+        child: hasImage
+            ? Image.network(
+                url,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _letter(letter),
+              )
+            : _letter(letter),
+      ),
+    );
+  }
+
+  Widget _letter(String l) => Text(
+    l,
+    style: TextStyle(
+      color: Colors.white,
+      fontSize: size * 0.4,
+      fontWeight: FontWeight.w800,
+    ),
+  );
+}
+
+/// Shown over [uid]'s video while their camera is off: their picture (or
+/// initial) in a circle, instead of the frozen last frame.
+class LiveCamOffCover extends StatelessWidget {
+  final int uid;
+  final String name;
+  final String? avatar;
+
+  /// Diameter of the circle.
+  final double size;
+  const LiveCamOffCover({
+    super.key,
+    required this.uid,
+    required this.name,
+    this.avatar,
+    this.size = 96,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final meter = LiveAudioMeter.instance;
+    return ListenableBuilder(
+      listenable: meter,
+      builder: (_, _) {
+        if (!meter.isCamOff(uid)) return const SizedBox.shrink();
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1B1446), Colors.black],
+            ),
+          ),
+          child: Center(
+            child: LiveAvatarCircle(name: name, avatar: avatar, size: size),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Bottom name chip for a tile: [indicator] + name.
 class LiveNameChip extends StatelessWidget {
   final String name;
@@ -343,6 +448,19 @@ class _GuestTile extends StatelessWidget {
                   ),
                 ),
                 video,
+                LiveCamOffCover(
+                  uid: guest.uid,
+                  name: guest.name,
+                  avatar: guest.avatar,
+                  size: width * 0.5,
+                ),
+                if (onTap != null)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onTap,
+                    ),
+                  ),
                 Positioned(
                   left: 0,
                   right: 0,
@@ -375,6 +493,11 @@ class LiveSpotlightStage extends StatefulWidget {
 
   /// Agora uid of the main video (0 = me), for its wave / mute icon.
   final int? mainUid;
+
+  /// Picture + name shown in a circle while the main camera is off
+  /// (name defaults to [mainLabel]).
+  final String? mainAvatar;
+  final String? mainAvatarName;
   final bool? mainMuted;
   final LiveGuestsController guests;
   final Widget Function(LiveGuest g) videoFor;
@@ -399,6 +522,8 @@ class LiveSpotlightStage extends StatefulWidget {
     required this.main,
     required this.mainLabel,
     this.mainUid,
+    this.mainAvatar,
+    this.mainAvatarName,
     this.mainMuted,
     required this.guests,
     required this.videoFor,
@@ -414,14 +539,23 @@ class LiveSpotlightStage extends StatefulWidget {
 class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
   String? _spotUuid;
 
+  /// Spotlight value meaning "me" (the leading "You" tile).
+  static const _me = '__me__';
+  bool get _spotMe => _spotUuid == _me && widget.leadingTile != null;
+
   @override
   Widget build(BuildContext context) {
+    final meter = LiveAudioMeter.instance;
     return ListenableBuilder(
-      listenable: widget.guests,
+      listenable: Listenable.merge([widget.guests, meter]),
       builder: (context, _) {
+        // In the box per the server AND still connected to the call — a
+        // guest who left or whose app died disappears right away.
         final all = widget.showGuests
             ? widget.guests.guests
-                  .where((g) => g.uuid != widget.hideUuid)
+                  .where(
+                    (g) => g.uuid != widget.hideUuid && !meter.isGone(g.uid),
+                  )
                   .toList()
             : const <LiveGuest>[];
         // Spotlighted guest left the box → back to normal.
@@ -429,7 +563,7 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
         for (final g in all) {
           if (g.uuid == _spotUuid) spot = g;
         }
-        if (spot == null && _spotUuid != null) {
+        if (spot == null && _spotUuid != null && _spotUuid != _me) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() => _spotUuid = null);
           });
@@ -450,13 +584,29 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
   ) {
     final w = (size.width * 0.26).clamp(86.0, 128.0);
     final h = w * 4 / 3;
-    final mainRect = spot == null
+    // Main video shrinks into the column when anyone (a guest, or "me")
+    // is spotlighted.
+    final shrunk = spot != null || _spotMe;
+    final mainRect = !shrunk
         ? Rect.fromLTWH(0, 0, size.width, size.height)
         : Rect.fromLTWH(size.width - w - 8, widget.top, w, h);
 
     return Stack(
       fit: StackFit.expand,
       children: [
+        // "Me" spotlighted: my own camera full screen.
+        if (_spotMe)
+          Positioned.fill(
+            key: const ValueKey('spot_me'),
+            child: GestureDetector(
+              onTap: () => setState(() => _spotUuid = null),
+              child: ColoredBox(
+                color: Colors.black,
+                child: widget.leadingTile!(size.width, size.height),
+              ),
+            ),
+          ),
+
         // The spotlighted guest, full screen.
         if (spot != null)
           Positioned.fill(
@@ -469,6 +619,12 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
                   fit: StackFit.expand,
                   children: [
                     widget.videoFor(spot),
+                    LiveCamOffCover(
+                      uid: spot.uid,
+                      name: spot.name,
+                      avatar: spot.avatar,
+                      size: 120,
+                    ),
                     Positioned(
                       left: 12,
                       bottom: 150,
@@ -513,12 +669,12 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
           width: mainRect.width,
           height: mainRect.height,
           child: GestureDetector(
-            onTap: spot == null ? null : () => setState(() => _spotUuid = null),
+            onTap: !shrunk ? null : () => setState(() => _spotUuid = null),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 320),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(spot == null ? 0 : 14),
-                border: spot == null
+                borderRadius: BorderRadius.circular(!shrunk ? 0 : 14),
+                border: !shrunk
                     ? null
                     : Border.all(color: Colors.white.withValues(alpha: 0.85)),
               ),
@@ -527,7 +683,23 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
                 fit: StackFit.expand,
                 children: [
                   widget.main,
-                  if (spot != null)
+                  if (widget.mainUid != null)
+                    LiveCamOffCover(
+                      uid: widget.mainUid!,
+                      name: widget.mainAvatarName ?? widget.mainLabel,
+                      avatar: widget.mainAvatar,
+                      size: shrunk ? 48 : 120,
+                    ),
+                  // Native video views can swallow touches on Android — a
+                  // transparent layer on top guarantees the tap-to-swap.
+                  if (shrunk)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _spotUuid = null),
+                      ),
+                    ),
+                  if (shrunk)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -550,10 +722,10 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
 
         // The rest of the box (minus the spotlighted guest), shifted
         // below the shrunken main tile while spotlighting.
-        if (widget.leadingTile != null ||
+        if ((widget.leadingTile != null && !_spotMe) ||
             all.where((g) => g.uuid != spot?.uuid).isNotEmpty)
           Positioned(
-            top: spot == null ? widget.top : widget.top + h + 8,
+            top: !shrunk ? widget.top : widget.top + h + 8,
             right: 8,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: size.height * 0.5),
@@ -561,13 +733,30 @@ class _LiveSpotlightStageState extends State<LiveSpotlightStage> {
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   children: [
-                    if (widget.leadingTile != null)
+                    if (widget.leadingTile != null && !_spotMe)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: SizedBox(
-                          width: w,
-                          height: h,
-                          child: widget.leadingTile!(w, h),
+                        // Tap "You" → your camera fills the screen.
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _spotUuid = _me),
+                          child: SizedBox(
+                            width: w,
+                            height: h,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                widget.leadingTile!(w, h),
+                                Positioned.fill(
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () =>
+                                        setState(() => _spotUuid = _me),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     for (final g in all.where((g) => g.uuid != spot?.uuid))

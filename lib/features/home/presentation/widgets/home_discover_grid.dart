@@ -13,8 +13,6 @@
 
 import 'dart:async';
 
-import 'dart:async';
-
 import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -45,7 +43,7 @@ class HomeDiscoverGrid extends StatefulWidget {
 }
 
 class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   // Without this, TabBarView can dispose this tab's State when swiped far
   // enough away and rebuild it fresh next time — re-triggering
   // loadFirstPage() and showing the shimmer again even though it had
@@ -55,6 +53,10 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
 
   final _ctrl = ScrollController();
   StreamSubscription<ScrollTarget>? _topSub;
+
+  /// New lives show up on their own (no pull-to-refresh needed).
+  Timer? _liveTicker;
+  bool _foreground = true;
   FeedCubit get _videoCubit => widget.videoCubit;
 
   @override
@@ -67,6 +69,20 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
     _topSub = ScrollToTopService.stream.listen((t) {
       if (t == ScrollTarget.watch) ScrollToTopService.animateToTop(_ctrl);
     });
+    WidgetsBinding.instance.addObserver(this);
+    _liveTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _foreground) {
+        context.read<LiveFeedBloc>().add(LiveFeedSilentRefresh());
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground && mounted) {
+      context.read<LiveFeedBloc>().add(LiveFeedSilentRefresh());
+    }
   }
 
   void _onScroll() {
@@ -78,6 +94,8 @@ class _HomeDiscoverGridState extends State<HomeDiscoverGrid>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _liveTicker?.cancel();
     _topSub?.cancel();
     _ctrl.dispose();
     super.dispose();

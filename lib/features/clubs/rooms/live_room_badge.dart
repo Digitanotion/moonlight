@@ -15,9 +15,17 @@ import 'club_room_models.dart';
 import 'room_stage.dart' show MoonColors;
 
 /// The club's live-room line, e.g. "Okwy is live now in this club's audio
-/// room". Used on the club page and in club chat (and the push matches it).
+/// room. Join them". Used on the club page and in club chat (and the push
+/// matches it).
 String liveRoomHeadline(String host, {required bool isVideo}) =>
-    '$host is live now in this club\'s ${isVideo ? 'video' : 'audio'} room';
+    '$host is live now in this club\'s ${isVideo ? 'video' : 'audio'} room. '
+    'Join them';
+
+/// Second line under the headline: "5 listening · Title" (may be empty).
+String liveRoomDetails(int n, String title, {required bool isVideo}) => [
+  if (n > 0) '$n ${isVideo ? 'watching' : 'listening'}',
+  if (title.isNotEmpty) title,
+].join(' · ');
 
 const _audioGradient = LinearGradient(
   colors: [MoonColors.violet, MoonColors.magenta],
@@ -335,7 +343,7 @@ class _LiveRoomStrip extends StatelessWidget {
                 children: [
                   Text(
                     liveRoomHeadline(who, isVideo: video),
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
@@ -344,15 +352,19 @@ class _LiveRoomStrip extends StatelessWidget {
                       height: 1.25,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Join them'
-                    '${n > 0 ? ' · $n ${video ? 'watching' : 'listening'}' : ''}'
-                    '${title.isNotEmpty ? ' · $title' : ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
+                  if (liveRoomDetails(n, title, isVideo: video)
+                      case final details when details.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      details,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
