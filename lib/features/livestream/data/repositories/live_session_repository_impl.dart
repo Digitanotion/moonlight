@@ -627,6 +627,24 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     }
   }
 
+  /// Gift chat line → card data. On the host's screen a gift for the host
+  /// reads "sent you"; a gift for a guest names the guest.
+  LiveChatGift _giftFromMeta(Object? metaRaw, String fallback) {
+    final meta = metaRaw is Map
+        ? metaRaw.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final toName = meta['to_name']?.toString().trim() ?? '';
+    final toHost = meta['to_is_host'] != false && meta['to_is_host'] != 0;
+    return LiveChatGift(
+      label: (meta['gift_title'] ?? meta['gift_code'] ?? fallback).toString(),
+      code: meta['gift_code']?.toString(),
+      imageUrl: meta['gift_image']?.toString(),
+      quantity: meta['quantity'] is num ? (meta['quantity'] as num).toInt() : 1,
+      coins: meta['coins'] is num ? (meta['coins'] as num).toInt() : null,
+      recipient: (toHost || toName.isEmpty) ? 'you' : toName,
+    );
+  }
+
   void _handleChatMessage(Map<String, dynamic> raw) {
     try {
       if (raw.isEmpty) return;
@@ -647,7 +665,7 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       if (text.isEmpty) return;
 
       final role = (chatData['role'] ?? 'viewer').toString();
-      final avatarUrl = (chatData['role'] ?? 'viewer').toString();
+      final avatarUrl = chatData['avatar']?.toString();
       // Extract user handle
       String handle = 'user';
       final userData = chatData['user'];
@@ -662,7 +680,15 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
       debugPrint('🎯 [CHAT] Sending: $handle: $text');
       _safeAddToStream(
         _chatCtrl,
-        LiveChatMessage(handle, text, role, avatarUrl),
+        LiveChatMessage(
+          handle,
+          text,
+          role,
+          avatarUrl,
+          gift: chatData['type']?.toString() == 'gift'
+              ? _giftFromMeta(chatData['meta'], text)
+              : null,
+        ),
       );
     } catch (e) {
       debugPrint('❌ [CHAT HANDLER] Error: $e\n${StackTrace.current}');
@@ -871,7 +897,12 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
         if (senderAvatar.isEmpty) senderAvatar = null;
       }
 
+      final recipient = raw['recipient'] is Map
+          ? (raw['recipient'] as Map).cast<String, dynamic>()
+          : null;
       final hb = HostGiftBroadcast(
+        toHost: recipient == null || recipient['is_host'] != false,
+        recipientName: recipient?['display_name']?.toString(),
         serverTxnId: serverTxnId.isEmpty
             ? DateTime.now().millisecondsSinceEpoch.toString()
             : serverTxnId,

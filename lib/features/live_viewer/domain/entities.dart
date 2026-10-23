@@ -195,6 +195,9 @@ class ChatMessage extends Equatable {
   final int? giftCoins;
   final int giftQuantity;
 
+  /// Who the gift went to ("you", a guest's name…); null = the host.
+  final String? giftRecipient;
+
   const ChatMessage({
     required this.id,
     required this.username,
@@ -206,6 +209,7 @@ class ChatMessage extends Equatable {
     this.giftImageUrl,
     this.giftCoins,
     this.giftQuantity = 1,
+    this.giftRecipient,
   });
 
   factory ChatMessage.gift({
@@ -218,6 +222,7 @@ class ChatMessage extends Equatable {
     int? coins,
     int quantity = 1,
     bool fromHost = false,
+    String? recipient,
   }) {
     return ChatMessage(
       id: id,
@@ -230,6 +235,7 @@ class ChatMessage extends Equatable {
       giftImageUrl: giftImageUrl,
       giftCoins: coins,
       giftQuantity: quantity,
+      giftRecipient: recipient,
     );
   }
 
@@ -245,6 +251,7 @@ class ChatMessage extends Equatable {
     giftImageUrl,
     giftCoins,
     giftQuantity,
+    giftRecipient,
   ];
 }
 
@@ -260,13 +267,17 @@ class GiftNotice extends Equatable {
   final String from;
   final String giftName;
   final int coins;
+
+  /// Who got it ("you", a guest's name); null = the host.
+  final String? to;
   const GiftNotice({
     required this.from,
     required this.giftName,
     required this.coins,
+    this.to,
   });
   @override
-  List<Object?> get props => [from, giftName, coins];
+  List<Object?> get props => [from, giftName, coins, to];
 }
 
 // ============ GIFTS DOMAIN MODELS ============
@@ -330,6 +341,11 @@ class GiftBroadcast {
   final int? comboIndex;
   final int? comboWindowMs;
 
+  /// Who the gift was for (null fields = older server: the host).
+  final String? recipientUuid;
+  final String? recipientName;
+  final bool recipientIsHost;
+
   GiftBroadcast({
     required this.type,
     required this.livestreamId,
@@ -345,7 +361,21 @@ class GiftBroadcast {
     required this.timestamp,
     this.comboIndex,
     this.comboWindowMs,
+    this.recipientUuid,
+    this.recipientName,
+    this.recipientIsHost = true,
   });
+
+  /// How to name the recipient to the viewer [myUuid]: "you", a guest's
+  /// name, or null for the host (the caller shows the host's name).
+  String? recipientLabel(String? myUuid) {
+    if (recipientUuid != null && recipientUuid!.isNotEmpty) {
+      if (recipientUuid == myUuid) return 'you';
+    }
+    if (recipientIsHost) return null;
+    final n = recipientName?.trim() ?? '';
+    return n.isEmpty ? null : n;
+  }
 
   factory GiftBroadcast.fromJson(Map<String, dynamic> m) {
     int _intFrom(dynamic v, {int fallback = 0}) {
@@ -363,6 +393,10 @@ class GiftBroadcast {
     final sender = (m['sender'] is Map)
         ? (m['sender'] as Map).cast<String, dynamic>()
         : const <String, dynamic>{};
+
+    final recipient = (m['recipient'] is Map)
+        ? (m['recipient'] as Map).cast<String, dynamic>()
+        : null;
 
     final comboMap = (m['combo'] is Map)
         ? (m['combo'] as Map).cast<String, dynamic>()
@@ -388,6 +422,9 @@ class GiftBroadcast {
       comboWindowMs: comboMap == null
           ? null
           : _intFrom(comboMap['window_ms'], fallback: 0),
+      recipientUuid: recipient?['user_uuid']?.toString(),
+      recipientName: recipient?['display_name']?.toString(),
+      recipientIsHost: recipient == null || recipient['is_host'] != false,
     );
   }
 }

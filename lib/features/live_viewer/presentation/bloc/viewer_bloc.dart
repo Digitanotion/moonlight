@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
@@ -260,8 +262,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
       http: implRepo.http,
       livestreamUuid: implRepo.livestreamParam,
       pollInterval: const Duration(seconds: 12),
-      isMediaFlowing: () =>
-          agoraViewerService?.isReceivingHostVideo ?? false,
+      isMediaFlowing: () => agoraViewerService?.isReceivingHostVideo ?? false,
     );
 
     _healthSub = _streamHealthService!.stream.listen((result) {
@@ -1128,6 +1129,7 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
               : b.senderDisplayName.trim(),
           giftName: giftLabel,
           coins: b.coinsSpent,
+          to: b.recipientLabel(sl<CurrentUserService>().getCurrentUserId()),
         ),
         showGiftToast: true,
       ),

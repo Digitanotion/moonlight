@@ -70,5 +70,33 @@ class LiveChatMessage {
   final String text;
   final String role;
   final String? avatarUrl;
-  LiveChatMessage(this.handle, this.text, this.role, this.avatarUrl);
+
+  /// Gift line (same card as viewers see): set when this is a gift.
+  final LiveChatGift? gift;
+  LiveChatMessage(
+    this.handle,
+    this.text,
+    this.role,
+    this.avatarUrl, {
+    this.gift,
+  });
+}
+
+class LiveChatGift {
+  final String label;
+  final String? code;
+  final String? imageUrl;
+  final int quantity;
+  final int? coins;
+
+  /// "you" (the host) or the guest/viewer who got it.
+  final String recipient;
+  const LiveChatGift({
+    required this.label,
+    required this.recipient,
+    this.code,
+    this.imageUrl,
+    this.quantity = 1,
+    this.coins,
+  });
 }

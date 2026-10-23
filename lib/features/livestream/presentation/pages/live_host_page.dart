@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:moonlight/core/config/runtime_config.dart';
 import 'package:moonlight/core/injection_container.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/live_gift_chat_line.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/routing/route_names.dart';
@@ -362,6 +363,8 @@ class _LiveHostPageState extends State<LiveHostPage>
       final window = Duration(milliseconds: b.comboWindowMs ?? 2000);
       if (b.senderUuid == _currentGift!.senderUuid &&
           b.giftCode == _currentGift!.giftCode &&
+          b.toHost == _currentGift!.toHost &&
+          b.recipientName == _currentGift!.recipientName &&
           b.timestamp.difference(_currentGift!.timestamp).abs() <= window) {
         setState(() {
           _currentGift!.quantity += b.quantity;
@@ -900,7 +903,9 @@ class _LiveHostPageState extends State<LiveHostPage>
                                                   children: [
                                                     Expanded(
                                                       child: Text(
-                                                        'sent ${_currentGift!.giftCode} to you',
+                                                        _currentGift!.toHost
+                                                            ? 'sent ${_currentGift!.giftCode} to you'
+                                                            : 'sent ${_currentGift!.giftCode} to ${_currentGift!.recipientName ?? 'a guest'}',
                                                         style: const TextStyle(
                                                           color: Colors.white70,
                                                           fontSize: 13.5,
@@ -2120,6 +2125,22 @@ class _HostChatWidgetState extends State<_HostChatWidget>
                           // );
 
                           final isHost = m.role == 'host';
+                          final gift = m.gift;
+                          if (gift != null) {
+                            return Align(
+                              alignment: Alignment.centerLeft,
+                              child: LiveGiftChatLine(
+                                sender: m.handle,
+                                senderAvatar: m.avatarUrl,
+                                recipient: gift.recipient,
+                                giftLabel: gift.label,
+                                giftCode: gift.code,
+                                giftImageUrl: gift.imageUrl,
+                                quantity: gift.quantity,
+                                coins: gift.coins,
+                              ),
+                            );
+                          }
 
                           return AnimatedBuilder(
                             animation: _fadeController,

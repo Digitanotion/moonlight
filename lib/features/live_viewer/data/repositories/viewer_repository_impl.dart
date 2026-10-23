@@ -20,7 +20,9 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/agora_viewer_service.dart';
 import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/auth/data/datasources/auth_local_datasource.dart';
@@ -710,6 +712,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
             from: b.senderDisplayName,
             giftName: b.giftCode,
             coins: b.coinsSpent,
+            to: b.recipientLabel(sl<CurrentUserService>().getCurrentUserId()),
           ),
         );
       } catch (e) {
@@ -991,7 +994,21 @@ class ViewerRepositoryImpl implements ViewerRepository {
       coins: meta['coins'] is num ? (meta['coins'] as num).toInt() : null,
       quantity: meta['quantity'] is num ? (meta['quantity'] as num).toInt() : 1,
       fromHost: isHost,
+      recipient: _giftRecipientLabel(meta),
     );
+  }
+
+  /// "you" when the gift was for me, else the recipient's name (null = the
+  /// host, for gift lines from before the server sent a recipient).
+  String? _giftRecipientLabel(Map<String, dynamic> meta) {
+    final to = meta['to_user_uuid']?.toString();
+    if (to != null &&
+        to.isNotEmpty &&
+        to == sl<CurrentUserService>().getCurrentUserId()) {
+      return 'you';
+    }
+    final name = meta['to_name']?.toString().trim();
+    return (name == null || name.isEmpty) ? null : name;
   }
 
   Future<void> _hydrateRecentChat() async {

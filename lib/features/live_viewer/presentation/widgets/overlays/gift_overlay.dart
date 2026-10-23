@@ -35,7 +35,7 @@ class GiftOverlay extends StatelessWidget {
                 '${g.from}|${g.giftName}|${g.coins}|${s.showGiftToast}',
               ),
               from: g.from,
-              hostName: hostName,
+              hostName: g.to ?? hostName,
               giftName: g.giftName,
               coins: g.coins,
             ),

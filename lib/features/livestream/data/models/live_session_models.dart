@@ -12,6 +12,10 @@ class HostGiftBroadcast {
   final int? comboIndex;
   final int? comboWindowMs;
 
+  /// False when the gift went to a guest in the box (not the host).
+  final bool toHost;
+  final String? recipientName;
+
   HostGiftBroadcast({
     required this.serverTxnId,
     required this.giftId,
@@ -25,13 +29,20 @@ class HostGiftBroadcast {
     required this.timestamp,
     this.comboIndex,
     this.comboWindowMs,
+    this.toHost = true,
+    this.recipientName,
   });
 
   factory HostGiftBroadcast.fromJson(Map<String, dynamic> m) {
     final sender = (m['sender'] is Map)
         ? (m['sender'] as Map).cast<String, dynamic>()
         : <String, dynamic>{};
+    final recipient = (m['recipient'] is Map)
+        ? (m['recipient'] as Map).cast<String, dynamic>()
+        : null;
     return HostGiftBroadcast(
+      toHost: recipient == null || recipient['is_host'] != false,
+      recipientName: recipient?['display_name']?.toString(),
       serverTxnId:
           (m['server_txn_id'] ??
                   DateTime.now().millisecondsSinceEpoch.toString())
