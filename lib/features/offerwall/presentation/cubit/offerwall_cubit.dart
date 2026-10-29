@@ -24,7 +24,7 @@ class OfferwallState extends Equatable {
     this.loading = false,
     this.activating = false,
     this.activated = false,
-    this.activationCostCoins = 100,
+    this.activationCostCoins = 0,
     this.balanceUsdCents = 0,
     this.lifetimeEarnedUsdCents = 0,
     this.minWithdrawUsdCents = 1500,
@@ -94,7 +94,7 @@ class OfferwallCubit extends Cubit<OfferwallState> {
         state.copyWith(
           loading: false,
           activated: status['activated'] == true,
-          activationCostCoins: (status['activation_cost_coins'] ?? 100) as int,
+          activationCostCoins: (status['activation_cost_coins'] ?? 0) as int,
           balanceUsdCents: (status['balance_usd_cents'] ?? 0) as int,
           lifetimeEarnedUsdCents:
               (status['lifetime_earned_usd_cents'] ?? 0) as int,

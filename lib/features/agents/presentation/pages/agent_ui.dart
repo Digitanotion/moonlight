@@ -4,12 +4,12 @@ import 'package:moonlight/core/theme/app_colors.dart';
 /// The exact programme text from the Moonlight Agent spec — shown before
 /// anyone creates an agency, and again on the dashboard.
 const String kAgentInviteMessage =
-    'Invite new people to Moonlight. Earn 10% each time your invited host '
+    'Invite new people to Moonlight! Earn 10% each time your invited host '
     'earns from livestreaming or video chat. Receive 5% each time your hosts '
-    'buy coins. Receive 60 coins when your host joins the free task platform. '
-    'An agent with the highest performing rate earns huge thank you rewards '
-    'from Moonlight. You will be added to Moonlight agency WhatsApp Group '
-    'once your invited hosts reach 10 persons.';
+    'buy coins. Earn 10% each time your hosts earn from club earnings. '
+    'An agent with the highest performance will become a Moonlight '
+    'ambassador and will be placed on salary. You\'ll be added to Moonlight '
+    'WhatsApp Group once your hosts reach 10 persons.';
 
 class AgentScaffold extends StatelessWidget {
   final String title;

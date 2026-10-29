@@ -1,9 +1,8 @@
 // lib/features/offerwall/presentation/pages/daily_tasks_screen.dart
 //
-// Locked (activation) state + unlocked Daily Tasks surface, per the client
-// spec: "Activate your participation with one time 100 coins maintenance
-// requirement to start earning cash daily for life. You will be able to
-// withdraw your earnings every week."
+// Locked (activation) state + unlocked Daily Tasks surface. Activation is
+// free now (was a one-time 100 coins); the server's activation_cost_coins
+// decides which wording shows.
 //
 // Migrated from Adjoe/Torox to CPAGrip/Timewall/CPX Research, all live now:
 //  - CPAGrip: NOT an embedded widget — their "Offer Walls" tool is a
@@ -74,36 +73,44 @@ class _DailyTasksViewState extends State<_DailyTasksView>
     final cubit = context.read<OfferwallCubit>();
     final coins = cubit.state.activationCostCoins;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF0E1024),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text(
-          'Activate Daily Tasks',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          'This uses $coins coins as a one-time activation fee. '
-          'You\'ll then be able to earn cash daily for life and withdraw '
-          'your earnings every week.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF1FBF75),
+    // Free: nothing to confirm.
+    final confirmed = coins <= 0
+        ? true
+        : await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              backgroundColor: const Color(0xFF0E1024),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: const Text(
+                'Activate Daily Tasks',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              content: Text(
+                'This uses $coins coins as a one-time activation fee. '
+                'You\'ll then be able to earn cash daily for life and withdraw '
+                'your earnings every week.',
+                style: const TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF1FBF75),
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Activate'),
+                ),
+              ],
             ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Activate'),
-          ),
-        ],
-      ),
-    );
+          );
 
     if (confirmed != true || !context.mounted) return;
 
@@ -257,10 +264,14 @@ class _ActivationGate extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Activate your participation with one time $costCoins coins '
-              '(${_formatUsd(costCoins)}) maintenance requirement to start '
-              'earning cash daily for life. You will be able to withdraw '
-              'your earnings every week.',
+              costCoins <= 0
+                  ? 'Activate your participation for free to start earning '
+                        'cash daily for life. You will be able to withdraw '
+                        'your earnings every week.'
+                  : 'Activate your participation with one time $costCoins '
+                        'coins (${_formatUsd(costCoins)}) maintenance '
+                        'requirement to start earning cash daily for life. '
+                        'You will be able to withdraw your earnings every week.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white60, height: 1.5),
             ),
@@ -283,7 +294,9 @@ class _ActivationGate extends StatelessWidget {
                         child: AppLogoLoader(),
                       )
                     : Text(
-                        'Activate with $costCoins coins (${_formatUsd(costCoins)})',
+                        costCoins <= 0
+                            ? 'Activate for free'
+                            : 'Activate with $costCoins coins (${_formatUsd(costCoins)})',
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
