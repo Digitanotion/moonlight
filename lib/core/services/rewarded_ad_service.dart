@@ -27,7 +27,7 @@ class RewardedAdService {
   // turn on server-side verification with the callback URL
   // https://svc.moonlightstream.app/api/v1/ads/admob/ssv, then paste here.
   static const _prodUnit = {
-    'android': 'REPLACE_WITH_REWARDED_UNIT_ID',
+    'android': 'ca-app-pub-9544684683357809/3350987336', // "Live – Free coins"
     'ios': 'REPLACE_WITH_REWARDED_UNIT_ID',
   };
 
