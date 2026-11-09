@@ -7,6 +7,7 @@
 // Shared by the main wallet withdrawal screen and the offerwall
 // withdrawal sheet — both use the same Flutterwave bank-transfer rails,
 // so both need the same country list.
+// ...
 
 class FlutterwaveCountryInfo {
   final String name;
