@@ -93,6 +93,13 @@ jobs:
           sed -i "s/flutter.versionName=.*/flutter.versionName=$NEW_NAME/" local.properties
           echo "✅ Bumped from $CURRENT to $NEW_NAME+$NEW_CODE"
 
+      # The runner's default JDK is now 25, which Gradle 8.14 can't run on.
+      # Pin 17 (matches sourceCompatibility/jvmTarget in android/app).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
