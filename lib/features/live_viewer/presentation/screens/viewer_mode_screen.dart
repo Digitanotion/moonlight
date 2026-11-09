@@ -12,6 +12,7 @@ import 'package:moonlight/core/services/pusher_service.dart';
 import 'package:moonlight/features/home/domain/repositories/live_feed_repository.dart';
 import 'package:moonlight/features/live_viewer/data/repositories/viewer_repository_impl.dart';
 import 'package:moonlight/features/live_viewer/domain/entities.dart';
+import 'package:moonlight/features/live_viewer/data/pool_rtc_resolver.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/live_guest_strip.dart';
@@ -93,7 +94,9 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
     // not app-wide, and reversed in dispose() below so other screens
     // are unaffected.
     ScreenGuard.acquire();
+    PoolRtcResolver.revoked.addListener(_onRevoked);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _onRevoked();
       final bloc = context.read<ViewerBloc>();
       if (bloc.state.giftCatalog.isEmpty) {
         bloc.add(GiftsFetchRequested());
@@ -106,9 +109,26 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
     PipService.instance.isInPipMode.removeListener(_onPipChanged);
     MiniPlayerController.instance.removeListener(_onPipChanged);
     ScreenGuard.release();
+    PoolRtcResolver.revoked.removeListener(_onRevoked);
     _commentCtrl.dispose();
     _guests.dispose();
     super.dispose();
+  }
+
+  bool _revokedHandled = false;
+
+  /// The host removed this account (server refuses the video token): show
+  /// the removal screen rather than a black live that keeps reconnecting.
+  void _onRevoked() {
+    if (_revokedHandled || !mounted) return;
+    if (!PoolRtcResolver.revoked.value
+        .contains(widget.repository.livestreamParam)) {
+      return;
+    }
+    _revokedHandled = true;
+    context.read<ViewerBloc>().add(
+      const ParticipantRemoved('The host removed you from this live.'),
+    );
   }
 
   @override

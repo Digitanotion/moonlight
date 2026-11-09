@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:moonlight/core/services/pip_service.dart';
 import 'package:moonlight/core/services/reel_ad_service.dart';
 import 'package:moonlight/core/services/video_ad_service.dart';
 import 'package:flutter/foundation.dart';
@@ -107,12 +108,14 @@ class AdService {
           ad.fullScreenContentCallback = FullScreenContentCallback(
             onAdDismissedFullScreenContent: (ad) {
               ad.dispose();
+              PipService.instance.resume();
               _cachedInterstitial = null;
               _preloadInterstitial();
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               debugPrint('⚠️ [Ads] interstitial show failed: $error');
               ad.dispose();
+              PipService.instance.resume();
               _cachedInterstitial = null;
               _preloadInterstitial();
             },
@@ -150,7 +153,7 @@ class AdService {
 
     _postsSinceLastAd = 0;
     _cachedInterstitial = null;
-    ad.show();
+    _showInterstitial(ad);
   }
 
   // ── Short-video pager ───────────────────────────────────────────────────
@@ -185,10 +188,17 @@ class AdService {
     _postsSinceLastAd = 0;
     _lastAdShownAt = DateTime.now();
     _cachedInterstitial = null;
-    ad.show();
+    _showInterstitial(ad);
   }
 
   void resetCounter() => _postsSinceLastAd = 0;
+
+  /// Full-screen ads open their own activity; keep a playing video from
+  /// auto-shrinking into PiP over the ad (resumed in the ad's callbacks).
+  Future<void> _showInterstitial(InterstitialAd ad) async {
+    await PipService.instance.suspend();
+    await ad.show();
+  }
 
   // ── Banner ───────────────────────────────────────────────────────────────
 

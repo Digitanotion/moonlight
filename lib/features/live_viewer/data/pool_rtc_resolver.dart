@@ -27,6 +27,12 @@ import 'package:moonlight/features/home/domain/entities/live_item.dart';
 class PoolRtcResolver {
   PoolRtcResolver({required this.http});
 
+  /// Lives this account was removed from by the host: the server answers
+  /// /rtc with 403 "Access revoked" for 6 hours. The viewer screen listens
+  /// and shows the removal screen instead of a black, endlessly
+  /// reconnecting live.
+  static final ValueNotifier<Set<String>> revoked = ValueNotifier(<String>{});
+
   final DioClient http;
 
   // Cache: index → StreamJoinRequest. Cleared when the item list changes
@@ -87,6 +93,11 @@ class PoolRtcResolver {
         hostUid: int.tryParse('${data['host_uid'] ?? ''}'),
       );
 
+      // Ban expired (6h) — let the screen join normally again.
+      if (revoked.value.contains(item.uuid)) {
+        revoked.value = {...revoked.value}..remove(item.uuid);
+      }
+
       _cache[index] = req;
       _channelCache[index] = req.channel;
 
@@ -102,6 +113,11 @@ class PoolRtcResolver {
       // leaks behind the paywall. After payment the screen calls
       // pool.refreshCurrentSlot() with forceRefresh, which re-hits this
       // endpoint (now 200).
+      if (e.response?.statusCode == 403) {
+        debugPrint('🚫 [Resolver] removed from ${item.uuid} by the host');
+        revoked.value = {...revoked.value, item.uuid};
+        return null;
+      }
       if (e.response?.statusCode == 402) {
         debugPrint('🔒 [Resolver] index $index is premium-locked (unpaid)');
         return null;

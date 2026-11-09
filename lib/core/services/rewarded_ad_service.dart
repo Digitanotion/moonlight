@@ -12,6 +12,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:moonlight/core/services/ad_service.dart';
+import 'package:moonlight/core/services/pip_service.dart';
 
 class RewardedAdService {
   RewardedAdService._();
@@ -97,16 +98,21 @@ class RewardedAdService {
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
+        PipService.instance.resume();
         onClosed?.call();
         preload(); // next one ready for the next tap
       },
       onAdFailedToShowFullScreenContent: (ad, err) {
         debugPrint('⚠️ [RewardedAd] show failed: $err');
         ad.dispose();
+        PipService.instance.resume();
         onClosed?.call();
         preload();
       },
     );
+    // The ad is its own activity: keep the live from auto-shrinking into
+    // PiP over it. Must be off before the ad activity starts.
+    await PipService.instance.suspend();
     await ad.show(onUserEarnedReward: (_, _) => onEarned());
     return true;
   }

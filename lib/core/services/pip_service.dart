@@ -35,7 +35,7 @@ class PipService {
       // braces against a stale flag). If a video screen is still on top —
       // e.g. the user tapped the PiP window to expand it back into the app
       // — re-assert so backgrounding again still works.
-      if (!active && _refs > 0) {
+      if (!active && _refs > 0 && _suspended == 0) {
         _setVideoPlaying(true);
       }
     }
@@ -45,7 +45,7 @@ class PipService {
   /// Register interest in PiP (call from a video screen's initState).
   void acquire() {
     _refs++;
-    if (_refs == 1) _setVideoPlaying(true);
+    if (_refs == 1 && _suspended == 0) _setVideoPlaying(true);
   }
 
   /// Give up interest (call from dispose). Clears auto-PiP when the count
@@ -54,6 +54,24 @@ class PipService {
     if (_refs == 0) return;
     _refs--;
     if (_refs == 0) _setVideoPlaying(false);
+  }
+
+  int _suspended = 0;
+
+  /// Turn auto-PiP off while something of our own covers the screen — a
+  /// full-screen ad opens in its own Android activity, which otherwise counts
+  /// as "leaving the app" and shrinks the live into PiP on top of the ad
+  /// (and leaves the user on the home screen when the ad closes).
+  Future<void> suspend() async {
+    _suspended++;
+    if (_suspended == 1) await _setVideoPlaying(false);
+  }
+
+  /// Undo [suspend]; re-arms auto-PiP if a video screen is still open.
+  void resume() {
+    if (_suspended == 0) return;
+    _suspended--;
+    if (_suspended == 0 && _refs > 0) _setVideoPlaying(true);
   }
 
   Future<void> _setVideoPlaying(bool playing) async {
