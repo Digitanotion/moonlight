@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:moonlight/core/routing/route_names.dart';
+import 'package:moonlight/features/clubs/community/club_community_screen.dart';
 import 'package:moonlight/features/notifications/data/models/notification_model.dart';
 
 class NotificationNavigator {
@@ -52,6 +53,22 @@ class NotificationNavigator {
           context,
           RouteNames.liveViewer,
           arguments: {'uuid': liveUuid},
+        );
+        return true;
+
+      // ── Club community (comment / reply / new post) ───────────────
+      case 'club.community_comment':
+      case 'club.community_reply':
+      case 'club.community_post':
+        final club = n.meta.clubUuid;
+        if (club == null || club.isEmpty) return false;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ClubCommunityScreen(
+              clubUuid: club,
+              clubName: n.meta.clubName ?? 'Club',
+            ),
+          ),
         );
         return true;
 

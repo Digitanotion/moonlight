@@ -706,8 +706,7 @@ Future<void> _openVideoCall(
   final minutes = await DurationPickerSheet.show(
     context,
     calleeDisplayName: targetUser.fullName,
-    ratePerMinute:
-        100, // TODO: same hardcoded rate as the directory screen — source from config if one exists
+    ratePerMinute: kVideoCallCoinsPerMinute,
     callerCoinBalance: balance,
   );
 

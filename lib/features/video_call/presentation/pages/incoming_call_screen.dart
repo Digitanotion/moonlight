@@ -132,7 +132,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                     children: [
                       const SizedBox(height: 32),
                       Text(
-                        'Incoming video call',
+                        (state.session?.isAudio ?? false)
+                            ? 'Incoming audio call'
+                            : 'Incoming video call',
                         style: AppTextStyles.body.copyWith(
                           color: Colors.white.withOpacity(0.75),
                           letterSpacing: 0.5,
@@ -229,7 +231,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'wants to video call you',
+                        (state.session?.isAudio ?? false)
+                            ? 'wants to talk with you'
+                            : 'wants to video call you',
                         style: AppTextStyles.body.copyWith(
                           color: Colors.white.withOpacity(0.65),
                         ),

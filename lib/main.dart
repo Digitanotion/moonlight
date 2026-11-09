@@ -30,7 +30,8 @@ import 'package:moonlight/features/onboarding/presentation/bloc/onboarding_bloc.
 import 'package:moonlight/features/video_call/domain/repositories/video_call_repository.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/active_call_screen.dart'; // ← NEW
-import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart'; // ← NEW
+import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart';
+import 'package:moonlight/features/video_call/presentation/widgets/ongoing_call_bar.dart'; // ← NEW
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
@@ -67,6 +68,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         callerAvatarUrl: (data['caller_avatar'] as String?)?.isNotEmpty == true
             ? data['caller_avatar']
             : null,
+        audio: data['call_kind'] == 'audio',
       );
     } catch (e) {
       debugPrint('⚠️ CallKit background show failed: $e');
@@ -84,6 +86,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         sessionUuid: data['session_uuid'] ?? '',
         callerName: data['caller_name'] ?? 'Someone',
         apiBaseUrl: data['api_base_url'] ?? 'https://svc.moonlightstream.app',
+        audio: data['call_kind'] == 'audio',
       );
     } catch (e) {
       debugPrint('⚠️ Fallback notification (background) failed: $e');
@@ -282,7 +285,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         builder: (context, child) => IncomingCallBanner(
           child: SimpleConnectionToast(
             // "You're in a room" bar while a club call runs in the background.
-            child: ActiveRoomBar(child: child!),
+            child: ActiveRoomBar(
+              // "Ongoing call — tap to return" while an audio call is minimised.
+              child: OngoingCallBar(
+                navigatorKey: MyApp.navigatorKey,
+                child: child!,
+              ),
+            ),
           ),
         ),
       ),
@@ -562,6 +571,7 @@ void _startGlobalVideoCallListeners() {
             sessionUuid: uuid,
             callerName: caller?.displayName ?? 'Someone',
             callerAvatarUrl: caller?.avatarUrl,
+            audio: state.session?.isAudio ?? false,
           );
           // Fallback, alongside CallKit — see NotificationService's own
           // doc comment for why this exists. Skipped while foreground:
@@ -572,6 +582,7 @@ void _startGlobalVideoCallListeners() {
             sessionUuid: uuid,
             callerName: caller?.displayName ?? 'Someone',
             apiBaseUrl: sl<RuntimeConfig>().apiBaseUrl,
+            audio: state.session?.isAudio ?? false,
           );
         }
       }

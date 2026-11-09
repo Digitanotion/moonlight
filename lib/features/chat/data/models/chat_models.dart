@@ -150,6 +150,11 @@ class Message extends Equatable {
   final String? replyToUuid;
   final Message? replyTo; // This is the full reply message object
 
+  /// Extra data for gift lines (gift_title, gift_image, coins, quantity,
+  /// to_user_uuid) and call-log lines (call_kind, answered,
+  /// duration_seconds).
+  final Map<String, dynamic>? meta;
+
   const Message({
     required this.uuid,
     required this.body,
@@ -162,6 +167,7 @@ class Message extends Equatable {
     this.editedAt,
     this.replyToUuid,
     this.replyTo, // Initialize
+    this.meta,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -185,6 +191,9 @@ class Message extends Equatable {
           ? DateTime.parse(json['edited_at'] as String).toLocal()
           : null,
       replyToUuid: json['reply_to_uuid'] as String?,
+      meta: json['meta'] is Map
+          ? Map<String, dynamic>.from(json['meta'] as Map)
+          : null,
       replyTo: json['reply_to'] != null
           ? Message.fromReplyToJson(
               Map<String, dynamic>.from(json['reply_to'] as Map),
@@ -297,6 +306,7 @@ class Message extends Equatable {
       editedAt: editedAt ?? this.editedAt,
       replyToUuid: replyToUuid,
       replyTo: replyTo,
+      meta: meta,
     );
   }
 
@@ -458,7 +468,9 @@ class Conversation extends Equatable {
 
 enum MessageType {
   text('text'),
-  media('media');
+  media('media'),
+  gift('gift'),
+  call('call');
 
   final String value;
   const MessageType(this.value);
@@ -467,6 +479,10 @@ enum MessageType {
     switch (value) {
       case 'media':
         return MessageType.media;
+      case 'gift':
+        return MessageType.gift;
+      case 'call':
+        return MessageType.call;
       case 'text':
       default:
         return MessageType.text;

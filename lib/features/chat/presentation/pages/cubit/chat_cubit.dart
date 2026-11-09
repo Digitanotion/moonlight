@@ -215,6 +215,7 @@ class ChatCubit extends Cubit<ChatState> {
 
       if (!loadMore) {
         _setupRealTimeListeners(conversationUuid);
+        _startSync(conversationUuid);
         markAsRead(conversationUuid);
       }
     } catch (e) {
@@ -541,11 +542,46 @@ class ChatCubit extends Cubit<ChatState> {
   }
 
   // In ChatCubit - sendTextMessage method should already have replyToUuid
+  /// Shows the message at once (like WhatsApp) and swaps in the server's
+  /// copy when the send completes — it used to appear only after the round
+  /// trip, which felt slow.
   Future<void> sendTextMessage({
     required String conversationUuid,
     required String body,
     String? replyToUuid,
   }) async {
+    final me = _currentUserService?.currentUser;
+    Message? pending;
+    if (me != null) {
+      Message? replyTo;
+      if (replyToUuid != null) {
+        for (final m in _allMessages) {
+          if (m.uuid == replyToUuid) replyTo = m;
+        }
+      }
+      pending = Message(
+        uuid: 'local-${DateTime.now().microsecondsSinceEpoch}',
+        body: body,
+        type: MessageType.text,
+        sender: ChatUser(
+          uuid: me.id,
+          userSlug: me.userSlug ?? '',
+          fullName: me.fullname ?? '',
+          avatarUrl: me.avatarUrl,
+        ),
+        createdAt: DateTime.now(),
+        replyToUuid: replyToUuid,
+        replyTo: replyTo,
+      );
+      _allMessages.add(pending);
+      emit(
+        ChatMessageSent(
+          messages: List.from(_allMessages),
+          conversationUuid: conversationUuid,
+        ),
+      );
+    }
+
     try {
       final message = await _repository.sendTextMessage(
         conversationUuid,
@@ -553,7 +589,11 @@ class ChatCubit extends Cubit<ChatState> {
         replyToUuid: replyToUuid, // Make sure this is passed
       );
 
-      _allMessages.add(message);
+      if (pending != null) _allMessages.remove(pending);
+      // The realtime echo may have delivered it already.
+      if (!_allMessages.any((m) => m.uuid == message.uuid)) {
+        _allMessages.add(message);
+      }
 
       emit(
         ChatMessageSent(
@@ -562,7 +602,60 @@ class ChatCubit extends Cubit<ChatState> {
         ),
       );
     } catch (e) {
+      if (pending != null) _allMessages.remove(pending);
       emit(ChatError(e.toString(), _currentConversationUuid));
+    }
+  }
+
+  /// Backup for realtime: while a chat is open, quietly fetch the newest
+  /// page every few seconds and add anything we missed (a dropped Pusher
+  /// connection used to leave new texts invisible until reopening).
+  Timer? _syncTimer;
+
+  void _startSync(String conversationUuid) {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _syncLatest(conversationUuid),
+    );
+  }
+
+  Future<void> _syncLatest(String conversationUuid) async {
+    if (isClosed ||
+        _isLoading ||
+        _currentConversationUuid != conversationUuid) {
+      return;
+    }
+    try {
+      var res = await _repository.getMessages(
+        conversationUuid,
+        page: _lastPage,
+        perPage: 30,
+      );
+      final fresh = [...res.data];
+      if (res.lastPage > _lastPage) {
+        _lastPage = res.lastPage;
+        res = await _repository.getMessages(
+          conversationUuid,
+          page: _lastPage,
+          perPage: 30,
+        );
+        fresh.addAll(res.data);
+      }
+      if (isClosed || _currentConversationUuid != conversationUuid) return;
+      final known = _allMessages.map((m) => m.uuid).toSet();
+      final missed = fresh.where((m) => !known.contains(m.uuid)).toList();
+      if (missed.isEmpty) return;
+      _allMessages.addAll(missed);
+      _allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      emit(
+        ChatMessageReceived(
+          messages: List.from(_allMessages),
+          conversationUuid: conversationUuid,
+        ),
+      );
+    } catch (_) {
+      // next tick tries again
     }
   }
 
@@ -927,6 +1020,7 @@ class ChatCubit extends Cubit<ChatState> {
     final uuid = _currentConversationUuid;
 
     _currentConversationUuid = null;
+    _syncTimer?.cancel();
     _allMessages.clear();
     _loadedPageMessages.clear();
 

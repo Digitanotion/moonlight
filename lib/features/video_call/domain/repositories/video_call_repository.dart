@@ -41,9 +41,10 @@ abstract class VideoCallRepository {
   Future<VideoCallSessionModel> initiate({
     required String calleeUserSlug,
     required int minutes,
-    required String initiatedFrom, // directory|profile|livestream
+    required String initiatedFrom, // directory|profile|livestream|chat
     int? livestreamId,
     String? idempotencyKey,
+    String kind = 'video', // or 'audio' (free, from a chat)
   });
 
   Future<VideoCallSessionModel> accept(String sessionUuid);

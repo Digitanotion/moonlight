@@ -127,6 +127,7 @@ class CallKitService {
     required String sessionUuid,
     required String callerName,
     String? callerAvatarUrl,
+    bool audio = false,
   }) async {
     final params = CallKitParams(
       id: sessionUuid,
@@ -134,13 +135,13 @@ class CallKitService {
       appName: 'Moonlight',
       avatar: callerAvatarUrl,
       handle: callerName,
-      type: 1, // video
+      type: audio ? 0 : 1, // 0 = audio, 1 = video
       duration:
           45000, // doc 1M — ring timeout ~45s, matches backend's VIDEO_CALL_RING_TIMEOUT_SECONDS
-      missedCallNotification: const NotificationParams(
+      missedCallNotification: NotificationParams(
         showNotification: true,
         isShowCallback: false,
-        subtitle: 'Missed video call',
+        subtitle: audio ? 'Missed audio call' : 'Missed video call',
       ),
       extra: <String, dynamic>{'session_uuid': sessionUuid},
       android: const AndroidParams(

@@ -320,6 +320,7 @@ class NotificationService {
     required String sessionUuid,
     required String callerName,
     required String apiBaseUrl,
+    bool audio = false,
   }) async {
     final payload = jsonEncode({
       'session_uuid': sessionUuid,
@@ -379,7 +380,7 @@ class NotificationService {
       // elsewhere or times out) can target this exact notification.
       sessionUuid.hashCode,
       '$callerName is calling',
-      'Incoming video call',
+      audio ? 'Incoming audio call' : 'Incoming video call',
       NotificationDetails(android: androidDetails),
       payload: payload,
     );

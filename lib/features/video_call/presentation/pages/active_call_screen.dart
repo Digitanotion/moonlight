@@ -9,6 +9,7 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/core/theme/app_text_styles.dart';
 import 'package:moonlight/features/video_call/data/models/video_call_session_model.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:moonlight/features/video_call/presentation/widgets/audio_call_view.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
 
@@ -21,12 +22,28 @@ String _firstName(String? full) {
 class ActiveCallScreen extends StatefulWidget {
   const ActiveCallScreen({super.key});
 
+  /// True while this screen is on screen. When an audio call is minimised
+  /// (screen closed, call still running) OngoingCallBar shows instead.
+  static final ValueNotifier<bool> isOpen = ValueNotifier(false);
+
   @override
   State<ActiveCallScreen> createState() => _ActiveCallScreenState();
 }
 
 class _ActiveCallScreenState extends State<ActiveCallScreen> {
   bool _controlsVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    ActiveCallScreen.isOpen.value = true;
+  }
+
+  @override
+  void dispose() {
+    ActiveCallScreen.isOpen.value = false;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +53,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     return BlocConsumer<VideoCallBloc, VideoCallState>(
       listenWhen: (prev, curr) => prev.phase != curr.phase,
       listener: (context, state) {
-        if (state.phase == VideoCallPhase.ended) {
+        if (state.phase == VideoCallPhase.ended &&
+            (state.session?.isAudio ?? false)) {
+          // Free audio call: nothing to settle — no summary, just close
+          // (the chat gets an "Audio call · 2:31" line).
+          bloc.add(CallDismissed());
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        } else if (state.phase == VideoCallPhase.ended) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => BlocProvider.value(
@@ -75,224 +98,251 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
             }
             Navigator.of(context).pop();
           },
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            body: GestureDetector(
-              onTap: () => setState(() => _controlsVisible = !_controlsVisible),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // ── Remote video, full screen (or hero backdrop) ──────
-                  ListenableBuilder(
-                    listenable: agora,
-                    builder: (context, _) {
-                      return ValueListenableBuilder<bool>(
-                        valueListenable: agora.remoteHasVideo,
-                        builder: (context, hasVideo, _) {
-                          if (!hasVideo) {
-                            return _HeroBackdrop(
-                              name: name,
-                              avatarUrl: avatarUrl,
-                              status: (state.isPaused || state.localMediaDown)
-                                  ? 'Reconnecting…'
-                                  : 'Connecting…',
+          child: (session?.isAudio ?? false)
+              ? AudioCallView(
+                  name: otherParty?.displayName ?? name,
+                  avatarUrl: avatarUrl,
+                  connectedAt: session?.connectedAt,
+                  reconnecting: state.isPaused || state.localMediaDown,
+                  agora: agora,
+                  onEnd: () => bloc.add(CallEndRequested(reason: null)),
+                  // Leave the screen; the call keeps going (OngoingCallBar
+                  // brings it back). Navigator.pop skips the PopScope guard.
+                  onMinimize: () => Navigator.of(context).pop(),
+                )
+              : Scaffold(
+                  backgroundColor: Colors.black,
+                  body: GestureDetector(
+                    onTap: () =>
+                        setState(() => _controlsVisible = !_controlsVisible),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // ── Remote video, full screen (or hero backdrop) ──────
+                        ListenableBuilder(
+                          listenable: agora,
+                          builder: (context, _) {
+                            return ValueListenableBuilder<bool>(
+                              valueListenable: agora.remoteHasVideo,
+                              builder: (context, hasVideo, _) {
+                                if (!hasVideo) {
+                                  return _HeroBackdrop(
+                                    name: name,
+                                    avatarUrl: avatarUrl,
+                                    status:
+                                        (state.isPaused || state.localMediaDown)
+                                        ? 'Reconnecting…'
+                                        : 'Connecting…',
+                                  );
+                                }
+                                return agora.remoteView();
+                              },
                             );
-                          }
-                          return agora.remoteView();
-                        },
-                      );
-                    },
-                  ),
-
-                  // Soft top/bottom scrims so chrome stays legible over video.
-                  const _EdgeScrims(),
-
-                  // ── Local preview ─────────────────────────────────────
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 64,
-                    right: 14,
-                    child: AnimatedSlide(
-                      offset: _controlsVisible
-                          ? Offset.zero
-                          : const Offset(0, -0.15),
-                      duration: const Duration(milliseconds: 220),
-                      child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1 : 0.35,
-                        duration: const Duration(milliseconds: 220),
-                        child: Container(
-                          width: 96,
-                          height: 132,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.25),
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.35),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: agora.localPreview(),
-                          ),
+                          },
                         ),
-                      ),
-                    ),
-                  ),
 
-                  // ── Top chrome: identity + timer + report ─────────────
-                  AnimatedOpacity(
-                    opacity: _controlsVisible ? 1 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const SizedBox(width: 40),
-                                Expanded(
-                                  child: Center(
-                                    child: showTimer
-                                        ? _CountdownPill(
-                                            endsAt: state.countdownEndsAt!,
-                                            paused: state.isPaused,
-                                          )
-                                        : const SizedBox.shrink(),
-                                  ),
-                                ),
-                                _GlassIconButton(
-                                  icon: Icons.flag_outlined,
-                                  onTap: () => _showReportSheet(context),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: _CallerIdentity(
-                                name: name,
-                                avatarUrl: avatarUrl,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                        // Soft top/bottom scrims so chrome stays legible over video.
+                        const _EdgeScrims(),
 
-                  // ── Network-drop banner (#3) / extend prompt ──────────
-                  if (state.isPaused || state.localMediaDown)
-                    Positioned(
-                      top: MediaQuery.of(context).padding.top + 128,
-                      left: 20,
-                      right: 20,
-                      child: _ReconnectingBanner(
-                        // The caller's freeze is authoritative & billed-safe;
-                        // the callee's is just "we can't see them right now".
-                        billed: state.isCaller,
-                      ),
-                    ),
-                  if (state.showExtendPrompt &&
-                      !state.isPaused &&
-                      !state.localMediaDown &&
-                      state.isCaller)
-                    Positioned(
-                      top: MediaQuery.of(context).padding.top + 128,
-                      left: 20,
-                      right: 20,
-                      child: _ExtendBanner(
-                        loading: state.actionLoading,
-                        onExtend: (minutes) => context
-                            .read<VideoCallBloc>()
-                            .add(CallExtendRequested(minutes)),
-                      ),
-                    ),
-
-                  // ── Bottom control bar ───────────────────────────────
-                  AnimatedOpacity(
-                    opacity: _controlsVisible ? 1 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 24),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(32),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        // ── Local preview ─────────────────────────────────────
+                        Positioned(
+                          top: MediaQuery.of(context).padding.top + 64,
+                          right: 14,
+                          child: AnimatedSlide(
+                            offset: _controlsVisible
+                                ? Offset.zero
+                                : const Offset(0, -0.15),
+                            duration: const Duration(milliseconds: 220),
+                            child: AnimatedOpacity(
+                              opacity: _controlsVisible ? 1 : 0.35,
+                              duration: const Duration(milliseconds: 220),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
+                                width: 96,
+                                height: 132,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.10),
-                                  borderRadius: BorderRadius.circular(32),
+                                  borderRadius: BorderRadius.circular(22),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.12),
+                                    color: Colors.white.withOpacity(0.25),
+                                    width: 1.5,
                                   ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ListenableBuilder(
-                                      listenable: agora,
-                                      builder: (context, _) => _ControlButton(
-                                        icon: agora.isMicEnabled
-                                            ? Icons.mic_rounded
-                                            : Icons.mic_off_rounded,
-                                        active: agora.isMicEnabled,
-                                        onTap: () => agora.setMicEnabled(
-                                          !agora.isMicEnabled,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    ListenableBuilder(
-                                      listenable: agora,
-                                      builder: (context, _) => _ControlButton(
-                                        icon: agora.isCameraEnabled
-                                            ? Icons.videocam_rounded
-                                            : Icons.videocam_off_rounded,
-                                        active: agora.isCameraEnabled,
-                                        onTap: () => agora.setCameraEnabled(
-                                          !agora.isCameraEnabled,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    _ControlButton(
-                                      icon: Icons.flip_camera_ios_rounded,
-                                      active: true,
-                                      onTap: agora.switchCamera,
-                                    ),
-                                    const SizedBox(width: 14),
-                                    _EndCallButton(
-                                      onTap: () => context
-                                          .read<VideoCallBloc>()
-                                          .add(CallEndRequested(reason: null)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.35),
+                                      blurRadius: 18,
+                                      offset: const Offset(0, 6),
                                     ),
                                   ],
                                 ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: agora.localPreview(),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+
+                        // ── Top chrome: identity + timer + report ─────────────
+                        AnimatedOpacity(
+                          opacity: _controlsVisible ? 1 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      const SizedBox(width: 40),
+                                      Expanded(
+                                        child: Center(
+                                          child: showTimer
+                                              ? _CountdownPill(
+                                                  endsAt:
+                                                      state.countdownEndsAt!,
+                                                  paused: state.isPaused,
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
+                                      ),
+                                      _GlassIconButton(
+                                        icon: Icons.flag_outlined,
+                                        onTap: () => _showReportSheet(context),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _CallerIdentity(
+                                      name: name,
+                                      avatarUrl: avatarUrl,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // ── Network-drop banner (#3) / extend prompt ──────────
+                        if (state.isPaused || state.localMediaDown)
+                          Positioned(
+                            top: MediaQuery.of(context).padding.top + 128,
+                            left: 20,
+                            right: 20,
+                            child: _ReconnectingBanner(
+                              // The caller's freeze is authoritative & billed-safe;
+                              // the callee's is just "we can't see them right now".
+                              billed: state.isCaller,
+                            ),
+                          ),
+                        if (state.showExtendPrompt &&
+                            !state.isPaused &&
+                            !state.localMediaDown &&
+                            state.isCaller)
+                          Positioned(
+                            top: MediaQuery.of(context).padding.top + 128,
+                            left: 20,
+                            right: 20,
+                            child: _ExtendBanner(
+                              loading: state.actionLoading,
+                              onExtend: (minutes) => context
+                                  .read<VideoCallBloc>()
+                                  .add(CallExtendRequested(minutes)),
+                            ),
+                          ),
+
+                        // ── Bottom control bar ───────────────────────────────
+                        AnimatedOpacity(
+                          opacity: _controlsVisible ? 1 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 24),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(32),
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(
+                                      sigmaX: 18,
+                                      sigmaY: 18,
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 12,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.10),
+                                        borderRadius: BorderRadius.circular(32),
+                                        border: Border.all(
+                                          color: Colors.white.withOpacity(0.12),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ListenableBuilder(
+                                            listenable: agora,
+                                            builder: (context, _) =>
+                                                _ControlButton(
+                                                  icon: agora.isMicEnabled
+                                                      ? Icons.mic_rounded
+                                                      : Icons.mic_off_rounded,
+                                                  active: agora.isMicEnabled,
+                                                  onTap: () =>
+                                                      agora.setMicEnabled(
+                                                        !agora.isMicEnabled,
+                                                      ),
+                                                ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          ListenableBuilder(
+                                            listenable: agora,
+                                            builder: (context, _) =>
+                                                _ControlButton(
+                                                  icon: agora.isCameraEnabled
+                                                      ? Icons.videocam_rounded
+                                                      : Icons
+                                                            .videocam_off_rounded,
+                                                  active: agora.isCameraEnabled,
+                                                  onTap: () =>
+                                                      agora.setCameraEnabled(
+                                                        !agora.isCameraEnabled,
+                                                      ),
+                                                ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          _ControlButton(
+                                            icon: Icons.flip_camera_ios_rounded,
+                                            active: true,
+                                            onTap: agora.switchCamera,
+                                          ),
+                                          const SizedBox(width: 14),
+                                          _EndCallButton(
+                                            onTap: () => context
+                                                .read<VideoCallBloc>()
+                                                .add(
+                                                  CallEndRequested(
+                                                    reason: null,
+                                                  ),
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
         );
       },
     );

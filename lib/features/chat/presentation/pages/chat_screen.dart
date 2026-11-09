@@ -19,6 +19,10 @@ import 'package:moonlight/features/chat/presentation/widgets/message_bubble.dart
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/features/chat/presentation/widgets/upload_progress_widget.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+import 'package:moonlight/features/chat/presentation/widgets/chat_gift_sheet.dart';
+import 'package:moonlight/features/video_call/presentation/utils/start_call.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
 
@@ -38,6 +42,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   late FocusNode _messageFocusNode = FocusNode();
   final ImagePicker _picker = ImagePicker();
+
+  // Voice notes: tap the mic to record, then send or delete.
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _recording = false;
+  DateTime? _recordStart;
+  Timer? _recordTicker;
+  String? _recordPath;
 
   // Reply functionality
   Message? _replyingToMessage;
@@ -462,6 +473,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _recordTicker?.cancel();
+    _recorder.dispose();
     _scrollDebounceTimer?.cancel();
     _typingClearTimer?.cancel();
     _typingSub?.cancel();
@@ -1511,6 +1524,132 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  Future<void> _startRecording() async {
+    try {
+      if (!await _recorder.hasPermission()) {
+        if (mounted) {
+          TopSnack.error(
+            context,
+            'Allow the microphone to record a voice note.',
+          );
+        }
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      _recordPath =
+          '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
+        path: _recordPath!,
+      );
+      _recordTicker?.cancel();
+      _recordTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        setState(() {});
+        // Keep notes short (5 minutes max).
+        if (_recordSeconds >= 300) _finishRecording(send: true);
+      });
+      setState(() {
+        _recording = true;
+        _recordStart = DateTime.now();
+      });
+    } catch (e) {
+      debugPrint('voice note start failed: $e');
+      if (mounted) TopSnack.error(context, 'Couldn\'t start recording.');
+    }
+  }
+
+  int get _recordSeconds => _recordStart == null
+      ? 0
+      : DateTime.now().difference(_recordStart!).inSeconds;
+
+  Future<void> _finishRecording({required bool send}) async {
+    if (!_recording) return;
+    final seconds = _recordSeconds;
+    _recordTicker?.cancel();
+    setState(() => _recording = false);
+    String? path;
+    try {
+      path = await _recorder.stop();
+    } catch (_) {}
+    path ??= _recordPath;
+    if (path == null) return;
+    final file = File(path);
+    if (!send || seconds < 1 || !file.existsSync()) {
+      if (file.existsSync()) file.deleteSync();
+      if (send && seconds < 1 && mounted) {
+        TopSnack.info(context, 'Too short — tap the mic and talk.');
+      }
+      return;
+    }
+    // The name carries the length; the upload marks it as a voice note.
+    final named = await file.rename(
+      '${file.parent.path}/voice_note_${seconds}s_${DateTime.now().millisecondsSinceEpoch}.m4a',
+    );
+    if (!mounted) return;
+    context.read<ChatCubit>().sendMediaMessage(
+      conversationUuid: widget.conversation.uuid,
+      file: named,
+      replyToUuid: _replyingToMessage?.uuid,
+    );
+    setState(() {
+      _replyingToMessage = null;
+      _showReplyPreview = false;
+    });
+    _scrollToBottom();
+  }
+
+  Widget _buildRecordingBar() {
+    final s = _recordSeconds;
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Delete',
+          onPressed: () => _finishRecording(send: false),
+          icon: const Icon(Icons.delete_outline_rounded, color: Colors.white70),
+        ),
+        const SizedBox(width: 4),
+        Container(
+          width: 10,
+          height: 10,
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF3B30),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            'Recording voice note…',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+        Container(
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.primary_,
+          ),
+          child: IconButton(
+            onPressed: () => _finishRecording(send: true),
+            icon: const Icon(Icons.send, color: Colors.white, size: 20),
+          ),
+        ),
+      ],
+    );
+  }
+
+  bool get _canGift =>
+      !widget.isClub && (widget.conversation.otherUserUuid ?? '').isNotEmpty;
+
   Widget _buildMessageInput() {
     final hasText = _messageController.text.trim().isNotEmpty;
     final hasMedia = _selectedMedia.isNotEmpty;
@@ -1542,113 +1681,134 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           // Selected Media Preview
           if (_selectedMedia.isNotEmpty) _buildSelectedMediaPreview(),
 
-          // Input Row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Emoji Button (inside the input field)
-              Container(
-                margin: EdgeInsets.only(bottom: 4),
-                child: IconButton(
-                  onPressed: _toggleEmoji,
-                  icon: Icon(
-                    _isEmojiVisible
-                        ? Icons.keyboard
-                        : Icons.emoji_emotions_outlined,
-                    color: AppColors.textSecondary.withOpacity(0.7),
-                    size: 22,
+          // Input Row (or the voice-note recording bar)
+          if (_recording)
+            _buildRecordingBar()
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Emoji Button (inside the input field)
+                Container(
+                  margin: EdgeInsets.only(bottom: 4),
+                  child: IconButton(
+                    onPressed: _toggleEmoji,
+                    icon: Icon(
+                      _isEmojiVisible
+                          ? Icons.keyboard
+                          : Icons.emoji_emotions_outlined,
+                      color: AppColors.textSecondary.withOpacity(0.7),
+                      size: 22,
+                    ),
+                    padding: EdgeInsets.all(6),
+                    constraints: BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
                   ),
-                  padding: EdgeInsets.all(6),
-                  constraints: BoxConstraints(),
-                  visualDensity: VisualDensity.compact,
                 ),
-              ),
-              SizedBox(width: 4),
+                SizedBox(width: 4),
 
-              // Message Input Field
-              Expanded(
-                child: Container(
-                  constraints: BoxConstraints(minHeight: 40),
-                  decoration: BoxDecoration(
-                    color: AppColors.card.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      // Attachment Button (inside input)
-                      Container(
-                        margin: EdgeInsets.only(left: 4, bottom: 4),
-                        child: _buildAttachmentButton(),
-                      ),
-                      SizedBox(width: 4),
-
-                      // Text Input
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          focusNode: _messageFocusNode,
-                          style: TextStyle(color: Colors.white, fontSize: 15),
-                          maxLines: 5,
-                          minLines: 1,
-                          decoration: InputDecoration(
-                            hintText: 'Message',
-                            hintStyle: TextStyle(
-                              color: AppColors.textSecondary.withOpacity(0.6),
-                              fontSize: 15,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 10,
-                            ),
-                          ),
-                          onChanged: (_) {
-                            _sendTypingIndicator();
-                            setState(() {}); // Update UI on text change
-                          },
-                          onTap: () {
-                            if (_isEmojiVisible) {
-                              setState(() {
-                                _isEmojiVisible = false;
-                              });
-                            }
-
-                            // Show keyboard when user taps the field
-                            _showKeyboardNow();
-                          },
+                // Message Input Field
+                Expanded(
+                  child: Container(
+                    constraints: BoxConstraints(minHeight: 40),
+                    decoration: BoxDecoration(
+                      color: AppColors.card.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        // Attachment Button (inside input)
+                        Container(
+                          margin: EdgeInsets.only(left: 4, bottom: 4),
+                          child: _buildAttachmentButton(),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(width: 8),
+                        if (_canGift)
+                          IconButton(
+                            tooltip: 'Send a gift',
+                            onPressed: () => showChatGiftSheet(
+                              context,
+                              conversationUuid: widget.conversation.uuid,
+                              recipientUuid: widget.conversation.otherUserUuid!,
+                              recipientName: widget.conversation.title,
+                            ),
+                            icon: const Icon(
+                              Icons.card_giftcard_rounded,
+                              color: Color(0xFFFFB020),
+                              size: 22,
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        SizedBox(width: 4),
 
-              // Send Button
-              Container(
-                margin: EdgeInsets.only(bottom: 4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: canSend
-                      ? AppColors.primary_
-                      : AppColors.textSecondary.withOpacity(0.3),
-                ),
-                child: IconButton(
-                  onPressed: canSend ? _sendMessage : null,
-                  icon: Icon(
-                    Icons.send,
-                    color: canSend
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.5),
-                    size: 20,
+                        // Text Input
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            focusNode: _messageFocusNode,
+                            style: TextStyle(color: Colors.white, fontSize: 15),
+                            maxLines: 5,
+                            minLines: 1,
+                            decoration: InputDecoration(
+                              hintText: 'Message',
+                              hintStyle: TextStyle(
+                                color: AppColors.textSecondary.withOpacity(0.6),
+                                fontSize: 15,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 10,
+                              ),
+                            ),
+                            onChanged: (_) {
+                              _sendTypingIndicator();
+                              setState(() {}); // Update UI on text change
+                            },
+                            onTap: () {
+                              if (_isEmojiVisible) {
+                                setState(() {
+                                  _isEmojiVisible = false;
+                                });
+                              }
+
+                              // Show keyboard when user taps the field
+                              _showKeyboardNow();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  padding: EdgeInsets.all(8),
-                  constraints: BoxConstraints(),
-                  visualDensity: VisualDensity.compact,
                 ),
-              ),
-            ],
-          ),
+                SizedBox(width: 8),
+
+                // Send Button
+                Container(
+                  margin: EdgeInsets.only(bottom: 4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary_,
+                  ),
+                  child: IconButton(
+                    // Nothing typed: the button records a voice note.
+                    onPressed: canSend
+                        ? _sendMessage
+                        : (_editingMessage == null ? _startRecording : null),
+                    tooltip: canSend ? 'Send' : 'Record a voice note',
+                    icon: Icon(
+                      canSend ? Icons.send : Icons.mic_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -2945,6 +3105,30 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
+          // One-to-one chats: free audio call and paid video call.
+          if (!widget.isClub &&
+              (widget.conversation.otherUserSlug ?? '').isNotEmpty) ...[
+            IconButton(
+              tooltip: 'Audio call',
+              onPressed: () => startAudioCall(
+                context,
+                calleeSlug: widget.conversation.otherUserSlug!,
+                calleeName: widget.conversation.title,
+                calleeAvatar: widget.conversation.imageUrl,
+              ),
+              icon: const Icon(Icons.call_rounded, color: Colors.white),
+            ),
+            IconButton(
+              tooltip: 'Video call',
+              onPressed: () => startVideoCall(
+                context,
+                calleeSlug: widget.conversation.otherUserSlug!,
+                calleeName: widget.conversation.title,
+                calleeAvatar: widget.conversation.imageUrl,
+              ),
+              icon: const Icon(Icons.videocam_rounded, color: Colors.white),
+            ),
+          ],
         ],
       ),
     );

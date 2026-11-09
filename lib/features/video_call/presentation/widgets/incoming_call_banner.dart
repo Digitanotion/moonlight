@@ -134,6 +134,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner> {
                       child: _BannerCard(
                         name: caller?.displayName ?? 'Someone',
                         avatarUrl: caller?.avatarUrl,
+                        audio: _displayState?.session?.isAudio ?? false,
                         loading: loading,
                         onAccept: _accept,
                         onDecline: _decline,
@@ -153,6 +154,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner> {
 class _BannerCard extends StatelessWidget {
   final String name;
   final String? avatarUrl;
+  final bool audio;
   final bool loading;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
@@ -160,6 +162,7 @@ class _BannerCard extends StatelessWidget {
   const _BannerCard({
     required this.name,
     required this.avatarUrl,
+    this.audio = false,
     required this.loading,
     required this.onAccept,
     required this.onDecline,
@@ -217,7 +220,7 @@ class _BannerCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Incoming video call',
+                      audio ? 'Incoming audio call' : 'Incoming video call',
                       style: AppTextStyles.caption.copyWith(
                         color: Colors.white.withOpacity(0.6),
                       ),

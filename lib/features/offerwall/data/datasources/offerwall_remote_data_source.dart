@@ -56,6 +56,12 @@ class OfferwallRemoteDataSource {
     return (res.data as Map)['url'] as String;
   }
 
+  /// TheoremReach survey wall — signed server-side like CPX.
+  Future<String> getTheoremReachLaunchUrl() async {
+    final res = await dio.get('/api/v1/offerwall/theoremreach/launch-url');
+    return (res.data as Map)['url'] as String;
+  }
+
   /// CPAGrip's actual offer list for the signed-in user — fetched
   /// server-to-server (see OfferwallService::fetchCpagripOffers), not an
   /// embedded widget. Each offer already carries this user's id baked

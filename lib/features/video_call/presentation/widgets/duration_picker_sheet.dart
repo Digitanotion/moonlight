@@ -7,6 +7,10 @@ import 'package:moonlight/core/theme/app_text_styles.dart';
 /// (and see the coin cost) before any coins are actually spent (doc 1C/1D:
 /// "They can choose how many minutes they want the video to last before it
 /// starts").
+/// Price of a video call (must match the server's
+/// services.video_call.rate_coins_per_minute).
+const int kVideoCallCoinsPerMinute = 10;
+
 class DurationPickerSheet extends StatefulWidget {
   final String calleeDisplayName;
   final int ratePerMinute;

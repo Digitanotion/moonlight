@@ -110,11 +110,15 @@ class CallInitiateRequested extends VideoCallEvent {
   final int minutes;
   final String initiatedFrom;
   final int? livestreamId;
+
+  /// "video" or "audio".
+  final String kind;
   CallInitiateRequested({
     required this.calleeUserSlug,
     required this.minutes,
     required this.initiatedFrom,
     this.livestreamId,
+    this.kind = 'video',
   });
 }
 
@@ -392,6 +396,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
         minutes: e.minutes,
         initiatedFrom: e.initiatedFrom,
         livestreamId: e.livestreamId,
+        kind: e.kind,
       );
       emit(
         state.copyWith(
@@ -583,6 +588,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
       channel: creds.channelName,
       token: creds.token,
       uid: creds.uid,
+      audioOnly: session.isAudio,
     );
   }
 

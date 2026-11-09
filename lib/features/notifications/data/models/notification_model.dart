@@ -30,6 +30,8 @@ class NotificationMeta {
   final bool isReply;
   final String? userUuid; // for follow notifications
   final String? liveUuid; // for live stream notifications
+  final String? clubUuid; // club community notifications
+  final String? clubName;
 
   const NotificationMeta({
     this.postUuid,
@@ -39,6 +41,8 @@ class NotificationMeta {
     this.isReply = false,
     this.userUuid,
     this.liveUuid,
+    this.clubUuid,
+    this.clubName,
   });
 
   factory NotificationMeta.fromJson(Map<String, dynamic> j) => NotificationMeta(
@@ -49,6 +53,8 @@ class NotificationMeta {
     isReply: j['is_reply'] == true,
     userUuid: j['user_uuid']?.toString(),
     liveUuid: j['live_uuid']?.toString(),
+    clubUuid: j['club_uuid']?.toString(),
+    clubName: j['club_name']?.toString(),
   );
 
   static NotificationMeta empty() => const NotificationMeta();

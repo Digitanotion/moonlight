@@ -79,8 +79,16 @@ class VideoCallAgoraService with ChangeNotifier {
     } catch (_) {}
   }
 
+  /// True during a free audio call (from a chat): no camera at all, and
+  /// "the other side is there" is judged by their audio, not video.
+  bool _audioOnly = false;
+  bool get audioOnly => _audioOnly;
+
   Future<void> _ensurePermissions() async {
-    final statuses = await [Permission.microphone, Permission.camera].request();
+    final statuses = await [
+      Permission.microphone,
+      if (!_audioOnly) Permission.camera,
+    ].request();
     final denied = statuses.values.any(
       (s) => s.isDenied || s.isPermanentlyDenied || s.isRestricted,
     );
@@ -95,7 +103,9 @@ class VideoCallAgoraService with ChangeNotifier {
     required String channel,
     required String token,
     required int uid,
+    bool audioOnly = false,
   }) async {
+    _audioOnly = audioOnly;
     if (appId.isEmpty) throw ArgumentError('appId is empty');
     if (channel.isEmpty) throw ArgumentError('channel is empty');
     if (token.isEmpty) throw ArgumentError('token is empty');
@@ -130,22 +140,30 @@ class VideoCallAgoraService with ChangeNotifier {
     );
 
     await e.enableAudio();
-    await e.enableVideo();
-    await e.setCameraCapturerConfiguration(
-      const CameraCapturerConfiguration(
-        cameraDirection: CameraDirection.cameraFront,
-      ),
-    );
-    await e.setVideoEncoderConfiguration(
-      const VideoEncoderConfiguration(
-        dimensions: VideoDimensions(width: 720, height: 1280),
-        frameRate: 24,
-        bitrate: 0,
-        orientationMode: OrientationMode.orientationModeFixedPortrait,
-        degradationPreference: DegradationPreference.maintainFramerate,
-      ),
-    );
-    await e.setDefaultAudioRouteToSpeakerphone(true);
+    if (audioOnly) {
+      await e.disableVideo();
+      // Like a phone call: earpiece until the user taps Speaker.
+      await e.setDefaultAudioRouteToSpeakerphone(false);
+      _speakerOn = false;
+    } else {
+      await e.enableVideo();
+      await e.setCameraCapturerConfiguration(
+        const CameraCapturerConfiguration(
+          cameraDirection: CameraDirection.cameraFront,
+        ),
+      );
+      await e.setVideoEncoderConfiguration(
+        const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 720, height: 1280),
+          frameRate: 24,
+          bitrate: 0,
+          orientationMode: OrientationMode.orientationModeFixedPortrait,
+          degradationPreference: DegradationPreference.maintainFramerate,
+        ),
+      );
+      await e.setDefaultAudioRouteToSpeakerphone(true);
+      _speakerOn = true;
+    }
 
     e.registerEventHandler(
       RtcEngineEventHandler(
@@ -161,6 +179,7 @@ class VideoCallAgoraService with ChangeNotifier {
         onUserJoined: (RtcConnection conn, int uid, int elapsed) {
           if (kDebugMode) debugPrint('[VideoCallAgora] Remote joined: $uid');
           _setNotifier(remoteUid, uid);
+          if (_audioOnly) _setNotifier(remoteStreamHealthy, true);
           _notify();
         },
         onUserOffline:
@@ -254,6 +273,15 @@ class VideoCallAgoraService with ChangeNotifier {
                   state == RemoteAudioState.remoteAudioStateDecoding;
               if (uid == remoteUid.value) {
                 _setNotifier(remoteHasAudio, hasAudio);
+                // Audio call: a muted mic is fine; only a frozen/failed
+                // stream counts as a network problem.
+                if (_audioOnly) {
+                  _setNotifier(
+                    remoteStreamHealthy,
+                    state != RemoteAudioState.remoteAudioStateFrozen &&
+                        state != RemoteAudioState.remoteAudioStateFailed,
+                  );
+                }
               }
               _notify();
             },
@@ -286,8 +314,8 @@ class VideoCallAgoraService with ChangeNotifier {
       token: token,
       channelId: channel,
       uid: uid,
-      options: const ChannelMediaOptions(
-        publishCameraTrack: true,
+      options: ChannelMediaOptions(
+        publishCameraTrack: !audioOnly,
         publishMicrophoneTrack: true,
         clientRoleType: ClientRoleType.clientRoleBroadcaster,
         channelProfile: ChannelProfileType.channelProfileCommunication,
@@ -311,6 +339,21 @@ class VideoCallAgoraService with ChangeNotifier {
       _notify();
     } catch (e) {
       debugPrint('❌ [VideoCallAgora] setMicEnabled failed: $e');
+    }
+  }
+
+  bool _speakerOn = true;
+  bool get speakerOn => _speakerOn;
+
+  /// Loudspeaker vs earpiece (audio calls start on the earpiece).
+  Future<void> setSpeakerOn(bool on) async {
+    if (_disposed || _engine == null) return;
+    try {
+      _speakerOn = on;
+      await _engine!.setEnableSpeakerphone(on);
+      _notify();
+    } catch (e) {
+      debugPrint('❌ [VideoCallAgora] setSpeakerOn failed: $e');
     }
   }
 

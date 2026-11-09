@@ -251,9 +251,17 @@ class ChatRepositoryImpl implements ChatRepository {
       debugPrint('📤 File size: ${fileBytes.length} bytes');
       debugPrint('📤 File type: ${_getMimeType(file.path)}');
 
+      // Voice notes from the mic button are named voice_note_<secs>s_….m4a
+      // (see VoiceNoteRecorder) — tell the server so it stores them as
+      // audio with their length.
+      final voice = RegExp(
+        r'voice_note_(\d+)s_',
+      ).firstMatch(file.path.split('/').last);
       final formData = FormData.fromMap({
         if (body != null && body.isNotEmpty) 'body': body,
         if (replyToUuid != null) 'reply_to_uuid': replyToUuid,
+        if (voice != null) 'voice_note': 1,
+        if (voice != null) 'voice_duration': int.parse(voice.group(1)!),
         'media[]': await MultipartFile.fromFile(
           file.path,
           filename: file.path.split('/').last,
@@ -331,6 +339,9 @@ class ChatRepositoryImpl implements ChatRepository {
         return 'application/pdf';
       case 'mp3':
         return 'audio/mpeg';
+      case 'm4a':
+      case 'aac':
+        return 'audio/mp4';
       default:
         return 'application/octet-stream';
     }

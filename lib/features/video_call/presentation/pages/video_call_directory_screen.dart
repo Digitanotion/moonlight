@@ -460,8 +460,7 @@ class _UserCard extends StatelessWidget {
     final minutes = await DurationPickerSheet.show(
       context,
       calleeDisplayName: user.displayName,
-      ratePerMinute:
-          100, // TODO: source from a pricing/config endpoint if one exists, instead of hardcoding
+      ratePerMinute: kVideoCallCoinsPerMinute,
       callerCoinBalance: balance,
     );
 

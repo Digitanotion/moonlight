@@ -17,21 +17,34 @@ class AgentRemoteDataSource {
         ((res.data as Map)['data'] as List? ?? const []),
       );
 
+  /// Every page of a paginated list (the server returns 20–30 per page and
+  /// only the first page used to be read — lists stopped at 20).
+  Future<List<Map<String, dynamic>>> _allPages(
+    String path, [
+    Map<String, dynamic> query = const {},
+  ]) async {
+    final all = <Map<String, dynamic>>[];
+    for (var page = 1; page <= 100; page++) {
+      final res = await dio.get(
+        path,
+        queryParameters: {...query, 'page': page, 'per_page': 100},
+      );
+      all.addAll(_list(res));
+      final meta = (res.data as Map)['meta'];
+      final last = meta is Map ? (meta['last_page'] as num?)?.toInt() ?? 1 : 1;
+      if (page >= last) break;
+    }
+    return all;
+  }
+
   Future<Map<String, dynamic>> me() async =>
       _data(await dio.get('/api/v1/agents/me'));
 
-  Future<List<Map<String, dynamic>>> directory({
-    String? country,
-    String? q,
-  }) async => _list(
-    await dio.get(
-      '/api/v1/agents',
-      queryParameters: {
+  Future<List<Map<String, dynamic>>> directory({String? country, String? q}) =>
+      _allPages('/api/v1/agents', {
         if (country != null && country.isNotEmpty) 'country': country,
         if (q != null && q.isNotEmpty) 'q': q,
-      },
-    ),
-  );
+      });
 
   Future<Map<String, dynamic>> detail(String code) async =>
       _data(await dio.get('/api/v1/agents/$code'));
@@ -59,11 +72,11 @@ class AgentRemoteDataSource {
     }
   }
 
-  Future<List<Map<String, dynamic>>> members() async =>
-      _list(await dio.get('/api/v1/agents/me/members'));
+  Future<List<Map<String, dynamic>>> members() =>
+      _allPages('/api/v1/agents/me/members');
 
-  Future<List<Map<String, dynamic>>> commissions() async =>
-      _list(await dio.get('/api/v1/agents/me/commissions'));
+  Future<List<Map<String, dynamic>>> commissions() =>
+      _allPages('/api/v1/agents/me/commissions');
 
   Future<List<Map<String, dynamic>>> withdrawals() async =>
       _list(await dio.get('/api/v1/agents/me/withdrawals'));

@@ -8,7 +8,10 @@ import 'package:moonlight/core/theme/app_colors.dart';
 import 'package:moonlight/features/chat/data/models/chat_models.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:moonlight/features/chat/presentation/pages/cubit/chat_cubit.dart';
+import 'package:moonlight/features/chat/presentation/utils/save_chat_media.dart';
+import 'package:moonlight/features/chat/presentation/widgets/chat_special_lines.dart';
 import 'package:moonlight/features/chat/presentation/widgets/video_player_dialog.dart';
+import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/widgets/video_thumbnail.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -181,9 +184,9 @@ class MessageBubble extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         if (hasLocalFile) {
-          _showImagePreview(context, mediaFile!);
+          _showImagePreview(context, mediaFile!, null, media);
         } else if (media.url.isNotEmpty) {
-          _showImagePreview(context, null, media.url);
+          _showImagePreview(context, null, media.url, media);
         }
       },
       child: Container(
@@ -486,62 +489,18 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildAudioContent(MediaAttachment media) {
+    final hasLocal = mediaFile != null && mediaFile!.existsSync();
     return Container(
-      constraints: BoxConstraints(maxWidth: 250),
-      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        color: isMe ? AppColors.primary_.withOpacity(0.85) : AppColors.card,
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: AppColors.primary_,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
-              ),
-            ),
-            child: const Icon(Icons.audiotrack, color: Colors.white),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Audio Message',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    media.duration != null
-                        ? _formatDuration(media.duration!)
-                        : '0:00',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: () {
-              // Implement play functionality
-            },
-            icon: Icon(Icons.play_arrow, color: AppColors.primary_),
-          ),
-        ],
+      child: VoiceNotePlayer(
+        url: media.url,
+        localFile: hasLocal ? mediaFile : null,
+        durationSeconds: media.duration,
+        isMe: isMe,
       ),
     );
   }
@@ -550,41 +509,61 @@ class MessageBubble extends StatelessWidget {
     BuildContext context,
     File? imageFile, [
     String? imageUrl,
+    MediaAttachment? media,
   ]) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(20),
-        child: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            width: double.infinity,
-            height: double.infinity,
-            child: InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 3,
-              child: Center(
-                child: imageFile != null
-                    ? Image.file(imageFile, fit: BoxFit.contain)
-                    : (imageUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              fit: BoxFit.contain,
-                              memCacheWidth: 1080,
-                              errorWidget: (context, url, error) => Center(
-                                child: Icon(
-                                  Icons.broken_image,
-                                  color: Colors.white,
-                                  size: 50,
-                                ),
-                              ),
-                            )
-                          : const SizedBox()),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    minScale: 0.5,
+                    maxScale: 3,
+                    child: Center(
+                      child: imageFile != null
+                          ? Image.file(imageFile, fit: BoxFit.contain)
+                          : (imageUrl != null
+                                ? CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.contain,
+                                    memCacheWidth: 1080,
+                                    errorWidget: (context, url, error) =>
+                                        Center(
+                                          child: Icon(
+                                            Icons.broken_image,
+                                            color: Colors.white,
+                                            size: 50,
+                                          ),
+                                        ),
+                                  )
+                                : const SizedBox()),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            if (media != null)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: IconButton.filled(
+                  style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                  tooltip: 'Save to phone',
+                  icon: const Icon(Icons.download_rounded, color: Colors.white),
+                  onPressed: () =>
+                      saveChatMedia(context, media, localFile: imageFile),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -615,6 +594,12 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isTyping) {
       return _buildTypingIndicator();
+    }
+    if (message.type == MessageType.gift) {
+      return ChatGiftLine(message: message, isMe: isMe);
+    }
+    if (message.type == MessageType.call) {
+      return ChatCallLine(message: message, isMe: isMe);
     }
 
     return Container(
@@ -853,9 +838,13 @@ class MessageBubble extends StatelessWidget {
   // clean vertical list of actions. Same options as before (sender gets
   // Edit/Delete, receiver gets Report), just a calmer, more legible layout.
   void _showMessageContextMenu(BuildContext context) {
-    final bool canEdit = message.type == MessageType.text && onEdit != null;
+    // Still sending (shown before the server confirms): only Copy makes
+    // sense until it has a real id.
+    final bool pending = message.uuid.startsWith('local-');
+    final bool canEdit =
+        !pending && message.type == MessageType.text && onEdit != null;
     final bool canCopy = message.body.trim().isNotEmpty;
-    final bool canReact = onReactWith != null || onReact != null;
+    final bool canReact = !pending && (onReactWith != null || onReact != null);
 
     showModalBottomSheet(
       context: context,
@@ -935,24 +924,48 @@ class MessageBubble extends StatelessWidget {
                     indent: 16,
                     endIndent: 16,
                   ),
-                _buildActionRow(
-                  icon: Icons.reply_rounded,
-                  label: 'Reply',
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    onReply?.call();
-                  },
-                ),
+                if (!pending)
+                  _buildActionRow(
+                    icon: Icons.reply_rounded,
+                    label: 'Reply',
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      onReply?.call();
+                    },
+                  ),
                 if (canCopy)
                   _buildActionRow(
                     icon: Icons.content_copy_rounded,
                     label: 'Copy',
+                    onTap: () async {
+                      Navigator.pop(sheetCtx);
+                      // Shown at the top: the old bottom SnackBar sat under
+                      // the chat's input bar, so copying looked broken.
+                      try {
+                        await Clipboard.setData(
+                          ClipboardData(text: message.body.trim()),
+                        );
+                        if (context.mounted) {
+                          TopSnack.success(context, 'Message copied');
+                        }
+                      } catch (_) {
+                        if (context.mounted) {
+                          TopSnack.error(context, 'Couldn\'t copy message');
+                        }
+                      }
+                    },
+                  ),
+                for (final m in message.media.where(
+                  (m) => m.isImage || m.isVideo,
+                ))
+                  _buildActionRow(
+                    icon: Icons.download_rounded,
+                    label: m.isVideo
+                        ? 'Save video to phone'
+                        : 'Save photo to phone',
                     onTap: () {
                       Navigator.pop(sheetCtx);
-                      Clipboard.setData(ClipboardData(text: message.body));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Message copied')),
-                      );
+                      saveChatMedia(context, m);
                     },
                   ),
                 if (isMe && canEdit)
@@ -964,7 +977,9 @@ class MessageBubble extends StatelessWidget {
                       onEdit?.call();
                     },
                   ),
-                if (isMe)
+                if (pending)
+                  const SizedBox.shrink()
+                else if (isMe)
                   _buildActionRow(
                     icon: Icons.delete_outline_rounded,
                     label: 'Delete',

@@ -61,7 +61,7 @@ class _DailyTasksView extends StatefulWidget {
 
 class _DailyTasksViewState extends State<_DailyTasksView>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void dispose() {
@@ -177,6 +177,8 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                 color: AppColors.dark,
                 child: TabBar(
                   controller: _tabs,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
                   indicatorColor: const Color(0xFF1FBF75),
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white38,
@@ -185,6 +187,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                     Tab(text: 'CPAGrip'),
                     Tab(text: 'Timewall'),
                     Tab(text: 'CPX'),
+                    Tab(text: 'Surveys'),
                   ],
                 ),
               ),
@@ -195,6 +198,7 @@ class _DailyTasksViewState extends State<_DailyTasksView>
                     _CpagripOfferwallView(),
                     _TimewallOfferwallView(),
                     _CpxOfferwallView(),
+                    _CpxOfferwallView(provider: _SignedWall.theoremReach),
                   ],
                 ),
               ),
@@ -552,8 +556,12 @@ class _OfferwallErrorView extends StatelessWidget {
 /// this device: it's signed with the same secret that verifies postbacks,
 /// so it's fetched from our backend (which keeps that secret server-side)
 /// instead.
+/// Walls whose launch link is signed by our server.
+enum _SignedWall { cpx, theoremReach }
+
 class _CpxOfferwallView extends StatefulWidget {
-  const _CpxOfferwallView();
+  final _SignedWall provider;
+  const _CpxOfferwallView({this.provider = _SignedWall.cpx});
 
   @override
   State<_CpxOfferwallView> createState() => _CpxOfferwallViewState();
@@ -578,7 +586,10 @@ class _CpxOfferwallViewState extends State<_CpxOfferwallView> {
 
     String url;
     try {
-      url = await sl<OfferwallRemoteDataSource>().getCpxLaunchUrl();
+      final ds = sl<OfferwallRemoteDataSource>();
+      url = widget.provider == _SignedWall.theoremReach
+          ? await ds.getTheoremReachLaunchUrl()
+          : await ds.getCpxLaunchUrl();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -637,7 +648,9 @@ class _CpxOfferwallViewState extends State<_CpxOfferwallView> {
           ),
         if (_hasError)
           _OfferwallErrorView(
-            message: 'Could not load CPX Research tasks.',
+            message: widget.provider == _SignedWall.theoremReach
+                ? 'Could not load TheoremReach surveys.'
+                : 'Could not load CPX Research tasks.',
             onRetry: _load,
           ),
         if (_loading && !_hasError) const Center(child: AppLogoLoader()),

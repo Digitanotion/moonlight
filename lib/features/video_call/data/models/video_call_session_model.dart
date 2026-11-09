@@ -42,6 +42,10 @@ class VideoCallAgoraCredentials {
 
 class VideoCallSessionModel {
   final String uuid;
+
+  /// "video" (paid, per minute) or "audio" (free call from a chat).
+  final String kind;
+  bool get isAudio => kind == 'audio';
   final String
   status; // pending|ringing|active|completed|rejected|no_answer|cancelled
   final String channelName;
@@ -65,6 +69,7 @@ class VideoCallSessionModel {
 
   VideoCallSessionModel({
     required this.uuid,
+    this.kind = 'video',
     required this.status,
     required this.channelName,
     required this.initiatedFrom,
@@ -94,6 +99,7 @@ class VideoCallSessionModel {
 
     return VideoCallSessionModel(
       uuid: (map['uuid'] ?? '').toString(),
+      kind: (map['kind'] ?? 'video').toString(),
       status: (map['status'] ?? '').toString(),
       channelName: (map['channel_name'] ?? '').toString(),
       initiatedFrom: (map['initiated_from'] ?? '').toString(),

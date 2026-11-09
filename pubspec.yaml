@@ -1,6 +1,6 @@
 name: moonlight
 description: Moonlight Livestream App MVP
-version: 1.9.8+74
+version: 1.9.9+75
 
 # ==== ENVIRONMENT SECTION ====
 environment:
@@ -83,6 +83,7 @@ dependencies:
     path: packages/ringtone_native
   play_install_referrer: ^0.5.0
   interactive_media_ads: ^0.3.0+18
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:

@@ -190,12 +190,14 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
     required String initiatedFrom,
     int? livestreamId,
     String? idempotencyKey,
+    String kind = 'video',
   }) async {
     final res = await _client.dio.post(
       '/api/v1/video-call/initiate',
       data: {
         'callee_user_slug': calleeUserSlug,
-        'minutes': minutes,
+        'kind': kind,
+        if (kind != 'audio') 'minutes': minutes,
         'initiated_from': initiatedFrom,
         if (livestreamId != null) 'livestream_id': livestreamId,
         if (idempotencyKey != null) 'idempotency_key': idempotencyKey,

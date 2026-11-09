@@ -5,7 +5,9 @@
 		<key>NSCameraUsageDescription</key>
 		<string>This app needs access to camera to take photos for your profile</string>
 		<key>NSMicrophoneUsageDescription</key>
-		<string>Need microphone for audio test.</string>
+		<string>Moonlight uses the microphone for calls, livestreams, club rooms and voice notes.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Moonlight saves photos and videos from your chats to your library when you choose Save.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>This app needs access to photos to select profile pictures</string>
 		<key>CFBundleDevelopmentRegion</key>

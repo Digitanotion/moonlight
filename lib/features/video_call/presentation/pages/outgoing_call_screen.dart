@@ -12,9 +12,12 @@ class OutgoingCallScreen extends StatefulWidget {
   final String calleeUserSlug;
   final String calleeDisplayName;
   final String? calleeAvatarUrl;
-  final String initiatedFrom; // directory|profile|livestream
+  final String initiatedFrom; // directory|profile|livestream|chat
   final int? livestreamId;
   final int initialMinutes;
+
+  /// "video" (paid) or "audio" (free, from a chat).
+  final String kind;
 
   const OutgoingCallScreen({
     super.key,
@@ -24,6 +27,7 @@ class OutgoingCallScreen extends StatefulWidget {
     required this.initiatedFrom,
     this.livestreamId,
     this.initialMinutes = 1,
+    this.kind = 'video',
   });
 
   @override
@@ -135,6 +139,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                 minutes: widget.initialMinutes,
                 initiatedFrom: widget.initiatedFrom,
                 livestreamId: widget.livestreamId,
+                kind: widget.kind,
               ),
             );
           });
@@ -324,7 +329,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   String _statusLabel(VideoCallState state) {
     if (state.error != null) return 'Could not connect';
     if (state.phase == VideoCallPhase.connecting) return 'Connecting...';
-    return 'Calling...';
+    return widget.kind == 'audio' ? 'Audio calling...' : 'Video calling...';
   }
 
   Widget _avatarFallback() {

@@ -14,6 +14,7 @@ import 'package:moonlight/features/clubs/presentation/pages/support_club_page.da
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 import 'package:moonlight/features/clubs/rooms/club_rooms_bar.dart';
+import 'package:moonlight/features/clubs/community/club_community_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:moonlight/core/widgets/app_logo_loader.dart';
@@ -136,6 +137,17 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                               ClubRoomsBar(
                                 clubUuid: club.uuid,
                                 canOpenAudio: true, // any member can start one
+                              ),
+                              const SizedBox(height: 14),
+                              _CommunityCard(
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ClubCommunityScreen(
+                                      clubUuid: club.uuid,
+                                      clubName: club.name,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                             const SizedBox(height: 30),
@@ -702,44 +714,55 @@ class _HeaderMeta extends StatelessWidget {
                 children: [
                   _Pill('Club Profile'),
                   const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => _navigateToMembersPage(context),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.white30, width: 0.5),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.people_outline,
-                              size: 12,
-                              color: Colors.white70,
+                  // Flexible: on narrow phones the members chip used to
+                  // overflow into the chat button.
+                  Flexible(
+                    child: GestureDetector(
+                      onTap: () => _navigateToMembersPage(context),
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.white30,
+                              width: 0.5,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${club.membersCount} members',
-                              style: const TextStyle(
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.people_outline,
+                                size: 12,
                                 color: Colors.white70,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-                            const SizedBox(width: 2),
-                            const Icon(
-                              Icons.chevron_right,
-                              size: 14,
-                              color: Colors.white70,
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  '${club.membersCount} members',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.chevron_right,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -1377,6 +1400,62 @@ class _Pill extends StatelessWidget {
           color: Colors.white,
           fontSize: 11,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Opens the club's community feed (posts, photos, voice, comments).
+class _CommunityCard extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CommunityCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF2A1F5C), Color(0xFF3B1E54)],
+          ),
+          border: Border.all(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+          ),
+        ),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Color(0xFF8B5CF6),
+              child: Icon(Icons.forum_rounded, color: Colors.white),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Community',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Share what\'s on your mind — posts, photos, videos, voice',
+                    style: TextStyle(color: Colors.white60, fontSize: 12.5),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Colors.white54),
+          ],
         ),
       ),
     );

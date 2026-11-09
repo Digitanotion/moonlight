@@ -15,6 +15,7 @@ import 'package:moonlight/features/live_viewer/domain/entities.dart';
 import 'package:moonlight/features/live_viewer/presentation/bloc/viewer_bloc.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/gift_bottom_sheet.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/live_guest_strip.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/free_coins_ad_button.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/live_join_button.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/chat_panel.dart';
 import 'package:moonlight/features/live_viewer/presentation/widgets/overlays/follow_prompt_overlay.dart';
@@ -311,7 +312,19 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                         alignment: const Alignment(1, 0.62),
                         child: Padding(
                           padding: const EdgeInsets.only(right: 12),
-                          child: LiveJoinButton(repository: widget.repository),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              // Rewarded ad, just above Join.
+                              FreeCoinsAdButton(
+                                customData:
+                                    'live:${widget.repository.livestreamIdNumeric}',
+                              ),
+                              const SizedBox(height: 10),
+                              LiveJoinButton(repository: widget.repository),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -447,7 +460,7 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
       final minutes = await DurationPickerSheet.show(
         context,
         calleeDisplayName: host.name,
-        ratePerMinute: 100,
+        ratePerMinute: kVideoCallCoinsPerMinute,
         callerCoinBalance: balance,
       );
 

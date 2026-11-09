@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/services/deep_link_service.dart';
+import 'package:moonlight/features/clubs/community/club_community_screen.dart';
 import 'package:moonlight/features/chat/presentation/pages/chat_screen.dart';
 import 'package:moonlight/features/clubs/presentation/pages/club_profile_screen.dart';
 import 'package:moonlight/features/profile_view/presentation/pages/profile_view.dart';
@@ -48,6 +49,13 @@ class NotificationHandlerService {
       case 'club.donation.confirmed':
       case 'club.room_started': // audio / video room live → club page shows it
         _handleClubNotification(payload);
+        break;
+
+      // Club community → straight to the club's feed
+      case 'club.community_comment':
+      case 'club.community_reply':
+      case 'club.community_post':
+        _handleClubCommunityNotification(payload);
         break;
 
       // Social Notifications
@@ -197,6 +205,20 @@ class NotificationHandlerService {
 
     // Option 2: If you have a way to open directly to a conversation with just UUID,
     // you would do that here. For now, we'll use conversations list.
+  }
+
+  void _handleClubCommunityNotification(Map<String, dynamic> payload) {
+    final club = (payload['club_uuid'] ?? payload['club_slug'] ?? '')
+        .toString();
+    if (club.isEmpty) return;
+    final name = payload['club_name']?.toString() ?? 'Club';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      main_app.MyApp.navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => ClubCommunityScreen(clubUuid: club, clubName: name),
+        ),
+      );
+    });
   }
 
   void _handleClubNotification(Map<String, dynamic> payload) {
