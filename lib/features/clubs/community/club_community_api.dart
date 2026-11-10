@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CommunityAuthor {
   final String uuid;
@@ -189,6 +190,7 @@ class ClubCommunityApi {
     String? body,
     List<File> files = const [],
     int? voiceSeconds,
+    void Function(double progress)? onProgress,
   }) async {
     final form = FormData.fromMap({
       if (body != null && body.trim().isNotEmpty) 'body': body.trim(),
@@ -205,8 +207,11 @@ class ClubCommunityApi {
     final res = await _dio.post(
       '$_base/posts',
       data: form,
+      onSendProgress: (sent, total) {
+        if (total > 0) onProgress?.call(sent / total);
+      },
       options: Options(
-        sendTimeout: const Duration(minutes: 3),
+        sendTimeout: const Duration(minutes: 10),
         receiveTimeout: const Duration(minutes: 3),
       ),
     );
@@ -248,7 +253,41 @@ class ClubCommunityApi {
 String communityError(Object e) {
   if (e is DioException) {
     final d = e.response?.data;
+    if (e.response?.statusCode == 413) {
+      return 'That file is too big to upload. Try a shorter video.';
+    }
     if (d is Map && d['message'] != null) return d['message'].toString();
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.connectionTimeout) {
+      return 'Upload failed — check your connection and try again.';
+    }
   }
   return 'Something went wrong. Please try again.';
+}
+
+/// "New posts" red badge on the club's Community banner: posts newer than
+/// the last time this member opened the community (kept on the phone).
+class CommunityUnread {
+  static String _key(String club) => 'club_community_seen_$club';
+
+  /// How many posts arrived since the last visit (0 if none / offline).
+  static Future<int> count(String club) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seen = DateTime.tryParse(prefs.getString(_key(club)) ?? '');
+      final (posts, _) = await ClubCommunityApi(club).posts();
+      if (seen == null) return posts.length;
+      return posts.where((p) => p.createdAt.isAfter(seen)).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static Future<void> markSeen(String club) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key(club), DateTime.now().toIso8601String());
+    } catch (_) {}
+  }
 }

@@ -56,6 +56,17 @@ class _Avatar extends StatelessWidget {
   }
 }
 
+/// What the composer hands back: the screen uploads it in the background.
+class _PostDraft {
+  final String body;
+  final List<File> files;
+  final int? voiceSeconds;
+  const _PostDraft(this.body, this.files, this.voiceSeconds);
+}
+
+/// Max size per photo/video (must match the server's limit).
+const _maxUploadBytes = 200 * 1024 * 1024;
+
 class ClubCommunityScreen extends StatefulWidget {
   final String clubUuid;
   final String clubName;
@@ -81,6 +92,7 @@ class _ClubCommunityScreenState extends State<ClubCommunityScreen> {
   @override
   void initState() {
     super.initState();
+    CommunityUnread.markSeen(widget.clubUuid);
     _load(reset: true);
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
@@ -91,6 +103,8 @@ class _ClubCommunityScreenState extends State<ClubCommunityScreen> {
 
   @override
   void dispose() {
+    // Everything up to now has been seen (including the user's own posts).
+    CommunityUnread.markSeen(widget.clubUuid);
     _scroll.dispose();
     super.dispose();
   }
@@ -117,18 +131,135 @@ class _ClubCommunityScreenState extends State<ClubCommunityScreen> {
     }
   }
 
+  // Background upload of the post being published (null = none).
+  _PostDraft? _uploading;
+  double _uploadProgress = 0;
+  String? _uploadError;
+
   Future<void> _compose() async {
-    final post = await showModalBottomSheet<CommunityPost>(
+    if (_uploading != null && _uploadError == null) {
+      TopSnack.info(context, 'Your last post is still uploading.');
+      return;
+    }
+    final draft = await showModalBottomSheet<_PostDraft>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ComposerSheet(api: _api),
+      builder: (_) => const _ComposerSheet(),
     );
-    if (post != null && mounted) {
-      setState(() => _posts.insert(0, post));
-      TopSnack.success(context, 'Posted to ${widget.clubName}');
+    if (draft != null && mounted) _publish(draft);
+  }
+
+  /// Uploads [draft] while the user keeps browsing; a slim bar at the top
+  /// shows the progress, then the feed refreshes with the new post.
+  Future<void> _publish(_PostDraft draft) async {
+    setState(() {
+      _uploading = draft;
+      _uploadProgress = 0;
+      _uploadError = null;
+    });
+    try {
+      await _api.create(
+        body: draft.body,
+        files: draft.files,
+        voiceSeconds: draft.voiceSeconds,
+        onProgress: (p) {
+          if (mounted && (p - _uploadProgress).abs() >= 0.01) {
+            setState(() => _uploadProgress = p);
+          }
+        },
+      );
+      if (!mounted) return;
+      setState(() => _uploading = null);
+      await _load(reset: true);
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _uploadError = communityError(e));
     }
+  }
+
+  Widget _uploadBar() {
+    final failed = _uploadError != null;
+    final hasMedia = _uploading!.files.isNotEmpty;
+    final pct = (_uploadProgress * 100).clamp(0, 100).round();
+    final label = failed
+        ? _uploadError!
+        : (_uploadProgress >= 0.999 || !hasMedia)
+        ? 'Publishing your post…'
+        : 'Uploading your post… $pct%';
+    return Material(
+      color: _card,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  failed
+                      ? Icons.error_outline_rounded
+                      : Icons.cloud_upload_outlined,
+                  color: failed ? const Color(0xFFFF6B81) : _accent,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+                if (failed) ...[
+                  TextButton(
+                    onPressed: () => _publish(_uploading!),
+                    child: const Text('Retry'),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() {
+                      _uploading = null;
+                      _uploadError = null;
+                    }),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ] else
+                  const SizedBox(width: 8),
+              ],
+            ),
+            if (!failed) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    minHeight: 4,
+                    value: (hasMedia && _uploadProgress < 0.999)
+                        ? _uploadProgress
+                        : null,
+                    backgroundColor: Colors.white12,
+                    color: _accent,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _react(int i, String value) async {
@@ -219,55 +350,67 @@ class _ClubCommunityScreenState extends State<ClubCommunityScreen> {
           ],
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: () => _load(reset: true),
-        child: ListView.builder(
-          controller: _scroll,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 40),
-          itemCount: _posts.length + 2,
-          itemBuilder: (_, i) {
-            if (i == 0) return _ComposerPrompt(onTap: _compose);
-            if (i == _posts.length + 1) {
-              if (_error != null && _posts.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    _error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white60),
-                  ),
-                );
-              }
-              if (_loading) {
-                return const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (_posts.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(40),
-                  child: Text(
-                    'No posts yet. Be the first to share what\'s on your mind!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            }
-            final idx = i - 1;
-            final p = _posts[idx];
-            return _PostCard(
-              post: p,
-              onLike: () => _react(idx, 'like'),
-              onDislike: () => _react(idx, 'dislike'),
-              onComments: () => _openComments(idx),
-              onDelete: p.canDelete ? () => _delete(idx) : null,
-            );
-          },
-        ),
+      body: Column(
+        children: [
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            child: _uploading == null
+                ? const SizedBox(width: double.infinity)
+                : _uploadBar(),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => _load(reset: true),
+              child: ListView.builder(
+                controller: _scroll,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 40),
+                itemCount: _posts.length + 2,
+                itemBuilder: (_, i) {
+                  if (i == 0) return _ComposerPrompt(onTap: _compose);
+                  if (i == _posts.length + 1) {
+                    if (_error != null && _posts.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white60),
+                        ),
+                      );
+                    }
+                    if (_loading) {
+                      return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    if (_posts.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Text(
+                          'No posts yet. Be the first to share what\'s on your mind!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }
+                  final idx = i - 1;
+                  final p = _posts[idx];
+                  return _PostCard(
+                    post: p,
+                    onLike: () => _react(idx, 'like'),
+                    onDislike: () => _react(idx, 'dislike'),
+                    onComments: () => _openComments(idx),
+                    onDelete: p.canDelete ? () => _delete(idx) : null,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -529,8 +672,7 @@ class _MediaView extends StatelessWidget {
 // ── composer ─────────────────────────────────────────────────────────────
 
 class _ComposerSheet extends StatefulWidget {
-  final ClubCommunityApi api;
-  const _ComposerSheet({required this.api});
+  const _ComposerSheet();
 
   @override
   State<_ComposerSheet> createState() => _ComposerSheetState();
@@ -545,7 +687,6 @@ class _ComposerSheetState extends State<_ComposerSheet> {
   Timer? _ticker;
   File? _voice;
   int _voiceSeconds = 0;
-  bool _posting = false;
 
   @override
   void dispose() {
@@ -556,8 +697,27 @@ class _ComposerSheetState extends State<_ComposerSheet> {
   }
 
   Future<void> _pickMedia() async {
-    final picked = await ImagePicker().pickMultipleMedia(limit: 4);
+    // Photos are shrunk to JPEG (also turns iPhone/Samsung HEIC photos
+    // into something every phone can show) — much faster to upload.
+    final picked = await ImagePicker().pickMultipleMedia(
+      limit: 4,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 82,
+    );
     if (picked.isEmpty || !mounted) return;
+    for (final x in picked.take(4)) {
+      if (await File(x.path).length() > _maxUploadBytes) {
+        if (mounted) {
+          TopSnack.error(
+            context,
+            'That video is too big (max 200 MB). Pick a shorter one.',
+          );
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
     setState(() {
       _voice = null;
       _files
@@ -602,8 +762,8 @@ class _ComposerSheetState extends State<_ComposerSheet> {
     });
   }
 
-  Future<void> _post() async {
-    if (_posting || _recording) return;
+  void _post() {
+    if (_recording) return;
     if (_text.text.trim().isEmpty && _files.isEmpty && _voice == null) {
       TopSnack.info(
         context,
@@ -611,19 +771,16 @@ class _ComposerSheetState extends State<_ComposerSheet> {
       );
       return;
     }
-    setState(() => _posting = true);
-    try {
-      final post = await widget.api.create(
-        body: _text.text,
-        files: _voice != null ? [_voice!] : _files,
-        voiceSeconds: _voice != null ? _voiceSeconds : null,
-      );
-      if (mounted) Navigator.pop(context, post);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _posting = false);
-      TopSnack.error(context, communityError(e));
-    }
+    // Hand the post to the feed, which uploads it in the background with a
+    // progress bar at the top — the user isn't stuck waiting here.
+    Navigator.pop(
+      context,
+      _PostDraft(
+        _text.text,
+        _voice != null ? [_voice!] : List.of(_files),
+        _voice != null ? _voiceSeconds : null,
+      ),
+    );
   }
 
   @override
@@ -660,8 +817,8 @@ class _ComposerSheetState extends State<_ComposerSheet> {
                   const Spacer(),
                   FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: _accent),
-                    onPressed: _posting ? null : _post,
-                    child: Text(_posting ? 'Posting…' : 'Post'),
+                    onPressed: _post,
+                    child: const Text('Post'),
                   ),
                 ],
               ),

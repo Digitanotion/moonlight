@@ -322,6 +322,8 @@ class _WithdrawalsList extends StatelessWidget {
         final w = items[i];
         final status = (w['status'] ?? 'pending').toString();
         final cents = (w['amount_usd_cents'] ?? 0) as int;
+        final fee = (w['fee_usd_cents'] as num?)?.toInt() ?? 0;
+        final payout = (w['payout_usd_cents'] as num?)?.toInt() ?? cents;
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -343,6 +345,16 @@ class _WithdrawalsList extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
+                    if (fee > 0)
+                      Text(
+                        'You receive \$${(payout / 100).toStringAsFixed(2)} '
+                        '(fee \$${(fee / 100).toStringAsFixed(2)})',
+                        style: const TextStyle(
+                          color: Color(0xFF22C55E),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     if ((w['bank_country'] ?? '').toString().isNotEmpty)
                       Text(
                         [
@@ -690,6 +702,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                 'Amount (USD)',
                 keyboardType: TextInputType.number,
               ),
+              _FeeBreakdown(amountText: _amountCtrl, state: state),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -1152,6 +1165,85 @@ class _OfferwallBankSearchSheetState extends State<_OfferwallBankSearchSheet> {
                     );
                   },
                 ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Live "Moonlight fee / You receive" lines under the withdrawal amount.
+class _FeeBreakdown extends StatelessWidget {
+  final TextEditingController amountText;
+  final OfferwallState state;
+  const _FeeBreakdown({required this.amountText, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: amountText,
+      builder: (_, value, _) {
+        final usd = double.tryParse(value.text.trim()) ?? 0;
+        final cents = (usd * 100).round();
+        final pct = state.withdrawFeePercent;
+        final pctText = pct == pct.roundToDouble()
+            ? pct.toStringAsFixed(0)
+            : pct.toStringAsFixed(1);
+        if (cents <= 0) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'A $pctText% Moonlight service fee is taken when you withdraw.',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          );
+        }
+        final fee = state.feeFor(cents);
+        final receive = cents - fee;
+        Widget row(String label, String amount, {bool bold = false}) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: bold ? Colors.white : Colors.white60,
+                    fontSize: 13,
+                    fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                ),
+              ),
+              Text(
+                amount,
+                style: TextStyle(
+                  color: bold ? const Color(0xFF22C55E) : Colors.white70,
+                  fontSize: bold ? 15 : 13,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
+        return Container(
+          margin: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              row(
+                'Moonlight service fee ($pctText%)',
+                '-\$${(fee / 100).toStringAsFixed(2)}',
+              ),
+              row(
+                'You receive',
+                '\$${(receive / 100).toStringAsFixed(2)}',
+                bold: true,
               ),
             ],
           ),

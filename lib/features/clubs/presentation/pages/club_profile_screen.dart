@@ -14,6 +14,7 @@ import 'package:moonlight/features/clubs/presentation/pages/support_club_page.da
 import 'package:moonlight/widgets/top_snack.dart';
 import 'package:moonlight/features/clubs/presentation/club_coins_ui.dart';
 import 'package:moonlight/features/clubs/rooms/club_rooms_bar.dart';
+import 'package:moonlight/features/clubs/community/club_community_api.dart';
 import 'package:moonlight/features/clubs/community/club_community_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -140,6 +141,7 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
                               ),
                               const SizedBox(height: 14),
                               _CommunityCard(
+                                clubUuid: club.uuid,
                                 onTap: () => Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) => ClubCommunityScreen(
@@ -1407,14 +1409,40 @@ class _Pill extends StatelessWidget {
 }
 
 /// Opens the club's community feed (posts, photos, voice, comments).
-class _CommunityCard extends StatelessWidget {
-  final VoidCallback onTap;
-  const _CommunityCard({required this.onTap});
+class _CommunityCard extends StatefulWidget {
+  final String clubUuid;
+  final Future<void> Function() onTap;
+  const _CommunityCard({required this.clubUuid, required this.onTap});
+
+  @override
+  State<_CommunityCard> createState() => _CommunityCardState();
+}
+
+class _CommunityCardState extends State<_CommunityCard> {
+  int _unread = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final n = await CommunityUnread.count(widget.clubUuid);
+    if (mounted) setState(() => _unread = n);
+  }
+
+  Future<void> _open() async {
+    setState(() => _unread = 0);
+    await widget.onTap();
+    _refresh();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final hasNew = _unread > 0;
     return GestureDetector(
-      onTap: onTap,
+      onTap: _open,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -1426,19 +1454,56 @@ class _CommunityCard extends StatelessWidget {
             color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
           ),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: Color(0xFF8B5CF6),
-              child: Icon(Icons.forum_rounded, color: Colors.white),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Color(0xFF8B5CF6),
+                  child: Icon(Icons.forum_rounded, color: Colors.white),
+                ),
+                if (hasNew)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 20,
+                        minHeight: 20,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF3B30),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF2A1F5C),
+                          width: 2,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _unread > 9 ? '9+' : '$_unread',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Community',
                     style: TextStyle(
                       color: Colors.white,
@@ -1446,15 +1511,23 @@ class _CommunityCard extends StatelessWidget {
                       fontSize: 16,
                     ),
                   ),
-                  SizedBox(height: 2),
+                  const SizedBox(height: 2),
                   Text(
-                    'Share what\'s on your mind — posts, photos, videos, voice',
-                    style: TextStyle(color: Colors.white60, fontSize: 12.5),
+                    hasNew
+                        ? (_unread == 1
+                              ? '1 new post — tap to see it'
+                              : '${_unread > 9 ? '9+' : _unread} new posts — tap to see them')
+                        : 'Share what\'s on your mind — posts, photos, videos, voice',
+                    style: TextStyle(
+                      color: hasNew ? const Color(0xFFFF8A80) : Colors.white60,
+                      fontSize: 12.5,
+                      fontWeight: hasNew ? FontWeight.w700 : FontWeight.normal,
+                    ),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: Colors.white54),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white54),
           ],
         ),
       ),

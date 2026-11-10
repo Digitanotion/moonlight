@@ -59,6 +59,29 @@ class VideoCallAgoraService with ChangeNotifier {
   // reporting 0 fps must NOT be read as a network stall.
   bool _remoteCameraMutedByPeer = false;
 
+  // Peer's voice and video, tracked separately. In a video call the call
+  // is "up" while EITHER is coming through: on a weak network Agora drops
+  // the video to save the voice, and that must not read as reconnecting.
+  bool _remoteAudioOk = false;
+  bool _remoteVideoOk = false;
+  // Video paused by Agora's audio-only fallback (weak downlink).
+  bool _remoteVideoFellBack = false;
+
+  void _updateRemoteHealth() {
+    final ok = _audioOnly
+        ? _remoteAudioOk
+        : (_remoteAudioOk || _remoteVideoOk || _remoteCameraMutedByPeer);
+    _setNotifier(remoteStreamHealthy, ok);
+  }
+
+  Future<void> _try(Future<void> Function() f) async {
+    try {
+      await f();
+    } catch (err) {
+      debugPrint('⚠️ [VideoCallAgora] optional setting failed: $err');
+    }
+  }
+
   bool get joined => _joined;
   String? get channelId => _channelId;
   bool get isMicEnabled => _isMicEnabled;
@@ -126,6 +149,9 @@ class VideoCallAgoraService with ChangeNotifier {
     _localUid = uid;
     _lastError = null;
     _remoteCameraMutedByPeer = false;
+    _remoteAudioOk = false;
+    _remoteVideoOk = false;
+    _remoteVideoFellBack = false;
     _setNotifier(connectionHealthy, true);
     _setNotifier(remoteStreamHealthy, false);
 
@@ -140,6 +166,22 @@ class VideoCallAgoraService with ChangeNotifier {
     );
 
     await e.enableAudio();
+    // Voice first, for weak networks and low-end phones (WhatsApp-style):
+    // speech codec (~18 kbps, survives packet loss far better than the
+    // music codec) and the call/chat audio mode with hardware echo
+    // cancellation.
+    await _try(() => e.setAudioProfile(
+          profile: AudioProfileType.audioProfileSpeechStandard,
+          scenario: AudioScenarioType.audioScenarioChatroom,
+        ));
+    if (!audioOnly) {
+      // When the downlink can't carry both, drop the peer's video and keep
+      // their voice instead of letting both break up. Video comes back by
+      // itself when the network improves.
+      await _try(() => e.setRemoteSubscribeFallbackOption(
+            StreamFallbackOptions.streamFallbackOptionAudioOnly,
+          ));
+    }
     if (audioOnly) {
       await e.disableVideo();
       // Like a phone call: earpiece until the user taps Speaker.
@@ -152,13 +194,19 @@ class VideoCallAgoraService with ChangeNotifier {
           cameraDirection: CameraDirection.cameraFront,
         ),
       );
+      // 360p/15fps: plenty for a phone-sized face, a fraction of 720p's
+      // bandwidth and CPU, so it leaves room on a slow uplink for the
+      // voice. Under pressure the encoder steps resolution and fps down
+      // together (maintainBalanced — which only takes effect with the
+      // adaptive orientation mode; the old fixed-portrait setting silently
+      // disabled it).
       await e.setVideoEncoderConfiguration(
         const VideoEncoderConfiguration(
-          dimensions: VideoDimensions(width: 720, height: 1280),
-          frameRate: 24,
+          dimensions: VideoDimensions(width: 360, height: 640),
+          frameRate: 15,
           bitrate: 0,
-          orientationMode: OrientationMode.orientationModeFixedPortrait,
-          degradationPreference: DegradationPreference.maintainFramerate,
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference: DegradationPreference.maintainBalanced,
         ),
       );
       await e.setDefaultAudioRouteToSpeakerphone(true);
@@ -179,7 +227,10 @@ class VideoCallAgoraService with ChangeNotifier {
         onUserJoined: (RtcConnection conn, int uid, int elapsed) {
           if (kDebugMode) debugPrint('[VideoCallAgora] Remote joined: $uid');
           _setNotifier(remoteUid, uid);
-          if (_audioOnly) _setNotifier(remoteStreamHealthy, true);
+          if (_audioOnly) {
+            _remoteAudioOk = true;
+            _updateRemoteHealth();
+          }
           _notify();
         },
         onUserOffline:
@@ -188,6 +239,8 @@ class VideoCallAgoraService with ChangeNotifier {
                 debugPrint('[VideoCallAgora] Remote offline: $uid ($reason)');
               }
               if (remoteUid.value == uid) {
+                _remoteAudioOk = false;
+                _remoteVideoOk = false;
                 _setNotifier(remoteUid, null);
                 _setNotifier(remoteHasVideo, false);
                 _setNotifier(remoteHasAudio, false);
@@ -204,13 +257,13 @@ class VideoCallAgoraService with ChangeNotifier {
           if (stats.uid != remoteUid.value) return;
           // If the peer deliberately turned their camera off, there are
           // no frames by design — don't treat that as a stall.
-          if (_remoteCameraMutedByPeer) return;
+          if (_remoteCameraMutedByPeer || _remoteVideoFellBack) return;
           final fps = stats.rendererOutputFrameRate ?? 0;
           final bitrate = stats.receivedBitrate ?? 0;
-          final flowing = fps > 0 && bitrate > 0;
           // A hard 0-fps report is a definitive "not seeing them" — this
           // catches a soft stall that never emits a frozen state change.
-          _setNotifier(remoteStreamHealthy, flowing);
+          _remoteVideoOk = fps > 0 && bitrate > 0;
+          _updateRemoteHealth();
           _notify();
         },
         onConnectionStateChanged:
@@ -242,6 +295,13 @@ class VideoCallAgoraService with ChangeNotifier {
               _setNotifier(remoteHasVideo, decoding || starting);
 
               if (reason ==
+                  RemoteVideoStateReason.remoteVideoStateReasonAudioFallback) {
+                _remoteVideoFellBack = true;
+              } else if (decoding || starting) {
+                _remoteVideoFellBack = false;
+              }
+
+              if (reason ==
                   RemoteVideoStateReason.remoteVideoStateReasonRemoteMuted) {
                 _remoteCameraMutedByPeer = true;
               } else if (reason ==
@@ -252,13 +312,11 @@ class VideoCallAgoraService with ChangeNotifier {
                 _remoteCameraMutedByPeer = false;
               }
 
-              // "Healthy" = we're seeing them, OR they deliberately turned
-              // their camera off (network fine — don't freeze the timer).
-              // Frozen/stopped for any other reason is a network problem.
-              _setNotifier(
-                remoteStreamHealthy,
-                decoding || starting || _remoteCameraMutedByPeer,
-              );
+              // Seeing them, or they deliberately turned their camera off.
+              // Frozen/stopped otherwise — fine as long as the voice still
+              // comes through (see _updateRemoteHealth).
+              _remoteVideoOk = decoding || starting;
+              _updateRemoteHealth();
               _notify();
             },
         onRemoteAudioStateChanged:
@@ -273,15 +331,12 @@ class VideoCallAgoraService with ChangeNotifier {
                   state == RemoteAudioState.remoteAudioStateDecoding;
               if (uid == remoteUid.value) {
                 _setNotifier(remoteHasAudio, hasAudio);
-                // Audio call: a muted mic is fine; only a frozen/failed
-                // stream counts as a network problem.
-                if (_audioOnly) {
-                  _setNotifier(
-                    remoteStreamHealthy,
+                // A muted mic is fine; only a frozen/failed stream counts
+                // as a network problem.
+                _remoteAudioOk =
                     state != RemoteAudioState.remoteAudioStateFrozen &&
-                        state != RemoteAudioState.remoteAudioStateFailed,
-                  );
-                }
+                    state != RemoteAudioState.remoteAudioStateFailed;
+                _updateRemoteHealth();
               }
               _notify();
             },

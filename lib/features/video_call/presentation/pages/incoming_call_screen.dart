@@ -132,7 +132,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                     children: [
                       const SizedBox(height: 32),
                       Text(
-                        (state.session?.isAudio ?? false)
+                        state.session == null
+                            ? 'Incoming call'
+                            : state.session!.isAudio
                             ? 'Incoming audio call'
                             : 'Incoming video call',
                         style: AppTextStyles.body.copyWith(
@@ -286,7 +288,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                               },
                             ),
                             _CallActionButton(
-                              icon: Icons.videocam_rounded,
+                              icon: (state.session?.isAudio ?? true)
+                                  ? Icons.call_rounded
+                                  : Icons.videocam_rounded,
                               color: AppColors.accentGreen,
                               label: 'Accept',
                               loading: state.actionLoading,

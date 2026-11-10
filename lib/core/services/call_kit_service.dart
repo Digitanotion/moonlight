@@ -10,6 +10,7 @@
 // built earlier) is no longer shown for the ringing phase. Once the user
 // taps Accept here, we go straight into ActiveCallScreen.
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:flutter_callkit_incoming/entities/entities.dart';
@@ -17,6 +18,8 @@ import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/services/notification_service.dart';
 import 'package:moonlight/core/services/ringtone_player.dart';
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CallKitService {
   static final CallKitService _instance = CallKitService._internal();
@@ -116,6 +119,30 @@ class CallKitService {
       }
     } catch (e) {
       debugPrint('⚠️ CallKit permission request failed: $e');
+    }
+    await _askToRunInBackground();
+  }
+
+  /// Calls only ring with the app closed if the phone lets Moonlight
+  /// receive pushes in the background. OPPO / Realme / Xiaomi / vivo /
+  /// Tecno / Infinix stop that for "optimised" apps once they're swiped
+  /// away, so ask (system dialog) to leave Moonlight out of battery
+  /// optimisation. Asked at most once every 3 days until allowed.
+  Future<void> _askToRunInBackground() async {
+    if (!Platform.isAndroid) return;
+    try {
+      if (await Permission.ignoreBatteryOptimizations.isGranted) return;
+      final prefs = await SharedPreferences.getInstance();
+      const key = 'battery_opt_asked_at';
+      final last = DateTime.tryParse(prefs.getString(key) ?? '');
+      if (last != null &&
+          DateTime.now().difference(last) < const Duration(days: 3)) {
+        return;
+      }
+      await prefs.setString(key, DateTime.now().toIso8601String());
+      await Permission.ignoreBatteryOptimizations.request();
+    } catch (e) {
+      debugPrint('⚠️ Battery optimisation request failed: $e');
     }
   }
 

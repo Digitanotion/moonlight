@@ -13,6 +13,8 @@
 
 import 'dart:async';
 
+import 'package:moonlight/core/services/rewarded_ad_service.dart';
+import 'package:moonlight/features/live_viewer/presentation/widgets/free_coins_ad_button.dart';
 import 'package:moonlight/core/services/ad_service.dart';
 import 'package:moonlight/core/services/reel_ad_service.dart';
 import 'package:moonlight/core/services/video_ad_service.dart';
@@ -193,13 +195,35 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   /// Most ads kept alive at once; each one holds its own video player.
   static const _maxLiveAds = 2;
 
+  // "Watch an ad, earn free coins" cards (rewarded ads), every few videos.
+  // Only shown on request — the user taps play, or just keeps scrolling.
+  final Set<int> _rewardAfterVideo = {};
+  int _videosSinceReward = 0;
+  static const _rewardEvery = 6;
+
   void _buildPages() {
     final pages = <_FeedPage>[];
     for (var v = 0; v < _videoPosts.length; v++) {
       pages.add(_FeedPage.video(v, _videoPosts[v].id));
+      if (_rewardAfterVideo.contains(v)) pages.add(_FeedPage.reward(v));
       if (_adAfterVideo.containsKey(v)) pages.add(_FeedPage.ad(v));
     }
     _pages = pages;
+  }
+
+  void _scheduleRewardCard(int videoIndex) {
+    final ads = RewardedAdService.instance;
+    if (!ads.configured) return;
+    _videosSinceReward++;
+    if (_videosSinceReward >= _rewardEvery - 2) ads.preload();
+    if (_videosSinceReward < _rewardEvery) return;
+    // Never two ad pages in a row: wait for the next video instead.
+    if (_adAfterVideo.containsKey(videoIndex) ||
+        _rewardAfterVideo.contains(videoIndex)) {
+      return;
+    }
+    _videosSinceReward = 0;
+    setState(() => _rewardAfterVideo.add(videoIndex));
   }
 
   void _scheduleReelAd(int videoIndex) {
@@ -438,6 +462,12 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
       _adAfterVideo
         ..clear()
         ..addAll(shifted);
+      final rewards = _rewardAfterVideo
+          .map((v) => v > removed ? v - 1 : (v == removed && v > 0 ? v - 1 : v))
+          .toSet();
+      _rewardAfterVideo
+        ..clear()
+        ..addAll(rewards);
     }
     feed.removePostById(post.id);
     if (wasLast) {
@@ -491,11 +521,18 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               _maybePaginate();
               _bumpView(i);
               _scheduleReelAd(i);
+              _scheduleRewardCard(i);
               // Interstitial fallback when in-feed ads aren't configured.
               AdService.instance.onShortVideoSwiped();
             },
             itemBuilder: (context, page) {
               final entry = _pages[page];
+              if (entry.reward) {
+                return _RewardAdPage(
+                  key: ValueKey(entry.id),
+                  onBack: () => Navigator.of(context).pop(),
+                );
+              }
               if (entry.video == null) {
                 return _ReelAdPage(
                   key: ValueKey(entry.id),
@@ -1092,11 +1129,188 @@ class _FeedPage {
   final int? video;
   final int afterVideo;
   final String id;
+  final bool reward;
   _FeedPage.video(int v, Object postId)
     : video = v,
       afterVideo = v,
+      reward = false,
       id = 'video-$postId';
-  _FeedPage.ad(int after) : video = null, afterVideo = after, id = 'ad-$after';
+  _FeedPage.ad(int after)
+    : video = null,
+      afterVideo = after,
+      reward = false,
+      id = 'ad-$after';
+  _FeedPage.reward(int after)
+    : video = null,
+      afterVideo = after,
+      reward = true,
+      id = 'reward-$after';
+}
+
+/// "Watch a short ad, earn free coins" — a full page in the feed with a
+/// play button. Tapping opens a rewarded ad; scrolling just moves on.
+class _RewardAdPage extends StatefulWidget {
+  final VoidCallback onBack;
+  const _RewardAdPage({super.key, required this.onBack});
+
+  @override
+  State<_RewardAdPage> createState() => _RewardAdPageState();
+}
+
+class _RewardAdPageState extends State<_RewardAdPage> {
+  bool _busy = false;
+  bool _watched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    RewardedAdService.instance.preload();
+  }
+
+  Future<void> _play() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    await watchRewardedAd(context, customData: 'feed');
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _watched = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1B1140), Color(0xFF0B0820), Colors.black],
+            ),
+          ),
+        ),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 84,
+                  height: 84,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFC24B), Color(0xFFFF8A00)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF8A00).withValues(alpha: 0.5),
+                        blurRadius: 30,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.monetization_on_rounded,
+                    color: Colors.white,
+                    size: 46,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  _watched ? 'Want more free coins?' : 'Earn free coins',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Watch a short video ad and get coins in your wallet.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                ),
+                const SizedBox(height: 34),
+                ValueListenableBuilder<bool>(
+                  valueListenable: RewardedAdService.instance.ready,
+                  builder: (_, ready, _) => GestureDetector(
+                    onTap: _play,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: ready ? 1 : 0.6,
+                      child: Container(
+                        width: 78,
+                        height: 78,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                        child: _busy
+                            ? const Padding(
+                                padding: EdgeInsets.all(24),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Color(0xFFFF8A00),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Color(0xFFFF8A00),
+                                size: 52,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Tap to watch',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.of(context).padding.bottom + 28,
+          child: const Column(
+            children: [
+              Icon(
+                Icons.keyboard_arrow_up_rounded,
+                color: Colors.white38,
+                size: 30,
+              ),
+              Text(
+                'or swipe to keep watching',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: top + 8,
+          left: 8,
+          child: IconButton(
+            onPressed: widget.onBack,
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// A native video ad laid out like a short video (see NativeReelAdFactory).

@@ -157,12 +157,11 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
             // for the rest of the app session (see the "already busy"
             // bug this fixes).
             if (bloc.state.phase != VideoCallPhase.idle) {
-              final uuid = bloc.state.session?.uuid;
-              if (uuid != null) {
-                bloc.add(CallRejectRequested(uuid));
-              } else {
-                bloc.add(CallDismissed());
-              }
+              // This is the caller's screen: cancelling our own call is
+              // end(), not reject() (reject is the callee's action and
+              // the server refuses it from the caller, leaving the call
+              // ringing on the other phone).
+              bloc.add(CallEndRequested(reason: 'caller_ended'));
             }
             Navigator.of(context).pop();
           },

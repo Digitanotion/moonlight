@@ -195,6 +195,12 @@ class _LocalMediaHealthChanged extends VideoCallEvent {
 /// even if the `video_call_ended` push was dropped.
 class _RemotePeerLeft extends VideoCallEvent {}
 
+/// The server confirmed the end of a call (final duration / coins).
+class _CallSettled extends VideoCallEvent {
+  final VideoCallSessionModel session;
+  _CallSettled(this.session);
+}
+
 /// Internal: the OTHER party paused / resumed the countdown — sourced
 /// from the 'video_call_paused' / 'video_call_resumed' notification.
 class _CallPauseStateChanged extends VideoCallEvent {
@@ -272,6 +278,12 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     on<_RemoteMediaChanged>(_onRemoteMediaChanged);
     on<_LocalMediaHealthChanged>(_onLocalMediaHealthChanged);
     on<_RemotePeerLeft>(_onRemotePeerLeft);
+    on<_CallSettled>((e, emit) {
+      if (state.phase == VideoCallPhase.ended &&
+          state.session?.uuid == e.session.uuid) {
+        emit(state.copyWith(session: e.session));
+      }
+    });
     on<_CallPauseStateChanged>(_onCallPauseStateChanged);
     on<_IncomingCallReceived>(_onIncomingReceived);
     on<_CallAcceptedReceived>(_onAcceptedReceived);
@@ -398,6 +410,14 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
         livestreamId: e.livestreamId,
         kind: e.kind,
       );
+      // The caller hung up (or left the screen) while the call was still
+      // being created: end it right away instead of bringing the ringing
+      // screen back and leaving the other person's phone ringing.
+      if (state.phase != VideoCallPhase.ringingOutgoing ||
+          state.session != null) {
+        unawaited(_endOnServer(session.uuid, 'caller_ended'));
+        return;
+      }
       emit(
         state.copyWith(
           actionLoading: false,
@@ -642,86 +662,90 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
 
   Future<void> _doEnd(CallEndRequested e, Emitter<VideoCallState> emit) async {
     final sessionUuid = state.session?.uuid;
-    // Capture this BEFORE resetting anything below — determines which
-    // phase to land on once the end() call completes.
     final wasActive = state.phase == VideoCallPhase.active;
     final endingSession = state.session;
     _tickTimer?.cancel();
     _detachRemoteMediaWatcher();
     _stopResolutionPoll();
-    await agora.leave();
-    await agora.disposeEngine();
+
+    // Close the call screen NOW. Waiting for the server first meant that
+    // on a slow network (or a busy server) hanging up did nothing visible
+    // for up to a minute, or forever — the screen just sat there.
+    // Only a call that actually connected goes to `ended` (summary / audio
+    // close); a cancelled ringing call goes to `idle`, which the outgoing
+    // screen closes on.
+    emit(
+      state.copyWith(
+        actionLoading: false,
+        clearError: true,
+        phase: wasActive ? VideoCallPhase.ended : VideoCallPhase.idle,
+      ),
+    );
+
+    try {
+      await agora.leave();
+      await agora.disposeEngine();
+    } catch (_) {}
 
     // If this call happened while the callee was livestreaming, her own
     // Agora engine (AgoraService) was released before the call's engine
-    // joined (see _joinAgoraFromSession). Now that the call's over,
-    // reconnect her to her own stream — fetch a fresh publisher token
-    // (the original one may be long expired by now) and rejoin. Wrapped
-    // in try/catch: a failure here shouldn't block the call itself from
-    // finishing cleanly — worst case, she has to manually restart her
-    // stream, same as before this fix existed.
+    // joined. Now that the call's over, reconnect her to her own stream.
     if (endingSession?.initiatedFrom == 'livestream' &&
         endingSession?.livestreamId != null) {
+      unawaited(_rejoinLivestream(endingSession!.livestreamId!));
+    }
+
+    if (sessionUuid == null) return;
+
+    // Tell the server (retries in the background so the other side's
+    // screen closes too). The settled session updates the summary screen
+    // if it is still showing this call.
+    unawaited(
+      _endOnServer(sessionUuid, e.reason).then((settled) {
+        if (settled != null && !_isDisposed) add(_CallSettled(settled));
+      }),
+    );
+  }
+
+  /// Ends the call on the server, retrying a few times on network errors.
+  Future<VideoCallSessionModel?> _endOnServer(
+    String sessionUuid,
+    String? reason,
+  ) async {
+    for (var attempt = 0; attempt < 4; attempt++) {
       try {
-        final res = await sl<DioClient>().dio.get(
-          '/api/v1/live/${endingSession!.livestreamId}/rtc',
-          queryParameters: {'role': 'publisher'},
-        );
-        final data = (res.data is Map) ? res.data as Map : const {};
-        await sl<AgoraService>().startPublishing(
-          appId: (data['app_id'] ?? '').toString(),
-          channel: (data['channel'] ?? '').toString(),
-          token: (data['rtc_token'] ?? '').toString(),
-          uidType: 'uid',
-          uid: '${data['rtc_uid'] ?? ''}',
-        );
-        debugPrint('✅ Rejoined livestream after call ended');
+        return await repo.end(sessionUuid: sessionUuid, reason: reason);
       } catch (err) {
-        debugPrint('⚠️ Failed to rejoin livestream after call: $err');
+        debugPrint('⚠️ end call attempt ${attempt + 1} failed: $err');
+        final m = err.toString().toLowerCase();
+        // Already ended / not found: nothing more to do.
+        if (m.contains('already') || m.contains('not found') ||
+            m.contains('422') || m.contains('404') || m.contains('409')) {
+          return null;
+        }
+        await Future<void>.delayed(Duration(seconds: 2 << attempt));
       }
     }
+    return null;
+  }
 
-    if (sessionUuid == null) {
-      emit(VideoCallState.initial());
-      return;
-    }
-
-    emit(state.copyWith(actionLoading: true, clearError: true));
+  Future<void> _rejoinLivestream(int livestreamId) async {
     try {
-      final session = await repo.end(
-        sessionUuid: sessionUuid,
-        reason: e.reason,
+      final res = await sl<DioClient>().dio.get(
+        '/api/v1/live/$livestreamId/rtc',
+        queryParameters: {'role': 'publisher'},
       );
-      emit(
-        state.copyWith(
-          actionLoading: false,
-          session: session,
-          // Only a call that actually connected should go to `ended`
-          // (which ActiveCallScreen listens for, pushing the summary
-          // screen). A call cancelled while still ringing/connecting
-          // needs `idle` instead — that's what OutgoingCallScreen's
-          // existing listener knows how to auto-close on. Landing on
-          // `ended` unconditionally (the previous behavior) meant
-          // cancelling a not-yet-connected call transitioned to a phase
-          // neither screen had any handling for at all, so nothing ever
-          // happened and the screen just sat there indefinitely.
-          phase: wasActive ? VideoCallPhase.ended : VideoCallPhase.idle,
-        ),
+      final data = (res.data is Map) ? res.data as Map : const {};
+      await sl<AgoraService>().startPublishing(
+        appId: (data['app_id'] ?? '').toString(),
+        channel: (data['channel'] ?? '').toString(),
+        token: (data['rtc_token'] ?? '').toString(),
+        uidType: 'uid',
+        uid: '${data['rtc_uid'] ?? ''}',
       );
+      debugPrint('✅ Rejoined livestream after call ended');
     } catch (err) {
-      // Same bug class as _onJoin's fix — leaving phase wherever it was
-      // (active/connecting) on a failed end() call wedges the bloc
-      // permanently, silently dropping every future incoming call under
-      // the "already busy" guard for the rest of the session. The Agora
-      // engine is already torn down above regardless of this call's
-      // outcome, so idle is always safe to land on here.
-      emit(
-        state.copyWith(
-          actionLoading: false,
-          error: _msg(err),
-          phase: VideoCallPhase.idle,
-        ),
-      );
+      debugPrint('⚠️ Failed to rejoin livestream after call: $err');
     }
   }
 
@@ -770,6 +794,9 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
         session: VideoCallSessionModel(
           uuid: sessionUuid,
           status: 'ringing',
+          // Audio or video — without this every incoming call was treated
+          // as video (camera icon + "Incoming video call" while ringing).
+          kind: (meta['call_kind'] ?? meta['kind'] ?? 'video').toString(),
           channelName: (meta['channel_name'] ?? '').toString(),
           initiatedFrom: '',
           rateCoinsPerMinute: 0,

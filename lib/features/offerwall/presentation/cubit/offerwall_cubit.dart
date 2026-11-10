@@ -20,6 +20,13 @@ class OfferwallState extends Equatable {
   final List<Map<String, dynamic>> withdrawals;
   final String? error;
 
+  /// Moonlight's share, taken when the user withdraws (e.g. 30).
+  final double withdrawFeePercent;
+
+  /// Part of the balance earned before the fee moved to withdrawal — it
+  /// already had Moonlight's share taken, so it withdraws with no fee.
+  final int feeFreeUsdCents;
+
   const OfferwallState({
     this.loading = false,
     this.activating = false,
@@ -32,9 +39,17 @@ class OfferwallState extends Equatable {
     this.transactions = const [],
     this.withdrawals = const [],
     this.error,
+    this.withdrawFeePercent = 30,
+    this.feeFreeUsdCents = 0,
   });
 
   double get balanceUsd => balanceUsdCents / 100;
+
+  /// Moonlight's fee on a withdrawal of [amountCents] (fee-free money first).
+  int feeFor(int amountCents) {
+    final free = amountCents < feeFreeUsdCents ? amountCents : feeFreeUsdCents;
+    return ((amountCents - free) * withdrawFeePercent / 100).round();
+  }
 
   OfferwallState copyWith({
     bool? loading,
@@ -49,6 +64,8 @@ class OfferwallState extends Equatable {
     List<Map<String, dynamic>>? withdrawals,
     bool clearError = false,
     String? error,
+    double? withdrawFeePercent,
+    int? feeFreeUsdCents,
   }) {
     return OfferwallState(
       loading: loading ?? this.loading,
@@ -63,6 +80,8 @@ class OfferwallState extends Equatable {
       transactions: transactions ?? this.transactions,
       withdrawals: withdrawals ?? this.withdrawals,
       error: clearError ? null : (error ?? this.error),
+      withdrawFeePercent: withdrawFeePercent ?? this.withdrawFeePercent,
+      feeFreeUsdCents: feeFreeUsdCents ?? this.feeFreeUsdCents,
     );
   }
 
@@ -79,6 +98,8 @@ class OfferwallState extends Equatable {
     transactions,
     withdrawals,
     error,
+    withdrawFeePercent,
+    feeFreeUsdCents,
   ];
 }
 
@@ -102,6 +123,9 @@ class OfferwallCubit extends Cubit<OfferwallState> {
               (status['min_withdraw_usd_cents'] ?? 1500) as int,
           maxWithdrawUsdCents:
               (status['max_withdraw_usd_cents'] ?? 10000) as int,
+          withdrawFeePercent:
+              (status['withdraw_fee_percent'] as num?)?.toDouble() ?? 30,
+          feeFreeUsdCents: (status['fee_free_usd_cents'] as num?)?.toInt() ?? 0,
         ),
       );
     } catch (e) {

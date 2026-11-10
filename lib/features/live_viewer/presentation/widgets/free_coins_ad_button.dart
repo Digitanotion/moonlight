@@ -4,12 +4,63 @@
 // Opens a (preloaded) Google rewarded ad; the server credits the coins when
 // AdMob confirms the ad was watched.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
 import 'package:moonlight/core/services/rewarded_ad_service.dart';
 import 'package:moonlight/widgets/top_snack.dart';
+
+/// Shows a rewarded ad and, once it's watched, tells the user what it
+/// earned. Used by the live's "Free coins" pill and the short-video feed.
+/// Completes when the ad closes (or right away when none is ready).
+Future<void> watchRewardedAd(BuildContext context, {String? customData}) async {
+  final ads = RewardedAdService.instance;
+  final uuid = sl<CurrentUserService>().getCurrentUserId();
+  if (uuid == null) return;
+  final done = Completer<void>();
+  var earned = false;
+  final shown = await ads.show(
+    userUuid: uuid,
+    customData: customData,
+    onEarned: () => earned = true,
+    onClosed: () {
+      if (!done.isCompleted) done.complete();
+      if (earned && context.mounted) _thank(context);
+    },
+  );
+  if (!shown) {
+    if (context.mounted) {
+      TopSnack.info(context, 'An ad is loading — try again in a moment.');
+    }
+    return;
+  }
+  await done.future;
+}
+
+/// AdMob tells the server a few seconds after the ad; then say what it
+/// earned. With 0.2 coins per ad, every 5th ad pays 1 coin.
+Future<void> _thank(BuildContext context) async {
+  var msg = 'Thanks for watching! Your free coins are being added.';
+  try {
+    await Future.delayed(const Duration(seconds: 4));
+    final r = await sl<DioClient>().dio.get('/api/v1/ads/rewarded/status');
+    final d = r.data is Map ? r.data as Map : const {};
+    final perCoin = (d['ads_per_coin'] as num?)?.toInt() ?? 1;
+    final toNext = (d['ads_to_next_coin'] as num?)?.toInt() ?? 1;
+    final left = (d['remaining_today'] as num?)?.toInt();
+    if (perCoin > 1) {
+      msg = toNext == perCoin
+          ? 'You earned 1 coin! Watch $perCoin more ads for the next one.'
+          : 'Thanks for watching! $toNext more '
+                '${toNext == 1 ? 'ad' : 'ads'} to earn your next coin.';
+    }
+    if (left == 0) msg += ' That\'s all the ads for today.';
+  } catch (_) {}
+  if (context.mounted) TopSnack.success(context, msg);
+}
 
 class FreeCoinsAdButton extends StatefulWidget {
   /// Sent with the reward (shows up on the server as e.g. "live:3374").
@@ -31,46 +82,10 @@ class _FreeCoinsAdButtonState extends State<FreeCoinsAdButton> {
   }
 
   Future<void> _watch() async {
-    final uuid = sl<CurrentUserService>().getCurrentUserId();
-    if (uuid == null || _busy) return;
+    if (_busy) return;
     setState(() => _busy = true);
-    var earned = false;
-    final shown = await _ads.show(
-      userUuid: uuid,
-      customData: widget.customData,
-      onEarned: () => earned = true,
-      onClosed: () {
-        if (!mounted) return;
-        setState(() => _busy = false);
-        if (earned) _thank();
-      },
-    );
-    if (!shown && mounted) {
-      setState(() => _busy = false);
-      TopSnack.info(context, 'An ad is loading — try again in a moment.');
-    }
-  }
-
-  /// AdMob tells the server a few seconds after the ad; then say what it
-  /// earned. With 0.2 coins per ad, every 5th ad pays 1 coin.
-  Future<void> _thank() async {
-    var msg = 'Thanks for watching! Your free coins are being added.';
-    try {
-      await Future.delayed(const Duration(seconds: 4));
-      final r = await sl<DioClient>().dio.get('/api/v1/ads/rewarded/status');
-      final d = r.data is Map ? r.data as Map : const {};
-      final perCoin = (d['ads_per_coin'] as num?)?.toInt() ?? 1;
-      final toNext = (d['ads_to_next_coin'] as num?)?.toInt() ?? 1;
-      final left = (d['remaining_today'] as num?)?.toInt();
-      if (perCoin > 1) {
-        msg = toNext == perCoin
-            ? 'You earned 1 coin! Watch $perCoin more ads for the next one.'
-            : 'Thanks for watching! $toNext more '
-                  '${toNext == 1 ? 'ad' : 'ads'} to earn your next coin.';
-      }
-      if (left == 0) msg += ' That\'s all the ads for today.';
-    } catch (_) {}
-    if (mounted) TopSnack.success(context, msg);
+    await watchRewardedAd(context, customData: widget.customData);
+    if (mounted) setState(() => _busy = false);
   }
 
   @override

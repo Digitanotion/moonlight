@@ -237,7 +237,7 @@ class _BannerCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _RoundButton(
-                icon: Icons.videocam_rounded,
+                icon: audio ? Icons.call_rounded : Icons.videocam_rounded,
                 color: AppColors.accentGreen,
                 loading: loading,
                 onTap: onAccept,
