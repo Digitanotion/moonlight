@@ -63,7 +63,12 @@ class _OngoingCallBarState extends State<OngoingCallBar> {
   }
 
   void _refresh() {
-    if (mounted) setState(() {});
+    // The call screen flips isOpen inside its initState, i.e. while the
+    // tree is building; a setState from there was dropped, so the bar
+    // stayed up over the open call. Re-check right after this frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override

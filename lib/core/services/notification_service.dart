@@ -291,15 +291,24 @@ class NotificationService {
   // channel ever ends up stuck with wrong sound/importance settings (as
   // happened with CallKit's own channel — channel settings are
   // permanently sticky once created), this one still works independently.
+  //
+  // v2 RINGS: the system itself plays the ringtone, looping (the
+  // notification is posted with FLAG_INSISTENT) until it is cancelled.
+  // Sound the app plays itself is cut after ~1-2s on OPPO/Xiaomi/Tecno
+  // etc., which freeze backgrounded apps — the call "rang" for a second.
+  // Channel sound settings are sticky once created, hence the new id.
+  static const _incomingCallChannelId = 'incoming_call_ring_v2';
+
   Future<void> _createIncomingCallChannel() async {
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'incoming_call_fallback_v1',
-      'Incoming Calls (Notification)',
-      description:
-          'Fallback actionable notification for incoming video calls, shown alongside the full-screen ringing UI.',
+      _incomingCallChannelId,
+      'Incoming calls',
+      description: 'Rings for incoming calls when Moonlight is not open.',
       importance: Importance.max,
       enableVibration: true,
       playSound: true,
+      sound: RawResourceAndroidNotificationSound('ringtone_default'),
+      audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
     );
 
     await _notificationsPlugin
@@ -328,10 +337,16 @@ class NotificationService {
     });
 
     final androidDetails = AndroidNotificationDetails(
-      'incoming_call_fallback_v1',
-      'Incoming Calls (Notification)',
+      _incomingCallChannelId,
+      'Incoming calls',
       channelDescription:
-          'Fallback actionable notification for incoming video calls.',
+          'Rings for incoming calls when Moonlight is not open.',
+      sound: const RawResourceAndroidNotificationSound('ringtone_default'),
+      audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
+      // FLAG_INSISTENT (4): the system repeats the sound until the
+      // notification is cancelled — answered, declined, or the caller
+      // gave up (every one of those cancels it).
+      additionalFlags: Int32List.fromList(<int>[4]),
       importance: Importance.max,
       priority: Priority.max,
       category: AndroidNotificationCategory.call,
@@ -374,11 +389,25 @@ class NotificationService {
       ],
     );
 
+    // The native receiver may already be ringing for this call (it posts
+    // the instant the push lands). Re-posting would restart the ring, so
+    // leave it — it has the same tap/Accept/Decline behaviour.
+    try {
+      final active = await _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.getActiveNotifications();
+      if (active?.any((n) => n.id == callNotificationId(sessionUuid)) ??
+          false) {
+        return;
+      }
+    } catch (_) {}
+
     await _notificationsPlugin.show(
-      // Use a stable, deterministic ID derived from the session so a
-      // later dismiss()/cancel() call (once the call is answered
-      // elsewhere or times out) can target this exact notification.
-      sessionUuid.hashCode,
+      // Same id the native IncomingCallPushReceiver uses, so the two
+      // never show twice and dismiss() clears either.
+      callNotificationId(sessionUuid),
       '$callerName is calling',
       audio ? 'Incoming audio call' : 'Incoming video call',
       NotificationDetails(android: androidDetails),
@@ -390,7 +419,17 @@ class NotificationService {
   /// resolved through any path (CallKit accept/decline, timeout, etc.)
   /// so it doesn't linger after the call is no longer relevant.
   Future<void> dismissIncomingCallNotification(String sessionUuid) async {
-    await _notificationsPlugin.cancel(sessionUuid.hashCode);
+    await _notificationsPlugin.cancel(callNotificationId(sessionUuid));
+  }
+
+  /// Java's String.hashCode — matches IncomingCallPushReceiver's id for the
+  /// same call (Dart's own String.hashCode differs from Java's).
+  static int callNotificationId(String s) {
+    var h = 0;
+    for (final c in s.codeUnits) {
+      h = (31 * h + c) & 0xFFFFFFFF;
+    }
+    return h >= 0x80000000 ? h - 0x100000000 : h;
   }
 
   Future<void> showNotification({

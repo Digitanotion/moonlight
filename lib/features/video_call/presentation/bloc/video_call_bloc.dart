@@ -879,6 +879,47 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
       if (!_isDisposed) add(_CallTicked());
     });
     _attachRemoteMediaWatcher();
+    _startHeartbeat();
+  }
+
+  // ── In-call heartbeat ───────────────────────────────────────────────
+  // Tells the server this phone is still on the call. If a phone dies or
+  // the app is killed, the pings stop and the server ends the call after
+  // ~2 minutes, so the other person isn't "already on another call"
+  // forever. One tiny request every 30s; it also closes our screen if the
+  // server says the call is over and the end event never arrived.
+  static const _heartbeatEvery = Duration(seconds: 30);
+  Timer? _heartbeatTimer;
+
+  void _startHeartbeat() {
+    final uuid = state.session?.uuid;
+    if (uuid == null) return;
+    _heartbeatTimer?.cancel();
+
+    Future<void> ping() async {
+      if (_isDisposed ||
+          state.phase != VideoCallPhase.active ||
+          state.session?.uuid != uuid) {
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = null;
+        return;
+      }
+      try {
+        final stillOn = await repo.heartbeat(uuid);
+        if (!stillOn && !_isDisposed && state.session?.uuid == uuid) {
+          _heartbeatTimer?.cancel();
+          _heartbeatTimer = null;
+          add(_CallResolvedByOtherParty({
+            'meta': {'session_uuid': uuid},
+          }));
+        }
+      } catch (_) {
+        // No network right now — the next ping retries.
+      }
+    }
+
+    unawaited(ping());
+    _heartbeatTimer = Timer.periodic(_heartbeatEvery, (_) => ping());
   }
 
   /// Re-anchor the call's end time to THIS device's clock using the
@@ -1277,6 +1318,7 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
   Future<void> close() async {
     _isDisposed = true;
     _tickTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _detachRemoteMediaWatcher();
     _stopResolutionPoll();
     await _incomingSub?.cancel();

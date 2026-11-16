@@ -538,6 +538,15 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
                   key: ValueKey(entry.id),
                   ad: _adAfterVideo[entry.afterVideo],
                   onBack: () => Navigator.of(context).pop(),
+                  onSwipe: (up) => up
+                      ? _pageController.nextPage(
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeOut,
+                        )
+                      : _pageController.previousPage(
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeOut,
+                        ),
                 );
               }
               final i = entry.video!;
@@ -1317,7 +1326,16 @@ class _RewardAdPageState extends State<_RewardAdPage> {
 class _ReelAdPage extends StatelessWidget {
   final NativeAd? ad;
   final VoidCallback onBack;
-  const _ReelAdPage({super.key, required this.ad, required this.onBack});
+
+  /// true = swipe up (next). The native ad view takes the touch stream,
+  /// so the feed's own swipe never fired and users got stuck on the ad.
+  final ValueChanged<bool> onSwipe;
+  const _ReelAdPage({
+    super.key,
+    required this.ad,
+    required this.onBack,
+    required this.onSwipe,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1326,9 +1344,21 @@ class _ReelAdPage extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         const ColoredBox(color: Colors.black),
-        if (ad != null)
-          AdWidget(ad: ad!)
-        else
+        if (ad != null) ...[
+          AdWidget(ad: ad!),
+          // Catches vertical swipes over the ad and turns the page; taps
+          // still go through to the ad (no tap handler here).
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragEnd: (d) {
+                final v = d.primaryVelocity ?? 0;
+                if (v.abs() < 150) return;
+                onSwipe(v < 0);
+              },
+            ),
+          ),
+        ] else
           const Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,

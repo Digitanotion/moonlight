@@ -63,6 +63,19 @@
             android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingBackgroundService"
             android:exported="false" />
 
+        <!-- Rings for an incoming call the moment its push lands, before
+             Flutter starts (low-RAM phones killed the app mid-start).
+             Only acts on call pushes; never consumes the broadcast, so
+             Firebase still delivers every push to the app as before. -->
+        <receiver
+            android:name=".IncomingCallPushReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+        </receiver>
+
         <!-- <receiver
             android:name="com.hiennv.flutter_callkit_incoming.CallkitIncomingBroadcastReceiver"
             android:exported="false" /> -->

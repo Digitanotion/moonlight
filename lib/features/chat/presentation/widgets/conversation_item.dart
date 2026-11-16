@@ -189,9 +189,20 @@ class ConversationItem extends StatelessWidget {
                       ] else ...[
                         // Empty message case
                         Text(_formatLastMessageMedia(lastMessage)),
-                        Text("Sent you a file"),
-                        Icon(Icons.image, size: 16, color: AppColors.primary_),
-                        Expanded(child: SizedBox(width: 6)),
+                        Icon(
+                          _mediaPreview(lastMessage).$2,
+                          size: 16,
+                          color: AppColors.primary_,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            _mediaPreview(lastMessage).$1,
+                            style: TextStyle(color: AppColors.textSecondary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
 
                       // Unread count badge
@@ -279,6 +290,21 @@ class ConversationItem extends StatelessWidget {
         : senderName;
 
     return '$trimmedName: ${message.body}';
+  }
+
+  /// Label + icon for a message with no text: a voice note reads
+  /// "Voice note", not "Sent you a file" with a picture icon.
+  (String, IconData) _mediaPreview(Message message) {
+    // The conversation list sends only the file type (meta.media_mime);
+    // a full message carries the attachment itself.
+    final mime = (message.media.isNotEmpty
+            ? message.media.first.mimeType
+            : (message.meta?['media_mime'] ?? '').toString())
+        .toLowerCase();
+    if (mime.startsWith('audio/')) return ('Voice note', Icons.mic_rounded);
+    if (mime.startsWith('video/')) return ('Video', Icons.videocam_rounded);
+    if (mime.startsWith('image/')) return ('Photo', Icons.image);
+    return ('Sent you a file', Icons.attach_file_rounded);
   }
 
   String _formatLastMessageMedia(Message message) {

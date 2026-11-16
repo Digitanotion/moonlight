@@ -56,11 +56,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     // reachable from this exact background isolate, and plays on
     // Android's own ringtone audio stream — confirmed by testing not to
     // touch the feed's playback at all.
-    try {
-      await RingtonePlayer().play();
-    } catch (e) {
-      debugPrint('⚠️ Ringtone background start failed: $e');
-    }
+    // No RingtonePlayer here any more: sound the app plays itself is cut
+    // within ~2s on phones that freeze background apps (OPPO, Xiaomi,
+    // Tecno…). The incoming-call notification below rings instead — the
+    // system plays it, looping, until the call is resolved.
 
     try {
       await CallKitService().showIncomingCall(
@@ -324,6 +323,14 @@ Future<void> _initEverything() async {
       await sl<TokenRegistrationService>().setDependencies(
         apiBaseUrl: sl<RuntimeConfig>().apiBaseUrl,
       );
+    } catch (_) {}
+
+    // The native incoming-call receiver (IncomingCallPushReceiver) runs
+    // before Flutter when a call push wakes a closed app; its Accept /
+    // Decline buttons need the API address, so keep the latest one saved.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('call_api_base_url', sl<RuntimeConfig>().apiBaseUrl);
     } catch (_) {}
 
     // Force VideoCallBloc's lazy singleton to construct RIGHT NOW, the
@@ -612,6 +619,16 @@ void _startGlobalVideoCallListeners() {
       }
       _lastRingingSessionUuid = null;
       _lastActiveNavigatedSessionUuid = null;
+    } else if (state.phase != VideoCallPhase.ringingIncoming &&
+        _lastRingingSessionUuid != null) {
+      // Answered (connecting/active): the ringing notification rings
+      // insistently until cancelled, so it must go the moment the call is
+      // picked up — by any path (banner, full-screen screen, CallKit).
+      final answered = _lastRingingSessionUuid!;
+      try {
+        RingtonePlayer().stop();
+      } catch (_) {}
+      NotificationService().dismissIncomingCallNotification(answered);
     }
 
     // ── 2. Post-accept navigation (cold-start-via-CallKit case) ─────────

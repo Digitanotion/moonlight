@@ -39,6 +39,11 @@ class ActiveCallScreen extends StatefulWidget {
 class _ActiveCallScreenState extends State<ActiveCallScreen> {
   bool _controlsVisible = true;
 
+  // Has the other person joined at least once? Until then nothing was
+  // "lost": they're still connecting (e.g. on a camera-permission prompt),
+  // so the screen says "Connecting…", not "Connection lost".
+  bool _peerSeen = false;
+
   @override
   void initState() {
     super.initState();
@@ -142,12 +147,16 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                             return ValueListenableBuilder<bool>(
                               valueListenable: agora.remoteHasVideo,
                               builder: (context, hasVideo, _) {
+                                if (agora.remoteUid.value != null) {
+                                  _peerSeen = true;
+                                }
                                 if (!hasVideo) {
                                   return _HeroBackdrop(
                                     name: name,
                                     avatarUrl: avatarUrl,
-                                    status:
-                                        (state.isPaused || state.localMediaDown)
+                                    status: _peerSeen &&
+                                            (state.isPaused ||
+                                                state.localMediaDown)
                                         ? 'Reconnecting…'
                                         : 'Connecting…',
                                   );
@@ -248,10 +257,18 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                             top: MediaQuery.of(context).padding.top + 128,
                             left: 20,
                             right: 20,
-                            child: _ReconnectingBanner(
-                              // The caller's freeze is authoritative & billed-safe;
-                              // the callee's is just "we can't see them right now".
-                              billed: state.isCaller,
+                            child: ValueListenableBuilder<int?>(
+                              valueListenable: agora.remoteUid,
+                              builder: (context, uid, _) {
+                                if (uid != null) _peerSeen = true;
+                                return _ReconnectingBanner(
+                                  // The caller's freeze is authoritative &
+                                  // billed-safe; the callee's is just "we
+                                  // can't see them right now".
+                                  billed: state.isCaller,
+                                  waitingForPeer: !_peerSeen,
+                                );
+                              },
                             ),
                           ),
                         if (state.showExtendPrompt &&
@@ -724,7 +741,11 @@ class _EndCallButton extends StatelessWidget {
 
 class _ReconnectingBanner extends StatelessWidget {
   final bool billed;
-  const _ReconnectingBanner({this.billed = false});
+  final bool waitingForPeer;
+  const _ReconnectingBanner({
+    this.billed = false,
+    this.waitingForPeer = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -745,7 +766,9 @@ class _ReconnectingBanner extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  billed
+                  waitingForPeer
+                      ? 'Connecting…'
+                      : billed
                       ? 'Connection lost — reconnecting. Your time is paused.'
                       : 'Connection lost — reconnecting…',
                   style: AppTextStyles.caption.copyWith(
@@ -971,7 +994,14 @@ class CallSummaryScreen extends StatelessWidget {
                             // she was on before in that case — her stream
                             // is still there underneath, exactly as it
                             // should be.
-                            if (session?.initiatedFrom == 'livestream') {
+                            //
+                            // Same for a call started from a chat (go back to
+                            // that chat) and for whoever answered (back to
+                            // what they were doing, not the Home screen).
+                            final from = session?.initiatedFrom;
+                            if (from == 'livestream' ||
+                                from == 'chat' ||
+                                !state.isCaller) {
                               Navigator.of(context).pop();
                             } else {
                               Navigator.of(context).popUntil((r) => r.isFirst);

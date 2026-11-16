@@ -45,6 +45,13 @@ class AgoraViewerService with ChangeNotifier {
   bool _isCoHost = false;
   bool _previewing = false;
 
+  // True only while WE are leaving the box connection. Promotion leaves
+  // the watching connection, which has the same channel + uid as the box
+  // connection, so its late "left" callback looked like the box itself
+  // leaving and reset the guest to not-publishing: the box appeared but
+  // the mic/camera buttons did nothing (worse after a long wait).
+  bool _leavingCoHost = false;
+
   final ValueNotifier<int?> hostUid = ValueNotifier<int?>(null);
   final ValueNotifier<int?> guestUid = ValueNotifier<int?>(null);
   final ValueNotifier<bool> _hasVideo = ValueNotifier<bool>(false);
@@ -171,6 +178,12 @@ class AgoraViewerService with ChangeNotifier {
 
         onLeaveChannel: (RtcConnection connection, RtcStats stats) {
           if (!_isOurConnection(connection)) return;
+          if (_coHostConnection != null && !_leavingCoHost) {
+            // The old watching connection's "left" (same channel + uid),
+            // not the box connection — it's still up. Ignore.
+            debugPrint('ℹ️ [Viewer] ignoring stale onLeaveChannel (box still up)');
+            return;
+          }
           _joined = false;
           _isCoHost = false;
           _previewing = false;
@@ -530,7 +543,12 @@ class AgoraViewerService with ChangeNotifier {
       }
 
       if (_coHostConnection != null) {
-        await engine.leaveChannelEx(connection: _coHostConnection!);
+        _leavingCoHost = true;
+        try {
+          await engine.leaveChannelEx(connection: _coHostConnection!);
+        } finally {
+          _leavingCoHost = false;
+        }
         _coHostConnection = null;
       }
 
@@ -587,7 +605,8 @@ class AgoraViewerService with ChangeNotifier {
   }
 
   Future<void> _enforceMuteState() async {
-    if (!_isCoHost || _coHostConnection == null) return;
+    // The box connection is what matters; _isCoHost alone could be stale.
+    if (_coHostConnection == null) return;
     try {
       // In the joinChannelEx (Ex API) architecture, per-connection publish
       // state must be set via updateChannelMediaOptionsEx — NOT via the
@@ -646,7 +665,12 @@ class AgoraViewerService with ChangeNotifier {
         _previewing = false;
       }
       if (_coHostConnection != null) {
-        await engine.leaveChannelEx(connection: _coHostConnection!);
+        _leavingCoHost = true;
+        try {
+          await engine.leaveChannelEx(connection: _coHostConnection!);
+        } finally {
+          _leavingCoHost = false;
+        }
         _coHostConnection = null;
       }
       if (_standaloneConnection != null) {

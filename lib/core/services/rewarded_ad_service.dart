@@ -40,8 +40,17 @@ class RewardedAdService {
   bool get configured => !_unitId.startsWith('REPLACE');
 
   RewardedAd? _ad;
+  DateTime? _loadedAt;
   bool _loading = false;
   int _retry = 0;
+  Timer? _retryTimer;
+
+  /// Why the last load failed (null after a success). Code 3 = Google had
+  /// no ad to give right now ("no fill").
+  LoadAdError? lastError;
+
+  // Google expires a loaded rewarded ad after an hour; showing it then fails.
+  static const _maxAdAge = Duration(minutes: 55);
 
   /// Ready to show right now (no waiting).
   final ValueNotifier<bool> ready = ValueNotifier(false);
@@ -49,7 +58,9 @@ class RewardedAdService {
   /// Load one ad in the background (call when a livestream opens and after
   /// each ad).
   Future<void> preload() async {
+    _dropIfExpired();
     if (!configured || _ad != null || _loading) return;
+    _retryTimer?.cancel();
     await AdService.instance.ready;
     _loading = true;
     RewardedAd.load(
@@ -59,20 +70,57 @@ class RewardedAdService {
         onAdLoaded: (ad) {
           _loading = false;
           _retry = 0;
+          lastError = null;
           _ad = ad;
+          _loadedAt = DateTime.now();
           ready.value = true;
         },
         onAdFailedToLoad: (err) {
           _loading = false;
           ready.value = false;
+          lastError = err;
           debugPrint('⚠️ [RewardedAd] load failed: $err');
-          // Back off: 5s, 10s, 20s … up to ~2 min.
+          // Back off: 5s, 10s, 20s … up to ~2 min. A tap loads at once
+          // (waitUntilReady), so the wait never blocks the user.
           final wait = Duration(seconds: (5 << _retry.clamp(0, 5)));
           _retry++;
-          Timer(wait, preload);
+          _retryTimer?.cancel();
+          _retryTimer = Timer(wait, preload);
         },
       ),
     );
+  }
+
+  void _dropIfExpired() {
+    final at = _loadedAt;
+    if (_ad != null && at != null && DateTime.now().difference(at) > _maxAdAge) {
+      _ad!.dispose();
+      _ad = null;
+      _loadedAt = null;
+      ready.value = false;
+    }
+  }
+
+  /// For a tap: load now if needed and wait (up to [timeout]) for an ad.
+  /// True when one is ready to show. Before, a tap with no ad loaded just
+  /// said "loading" while the background retry could be minutes away.
+  Future<bool> waitUntilReady({
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
+    _dropIfExpired();
+    if (_ad != null) return true;
+    if (!configured) return false;
+    final deadline = DateTime.now().add(timeout);
+    var attempts = 0;
+    while (DateTime.now().isBefore(deadline)) {
+      if (_ad != null) return true;
+      if (!_loading && attempts < 2) {
+        attempts++;
+        await preload(); // starts a load right away (cancels the backoff)
+      }
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    return _ad != null;
   }
 
   /// Show the ad. [onEarned] runs once the viewer has watched enough to be
@@ -84,12 +132,14 @@ class RewardedAdService {
     required VoidCallback onEarned,
     VoidCallback? onClosed,
   }) async {
+    _dropIfExpired();
     final ad = _ad;
     if (ad == null) {
       unawaited(preload());
       return false;
     }
     _ad = null;
+    _loadedAt = null;
     ready.value = false;
 
     await ad.setServerSideOptions(

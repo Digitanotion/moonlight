@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart' show LoadAdError;
 import 'package:moonlight/core/injection_container.dart';
 import 'package:moonlight/core/network/dio_client.dart';
 import 'package:moonlight/core/services/current_user_service.dart';
@@ -23,6 +24,12 @@ Future<void> watchRewardedAd(BuildContext context, {String? customData}) async {
   // How many ads the server has confirmed so far — compared after the ad
   // so we only say "you earned" once AdMob's confirmation really landed.
   final before = await _rewardStatus();
+  // Nothing loaded yet: load now and wait a few seconds rather than send
+  // the user away with "try again" (the caller shows a spinner meanwhile).
+  if (!await ads.waitUntilReady()) {
+    if (context.mounted) TopSnack.info(context, _noAdMessage(ads.lastError));
+    return;
+  }
   final done = Completer<void>();
   var earned = false;
   final shown = await ads.show(
@@ -37,12 +44,21 @@ Future<void> watchRewardedAd(BuildContext context, {String? customData}) async {
     },
   );
   if (!shown) {
-    if (context.mounted) {
-      TopSnack.info(context, 'An ad is loading — try again in a moment.');
-    }
+    if (context.mounted) TopSnack.info(context, _noAdMessage(ads.lastError));
     return;
   }
   await done.future;
+}
+
+String _noAdMessage(LoadAdError? err) {
+  if (err?.code == 3) {
+    // Google had no ad to give right now.
+    return 'No ads available right now — please try again a bit later.';
+  }
+  if (err?.code == 2) {
+    return 'Couldn\'t load an ad — check your internet connection and try again.';
+  }
+  return 'Couldn\'t load an ad right now — please try again in a minute.';
 }
 
 Future<Map?> _rewardStatus() async {

@@ -1,4 +1,5 @@
 // lib/features/video_call/data/repositories/video_call_repository_impl.dart
+import 'package:dio/dio.dart' show Options;
 import 'dart:async';
 import 'dart:convert';
 
@@ -262,6 +263,18 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
   Future<VideoCallSessionModel> status(String sessionUuid) async {
     final res = await _client.dio.get('/api/v1/video-call/$sessionUuid/status');
     return _sessionFromResponse(res.data);
+  }
+
+  @override
+  Future<bool> heartbeat(String sessionUuid) async {
+    final res = await _client.dio.post(
+      '/api/v1/video-call/$sessionUuid/hb',
+      // 410 (call over) / 404 are answers, not errors.
+      options: Options(validateStatus: (s) => s != null && s < 500),
+    );
+    // Only an explicit 410 means the call is over. Anything else (e.g. a
+    // 404 from a server without this route yet) must never end a call.
+    return res.statusCode != 410;
   }
 
   @override

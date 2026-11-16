@@ -75,7 +75,12 @@ class _IncomingCallBannerState extends State<IncomingCallBanner> {
     if (!mounted) return;
     final isRinging = state.phase == VideoCallPhase.ringingIncoming;
     if (isRinging && !_visible) {
-      RingtonePlayer().play();
+      // Only while the app is on screen. In the background the incoming-
+      // call notification rings (system sound) — playing here as well
+      // would double up until the phone froze the app a second later.
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        RingtonePlayer().play();
+      }
     } else if (!isRinging && _visible) {
       RingtonePlayer().stop();
     }

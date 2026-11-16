@@ -61,6 +61,10 @@ abstract class VideoCallRepository {
   });
   Future<VideoCallSessionModel> status(String sessionUuid);
 
+  /// In-call ping (~30s). False when the server says the call is over.
+  /// Throws on network errors (callers just try again next time).
+  Future<bool> heartbeat(String sessionUuid);
+
   /// Freeze / unfreeze the call countdown for a network drop (#3).
   Future<VideoCallSessionModel> pause(String sessionUuid);
   Future<VideoCallSessionModel> resume(String sessionUuid);

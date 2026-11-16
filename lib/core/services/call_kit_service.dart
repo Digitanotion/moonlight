@@ -156,6 +156,14 @@ class CallKitService {
     String? callerAvatarUrl,
     bool audio = false,
   }) async {
+    // Android: no CallKit ringing screen. It registers the call with the
+    // phone system as app-managed, so Android mutes notification sounds and
+    // expects the app to ring — but OPPO/Xiaomi/Tecno freeze background
+    // apps, so the ring died after ~1s. The incoming-call notification
+    // (NotificationService) rings instead: system sound, looping until the
+    // call is resolved, with Accept/Decline and a full-screen app screen.
+    if (Platform.isAndroid) return;
+
     final params = CallKitParams(
       id: sessionUuid,
       nameCaller: callerName,
