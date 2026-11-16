@@ -399,6 +399,10 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
         actionLoading: true,
         clearError: true,
         phase: VideoCallPhase.ringingOutgoing,
+        // Drop the previous call's session: it stays in state after a
+        // call ends, and the check below would read it as "the caller
+        // already hung up" and cancel every call after the first one.
+        clearSession: true,
       ),
     );
     try {

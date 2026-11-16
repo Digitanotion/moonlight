@@ -31,6 +31,7 @@ import 'package:moonlight/features/video_call/domain/repositories/video_call_rep
 import 'package:moonlight/features/video_call/presentation/bloc/video_call_bloc.dart';
 import 'package:moonlight/features/video_call/presentation/pages/active_call_screen.dart'; // ← NEW
 import 'package:moonlight/features/video_call/presentation/widgets/incoming_call_banner.dart';
+import 'package:moonlight/features/video_call/presentation/pages/outgoing_call_screen.dart';
 import 'package:moonlight/features/video_call/presentation/widgets/ongoing_call_bar.dart'; // ← NEW
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -618,7 +619,17 @@ void _startGlobalVideoCallListeners() {
       final uuid = state.session?.uuid;
       if (uuid != null && uuid != _lastActiveNavigatedSessionUuid) {
         final navState = MyApp.navigatorKey.currentState;
-        if (navState != null) {
+        // An open outgoing/incoming call screen opens the call screen
+        // itself, and pushReplacement there would replace OUR route, so
+        // a push from here doubled the screen and made the green
+        // "Ongoing call" bar show over the live call. Only push when
+        // nothing else will (e.g. answered from the small banner or
+        // a cold start via CallKit).
+        final handledByScreen = OutgoingCallScreen.openCount > 0 ||
+            IncomingCallBanner.suppressed.value ||
+            ActiveCallScreen.isOpen.value;
+        if (handledByScreen) _lastActiveNavigatedSessionUuid = uuid;
+        if (navState != null && !handledByScreen) {
           // If a screen is already showing this same active call (e.g.
           // OutgoingCallScreen/IncomingCallScreen's own BlocConsumer
           // already navigated), this becomes a harmless extra push.

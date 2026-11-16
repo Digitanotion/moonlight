@@ -20,6 +20,9 @@ Future<void> watchRewardedAd(BuildContext context, {String? customData}) async {
   final ads = RewardedAdService.instance;
   final uuid = sl<CurrentUserService>().getCurrentUserId();
   if (uuid == null) return;
+  // How many ads the server has confirmed so far — compared after the ad
+  // so we only say "you earned" once AdMob's confirmation really landed.
+  final before = await _rewardStatus();
   final done = Completer<void>();
   var earned = false;
   final shown = await ads.show(
@@ -28,7 +31,9 @@ Future<void> watchRewardedAd(BuildContext context, {String? customData}) async {
     onEarned: () => earned = true,
     onClosed: () {
       if (!done.isCompleted) done.complete();
-      if (earned && context.mounted) _thank(context);
+      if (earned && context.mounted) {
+        _thank(context, (before?['ads_watched'] as num?)?.toInt());
+      }
     },
   );
   if (!shown) {
@@ -40,25 +45,59 @@ Future<void> watchRewardedAd(BuildContext context, {String? customData}) async {
   await done.future;
 }
 
-/// AdMob tells the server a few seconds after the ad; then say what it
-/// earned. With 0.2 coins per ad, every 5th ad pays 1 coin.
-Future<void> _thank(BuildContext context) async {
-  var msg = 'Thanks for watching! Your free coins are being added.';
+Future<Map?> _rewardStatus() async {
   try {
-    await Future.delayed(const Duration(seconds: 4));
     final r = await sl<DioClient>().dio.get('/api/v1/ads/rewarded/status');
-    final d = r.data is Map ? r.data as Map : const {};
-    final perCoin = (d['ads_per_coin'] as num?)?.toInt() ?? 1;
-    final toNext = (d['ads_to_next_coin'] as num?)?.toInt() ?? 1;
-    final left = (d['remaining_today'] as num?)?.toInt();
-    if (perCoin > 1) {
-      msg = toNext == perCoin
-          ? 'You earned 1 coin! Watch $perCoin more ads for the next one.'
-          : 'Thanks for watching! $toNext more '
-                '${toNext == 1 ? 'ad' : 'ads'} to earn your next coin.';
+    return r.data is Map ? r.data as Map : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// AdMob tells our server a few seconds after the ad. Wait for that, then
+/// say what it earned. With 0.2 coins per ad, every 5th ad pays 1 coin.
+/// If the confirmation hasn't arrived, say so honestly instead of
+/// claiming a coin (that's what made users look for coins that weren't
+/// there).
+Future<void> _thank(BuildContext context, int? watchedBefore) async {
+  Map? d;
+  var confirmed = false;
+  for (final wait in const [3, 4, 6]) {
+    await Future.delayed(Duration(seconds: wait));
+    d = await _rewardStatus();
+    final now = (d?['ads_watched'] as num?)?.toInt();
+    if (now != null && watchedBefore != null && now > watchedBefore) {
+      confirmed = true;
+      break;
     }
-    if (left == 0) msg += ' That\'s all the ads for today.';
-  } catch (_) {}
+    // Older server without ads_watched: can't tell — fall back below.
+    if (now == null) break;
+  }
+
+  var msg =
+      'Thanks for watching! Your reward is being confirmed — it '
+      'can take a few minutes to show in your wallet.';
+  final perCoin = (d?['ads_per_coin'] as num?)?.toInt() ?? 1;
+  final toNext = (d?['ads_to_next_coin'] as num?)?.toInt() ?? 1;
+  final left = (d?['remaining_today'] as num?)?.toInt();
+  if (confirmed) {
+    if (perCoin <= 1) {
+      msg = 'You earned free coins! Check your wallet.';
+    } else if (toNext == perCoin) {
+      msg =
+          'You earned 1 coin! It\'s in your wallet. '
+          'Watch $perCoin more ads for the next one.';
+    } else {
+      msg =
+          'Ad counted! $toNext more '
+          '${toNext == 1 ? 'ad' : 'ads'} to earn your next coin.';
+    }
+  } else if (left == 0) {
+    msg =
+        'You\'ve reached today\'s limit for free-coin ads. '
+        'Come back tomorrow!';
+  }
+  if (confirmed && left == 0) msg += ' That\'s all the ads for today.';
   if (context.mounted) TopSnack.success(context, msg);
 }
 

@@ -26,6 +26,12 @@ class ActiveCallScreen extends StatefulWidget {
   /// (screen closed, call still running) OngoingCallBar shows instead.
   static final ValueNotifier<bool> isOpen = ValueNotifier(false);
 
+  // A count, not a flag: when one copy of this screen replaces another,
+  // the new one opens before the old one closes, and the old one's
+  // dispose used to switch isOpen off while a call screen was showing,
+  // which made the green "Ongoing call" bar appear over the open call.
+  static int _openCount = 0;
+
   @override
   State<ActiveCallScreen> createState() => _ActiveCallScreenState();
 }
@@ -36,12 +42,14 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   @override
   void initState() {
     super.initState();
+    ActiveCallScreen._openCount++;
     ActiveCallScreen.isOpen.value = true;
   }
 
   @override
   void dispose() {
-    ActiveCallScreen.isOpen.value = false;
+    ActiveCallScreen._openCount--;
+    ActiveCallScreen.isOpen.value = ActiveCallScreen._openCount > 0;
     super.dispose();
   }
 
@@ -53,12 +61,19 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     return BlocConsumer<VideoCallBloc, VideoCallState>(
       listenWhen: (prev, curr) => prev.phase != curr.phase,
       listener: (context, state) {
+        // Only pop while this screen is still the top route. Ending an
+        // audio call pops it AND resets the bloc to idle; that idle
+        // change reaches this listener again while the screen is still
+        // animating out, and a second pop closed the chat underneath.
+        final onTop = ModalRoute.of(context)?.isCurrent ?? false;
         if (state.phase == VideoCallPhase.ended &&
             (state.session?.isAudio ?? false)) {
           // Free audio call: nothing to settle — no summary, just close
           // (the chat gets an "Audio call · 2:31" line).
           bloc.add(CallDismissed());
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          if (onTop && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
         } else if (state.phase == VideoCallPhase.ended) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -69,7 +84,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
             ),
           );
         } else if (state.phase == VideoCallPhase.idle) {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          if (onTop && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
         }
       },
       builder: (context, state) {

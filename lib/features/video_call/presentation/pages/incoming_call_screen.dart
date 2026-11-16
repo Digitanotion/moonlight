@@ -19,6 +19,11 @@ class IncomingCallScreen extends StatefulWidget {
   State<IncomingCallScreen> createState() => _IncomingCallScreenState();
 }
 
+// How many IncomingCallScreens are mounted. Two can exist for one call
+// (notification tap + app-level navigation); a flag reset by the first
+// one to close let the small banner show over the full-screen view.
+int _incomingScreensOpen = 0;
+
 class _IncomingCallScreenState extends State<IncomingCallScreen>
     with TickerProviderStateMixin {
   late final AnimationController _ringController;
@@ -39,12 +44,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     // explicitly tapping a call notification/CallResumeFromNotification)
     // is showing — both react to the same bloc phase, so without this
     // they'd render simultaneously for the same call.
+    _incomingScreensOpen++;
     IncomingCallBanner.suppressed.value = true;
   }
 
   @override
   void dispose() {
-    IncomingCallBanner.suppressed.value = false;
+    _incomingScreensOpen--;
+    IncomingCallBanner.suppressed.value = _incomingScreensOpen > 0;
     _ringController.dispose();
     _pulseController.dispose();
     super.dispose();

@@ -30,6 +30,11 @@ class OutgoingCallScreen extends StatefulWidget {
     this.kind = 'video',
   });
 
+  /// Mounted OutgoingCallScreens. While one is up it opens the call
+  /// screen itself when the call connects, so main.dart must not push a
+  /// second copy.
+  static int openCount = 0;
+
   @override
   State<OutgoingCallScreen> createState() => _OutgoingCallScreenState();
 }
@@ -43,6 +48,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   @override
   void initState() {
     super.initState();
+    OutgoingCallScreen.openCount++;
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -51,6 +57,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   @override
   void dispose() {
+    OutgoingCallScreen.openCount--;
     _pulseController.dispose();
     super.dispose();
   }
