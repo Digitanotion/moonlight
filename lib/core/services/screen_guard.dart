@@ -16,8 +16,15 @@ class ScreenGuard {
 
   static int _count = 0;
 
+  /// Test-only: lets QA screenshot live screens. Needs BOTH a debug build
+  /// and `--dart-define=NO_SCREEN_GUARD=true`, so a release / Play build
+  /// can never ship without screenshot protection.
+  static const bool _offForTesting =
+      kDebugMode && bool.fromEnvironment('NO_SCREEN_GUARD');
+
   static Future<void> acquire() async {
     _count++;
+    if (_offForTesting) return;
     if (_count != 1) return;
     try {
       await ScreenProtector.protectDataLeakageOn(); // Android FLAG_SECURE
