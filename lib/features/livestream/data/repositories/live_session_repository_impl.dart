@@ -493,8 +493,17 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
     if (current == null) return;
 
     try {
-      await _client.dio.post('/api/v1/live/${current.livestreamId}/heartbeat');
+      final res = await _client.dio.post(
+        '/api/v1/live/${current.livestreamId}/heartbeat',
+      );
       debugPrint('💓 Heartbeat sent');
+      // The server says the stream was ended (admin, ban, timeout) — the
+      // backup for a missed live.ended Pusher event.
+      final data = res.data;
+      if (data is Map && data['ended'] == true) {
+        debugPrint('🔴 Heartbeat: stream was ended on the server');
+        _safeAddToStream(_endedCtrl, true);
+      }
     } catch (e) {
       debugPrint('⚠️ Heartbeat failed (will retry): $e');
     }

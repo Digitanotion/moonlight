@@ -1,6 +1,7 @@
 // lib/main.dart
 
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -354,7 +355,12 @@ Future<void> _initEverything() async {
     // Required Android 13+/14+ permissions (notification + full-screen
     // intent) — separate from Firebase Messaging's own notification
     // permission request. Must happen before the first showIncomingCall().
-    unawaited(CallKitService().requestRequiredPermissions());
+    // Android: the "Set up calls" guide (CallSetupGate, on the home screen)
+    // asks for these one at a time with an explanation, instead of a burst
+    // of unexplained system pop-ups at launch.
+    if (!Platform.isAndroid) {
+      unawaited(CallKitService().requestRequiredPermissions());
+    }
 
     // Global call-state listeners — see _startGlobalVideoCallListeners()
     // below for why these are needed (foreground ringing trigger +

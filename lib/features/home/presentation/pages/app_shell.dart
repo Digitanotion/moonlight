@@ -1,6 +1,7 @@
 import 'package:moonlight/core/services/pending_agent_code_service.dart';
 import 'package:moonlight/core/services/scroll_to_top_service.dart';
 import 'package:flutter/material.dart';
+import 'package:moonlight/features/call_setup/call_setup_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:moonlight/core/routing/route_names.dart';
 import 'package:moonlight/core/ui/empty_tab.dart';
@@ -18,7 +19,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
   DateTime? _lastBackPress;
 
@@ -28,6 +29,12 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     PendingAgentCodeService.applyIfPending();
+    WidgetsBinding.instance.addObserver(this);
+    // Each app open: if the phone is missing a permission calls need,
+    // walk the user through it. A short delay lets the home screen settle.
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (mounted) CallSetupGate.maybeShow(context);
+    });
     _tabs = const [
       HomeScreen(), // 0
       EmptyTab(), // 1 (Go Live modal)
@@ -35,6 +42,20 @@ class _AppShellState extends State<AppShell> {
       DiscoverClubsTab(), // 3
       MyProfileTab(), // 4
     ];
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from the background: re-check (at most every few hours).
+    if (state == AppLifecycleState.resumed && mounted) {
+      CallSetupGate.maybeShow(context, onResume: true);
+    }
   }
 
   void _onTabSelected(int index) {

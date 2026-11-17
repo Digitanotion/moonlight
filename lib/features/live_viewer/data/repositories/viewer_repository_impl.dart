@@ -111,6 +111,22 @@ class ViewerRepositoryImpl implements ViewerRepository {
   bool _isWiring = false;
   bool _disposed = false;
 
+  /// /leave already sent for the current visit. Several owners (screen,
+  /// bloc, pager) each call dispose(), and soft dispose has no other guard,
+  /// so without this one exit posted /leave 3–4 times.
+  bool _leaveSent = false;
+
+  /// The last join attempt found the stream not live (see _wireInternal).
+  bool _notJoinable = false;
+  String? _notJoinableMessage;
+  bool _joinRetried = false;
+
+  void _sendLeaveOnce() {
+    if (_leaveSent) return;
+    _leaveSent = true;
+    http.dio.post('$_basePath/leave').ignore();
+  }
+
   /// Soft-dispose mode: keepAlive=true means dispose() sends /leave and
   /// resets wiring but does NOT close stream controllers (allowing the
   /// repo to be rewired on swipe-back without recreating it).
@@ -457,6 +473,15 @@ class ViewerRepositoryImpl implements ViewerRepository {
   @override
   Stream<void> watchEnded() {
     ensureWiredOnce();
+    if (_notJoinable) {
+      // Joining already failed before anyone was listening: replay it once
+      // the caller has attached its listeners (they attach synchronously).
+      final msg = _notJoinableMessage;
+      scheduleMicrotask(() {
+        if (msg != null && !_errorCtrl.isClosed) _errorCtrl.add(msg);
+        if (!_endedCtrl.isClosed) _endedCtrl.add(null);
+      });
+    }
     return _endedCtrl.stream;
   }
 
@@ -583,20 +608,45 @@ class ViewerRepositoryImpl implements ViewerRepository {
         statusStr != 'live' &&
         statusStr != 'paused';
 
+    if (!isEnded && (isOffline || enterRejected) && !_joinRetried) {
+      // A stream whose host missed a heartbeat reads "offline" for a few
+      // seconds. Look again once before telling the viewer it isn't live.
+      _joinRetried = true;
+      debugPrint('⏳ Stream read "$statusStr" on join — rechecking in 3s');
+      await Future.delayed(const Duration(seconds: 3));
+      if (_disposed) {
+        _isWiring = false;
+        return;
+      }
+      return _wireInternal();
+    }
+
     if (isEnded || isOffline || enterRejected) {
       debugPrint(
         '🚫 Stream not joinable (status="$statusStr", '
         'enterEmpty=${enterData.isEmpty}) — aborting wire',
       );
-      if (!isEnded && !_errorCtrl.isClosed) {
-        final msg = (statusData['message'] ?? '').toString();
-        _errorCtrl.add(
-          msg.isNotEmpty ? msg : "This stream isn't live right now.",
-        );
+      // Remember the outcome: the screen subscribes only after loading the
+      // host info, often AFTER this — the events were lost and the viewer
+      // sat on a black screen. watchEnded() replays it to late listeners.
+      final msg = (statusData['message'] ?? '').toString();
+      _notJoinable = true;
+      _notJoinableMessage = isEnded
+          ? null
+          : (msg.isNotEmpty ? msg : "This stream isn't live right now.");
+      // Was left true, so every later ensureWiredOnce() returned at once
+      // and the stream was never joined again.
+      _isWiring = false;
+      _joinRetried = false;
+      if (_notJoinableMessage != null && !_errorCtrl.isClosed) {
+        _errorCtrl.add(_notJoinableMessage!);
       }
       if (!_endedCtrl.isClosed) _endedCtrl.add(null);
       return;
     }
+    _notJoinable = false;
+    _notJoinableMessage = null;
+    _joinRetried = false;
 
     // ── Step 3: Process enter response ────────────────────────────────────
     // Soft parse — a missing / non-int `viewers` must not blow up wiring or
@@ -606,6 +656,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     // Single approval emit here — no duplicate in Step 4
     if (!_myApprovalCtrl.isClosed) _myApprovalCtrl.add(true);
     debugPrint('🔌 Enter OK — viewers: $viewers');
+    _leaveSent = false; // a new visit — its exit must send /leave again
 
     // ── Step 4: Agora join (skipped in pool mode) ─────────────────────────
     if (skipAgoraJoin) {
@@ -1139,7 +1190,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
       debugPrint('🛡️ [Repository] Soft dispose (keepAlive): $livestreamParam');
       try {
         cancelClock();
-        http.dio.post('$_basePath/leave').ignore();
+        _sendLeaveOnce();
         pusher.unsubscribeAll();
       } catch (_) {}
       _wired = false;
@@ -1154,7 +1205,7 @@ class ViewerRepositoryImpl implements ViewerRepository {
     _disposed = true;
     try {
       cancelClock();
-      http.dio.post('$_basePath/leave').ignore();
+      _sendLeaveOnce();
       pusher.unsubscribeAll();
     } catch (_) {}
 

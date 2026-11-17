@@ -365,7 +365,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     });
 
     on<LiveEndedReceived>((e, emit) async {
-      if (_isDisposed) return;
+      if (_isDisposed || _endingByHost || !state.isLive) return;
       await _cleanDown();
       emit(state.copyWith(isLive: false));
     });
@@ -739,7 +739,12 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
       _eSub = repo.endedStream().listen(
         (_) {
           debugPrint('🔴 Live ended event received');
-          // add(LiveEndedReceived());
+          // Ended by someone else (admin, ban, server timeout). The host's own
+          // End press also echoes this event back — _onEnd handles that one
+          // (it shows the summary), so ignore it here.
+          if (!_isDisposed && !_endingByHost && state.isLive) {
+            add(LiveEndedReceived());
+          }
         },
         onError: (e) {
           debugPrint('❌ Ended stream error: $e');
@@ -897,6 +902,7 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
 
   Future<void> _onEnd(EndPressed e, Emitter<LiveHostState> emit) async {
     if (_isDisposed) return;
+    _endingByHost = true;
 
     try {
       debugPrint('🔄 Ending live session...');
@@ -967,6 +973,10 @@ class LiveHostBloc extends Bloc<LiveHostEvent, LiveHostState> {
     if (_isDisposed) return;
     Future.delayed(const Duration(seconds: 4), cb);
   }
+
+  /// The host pressed End — the live.ended echo of that must not race the
+  /// end-of-live summary.
+  bool _endingByHost = false;
 
   Future<void> _cleanDown() async {
     _timer?.cancel();

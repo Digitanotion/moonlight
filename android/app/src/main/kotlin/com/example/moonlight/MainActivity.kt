@@ -46,6 +46,9 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // "Set up calls" guide: permission checks and settings shortcuts.
+        CallSetupChannel.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+
         // Full-page native video ads in the short-video feed.
         GoogleMobileAdsPlugin.registerNativeAdFactory(
             flutterEngine, "moonlightReel", NativeReelAdFactory(layoutInflater)
