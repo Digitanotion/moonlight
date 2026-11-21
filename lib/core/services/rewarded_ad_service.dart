@@ -55,6 +55,35 @@ class RewardedAdService {
   /// Ready to show right now (no waiting).
   final ValueNotifier<bool> ready = ValueNotifier(false);
 
+  // ── Limits (the server enforces them too) ─────────────────────────────
+  /// Ads one spot (a livestream, a feed card) offers before it stops.
+  int perSpotLimit = 2;
+
+  /// Wait after an ad closes before the next one.
+  Duration cooldown = const Duration(seconds: 60);
+
+  DateTime? _lastClosedAt;
+  final Map<String, int> _spotCounts = {};
+
+  /// Bumped when a spot's count changes, so buttons can hide themselves.
+  final ValueNotifier<int> spotsChanged = ValueNotifier(0);
+
+  int watchedAt(String spot) => _spotCounts[spot] ?? 0;
+  bool spotUsedUp(String spot) => watchedAt(spot) >= perSpotLimit;
+
+  void _countSpot(String spot) {
+    _spotCounts[spot] = watchedAt(spot) + 1;
+    spotsChanged.value++;
+  }
+
+  /// Seconds left of the cooldown after the last ad (0 = may watch).
+  int get cooldownLeft {
+    final at = _lastClosedAt;
+    if (at == null) return 0;
+    final left = cooldown - DateTime.now().difference(at);
+    return left.isNegative ? 0 : left.inSeconds + 1;
+  }
+
   /// Load one ad in the background (call when a livestream opens and after
   /// each ad).
   Future<void> preload() async {
@@ -93,7 +122,9 @@ class RewardedAdService {
 
   void _dropIfExpired() {
     final at = _loadedAt;
-    if (_ad != null && at != null && DateTime.now().difference(at) > _maxAdAge) {
+    if (_ad != null &&
+        at != null &&
+        DateTime.now().difference(at) > _maxAdAge) {
       _ad!.dispose();
       _ad = null;
       _loadedAt = null;
@@ -128,6 +159,7 @@ class RewardedAdService {
   /// Returns false when no ad was available.
   Future<bool> show({
     required String userUuid,
+    required String spot,
     String? customData,
     required VoidCallback onEarned,
     VoidCallback? onClosed,
@@ -141,12 +173,14 @@ class RewardedAdService {
     _ad = null;
     _loadedAt = null;
     ready.value = false;
+    _countSpot(spot);
 
     await ad.setServerSideOptions(
       ServerSideVerificationOptions(userId: userUuid, customData: customData),
     );
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
+        _lastClosedAt = DateTime.now();
         ad.dispose();
         PipService.instance.resume();
         onClosed?.call();
@@ -154,6 +188,10 @@ class RewardedAdService {
       },
       onAdFailedToShowFullScreenContent: (ad, err) {
         debugPrint('⚠️ [RewardedAd] show failed: $err');
+        // Never shown — doesn't use up the spot.
+        final n = watchedAt(spot);
+        if (n > 0) _spotCounts[spot] = n - 1;
+        spotsChanged.value++;
         ad.dispose();
         PipService.instance.resume();
         onClosed?.call();

@@ -201,6 +201,10 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   int _videosSinceReward = 0;
   static const _rewardEvery = 6;
 
+  /// Free-coin cards per feed visit (each offers up to 2 ads; the server's
+  /// hourly cap is 6 ads).
+  static const _maxRewardCards = 3;
+
   void _buildPages() {
     final pages = <_FeedPage>[];
     for (var v = 0; v < _videoPosts.length; v++) {
@@ -217,6 +221,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
     _videosSinceReward++;
     if (_videosSinceReward >= _rewardEvery - 2) ads.preload();
     if (_videosSinceReward < _rewardEvery) return;
+    if (_rewardAfterVideo.length >= _maxRewardCards) return;
     // Never two ad pages in a row: wait for the next video instead.
     if (_adAfterVideo.containsKey(videoIndex) ||
         _rewardAfterVideo.contains(videoIndex)) {
@@ -530,6 +535,8 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
               if (entry.reward) {
                 return _RewardAdPage(
                   key: ValueKey(entry.id),
+                  // Unique to this card in this feed visit.
+                  spot: 'feed:${identityHashCode(this)}:${entry.id}',
                   onBack: () => Navigator.of(context).pop(),
                 );
               }
@@ -1159,8 +1166,9 @@ class _FeedPage {
 /// "Watch a short ad, earn free coins" — a full page in the feed with a
 /// play button. Tapping opens a rewarded ad; scrolling just moves on.
 class _RewardAdPage extends StatefulWidget {
+  final String spot;
   final VoidCallback onBack;
-  const _RewardAdPage({super.key, required this.onBack});
+  const _RewardAdPage({super.key, required this.spot, required this.onBack});
 
   @override
   State<_RewardAdPage> createState() => _RewardAdPageState();
@@ -1179,7 +1187,7 @@ class _RewardAdPageState extends State<_RewardAdPage> {
   Future<void> _play() async {
     if (_busy) return;
     setState(() => _busy = true);
-    await watchRewardedAd(context, customData: 'feed');
+    await watchRewardedAd(context, spot: widget.spot, customData: 'feed');
     if (mounted) {
       setState(() {
         _busy = false;
@@ -1191,6 +1199,8 @@ class _RewardAdPageState extends State<_RewardAdPage> {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
+    // This card has given its ads; it says so instead of offering more.
+    final usedUp = !_busy && RewardedAdService.instance.spotUsedUp(widget.spot);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -1232,7 +1242,11 @@ class _RewardAdPageState extends State<_RewardAdPage> {
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  _watched ? 'Want more free coins?' : 'Earn free coins',
+                  usedUp
+                      ? 'Thanks for watching!'
+                      : _watched
+                      ? 'Want more free coins?'
+                      : 'Earn free coins',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
@@ -1241,51 +1255,55 @@ class _RewardAdPageState extends State<_RewardAdPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Watch a short video ad and get coins in your wallet.',
+                Text(
+                  usedUp
+                      ? 'Keep scrolling — more free-coin ads come up later.'
+                      : 'Watch a short video ad and get coins in your wallet.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                  style: const TextStyle(color: Colors.white70, fontSize: 15),
                 ),
-                const SizedBox(height: 34),
-                ValueListenableBuilder<bool>(
-                  valueListenable: RewardedAdService.instance.ready,
-                  builder: (_, ready, _) => GestureDetector(
-                    onTap: _play,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: ready ? 1 : 0.6,
-                      child: Container(
-                        width: 78,
-                        height: 78,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                        ),
-                        child: _busy
-                            ? const Padding(
-                                padding: EdgeInsets.all(24),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 3,
+                if (!usedUp) ...[
+                  const SizedBox(height: 34),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: RewardedAdService.instance.ready,
+                    builder: (_, ready, _) => GestureDetector(
+                      onTap: _play,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: ready ? 1 : 0.6,
+                        child: Container(
+                          width: 78,
+                          height: 78,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                          ),
+                          child: _busy
+                              ? const Padding(
+                                  padding: EdgeInsets.all(24),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: Color(0xFFFF8A00),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.play_arrow_rounded,
                                   color: Color(0xFFFF8A00),
+                                  size: 52,
                                 ),
-                              )
-                            : const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Color(0xFFFF8A00),
-                                size: 52,
-                              ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Tap to watch',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Tap to watch',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
