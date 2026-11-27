@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:moonlight/features/gifts/fx/gift_fx_service.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart' show debugPrint;
 import 'package:moonlight/core/network/dio_client.dart';
@@ -932,6 +933,19 @@ class LiveSessionRepositoryImpl implements LiveSessionRepository {
 
       _safeAddToStream(_giftBroadcastCtrl, hb);
       _collectedGifts.add(hb);
+
+      // Expensive gifts also play full screen on the host (GiftFxLayer).
+      GiftFx.instance.show(
+        GiftFxEvent(
+          giftCode: giftCode,
+          giftTitle: GiftFx.instance.titleFor(giftCode),
+          senderName: senderDisplayName,
+          senderAvatar: senderAvatar,
+          recipientName: hb.toHost ? null : hb.recipientName,
+          quantity: quantity,
+          coins: coinsSpent,
+        ),
+      );
     } catch (e) {
       debugPrint('❌ [HOST GIFT BROADCAST] Parse failed: $e');
     }

@@ -1,5 +1,6 @@
 // lib/features/live_viewer/presentation/screens/viewer_mode_screen.dart
 
+import 'package:moonlight/features/gifts/fx/gift_fx_layer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:moonlight/core/injection_container.dart';
@@ -121,8 +122,9 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
   /// the removal screen rather than a black live that keeps reconnecting.
   void _onRevoked() {
     if (_revokedHandled || !mounted) return;
-    if (!PoolRtcResolver.revoked.value
-        .contains(widget.repository.livestreamParam)) {
+    if (!PoolRtcResolver.revoked.value.contains(
+      widget.repository.livestreamParam,
+    )) {
       return;
     }
     _revokedHandled = true;
@@ -277,6 +279,8 @@ class _ViewerModeScreenState extends State<ViewerModeScreen> {
                       const RoleChangeToast(),
                       const ReconnectionOverlay(),
                       if (state.isStreamUnstable) const _UnstableBanner(),
+                      // Full-screen gift animations (never takes touches).
+                      const Positioned.fill(child: GiftFxLayer()),
 
                       // Chat
                       Align(

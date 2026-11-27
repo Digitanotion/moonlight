@@ -1,5 +1,6 @@
 // lib/features/live_viewer/presentation/bloc/viewer_bloc.dart
 import 'dart:async';
+import 'package:moonlight/features/gifts/fx/gift_fx_service.dart';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
@@ -1132,6 +1133,22 @@ class ViewerBloc extends Bloc<ViewerEvent, ViewerState> {
           to: b.recipientLabel(sl<CurrentUserService>().getCurrentUserId()),
         ),
         showGiftToast: true,
+      ),
+    );
+    // Expensive gifts also play full screen (GiftFxLayer).
+    GiftFx.instance.show(
+      GiftFxEvent(
+        giftCode: b.giftCode,
+        giftTitle: giftLabel,
+        senderName: b.senderDisplayName.trim().isEmpty
+            ? 'Someone'
+            : b.senderDisplayName.trim(),
+        senderAvatar: b.senderAvatarUrl,
+        recipientName: b.recipientLabel(
+          sl<CurrentUserService>().getCurrentUserId(),
+        ),
+        quantity: b.quantity,
+        coins: b.coinsSpent,
       ),
     );
     _logEvent('GIFT_BROADCAST', 'Received: ${b.giftCode}');

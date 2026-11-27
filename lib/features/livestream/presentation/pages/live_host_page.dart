@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:ui';
+import 'package:moonlight/features/gifts/fx/gift_fx_layer.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
@@ -826,6 +827,9 @@ class _LiveHostPageState extends State<LiveHostPage>
                         ),
                       ),
                     ),
+
+                    // Full-screen gift animations (never takes touches).
+                    const Positioned.fill(child: GiftFxLayer()),
 
                     // Gift overlay
                     if (_currentGift != null && _giftAnimController != null)
